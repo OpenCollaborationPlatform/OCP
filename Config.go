@@ -34,6 +34,16 @@ var (
 
 func getConfigValue(keys ...string) ConfigEntry {
 
+	//could be viper access string like connection.port
+	if len(keys) == 1 {
+		return getConfigValueByArray(strings.Split(keys[0], "."))
+	}
+
+	return getConfigValueByArray(keys)
+}
+
+func getConfigValueByArray(keys []string) ConfigEntry {
+
 	//iterate over all nested values
 	tmp := configEntries
 	for i, key := range keys {
@@ -92,6 +102,27 @@ var cmdConfig = &cobra.Command{
 		}
 		fmt.Println("Empty configuration")
 	},
+}
+
+func addFlag(cmd *cobra.Command, accessor string) {
+
+	config := getConfigValue(accessor)
+	keys := strings.Split(accessor, ".")
+	name := keys[len(keys)-1]
+
+	switch config.Default.(type) {
+	case int:
+		cmd.Flags().IntP(name, config.Short, viper.GetInt(accessor), config.Text)
+	case string:
+		cmd.Flags().StringP(name, config.Short, viper.GetString(accessor), config.Text)
+	case float64:
+		cmd.Flags().Float64P(name, config.Short, viper.GetFloat64(accessor), config.Text)
+	default:
+		panic(fmt.Sprintf("No flag can be created for config %s", accessor))
+	}
+
+	fmt.Printf("Bind flag: %s\n", name)
+	viper.BindPFlag(accessor, cmd.Flags().Lookup(name))
 }
 
 func setupConfigMap(value map[string]interface{}, parent *cobra.Command, accessor string) {
@@ -194,6 +225,13 @@ func getConfigMap() map[string]interface{} {
 
 func saveToConfigV(value interface{}, keys ...string) {
 
+	//could be viper style key: connection.port
+	if len(keys) == 1 {
+		saveToConfig(value, strings.Split(keys[0], "."))
+		return
+	}
+
+	//just a array of strings
 	saveToConfig(value, keys)
 }
 

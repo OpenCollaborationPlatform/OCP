@@ -18,9 +18,6 @@ var (
 	createNodeDir bool
 	forceCreation bool
 	nodeDir       string
-
-	//start
-	port int
 )
 
 func getCommands() *cobra.Command {
@@ -29,10 +26,43 @@ func getCommands() *cobra.Command {
 	cmdInit.Flags().BoolVarP(&createNodeDir, "create", "c", false, "Create directory if it does not exist")
 	cmdInit.Flags().BoolVarP(&forceCreation, "force", "f", false, "Creates the directory even if there already exists one")
 	cmdInit.Flags().StringVarP(&nodeDir, "path", "p", "", "Specify alternative folder to be used")
-	cmdStart.Flags().IntVarP(&port, "port", "p", 8000, "Specify the port on which the node listens for clients")
+
+	addFlag(cmdStart, "connection.port")
 
 	rootCmd.AddCommand(cmdVersion, cmdStart, cmdStop, cmdInit, cmdConfig)
 	return rootCmd
+}
+
+func setup(pidPortPanic bool) {
+
+	//try to get the client to our running node
+	pid, port, err := ReadPidPort()
+	if err != nil && pidPortPanic {
+		panic(fmt.Sprintf("Problem with pid file: %s", err))
+	}
+
+	if pid == -1 { //definitely not connected
+		return
+	}
+
+	c, err := turnpike.NewWebsocketClient(turnpike.JSON, fmt.Sprintf("ws://localhost:%v/", port), nil, nil, nil)
+	if err != nil { //cannot connect means PID is wrong or process hangs
+		err := ClearPidPort()
+		if err != nil && pidPortPanic {
+			panic(fmt.Sprintf("Problem with pid file: %s", err))
+		}
+		return
+	}
+	_, err = c.JoinRealm("ocp", nil)
+	if err != nil { //seems like a wrong wamp server...
+		err := ClearPidPort()
+		if err != nil && pidPortPanic {
+			panic(fmt.Sprintf("Problem with pid file: %s", err))
+		}
+		return
+	}
+	isConnected = true
+	nodeClient = c
 }
 
 var rootCmd = &cobra.Command{
@@ -42,29 +72,7 @@ var rootCmd = &cobra.Command{
 		 	 access to all functionality of the eco system and handles the datastructures`,
 
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-
-		//try to get the client to our running node
-		pid, port, err := ReadPidPort()
-		if err != nil {
-			panic(fmt.Sprintf("Problem with pid file: %s", err))
-		}
-
-		if pid == -1 { //definitely not connected
-			return
-		}
-
-		c, err := turnpike.NewWebsocketClient(turnpike.JSON, fmt.Sprintf("ws://localhost:%v/", port), nil, nil, nil)
-		if err != nil { //cannot connect means PID is wrong or process hangs
-			ClearPidPort()
-			return
-		}
-		_, err = c.JoinRealm("ocp", nil)
-		if err != nil { //seems like a wrong wamp server...
-			ClearPidPort()
-			return
-		}
-		isConnected = true
-		nodeClient = c
+		setup(true)
 	},
 
 	Run: func(cmd *cobra.Command, args []string) {
@@ -125,7 +133,10 @@ var cmdInit = &cobra.Command{
 	Long: `OCP node needs a directory to store runtime as well as project data. With 
 			 this command this directory is prepared`,
 	Args: cobra.MaximumNArgs(1),
-
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		//we override root persistant prerun to not panic out on no init
+		setup(false)
+	},
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) > 1 {
 			fmt.Println("Initialization failed: to many arguments")
