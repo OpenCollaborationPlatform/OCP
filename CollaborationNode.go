@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"gopkg.in/jcelliott/turnpike.v2"
+	"github.com/beatgammit/turnpike"
 )
 
 var (
@@ -21,6 +21,23 @@ func startup() {
 		return
 	}
 
+	//connect to the collaboration server
+	cs := CollaborationServer{}
+	cs.start(quit)
+	defer cs.stop()
+
+	//start up our server
+	ls := LocalServer{collab: &cs}
+	ls.start(quit)
+	defer ls.stop()
+
+	//make the node stoppable by command
+	if client, err := ls.getClient(); err != nil {
+		panic(err)
+	} else if err := client.BasicRegister("ocp.command.stop", shutDown); err != nil {
+		panic(err)
+	}
+
 	//make sure we get system signals
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -28,18 +45,6 @@ func startup() {
 		sig := <-sigs
 		quit <- fmt.Sprintf("received system signal \"%s\"", sig)
 	}()
-
-	//start up our server
-	ws := WampServer{}
-	ws.start(quit)
-	defer ws.stop()
-
-	//make the node stoppable by command
-	if client, err := ws.getClient(); err != nil {
-		panic(err)
-	} else if err := client.BasicRegister("ocp.command.stop", shutDown); err != nil {
-		panic(err)
-	}
 
 	//save the pidfile
 	err := WritePidPort()

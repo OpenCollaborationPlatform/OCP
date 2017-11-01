@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/beatgammit/turnpike"
 	"github.com/spf13/cobra"
-	"gopkg.in/jcelliott/turnpike.v2"
 )
 
 var nodeClient *turnpike.Client = nil
@@ -45,7 +45,7 @@ func setup(pidPortPanic bool) {
 		return
 	}
 
-	c, err := turnpike.NewWebsocketClient(turnpike.JSON, fmt.Sprintf("ws://localhost:%v/", port), nil, nil, nil)
+	c, err := turnpike.NewWebsocketClient(turnpike.JSON, fmt.Sprintf("ws://localhost:%v/", port), nil)
 	if err != nil { //cannot connect means PID is wrong or process hangs
 		err := ClearPidPort()
 		if err != nil && pidPortPanic {
@@ -121,7 +121,7 @@ var cmdStop = &cobra.Command{
 			return
 		}
 
-		if _, err := nodeClient.Call("ocp.command.stop", nil, nil, nil); err != nil {
+		if _, err := nodeClient.Call("ocp.command.stop", nil, nil); err != nil {
 			fmt.Println("Error shutting down:", err)
 		}
 	},

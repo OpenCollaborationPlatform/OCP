@@ -26,6 +26,10 @@ var (
 		"connection": map[string]interface{}{
 			"port": ConfigEntry{Default: 8000, Short: "p", Text: "The port on which the node listents for client connections"},
 		},
+		"server": map[string]interface{}{
+			"uri":  ConfigEntry{Default: "localhost", Short: "u", Text: "The server URI to which to conenct to (without port)"},
+			"port": ConfigEntry{Default: 9000, Short: "p", Text: "The port which is used to connecto to the collaboration server"},
+		},
 	}
 
 	writeValue string
@@ -121,7 +125,6 @@ func addFlag(cmd *cobra.Command, accessor string) {
 		panic(fmt.Sprintf("No flag can be created for config %s", accessor))
 	}
 
-	fmt.Printf("Bind flag: %s\n", name)
 	viper.BindPFlag(accessor, cmd.Flags().Lookup(name))
 }
 
@@ -255,7 +258,7 @@ func saveToConfig(value interface{}, keys []string) {
 	}
 
 	//write back the file
-	data, _ := json.Marshal(conf)
+	data, _ := json.MarshalIndent(conf, "", "  ")
 	configDir.WriteFile("config.json", data)
 }
 
