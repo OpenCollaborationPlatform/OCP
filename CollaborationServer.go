@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/beatgammit/turnpike"
+	"github.com/gammazero/nexus/client"
 	"github.com/spf13/viper"
 )
 
 type CollaborationServer struct {
-	connections map[string]*turnpike.Client
+	connections map[string]*client.Client
 	tokens      map[string]string
 }
 
@@ -34,7 +34,7 @@ func (cs *CollaborationServer) hasClient(name string) bool {
 	return ok
 }
 
-func (cs *CollaborationServer) getClient(name string) (*turnpike.Client, string, error) {
+func (cs *CollaborationServer) getClient(name string) (*client.Client, string, error) {
 
 	client, ok := cs.connections[name]
 	//if no connection established yet we create one
@@ -67,20 +67,17 @@ func authFunc(details map[string]interface{}, data map[string]interface{}) (stri
 	return "joh", nil, nil
 }
 
-func (cs *CollaborationServer) connectClient(name, token string) *turnpike.Client {
+func (cs *CollaborationServer) connectClient(name, token string) *client.Client {
 
 	uri := viper.GetString("server.uri")
 	port := viper.GetInt("server.port")
 
-	c, err := turnpike.NewWebsocketClient(turnpike.JSON, fmt.Sprintf("ws://%v:%v/ws", uri, port), nil)
+	cfg := client.ClientConfig{
+		Realm: "ocp",
+	}
+	c, err := client.ConnectNet(fmt.Sprintf("ws://%v:%v/ws", uri, port), cfg)
 	if err != nil {
 		panic(fmt.Sprintf("Unable to conenct to server %s on port %v: %s", uri, port, err))
-	}
-
-	c.Auth = map[string]turnpike.AuthFunc{"ticket": authFunc}
-	_, err = c.JoinRealm("ocp", nil)
-	if err != nil {
-		panic(fmt.Sprintf("Unable to join realm on server: %v", err))
 	}
 
 	cs.connections[name] = c

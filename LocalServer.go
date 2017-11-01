@@ -2,13 +2,14 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
-	"time"
 
-	"github.com/beatgammit/turnpike"
+	"github.com/gammazero/nexus/client"
+	"github.com/gammazero/nexus/router"
+	"github.com/gammazero/nexus/wamp"
 	"github.com/spf13/viper"
 )
 
@@ -33,73 +34,62 @@ func (auth *ForwardAuth) Authenticate(details map[string]interface{}) (map[strin
 }
 
 type LocalServer struct {
-	server *http.Server
-	wamp   *turnpike.WebsocketServer
-	collab *CollaborationServer
+	wamp    *router.WebsocketServer
+	collab  *CollaborationServer
+	lclient *client.Client
 }
 
 func (ls *LocalServer) start(quit chan string) {
 
-	//setup wamp server
-	s, err := turnpike.NewWebsocketServer(map[string]turnpike.Realm{
-		"ocp": {
-		/*Authenticators: map[string]turnpike.Authenticator{
-			"authenticate": &ForwardAuth{server: ls.collab},
-		},*/
+	routerConfig := &router.RouterConfig{
+		RealmConfigs: []*router.RealmConfig{
+			&router.RealmConfig{
+				URI:           wamp.URI("ocp"),
+				AnonymousAuth: true,
+			},
 		},
-	})
-	ls.wamp = s
-	ls.server = &http.Server{
-		Handler: ls.wamp,
-		Addr:    fmt.Sprintf(":%v", viper.GetInt("connection.port")),
 	}
-	log.Printf("Local wamp server starting on port %v", viper.GetInt("connection.port"))
+	nxr, err := router.NewRouter(routerConfig, nil)
+	s := router.NewWebsocketServer(nxr)
+
+	ls.wamp = s
+
+	//we need a custom listener to ensure server is really ready for conections when
+	//creating the local client
+	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%v", viper.GetInt("connection.port")))
+	if err != nil {
+		panic(fmt.Sprintf("unable to setup listener: %s", err))
+	}
+	log.Printf("Local wamp server successfully started on port %v", viper.GetInt("connection.port"))
 
 	go func() {
-		if err := ls.server.ListenAndServe(); err != nil {
+		if err := http.Serve(listener, ls.wamp); err != nil {
 			// cannot panic, because this probably is an intentional close
 			quit <- err.Error()
 		}
 	}()
 
-	client, err := ls.getClient()
-	if err != nil {
-		panic(err)
+	//connect the local client
+	cfg := client.ClientConfig{
+		Realm: "ocp",
 	}
-	client.Subscribe("wamp.session.on_join", ls.onSessionOpened)
-	client.Subscribe("wamp.session.on_leave", ls.onSessionClosed)
+	c, err := client.ConnectNet(fmt.Sprintf("ws://localhost:%v", viper.GetInt("connection.port")), cfg)
+
+	if err != nil {
+		fmt.Printf("Problem with local client: %s", err)
+	}
+	ls.lclient = c
 }
 
 func (ls *LocalServer) stop() {
 
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	if err := ls.server.Shutdown(ctx); err != nil {
-		panic(err) // failure/timeout shutting down the server gracefully
-	}
+	//ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	//if err := ls.server.Shutdown(ctx); err != nil {
+	//	panic(err) // failure/timeout shutting down the server gracefully
+	//}
 	log.Println("Local wamp server has shut down")
 }
 
-func (ls *LocalServer) getClient() (*turnpike.Client, error) {
-
-	client, err := ls.wamp.GetLocalClient("ocp", nil)
-	return client, err
-}
-
-func (ls *LocalServer) onSessionOpened(args []interface{}, caller map[string]interface{}) {
-
-	log.Printf("Session %v opened with caller %v", args, caller)
-
-	ls.collab.connectClient("test", "123")
-}
-
-func (ls *LocalServer) onSessionClosed(args []interface{}, caller map[string]interface{}) {
-
-	if len(args) != 1 {
-		panic("No args send on connection close")
-	}
-	id, ok := args[0].(*turnpike.ID)
-	if !ok {
-		panic(fmt.Sprintf("No ID send on connection close, but %T instead", args[0]))
-	}
-	log.Printf("Session %v closed with caller %v", id, caller)
+func (ls *LocalServer) getLocalClient() *client.Client {
+	return ls.lclient
 }

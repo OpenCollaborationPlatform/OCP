@@ -2,14 +2,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
-	"github.com/beatgammit/turnpike"
+	"github.com/gammazero/nexus/client"
 	"github.com/spf13/cobra"
 )
 
-var nodeClient *turnpike.Client = nil
+var nodeClient *client.Client = nil
 var isConnected bool = false
 
 //flag variables
@@ -45,7 +46,11 @@ func setup(pidPortPanic bool) {
 		return
 	}
 
-	c, err := turnpike.NewWebsocketClient(turnpike.JSON, fmt.Sprintf("ws://localhost:%v/", port), nil)
+	cfg := client.ClientConfig{
+		Realm: "ocp",
+	}
+	c, err := client.ConnectNet(fmt.Sprintf("ws://localhost:%v/", port), cfg)
+
 	if err != nil { //cannot connect means PID is wrong or process hangs
 		err := ClearPidPort()
 		if err != nil && pidPortPanic {
@@ -53,14 +58,7 @@ func setup(pidPortPanic bool) {
 		}
 		return
 	}
-	_, err = c.JoinRealm("ocp", nil)
-	if err != nil { //seems like a wrong wamp server...
-		err := ClearPidPort()
-		if err != nil && pidPortPanic {
-			panic(fmt.Sprintf("Problem with pid file: %s", err))
-		}
-		return
-	}
+
 	isConnected = true
 	nodeClient = c
 }
@@ -121,7 +119,8 @@ var cmdStop = &cobra.Command{
 			return
 		}
 
-		if _, err := nodeClient.Call("ocp.command.stop", nil, nil); err != nil {
+		ctx := context.Background()
+		if _, err := nodeClient.Call(ctx, "ocp.command.stop", nil, nil, nil, ""); err != nil {
 			fmt.Println("Error shutting down:", err)
 		}
 	},

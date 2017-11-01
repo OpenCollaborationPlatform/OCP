@@ -1,13 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/beatgammit/turnpike"
+	"github.com/gammazero/nexus/client"
+	"github.com/gammazero/nexus/wamp"
 )
 
 var (
@@ -32,9 +34,9 @@ func startup() {
 	defer ls.stop()
 
 	//make the node stoppable by command
-	if client, err := ls.getClient(); err != nil {
-		panic(err)
-	} else if err := client.BasicRegister("ocp.command.stop", shutDown); err != nil {
+	client := ls.getLocalClient()
+
+	if err := client.Register("ocp.command.stop", shutDown, nil); err != nil {
 		panic(err)
 	}
 
@@ -57,10 +59,10 @@ func startup() {
 	log.Printf("Shuting down, reason: %s", reason)
 }
 
-func shutDown(args []interface{}, kwargs map[string]interface{}) (result *turnpike.CallResult) {
+func shutDown(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *client.InvokeResult {
 
 	defer func() { quit <- "Shutdown request received" }()
-	return &turnpike.CallResult{}
+	return &client.InvokeResult{}
 }
 
 func main() {
