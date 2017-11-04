@@ -1,19 +1,21 @@
 package main
 
 import (
-	"context"
+	"CollaborationNode/connection"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/gammazero/nexus/client"
-	"github.com/gammazero/nexus/wamp"
+	"github.com/satori/go.uuid"
 )
 
 var (
-	quit chan string //this is the quit channel
+	quit   chan string //this is the quit channel
+	server *connection.Server
+	router *connection.Router
+	nodeID uuid.UUID
 )
 
 func startup() {
@@ -23,22 +25,27 @@ func startup() {
 		return
 	}
 
-	//connect to the collaboration server
-	cs := CollaborationServer{}
-	cs.start(quit)
-	defer cs.stop()
+	nodeID = uuid.NewV4()
 
-	//start up our server
-	ls := LocalServer{collab: &cs}
-	ls.start(quit)
-	defer ls.stop()
+	//connect to the collaboration server
+	server := connection.Server{}
+	server.Start(quit)
+	defer server.Stop()
+
+	//start up our local router
+	router := connection.Router{server: &server}
+	router.Start(quit)
+	defer router.Stop()
+
+	//load the document component
+	setupDocumentHandler(router.GetLocalClient("document"))
 
 	//make the node stoppable by command
-	client := ls.getLocalClient()
+	client := router.GetLocalClient("command")
 
-	if err := client.Register("ocp.command.stop", shutDown, nil); err != nil {
-		panic(err)
-	}
+	//if err := client.Register("ocp.command.stop", shutDown, nil); err != nil {
+	//	panic(err)
+	//}
 
 	//make sure we get system signals
 	sigs := make(chan os.Signal)
@@ -59,11 +66,12 @@ func startup() {
 	log.Printf("Shuting down, reason: %s", reason)
 }
 
+/*
 func shutDown(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *client.InvokeResult {
 
 	defer func() { quit <- "Shutdown request received" }()
 	return &client.InvokeResult{}
-}
+}*/
 
 func main() {
 
