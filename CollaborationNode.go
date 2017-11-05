@@ -2,12 +2,16 @@ package main
 
 import (
 	"CollaborationNode/connection"
+	"CollaborationNode/document"
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/gammazero/nexus/client"
+	"github.com/gammazero/nexus/wamp"
 	"github.com/satori/go.uuid"
 )
 
@@ -33,19 +37,22 @@ func startup() {
 	defer server.Stop()
 
 	//start up our local router
-	router := connection.Router{server: &server}
+	router := connection.NewRouter(&server)
 	router.Start(quit)
 	defer router.Stop()
 
 	//load the document component
-	setupDocumentHandler(router.GetLocalClient("document"))
+	document.Setup(&server, router)
 
 	//make the node stoppable by command
-	client := router.GetLocalClient("command")
+	client, err := router.GetLocalClient("command")
+	if err != nil {
+		panic(fmt.Sprintf("Unable to setup command client: %s", err))
+	}
 
-	//if err := client.Register("ocp.command.stop", shutDown, nil); err != nil {
-	//	panic(err)
-	//}
+	if err := client.Register("ocp.command.stop", shutDown, nil); err != nil {
+		panic(err)
+	}
 
 	//make sure we get system signals
 	sigs := make(chan os.Signal)
@@ -56,7 +63,7 @@ func startup() {
 	}()
 
 	//save the pidfile
-	err := WritePidPort()
+	err = WritePidPort()
 	if err != nil {
 		panic(fmt.Sprintf("Writing PID file failed with \"%s\"", err))
 	}
@@ -66,12 +73,11 @@ func startup() {
 	log.Printf("Shuting down, reason: %s", reason)
 }
 
-/*
 func shutDown(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *client.InvokeResult {
 
 	defer func() { quit <- "Shutdown request received" }()
 	return &client.InvokeResult{}
-}*/
+}
 
 func main() {
 

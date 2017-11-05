@@ -16,9 +16,15 @@ import (
 )
 
 type Router struct {
-	wamp     *nxrouter.WebsocketServer
-	server   *Server
-	lclients map[string]*nxclient.Client
+	router  *nxrouter.Router
+	wamp    *nxrouter.WebsocketServer
+	server  *Server
+	clients map[string]*Client
+}
+
+func NewRouter(s *Server) *Router {
+
+	return &Router{server: s}
 }
 
 func (ls *Router) Start(quit chan string) {
@@ -33,8 +39,8 @@ func (ls *Router) Start(quit chan string) {
 		},
 	}
 	nxr, err := nxrouter.NewRouter(routerConfig, nil)
+	ls.router = &nxr
 	s := nxrouter.NewWebsocketServer(nxr)
-
 	ls.wamp = s
 
 	//we need a custom listener to ensure server is really ready for conections when
@@ -51,24 +57,31 @@ func (ls *Router) Start(quit chan string) {
 			quit <- err.Error()
 		}
 	}()
+
+	//we need meta events, and now we are able to make clients
+	meta, err := ls.GetLocalClient("meta")
+	if err != nil {
+		panic(fmt.Sprintf("Unable to create meta client: %s", err))
+	}
+	err = meta.client.Subscribe("wamp.session.on_leave", ls.onSessionLeave, wamp.Dict{})
+	if err != nil {
+		panic(fmt.Sprintf("Registering leave event failed: %s", err))
+	}
 }
 
 func (ls *Router) Stop() {
 
-	//ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	//if err := ls.server.Shutdown(ctx); err != nil {
-	//	panic(err) // failure/timeout shutting down the server gracefully
-	//}
+	//ls.router.Close()
 	log.Println("Local wamp server has shut down")
 }
 
-func (ls *Router) GetLocalClient(name string) *Client {
+func (ls *Router) GetLocalClient(name string) (*Client, error) {
 
-	if ls.lclients == nil {
-		ls.lclients = make(map[string]*nxclient.Client)
+	if ls.clients == nil {
+		ls.clients = make(map[string]*Client)
 	}
 
-	c, ok := ls.lclients[name]
+	c, ok := ls.clients[name]
 
 	if !ok {
 
@@ -81,15 +94,28 @@ func (ls *Router) GetLocalClient(name string) *Client {
 			HelloDetails: wamp.Dict{"authid": name, "role": "local"},
 			AuthHandlers: map[string]nxclient.AuthFunc{"ticket": authFunc},
 		}
-		c, err := nxclient.ConnectNet(fmt.Sprintf("ws://localhost:%v", viper.GetInt("connection.port")), cfg)
+		c, err := nxclient.ConnectLocal(*ls.router, cfg)
 
 		if err != nil {
-			fmt.Printf("Problem with local client: %s", err)
-			return nil
+			return nil, fmt.Errorf("Problem with local client: %s", err)
 		}
-		ls.lclients[name] = c
-		return &Client{c}
-	} else {
-		return &Client{c}
+		client := &Client{client: c, Role: "local", AuthID: name, SessionID: c.ID()}
+		ls.clients[name] = client
+		return client, nil
 	}
+
+	return c, nil
+}
+
+func (ls *Router) onSessionLeave(args wamp.List, kwargs, details wamp.Dict) {
+
+	session, ok := args[0].(wamp.ID)
+	if !ok {
+		return
+	}
+
+	log.Printf("Closing session %v", session)
+	ls.server.RemoveRouterSession(session)
+	return
+
 }

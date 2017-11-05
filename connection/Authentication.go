@@ -68,7 +68,8 @@ func (ta ticketAuthenticator) Authenticate(sid wamp.ID, details wamp.Dict, clien
 
 	//connect to the server if needed
 	if ta.server.HasClient(authid) {
-		if ta.server.tokens[authid] != jwt {
+		client, _ := ta.server.GetClient(authid)
+		if client.Token != jwt {
 			return nil, fmt.Errorf("Wrong ticket for multi connected client")
 		}
 	} else {
@@ -77,6 +78,9 @@ func (ta ticketAuthenticator) Authenticate(sid wamp.ID, details wamp.Dict, clien
 			return nil, err
 		}
 	}
+
+	//remember the session
+	ta.server.AddRouterSessionToClient(authid, sid)
 
 	// Create welcome details containing auth info.
 	welcomeDetails := wamp.Dict{

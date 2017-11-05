@@ -10,14 +10,14 @@ import (
 )
 
 type Server struct {
-	connections map[string]*Client
-	tokens      map[string]string
+	connections []*Client
+	sessions    map[*Client][]wamp.ID
 }
 
 func (s *Server) Start(quit chan string) {
 
-	s.connections = make(map[string]*Client)
-	s.tokens = make(map[string]string)
+	s.connections = make([]*Client, 0)
+	s.sessions = make(map[*Client][]wamp.ID)
 }
 
 func (s *Server) Stop() {
@@ -32,25 +32,24 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) HasClient(name string) bool {
-	_, ok := s.connections[name]
-	return ok
+
+	for _, client := range s.connections {
+		if client.AuthID == name {
+			return true
+		}
+	}
+	return false
 }
 
-func (s *Server) GetClient(name string) (*Client, string, error) {
+func (s *Server) GetClient(name string) (*Client, error) {
 
-	nxclient, ok := s.connections[name]
-	//if no connection established yet we create one
-	if !ok {
-		return nil, "", fmt.Errorf("No nxclient \"%v\" available", name)
+	for _, client := range s.connections {
+		if client.AuthID == name {
+			return client, nil
+		}
 	}
-
-	token, ok := s.tokens[name]
-	//if no token is available something is horribly wrong
-	if !ok {
-		panic(fmt.Sprintf("No token for nxclient \"%v\" available", name))
-	}
-
-	return nxclient, token, nil
+	//no connection established yet
+	return nil, fmt.Errorf("No client \"%v\" available", name)
 }
 
 func (s *Server) ConnectClient(name, token string) (*Client, error) {
@@ -58,7 +57,10 @@ func (s *Server) ConnectClient(name, token string) (*Client, error) {
 	uri := viper.GetString("server.uri")
 	port := viper.GetInt("server.port")
 
-	s.tokens[name] = token
+	//we add first to ensure token is available in auth func
+	client := Client{AuthID: name, Token: token, Role: "collaborator"}
+	s.connections = append(s.connections, &client)
+
 	cfg := nxclient.ClientConfig{
 		Realm:        "ocp",
 		HelloDetails: wamp.Dict{"authid": name},
@@ -66,13 +68,54 @@ func (s *Server) ConnectClient(name, token string) (*Client, error) {
 	}
 	c, err := nxclient.ConnectNet(fmt.Sprintf("ws://%v:%v/ws", uri, port), cfg)
 	if err != nil {
+		//we need to remove the client again...
+		for i, value := range s.connections {
+			if &client == value {
+				s.connections = append(s.connections[:i], s.connections[i+1:]...)
+				break
+			}
+		}
 		return nil, err
 	}
 
-	client := Client{c}
-	s.connections[name] = &client
-	s.tokens[name] = token
+	client.client = c
+	client.SessionID = c.ID()
 	return &client, nil
+}
+
+func (s *Server) AddRouterSessionToClient(authid string, id wamp.ID) error {
+
+	for _, value := range s.connections {
+		if value.AuthID == authid {
+			s.sessions[value] = append(s.sessions[value], id)
+			return nil
+		}
+	}
+	return fmt.Errorf("no client exists with given authid %s", authid)
+}
+
+func (s *Server) RemoveRouterSession(id wamp.ID) error {
+
+	//we look for all clients, if they use the session
+	for clI, client := range s.connections {
+
+		//search the index of the session
+		sessions := s.sessions[client]
+		for i, session := range sessions {
+			if session == id {
+				// now remove it
+				s.sessions[client] = append(sessions[:i], sessions[i+1:]...)
+
+				//if sessions are empty we can close the client
+				if len(s.sessions[client]) == 0 {
+					client.Close()
+					s.connections = append(s.connections[:clI], s.connections[clI+1:]...)
+				}
+				break
+			}
+		}
+	}
+	return nil
 }
 
 func (s *Server) authFunc(c *wamp.Challenge) (string, wamp.Dict) {
