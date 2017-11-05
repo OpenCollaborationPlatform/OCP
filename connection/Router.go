@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	nxclient "github.com/gammazero/nexus/client"
@@ -20,14 +21,21 @@ type Router struct {
 	wamp    *nxrouter.WebsocketServer
 	server  *Server
 	clients map[string]*Client
+	mutex   *sync.RWMutex
 }
 
 func NewRouter(s *Server) *Router {
 
-	return &Router{server: s}
+	return &Router{
+		server:  s,
+		mutex:   &sync.RWMutex{},
+		clients: make(map[string]*Client)}
 }
 
 func (ls *Router) Start(quit chan string) {
+
+	ls.mutex.Lock()
+	defer ls.mutex.Unlock()
 
 	routerConfig := &nxrouter.RouterConfig{
 		RealmConfigs: []*nxrouter.RealmConfig{
@@ -77,12 +85,10 @@ func (ls *Router) Stop() {
 
 func (ls *Router) GetLocalClient(name string) (*Client, error) {
 
-	if ls.clients == nil {
-		ls.clients = make(map[string]*Client)
-	}
+	ls.mutex.RLock()
+	defer ls.mutex.RUnlock()
 
 	c, ok := ls.clients[name]
-
 	if !ok {
 
 		//connect the local client

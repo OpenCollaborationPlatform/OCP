@@ -3,6 +3,7 @@ package connection
 
 import (
 	"fmt"
+	"sync"
 
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
@@ -12,15 +13,25 @@ import (
 type Server struct {
 	connections []*Client
 	sessions    map[*Client][]wamp.ID
+	mutex       *sync.RWMutex
+}
+
+func NewServer() *Server {
+
+	return &Server{
+		mutex:       &sync.RWMutex{},
+		connections: make([]*Client, 0),
+		sessions:    make(map[*Client][]wamp.ID)}
 }
 
 func (s *Server) Start(quit chan string) {
 
-	s.connections = make([]*Client, 0)
-	s.sessions = make(map[*Client][]wamp.ID)
 }
 
 func (s *Server) Stop() {
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 
 	for key, nxclient := range s.connections {
 
@@ -33,6 +44,9 @@ func (s *Server) Stop() {
 
 func (s *Server) HasClient(name string) bool {
 
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
 	for _, client := range s.connections {
 		if client.AuthID == name {
 			return true
@@ -42,6 +56,9 @@ func (s *Server) HasClient(name string) bool {
 }
 
 func (s *Server) GetClient(name string) (*Client, error) {
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 
 	for _, client := range s.connections {
 		if client.AuthID == name {
@@ -53,6 +70,9 @@ func (s *Server) GetClient(name string) (*Client, error) {
 }
 
 func (s *Server) ConnectClient(name, token string) (*Client, error) {
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	uri := viper.GetString("server.uri")
 	port := viper.GetInt("server.port")
@@ -85,6 +105,9 @@ func (s *Server) ConnectClient(name, token string) (*Client, error) {
 
 func (s *Server) AddRouterSessionToClient(authid string, id wamp.ID) error {
 
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	for _, value := range s.connections {
 		if value.AuthID == authid {
 			s.sessions[value] = append(s.sessions[value], id)
@@ -94,7 +117,26 @@ func (s *Server) AddRouterSessionToClient(authid string, id wamp.ID) error {
 	return fmt.Errorf("no client exists with given authid %s", authid)
 }
 
+func (s *Server) GetClientByRouterSession(id wamp.ID) (*Client, error) {
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	for client, sessions := range s.sessions {
+
+		for _, session := range sessions {
+			if session == id {
+				return client, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("The given session ID %v is unknown\n", id)
+}
+
 func (s *Server) RemoveRouterSession(id wamp.ID) error {
+
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	//we look for all clients, if they use the session
 	for clI, client := range s.connections {
@@ -119,6 +161,10 @@ func (s *Server) RemoveRouterSession(id wamp.ID) error {
 }
 
 func (s *Server) authFunc(c *wamp.Challenge) (string, wamp.Dict) {
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
 	/*method, ok := data["method"].(string)
 	if !ok {
 		log.Fatal("no method data recieved")

@@ -2,6 +2,8 @@
 package connection
 
 import (
+	"sync"
+
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
 )
@@ -14,6 +16,7 @@ type Client struct {
 
 	client  *nxclient.Client
 	closeCB []func(*Client)
+	mutex   *sync.RWMutex
 }
 
 func (c *Client) Close() error {
