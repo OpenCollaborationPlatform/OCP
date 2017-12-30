@@ -2,30 +2,52 @@
 package connection
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"sync"
 
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
+	"github.com/satori/go.uuid"
 	"github.com/spf13/viper"
 )
 
 type Server struct {
-	connections []*Client
-	sessions    map[*Client][]wamp.ID
-	mutex       *sync.RWMutex
+	nodeID     uuid.UUID
+	connection *nxclient.Client
+	clients    []*Client
+	groups     map[string][]string
+	mutex      *sync.RWMutex
 }
 
-func NewServer() *Server {
+func NewServer(id uuid.UUID) *Server {
 
 	return &Server{
-		mutex:       &sync.RWMutex{},
-		connections: make([]*Client, 0),
-		sessions:    make(map[*Client][]wamp.ID)}
+		nodeID:  id,
+		mutex:   &sync.RWMutex{},
+		clients: make([]*Client, 0),
+		groups:  make(map[string][]string)}
 }
 
-func (s *Server) Start(quit chan string) {
+func (s *Server) Start(quit chan string) error {
 
+	//we setup the connection to the server
+	uri := viper.GetString("server.uri")
+	port := viper.GetInt("server.port")
+
+	cfg := nxclient.ClientConfig{
+		Realm:        "ocp",
+		HelloDetails: wamp.Dict{"authid": s.nodeID},
+		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": s.authFunc},
+	}
+	c, err := nxclient.ConnectNet(fmt.Sprintf("ws://%v:%v/ws", uri, port), cfg)
+	if err != nil {
+		return err
+	}
+	s.connection = c
+
+	return nil
 }
 
 func (s *Server) Stop() {
@@ -33,12 +55,17 @@ func (s *Server) Stop() {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	for key, nxclient := range s.connections {
+	for _, client := range s.clients {
 
-		err := nxclient.Close()
+		err := client.Close()
 		if err != nil {
-			fmt.Printf("Warning: closing connection of nxclient %s failed", key)
+			fmt.Printf("Warning: closing connection of nxclient %s failed with %v", client.AuthID, err)
 		}
+	}
+
+	err := s.connection.Close()
+	if err != nil {
+		fmt.Printf("Warning: closing connection failed with %v", err)
 	}
 }
 
@@ -47,7 +74,7 @@ func (s *Server) HasClient(name string) bool {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	for _, client := range s.connections {
+	for _, client := range s.clients {
 		if client.AuthID == name {
 			return true
 		}
@@ -60,7 +87,7 @@ func (s *Server) GetClient(name string) (*Client, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	for _, client := range s.connections {
+	for _, client := range s.clients {
 		if client.AuthID == name {
 			return client, nil
 		}
@@ -71,50 +98,27 @@ func (s *Server) GetClient(name string) (*Client, error) {
 
 func (s *Server) ConnectClient(name, token string) (*Client, error) {
 
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	uri := viper.GetString("server.uri")
-	port := viper.GetInt("server.port")
-
-	//we add first to ensure token is available in auth func
-	client := Client{AuthID: name, Token: token, Role: "collaborator"}
-	s.connections = append(s.connections, &client)
-
-	cfg := nxclient.ClientConfig{
-		Realm:        "ocp",
-		HelloDetails: wamp.Dict{"authid": name},
-		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": s.authFunc},
+	if s.HasClient(name) {
+		return nil, fmt.Errorf("Client already connected")
 	}
-	c, err := nxclient.ConnectNet(fmt.Sprintf("ws://%v:%v/ws", uri, port), cfg)
+
+	ctx := context.Background()
+	_, err := s.connection.Call(ctx, "ocp.nodes.registerUser", wamp.Dict{}, wamp.List{name, token}, wamp.Dict{}, "")
+
 	if err != nil {
-		//we need to remove the client again...
-		for i, value := range s.connections {
-			if &client == value {
-				s.connections = append(s.connections[:i], s.connections[i+1:]...)
-				break
-			}
-		}
+		log.Printf("Connecting client %s failed: %s", name, err)
 		return nil, err
 	}
 
-	client.client = c
-	client.SessionID = c.ID()
-	return &client, nil
-}
-
-func (s *Server) AddRouterSessionToClient(authid string, id wamp.ID) error {
+	//we now add the client as we successfully joined
+	client := MakeClient(s, name, token, "collaborator")
 
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.clients = append(s.clients, client)
+	s.mutex.Unlock()
 
-	for _, value := range s.connections {
-		if value.AuthID == authid {
-			s.sessions[value] = append(s.sessions[value], id)
-			return nil
-		}
-	}
-	return fmt.Errorf("no client exists with given authid %s", authid)
+	log.Printf("Connected client %s", name)
+	return client, nil
 }
 
 func (s *Server) GetClientByRouterSession(id wamp.ID) (*Client, error) {
@@ -122,42 +126,66 @@ func (s *Server) GetClientByRouterSession(id wamp.ID) (*Client, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
-	for client, sessions := range s.sessions {
-
-		for _, session := range sessions {
-			if session == id {
-				return client, nil
-			}
+	for _, client := range s.clients {
+		if client.HasSession(id) {
+			return client, nil
 		}
 	}
 	return nil, fmt.Errorf("The given session ID %v is unknown\n", id)
 }
 
-func (s *Server) RemoveRouterSession(id wamp.ID) error {
+func (s *Server) Register(uri string, fn nxclient.InvocationHandler, options wamp.Dict) error {
+	return s.connection.Register(uri, fn, options)
+}
 
+func (s *Server) Unregister(uri string) error {
+	return s.connection.Unregister(uri)
+}
+
+func (s *Server) GroupRegister(group string, uri string, fn nxclient.InvocationHandler, options wamp.Dict) error {
+
+	uris, ok := s.groups[group]
+	if !ok {
+		uris = make([]string, 0)
+	}
 	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.groups[group] = append(uris, uri)
+	s.mutex.Unlock()
+	return s.connection.Register(uri, fn, options)
+}
 
-	//we look for all clients, if they use the session
-	for clI, client := range s.connections {
+func (s *Server) GroupUnregister(group string) error {
 
-		//search the index of the session
-		sessions := s.sessions[client]
-		for i, session := range sessions {
-			if session == id {
-				// now remove it
-				s.sessions[client] = append(sessions[:i], sessions[i+1:]...)
-
-				//if sessions are empty we can close the client
-				if len(s.sessions[client]) == 0 {
-					client.Close()
-					s.connections = append(s.connections[:clI], s.connections[clI+1:]...)
-				}
-				break
+	s.mutex.RLock()
+	uris, ok = s.groups[group]
+	if ok {
+		for _, uri = range uris {
+			err := s.connection.Unregister(uri)
+			if err != nil {
+				return err
 			}
 		}
 	}
+	s.mutex.RUnlock()
+	s.mutex.Lock()
+	delete(s.groups, group)
+	s.mutex.Unlock()
+
 	return nil
+}
+
+func (s *Server) Call(uri string, options wamp.Dict, args wamp.List, kwargs wamp.Dict) (*wamp.Result, error) {
+
+	ctx := context.Background()
+	return s.connection.Call(ctx, uri, options, args, kwargs, "")
+}
+
+func (s *Server) Subscribe(uri string, fn nxclient.EventHandler, options wamp.Dict) error {
+	return s.connection.Subscribe(uri, fn, options)
+}
+
+func (s *Server) Publish(uri string, options wamp.Dict, args wamp.List, kwargs wamp.Dict) error {
+	return s.connection.Publish(uri, options, args, kwargs)
 }
 
 func (s *Server) authFunc(c *wamp.Challenge) (string, wamp.Dict) {
@@ -176,5 +204,24 @@ func (s *Server) authFunc(c *wamp.Challenge) (string, wamp.Dict) {
 	fmt.Println("Authmethod for server-nxclient called")
 	fmt.Println(c)
 
-	return "testticket", wamp.Dict{}
+	return "defaultNodeTicket", wamp.Dict{}
+}
+
+func (s *Server) clientAuthFunc(ctx context.Context, args wamp.List, kwargs wamp.Dict, details wamp.Dict) *nxclient.InvokeResult {
+
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	/*method, ok := data["method"].(string)
+	if !ok {
+		log.Fatal("no method data recieved")
+	}
+	if method != "ticket" {
+		return "", nil, fmt.Errorf("Auth method not supported: %v", method)
+	}*/
+
+	fmt.Println("Authmethod for server-nxclient called")
+	fmt.Println(args)
+
+	return &nxclient.InvokeResult{Args: wamp.List{"MyUserTicket"}}
 }

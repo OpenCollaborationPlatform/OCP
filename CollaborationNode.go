@@ -32,17 +32,17 @@ func startup() {
 	nodeID = uuid.NewV4()
 
 	//connect to the collaboration server
-	server := connection.Server{}
+	server := connection.NewServer(nodeID)
 	server.Start(quit)
 	defer server.Stop()
 
 	//start up our local router
-	router := connection.NewRouter(&server)
+	router := connection.NewRouter(server)
 	router.Start(quit)
 	defer router.Stop()
 
 	//load the document component
-	document.Setup(&server, router)
+	document.Setup(server, router, nodeID)
 
 	//make the node stoppable by command
 	client, err := router.GetLocalClient("command")
