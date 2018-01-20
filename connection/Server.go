@@ -9,25 +9,50 @@ import (
 
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
-	"github.com/satori/go.uuid"
+	"github.com/libp2p/go-libp2p-peer"
 	"github.com/spf13/viper"
 )
 
+//WampGroup: store multiple connected registered and subscribed URIs
+//******************************************************************
+
+type wampGroup struct {
+	Registered []string
+	Subscribed []string
+}
+
+func (w *wampGroup) addRegistered(uri string) {
+	w.Registered = append(w.Registered, uri)
+}
+
+func (w *wampGroup) addSubscribed(uri string) {
+	w.Subscribed = append(w.Subscribed, uri)
+}
+
+func newWampGroup() *wampGroup {
+	return &wampGroup{
+		Registered: make([]string, 0),
+		Subscribed: make([]string, 0)}
+}
+
+//Server: A connection to a OCP server
+//************************************
+
 type Server struct {
-	nodeID     uuid.UUID
+	nodeID     peer.ID
 	connection *nxclient.Client
 	clients    []*Client
-	groups     map[string][]string
+	groups     map[string]*wampGroup
 	mutex      *sync.RWMutex
 }
 
-func NewServer(id uuid.UUID) *Server {
+func NewServer(id peer.ID) *Server {
 
 	return &Server{
 		nodeID:  id,
 		mutex:   &sync.RWMutex{},
 		clients: make([]*Client, 0),
-		groups:  make(map[string][]string)}
+		groups:  make(map[string]*wampGroup)}
 }
 
 func (s *Server) Start(quit chan string) error {
@@ -41,7 +66,14 @@ func (s *Server) Start(quit chan string) error {
 		HelloDetails: wamp.Dict{"authid": s.nodeID},
 		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": s.authFunc},
 	}
-	c, err := nxclient.ConnectNet(fmt.Sprintf("ws://%v:%v/ws", uri, port), cfg)
+	var adress string
+	if port > 0 {
+		adress = fmt.Sprintf("ws://%v:%v/ws", uri, port)
+	} else {
+		adress = fmt.Sprintf("ws://%v/ws", uri)
+	}
+	log.Printf("Connect to server: %s", adress)
+	c, err := nxclient.ConnectNet(adress, cfg)
 	if err != nil {
 		return err
 	}
@@ -144,34 +176,15 @@ func (s *Server) Unregister(uri string) error {
 
 func (s *Server) GroupRegister(group string, uri string, fn nxclient.InvocationHandler, options wamp.Dict) error {
 
-	uris, ok := s.groups[group]
-	if !ok {
-		uris = make([]string, 0)
-	}
 	s.mutex.Lock()
-	s.groups[group] = append(uris, uri)
+	wampgroup, ok := s.groups[group]
+	if !ok {
+		wampgroup = newWampGroup()
+		s.groups[group] = wampgroup
+	}
+	wampgroup.addRegistered(uri)
 	s.mutex.Unlock()
 	return s.connection.Register(uri, fn, options)
-}
-
-func (s *Server) GroupUnregister(group string) error {
-
-	s.mutex.RLock()
-	uris, ok = s.groups[group]
-	if ok {
-		for _, uri = range uris {
-			err := s.connection.Unregister(uri)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	s.mutex.RUnlock()
-	s.mutex.Lock()
-	delete(s.groups, group)
-	s.mutex.Unlock()
-
-	return nil
 }
 
 func (s *Server) Call(uri string, options wamp.Dict, args wamp.List, kwargs wamp.Dict) (*wamp.Result, error) {
@@ -184,8 +197,51 @@ func (s *Server) Subscribe(uri string, fn nxclient.EventHandler, options wamp.Di
 	return s.connection.Subscribe(uri, fn, options)
 }
 
+func (s *Server) Unsubscribe(uri string) error {
+	return s.connection.Unsubscribe(uri)
+}
+
+func (s *Server) GroupSubscribe(group string, uri string, fn nxclient.EventHandler, options wamp.Dict) error {
+
+	s.mutex.Lock()
+	wampgroup, ok := s.groups[group]
+	if !ok {
+		wampgroup = newWampGroup()
+		s.groups[group] = wampgroup
+	}
+	wampgroup.addSubscribed(uri)
+	s.mutex.Unlock()
+	return s.connection.Subscribe(uri, fn, options)
+}
+
 func (s *Server) Publish(uri string, options wamp.Dict, args wamp.List, kwargs wamp.Dict) error {
 	return s.connection.Publish(uri, options, args, kwargs)
+}
+
+func (s *Server) GroupRemove(group string) error {
+
+	s.mutex.RLock()
+	wampgroup, ok := s.groups[group]
+	if ok {
+		for _, uri := range wampgroup.Registered {
+			err := s.connection.Unregister(uri)
+			if err != nil {
+				return err
+			}
+		}
+		for _, uri := range wampgroup.Subscribed {
+			err := s.connection.Unsubscribe(uri)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	s.mutex.RUnlock()
+	s.mutex.Lock()
+	delete(s.groups, group)
+	s.mutex.Unlock()
+
+	return nil
 }
 
 func (s *Server) authFunc(c *wamp.Challenge) (string, wamp.Dict) {

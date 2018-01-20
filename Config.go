@@ -4,6 +4,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"path/filepath"
 	"strings"
 
@@ -14,6 +15,49 @@ import (
 )
 
 var configDir *configdir.Config = nil
+
+//Default init of config stuff:
+// - There is always a config file, even if node is not initialized
+// - If not existing it must be created
+// - Default values are setup
+// - Setup the subcommands for the main config command
+func init() {
+
+	configDirs := configdir.New("ocp", "")
+	folders := configDirs.QueryFolders(configdir.Global)
+	if len(folders) < 1 {
+		fmt.Println("No folder for config found")
+		return
+	}
+
+	configDir = folders[0]
+
+	//we aways need to have a config file
+	if !configDir.Exists("config.json") {
+		if _, err := configDir.Create("config.json"); err != nil {
+			log.Fatalf("Couldn't initialize the config file")
+		}
+
+		dummy := make(map[string]interface{})
+		bytes, _ := json.Marshal(dummy)
+		configDir.WriteFile("config.json", bytes)
+	}
+
+	viper.SetConfigName("config")
+	viper.SetConfigType("json")
+	viper.AddConfigPath(configDir.Path)
+	err := viper.ReadInConfig()
+	if err != nil {
+		log.Fatalf("While reading config file - \"%s\" \n", err)
+	}
+
+	//process the existing configs
+	setupConfigMapCommands(configEntries, cmdConfig, "")
+	setupConfigDefaults(configEntries, "")
+}
+
+//Default structure of the configs: types and values
+//**************************************************
 
 type ConfigEntry struct {
 	Short   string
@@ -29,6 +73,9 @@ var (
 		"server": map[string]interface{}{
 			"uri":  ConfigEntry{Default: "localhost", Short: "u", Text: "The server URI to which to conenct to (without port)"},
 			"port": ConfigEntry{Default: 9000, Short: "p", Text: "The port which is used to connecto to the collaboration server"},
+		},
+		"p2p": map[string]interface{}{
+			"port": ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens for p2p connections from other nodes"},
 		},
 	}
 
@@ -57,55 +104,8 @@ func getConfigValueByArray(keys []string) ConfigEntry {
 		tmp = tmp[key].(map[string]interface{})
 	}
 
-	panic("No such config entry exists")
+	log.Fatal("No such config entry exists")
 	return ConfigEntry{}
-}
-
-func initConfig() {
-
-	configDirs := configdir.New("ocp", "")
-	folders := configDirs.QueryFolders(configdir.Global)
-	if len(folders) < 1 {
-		fmt.Println("No folder for config found")
-		return
-	}
-
-	configDir = folders[0]
-	if !configDir.Exists("config.json") {
-		configDir.Create("config.json")
-		dummy := make(map[string]interface{})
-		bytes, _ := json.Marshal(dummy)
-		configDir.WriteFile("config.json", bytes)
-	}
-
-	viper.SetConfigName("config")
-	viper.SetConfigType("json")
-	viper.AddConfigPath(configDir.Path)
-	err := viper.ReadInConfig()
-	if err != nil {
-		panic(fmt.Errorf("While reading config file - \"%s\" \n", err))
-	}
-
-	setupConfigMap(configEntries, cmdConfig, "")
-	setupConfigDefaults(configEntries, "")
-}
-
-var cmdConfig = &cobra.Command{
-	Use: "config",
-	Short: `This command allows you to acces and modify the permanent configuration 
-			of the ocp node. A node restart is required for changes to take effect`,
-
-	Run: func(cmd *cobra.Command, args []string) {
-
-		conf := getConfigMap()
-
-		if conf != nil {
-			b, _ := json.MarshalIndent(conf, "", "  ")
-			fmt.Println(string(b))
-			return
-		}
-		fmt.Println("Empty configuration")
-	},
 }
 
 func addFlag(cmd *cobra.Command, accessor string) {
@@ -122,16 +122,17 @@ func addFlag(cmd *cobra.Command, accessor string) {
 	case float64:
 		cmd.Flags().Float64P(name, config.Short, viper.GetFloat64(accessor), config.Text)
 	default:
-		panic(fmt.Sprintf("No flag can be created for config %s", accessor))
+		log.Fatalf("No flag can be created for config %s", accessor)
 	}
 
 	viper.BindPFlag(accessor, cmd.Flags().Lookup(name))
 }
 
-func setupConfigMap(value map[string]interface{}, parent *cobra.Command, accessor string) {
+//Creates subcommands in the given parent that allow to read out and change all configs
+func setupConfigMapCommands(value map[string]interface{}, parent *cobra.Command, accessor string) {
 
 	if parent == nil {
-		panic("Parent command is NIL")
+		log.Fatal("Parent command is NIL")
 	}
 
 	//build all subcommands
@@ -157,7 +158,7 @@ func setupConfigMap(value map[string]interface{}, parent *cobra.Command, accesso
 			}
 
 			parent.AddCommand(cmd)
-			setupConfigMap(tmp, cmd, accessor_)
+			setupConfigMapCommands(tmp, cmd, accessor_)
 
 		} else {
 
@@ -266,7 +267,7 @@ func getDefaultNodeFolder() string {
 
 	dir, err := homedir.Dir()
 	if err != nil {
-		panic("Unable to get home dir of user")
+		log.Fatal("Unable to get home dir of user")
 	}
 
 	return filepath.Join(dir, ".ocp")

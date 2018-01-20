@@ -9,7 +9,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
-	"github.com/satori/go.uuid"
+	"github.com/libp2p/go-libp2p-peer"
 )
 
 var (
@@ -17,11 +17,11 @@ var (
 	server    *connection.Server
 	router    *connection.Router
 	documents []*Document
-	nodeID    uuid.UUID
+	nodeID    peer.ID
 	mutex     *sync.RWMutex
 )
 
-func Setup(s *connection.Server, r *connection.Router, node uuid.UUID) {
+func Setup(s *connection.Server, r *connection.Router, node peer.ID) {
 
 	mutex = &sync.RWMutex{}
 	server = s

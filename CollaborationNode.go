@@ -3,23 +3,25 @@ package main
 import (
 	"CollaborationNode/connection"
 	"CollaborationNode/document"
-	"context"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
-	"github.com/gammazero/nexus/client"
-	"github.com/gammazero/nexus/wamp"
-	"github.com/satori/go.uuid"
+	"github.com/spf13/viper"
+
+	"github.com/libp2p/go-libp2p-crypto"
+	"github.com/libp2p/go-libp2p-peer"
 )
 
 var (
 	quit   chan string //this is the quit channel
 	server *connection.Server
 	router *connection.Router
-	nodeID uuid.UUID
+	nodeID peer.ID
 )
 
 func startup() {
@@ -29,30 +31,32 @@ func startup() {
 		return
 	}
 
-	nodeID = uuid.NewV4()
+	content, err := ioutil.ReadFile(filepath.Join(viper.GetString("directory"), "public"))
+	if err != nil {
+		log.Fatalf("Public key could not be read: %s\n", err)
+	}
+	key, err := crypto.UnmarshalPublicKey(content)
+	if err != nil {
+		log.Fatalf("Public key is invalid: %s\n", err)
+	}
+	nodeID, _ := peer.IDFromPublicKey(key)
 
 	//connect to the collaboration server
-	server := connection.NewServer(nodeID)
-	server.Start(quit)
+	server = connection.NewServer(nodeID)
+	if err := server.Start(quit); err != nil {
+		log.Printf("Connection to server failed: %s", err)
+	} else {
+		log.Print("Connection to server successfull")
+	}
 	defer server.Stop()
 
 	//start up our local router
-	router := connection.NewRouter(server)
+	router = connection.NewRouter(server)
 	router.Start(quit)
 	defer router.Stop()
 
 	//load the document component
 	document.Setup(server, router, nodeID)
-
-	//make the node stoppable by command
-	client, err := router.GetLocalClient("command")
-	if err != nil {
-		panic(fmt.Sprintf("Unable to setup command client: %s", err))
-	}
-
-	if err := client.Register("ocp.command.stop", shutDown, nil); err != nil {
-		panic(err)
-	}
 
 	//make sure we get system signals
 	sigs := make(chan os.Signal)
@@ -65,24 +69,20 @@ func startup() {
 	//save the pidfile
 	err = WritePidPort()
 	if err != nil {
-		panic(fmt.Sprintf("Writing PID file failed with \"%s\"", err))
+		log.Fatalf(fmt.Sprintf("Writing PID file failed with \"%s\"", err))
 	}
 	defer ClearPidPort()
 
+	//setup all commands
+	initOnlineCommands()
+
 	reason := <-quit
-	log.Printf("Shuting down, reason: %s", reason)
-}
-
-func shutDown(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *client.InvokeResult {
-
-	defer func() { quit <- "Shutdown request received" }()
-	return &client.InvokeResult{}
+	log.Printf("Shuting down: %s", reason)
 }
 
 func main() {
 
 	quit = make(chan string)
-	initConfig()
 
 	cmd := getCommands()
 	cmd.Execute()

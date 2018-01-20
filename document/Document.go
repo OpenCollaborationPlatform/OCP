@@ -28,7 +28,11 @@ func NewDocument(ownerID wamp.ID, docID string) (*Document, error) {
 	}
 
 	if docID == "" {
-		docID = uuid.NewV4().String()
+		if ID, err := uuid.NewV4(); err != nil {
+			return nil, err
+		} else {
+			docID = ID.String()
+		}
 	}
 
 	docClient, err := router.GetLocalClient(docID)
@@ -50,8 +54,16 @@ func NewDocument(ownerID wamp.ID, docID string) (*Document, error) {
 	//subscribe all needed meta events
 	errS = append(errS, docClient.Subscribe("wamp.session.on_leave", doc.onSessionLeave, wamp.Dict{}))
 
+	//register all required server functions
+
+	//subscribe all server document events
+	errS = append(errS, doc.forwardServerEvent("opened"))
+	errS = append(errS, doc.forwardServerEvent("closed"))
+
 	for _, err := range errS {
 		if err != nil {
+			docClient.Close()
+			server.GroupRemove(doc.ID)
 			return nil, err
 		}
 	}
@@ -62,6 +74,15 @@ func NewDocument(ownerID wamp.ID, docID string) (*Document, error) {
 //****************************
 //normal methods
 //****************************
+
+//this function forwards server events to the router
+func (doc *Document) forwardServerEvent(event string) error {
+
+	handler := func(args wamp.List, kwargs, details wamp.Dict) {
+		doc.routerClient.Publish(fmt.Sprintf("ocp.documents.%s.%s", doc.ID, event), wamp.Dict{}, args, kwargs)
+	}
+	return server.GroupSubscribe(doc.ID, fmt.Sprintf("ocp.documents.%s.%s", doc.ID, event), handler, wamp.Dict{})
+}
 
 func (doc *Document) removeSession(session wamp.ID) error {
 
@@ -79,6 +100,7 @@ func (doc *Document) removeSession(session wamp.ID) error {
 
 					//and even the doc itself?
 					if len(doc.clients) == 0 {
+						doc.routerClient.Close()
 						removeDoc(doc)
 					}
 				}
@@ -98,6 +120,7 @@ func (doc *Document) removeClient(client *connection.Client) {
 	delete(doc.clients, client)
 	//and even the doc itself?
 	if len(doc.clients) == 0 {
+		doc.routerClient.Close()
 		removeDoc(doc)
 	}
 }
@@ -114,6 +137,16 @@ func (doc *Document) onSessionLeave(args wamp.List, kwargs, details wamp.Dict) {
 
 	//maybe the session has not correclty closed the document
 	doc.removeSession(session)
+
+	return
+}
+
+//close the document, no matter if we have anyone conencted anymore
+func (doc *Document) onRemoved(args wamp.List, kwargs, details wamp.Dict) {
+
+	doc.routerClient.Publish(fmt.Sprintf("ocp.documents.%s.removed", doc.ID), wamp.Dict{}, wamp.List{}, wamp.Dict{})
+	doc.routerClient.Close()
+	removeDoc(doc)
 
 	return
 }
