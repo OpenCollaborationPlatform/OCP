@@ -1,5 +1,5 @@
 // Config
-package main
+package utils
 
 import (
 	"encoding/json"
@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var configDir *configdir.Config = nil
+var ConfigDir *configdir.Config = nil
 
 //Default init of config stuff:
 // - There is always a config file, even if node is not initialized
@@ -30,29 +30,28 @@ func init() {
 		return
 	}
 
-	configDir = folders[0]
+	ConfigDir = folders[0]
 
 	//we aways need to have a config file
-	if !configDir.Exists("config.json") {
-		if _, err := configDir.Create("config.json"); err != nil {
+	if !ConfigDir.Exists("config.json") {
+		if _, err := ConfigDir.Create("config.json"); err != nil {
 			log.Fatalf("Couldn't initialize the config file")
 		}
 
 		dummy := make(map[string]interface{})
 		bytes, _ := json.Marshal(dummy)
-		configDir.WriteFile("config.json", bytes)
+		ConfigDir.WriteFile("config.json", bytes)
 	}
 
 	viper.SetConfigName("config")
 	viper.SetConfigType("json")
-	viper.AddConfigPath(configDir.Path)
+	viper.AddConfigPath(ConfigDir.Path)
 	err := viper.ReadInConfig()
 	if err != nil {
 		log.Fatalf("While reading config file - \"%s\" \n", err)
 	}
 
 	//process the existing configs
-	setupConfigMapCommands(configEntries, cmdConfig, "")
 	setupConfigDefaults(configEntries, "")
 }
 
@@ -75,7 +74,9 @@ var (
 			"port": ConfigEntry{Default: 9000, Short: "p", Text: "The port which is used to connecto to the collaboration server"},
 		},
 		"p2p": map[string]interface{}{
-			"port": ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens for p2p connections from other nodes"},
+			"port":      ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens on for p2p connections from other nodes"},
+			"uri":       ConfigEntry{Default: "0.0.0.0", Short: "u", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
+			"bootstrap": ConfigEntry{Default: []string{"/ip4/207.154.206.195/tcp/3000/ipfs/QmexAnfpHrhMmAC5UNQVS8iBuUUgDrMbMY17Cck2gKrqeX"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification"},
 		},
 	}
 
@@ -108,7 +109,10 @@ func getConfigValueByArray(keys []string) ConfigEntry {
 	return ConfigEntry{}
 }
 
-func addFlag(cmd *cobra.Command, accessor string) {
+//Adds a flag to a command based on a config entry. This uses the long and short names
+//as defined in the config, as well as the default vaule. The accessor string is the standart
+//viper access string.
+func AddConfigFlag(cmd *cobra.Command, accessor string) {
 
 	config := getConfigValue(accessor)
 	keys := strings.Split(accessor, ".")
@@ -121,11 +125,18 @@ func addFlag(cmd *cobra.Command, accessor string) {
 		cmd.Flags().StringP(name, config.Short, viper.GetString(accessor), config.Text)
 	case float64:
 		cmd.Flags().Float64P(name, config.Short, viper.GetFloat64(accessor), config.Text)
+	case []string:
+		cmd.Flags().StringSlice(name, viper.GetStringSlice(accessor), config.Text)
 	default:
 		log.Fatalf("No flag can be created for config %s", accessor)
 	}
 
 	viper.BindPFlag(accessor, cmd.Flags().Lookup(name))
+}
+
+//for access from outside the package
+func SetupConfigCommand(cmd *cobra.Command) {
+	setupConfigMapCommands(configEntries, cmd, "")
 }
 
 //Creates subcommands in the given parent that allow to read out and change all configs
@@ -169,7 +180,7 @@ func setupConfigMapCommands(value map[string]interface{}, parent *cobra.Command,
 				Run: func(cmd *cobra.Command, args []string) {
 
 					if writeValue != "" {
-						saveToConfig(writeValue, strings.Split(accessor_, "."))
+						SaveToConfig(writeValue, strings.Split(accessor_, "."))
 					} else {
 						if node {
 
@@ -208,13 +219,13 @@ func setupConfigDefaults(configs map[string]interface{}, accessor string) {
 	}
 }
 
-func getConfigMap() map[string]interface{} {
+func GetConfigMap() map[string]interface{} {
 
-	if configDir == nil {
+	if ConfigDir == nil {
 		fmt.Println("No config folder found, aborting")
 	}
 	var conf map[string]interface{}
-	data, err := configDir.ReadFile("config.json")
+	data, err := ConfigDir.ReadFile("config.json")
 	if err != nil {
 		fmt.Println("Error while loading configuration file")
 		return nil
@@ -227,21 +238,21 @@ func getConfigMap() map[string]interface{} {
 	return make(map[string]interface{})
 }
 
-func saveToConfigV(value interface{}, keys ...string) {
+func SaveToConfigV(value interface{}, keys ...string) {
 
 	//could be viper style key: connection.port
 	if len(keys) == 1 {
-		saveToConfig(value, strings.Split(keys[0], "."))
+		SaveToConfig(value, strings.Split(keys[0], "."))
 		return
 	}
 
 	//just a array of strings
-	saveToConfig(value, keys)
+	SaveToConfig(value, keys)
 }
 
-func saveToConfig(value interface{}, keys []string) {
+func SaveToConfig(value interface{}, keys []string) {
 
-	conf := getConfigMap()
+	conf := GetConfigMap()
 
 	//iterate over all nested values
 	tmp := conf
@@ -260,10 +271,10 @@ func saveToConfig(value interface{}, keys []string) {
 
 	//write back the file
 	data, _ := json.MarshalIndent(conf, "", "  ")
-	configDir.WriteFile("config.json", data)
+	ConfigDir.WriteFile("config.json", data)
 }
 
-func getDefaultNodeFolder() string {
+func GetDefaultNodeFolder() string {
 
 	dir, err := homedir.Dir()
 	if err != nil {

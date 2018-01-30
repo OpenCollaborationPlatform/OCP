@@ -1,0 +1,158 @@
+// Commands
+package commands
+
+import (
+	"CollaborationNode/node"
+	"CollaborationNode/utils"
+	"context"
+	"fmt"
+	"log"
+
+	nxclient "github.com/gammazero/nexus/client"
+	"github.com/gammazero/nexus/wamp"
+	"github.com/spf13/cobra"
+)
+
+var nodeClient *nxclient.Client = nil
+var isConnected bool = false
+
+var (
+	onlineCMDs []func(*node.Node) //all functions needed to setup the online commands
+	ocpNode    *node.Node
+)
+
+func Execute() {
+
+	rootCmd.AddCommand(cmdVersion, cmdStart, cmdStop, cmdInit, cmdConfig)
+	rootCmd.Execute()
+}
+
+func initOnlineCommands() {
+
+	if ocpNode == nil {
+		log.Fatal("OCP node is NIL, aborting")
+	}
+
+	for _, f := range onlineCMDs {
+		f(ocpNode)
+	}
+}
+
+//this is a herlper function which setups a function to be accessible via the router
+//so that it can be called by normal cobra command
+func onlineCommand(name string, f func([]string) string) func(*cobra.Command, []string) {
+
+	onlineCMDs = append(onlineCMDs, func(node *node.Node) {
+
+		//register the function to be callable via WAMP
+		cmdClient, err := node.Router.GetLocalClient("command")
+		if err != nil {
+			log.Fatalf("Unable to setup command client: %s", err)
+		}
+
+		//make a wrapper function that is WAMP callable
+		wrapper := func(ctx context.Context, wampargs wamp.List, wampkwargs, wampdetails wamp.Dict) *nxclient.InvokeResult {
+
+			//a string argument list
+			slice := make([]string, len(wampargs))
+			for i, value := range wampargs {
+				slice[i] = value.(string)
+			}
+
+			//call the function
+			result := f(slice)
+
+			//postprocess the result
+			return &nxclient.InvokeResult{Args: wamp.List{result}}
+		}
+
+		//register it to be callable
+		if err := cmdClient.Register(fmt.Sprintf("ocp.command.%s", name), wrapper, nil); err != nil {
+			log.Fatalf("Registry error: %s", err)
+		}
+	})
+
+	//build the cobra command function that calls our just registered one
+	cmdFunc := func(cmd *cobra.Command, args []string) {
+
+		//check if a node is running and return info about it
+		if !isConnected {
+			fmt.Println("No node is currently running. Aborting.")
+			return
+		}
+
+		//build the wamp argument list
+		slice := make(wamp.List, len(args))
+		for i, value := range args {
+			slice[i] = value
+		}
+
+		//call the node command
+		ctx := context.Background()
+		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, nil, "")
+		if err != nil {
+			fmt.Println("Error:", err)
+		}
+
+		//postprocess the result and print it
+		str := result.Arguments[0].(string)
+		if str != "" {
+			fmt.Println(str)
+		}
+	}
+
+	return cmdFunc
+}
+
+func setup(pidPortPanic bool) {
+
+	//try to get the client to our running node
+	pid, port, err := utils.ReadPidPort()
+	if err != nil && pidPortPanic {
+		log.Fatalf("Problem with pid file: %s", err)
+	}
+
+	if pid == -1 { //definitely not connected
+		return
+	}
+
+	authFunc := func(c *wamp.Challenge) (string, wamp.Dict) {
+		return "", wamp.Dict{}
+	}
+	cfg := nxclient.ClientConfig{
+		Realm:        "ocp",
+		HelloDetails: wamp.Dict{"authid": "command", "role": "local"},
+		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": authFunc},
+	}
+	c, err := nxclient.ConnectNet(fmt.Sprintf("ws://localhost:%v/", port), cfg)
+
+	if err != nil { //cannot connect means PID is wrong or process hangs
+		err := utils.ClearPidPort()
+		if err != nil && pidPortPanic {
+			log.Fatalf("Problem with pid file: %s", err)
+		}
+		return
+	}
+
+	isConnected = true
+	nodeClient = c
+}
+
+var rootCmd = &cobra.Command{
+	Use:   "ocp",
+	Short: "OCP is the open collaboration platform node",
+	Long: `A node within the open collaboration platform network which provides 
+		 	 access to all functionality of the eco system and handles the datastructures`,
+
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		setup(true)
+	},
+
+	Run: onlineCommand("ocp", func(args []string) string {
+
+		s := "OCP node running:\n"
+		s += fmt.Sprintf("Version: 	%s", ocpNode.Version)
+		s += fmt.Sprintf("ID: 		%s", ocpNode.ID.Pretty())
+		return s
+	}),
+}

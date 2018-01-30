@@ -2,6 +2,7 @@
 package connection
 
 import (
+	"CollaborationNode/p2p"
 	"context"
 	"fmt"
 	"log"
@@ -9,7 +10,6 @@ import (
 
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
-	"github.com/libp2p/go-libp2p-peer"
 	"github.com/spf13/viper"
 )
 
@@ -39,14 +39,14 @@ func newWampGroup() *wampGroup {
 //************************************
 
 type Server struct {
-	nodeID     peer.ID
+	nodeID     p2p.PeerID
 	connection *nxclient.Client
 	clients    []*Client
 	groups     map[string]*wampGroup
 	mutex      *sync.RWMutex
 }
 
-func NewServer(id peer.ID) *Server {
+func NewServer(id p2p.PeerID) *Server {
 
 	return &Server{
 		nodeID:  id,

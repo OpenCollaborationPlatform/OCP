@@ -1,5 +1,5 @@
 // PidPortFile
-package main
+package utils
 
 import (
 	"bytes"

@@ -2,6 +2,7 @@ package document
 
 import (
 	"CollaborationNode/connection"
+	"CollaborationNode/p2p"
 	"context"
 	"fmt"
 	"log"
@@ -9,7 +10,6 @@ import (
 
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
-	"github.com/libp2p/go-libp2p-peer"
 )
 
 var (
@@ -17,11 +17,11 @@ var (
 	server    *connection.Server
 	router    *connection.Router
 	documents []*Document
-	nodeID    peer.ID
+	nodeID    p2p.PeerID
 	mutex     *sync.RWMutex
 )
 
-func Setup(s *connection.Server, r *connection.Router, node peer.ID) {
+func Setup(s *connection.Server, r *connection.Router, node p2p.PeerID) {
 
 	mutex = &sync.RWMutex{}
 	server = s
