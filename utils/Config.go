@@ -4,7 +4,9 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,41 +16,54 @@ import (
 	"github.com/spf13/viper"
 )
 
-var ConfigDir *configdir.Config = nil
-
 //Default init of config stuff:
 // - There is always a config file, even if node is not initialized
 // - If not existing it must be created
 // - Default values are setup
 // - Setup the subcommands for the main config command
-func init() {
+func InitConfig(path string) {
 
-	configDirs := configdir.New("ocp", "")
-	folders := configDirs.QueryFolders(configdir.Global)
-	if len(folders) < 1 {
-		fmt.Println("No folder for config found")
-		return
-	}
-
-	ConfigDir = folders[0]
-
-	//we aways need to have a config file
-	if !ConfigDir.Exists("config.json") {
-		if _, err := ConfigDir.Create("config.json"); err != nil {
-			log.Fatalf("Couldn't initialize the config file")
+	if path == "" {
+		configDirs := configdir.New("ocp", "")
+		folders := configDirs.QueryFolders(configdir.Global)
+		if len(folders) < 1 {
+			fmt.Println("No folder for config found")
+			return
 		}
 
-		dummy := make(map[string]interface{})
-		bytes, _ := json.Marshal(dummy)
-		ConfigDir.WriteFile("config.json", bytes)
+		ConfigDir := folders[0]
+
+		//we aways need to have a config file
+		if !ConfigDir.Exists("config.json") {
+			if _, err := ConfigDir.Create("config.json"); err != nil {
+				log.Fatalf("Couldn't initialize the config file")
+			}
+
+			dummy := make(map[string]interface{})
+			bytes, _ := json.Marshal(dummy)
+			ConfigDir.WriteFile("config.json", bytes)
+		}
+
+		viper.SetConfigName("config")
+		viper.SetConfigType("json")
+		viper.AddConfigPath(ConfigDir.Path)
+
+	} else {
+
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			log.Fatalln("Invalid path to config file")
+		}
+		dir, file := filepath.Split(path)
+		parts := strings.Split(file, ".")
+
+		viper.SetConfigName(parts[0])
+		viper.SetConfigType(parts[1])
+		viper.AddConfigPath(dir)
 	}
 
-	viper.SetConfigName("config")
-	viper.SetConfigType("json")
-	viper.AddConfigPath(ConfigDir.Path)
 	err := viper.ReadInConfig()
 	if err != nil {
-		log.Fatalf("While reading config file - \"%s\" \n", err)
+		log.Fatalf("While reading config file: %s", err)
 	}
 
 	//process the existing configs
@@ -84,22 +99,27 @@ var (
 	node       bool
 )
 
-func getConfigValue(keys ...string) ConfigEntry {
+func GetConfigEntry(keys ...string) ConfigEntry {
 
 	//could be viper access string like connection.port
 	if len(keys) == 1 {
-		return getConfigValueByArray(strings.Split(keys[0], "."))
+		return getConfigEntryByArray(strings.Split(keys[0], "."))
 	}
 
-	return getConfigValueByArray(keys)
+	return getConfigEntryByArray(keys)
 }
 
-func getConfigValueByArray(keys []string) ConfigEntry {
+func getConfigEntryByArray(keys []string) ConfigEntry {
 
 	//iterate over all nested values
 	tmp := configEntries
 	for i, key := range keys {
 		if i == (len(keys) - 1) {
+			//maybe its not a entry...
+			val, ok := tmp[key]
+			if !ok || val == nil {
+				return ConfigEntry{}
+			}
 			return tmp[key].(ConfigEntry)
 		}
 		tmp = tmp[key].(map[string]interface{})
@@ -114,7 +134,7 @@ func getConfigValueByArray(keys []string) ConfigEntry {
 //viper access string.
 func AddConfigFlag(cmd *cobra.Command, accessor string) {
 
-	config := getConfigValue(accessor)
+	config := GetConfigEntry(accessor)
 	keys := strings.Split(accessor, ".")
 	name := keys[len(keys)-1]
 
@@ -132,70 +152,6 @@ func AddConfigFlag(cmd *cobra.Command, accessor string) {
 	}
 
 	viper.BindPFlag(accessor, cmd.Flags().Lookup(name))
-}
-
-//for access from outside the package
-func SetupConfigCommand(cmd *cobra.Command) {
-	setupConfigMapCommands(configEntries, cmd, "")
-}
-
-//Creates subcommands in the given parent that allow to read out and change all configs
-func setupConfigMapCommands(value map[string]interface{}, parent *cobra.Command, accessor string) {
-
-	if parent == nil {
-		log.Fatal("Parent command is NIL")
-	}
-
-	//build all subcommands
-	for key, value := range value {
-
-		var accessor_ string
-
-		if accessor == "" {
-			accessor_ = key
-		} else {
-			accessor_ = accessor + "." + key
-		}
-
-		//it is is a map we need to go on iterating
-		if tmp, ok := value.(map[string]interface{}); ok {
-			//setup the command as child of the former command
-			var cmd = &cobra.Command{
-				Use: key, Args: cobra.MaximumNArgs(0),
-				Run: func(cmd *cobra.Command, args []string) {
-					b, _ := json.MarshalIndent(tmp, "", "  ")
-					fmt.Println(string(b))
-				},
-			}
-
-			parent.AddCommand(cmd)
-			setupConfigMapCommands(tmp, cmd, accessor_)
-
-		} else {
-
-			tmp, _ := value.(ConfigEntry)
-			//setup the command as child of the former command
-			var cmd = &cobra.Command{
-				Use: key, Short: tmp.Text, Args: cobra.MaximumNArgs(0),
-				Run: func(cmd *cobra.Command, args []string) {
-
-					if writeValue != "" {
-						SaveToConfig(writeValue, strings.Split(accessor_, "."))
-					} else {
-						if node {
-
-						} else {
-							fmt.Println(viper.Get(accessor_))
-						}
-					}
-				},
-			}
-			//add all relevant flags
-			cmd.Flags().BoolVarP(&node, "node", "n", false, "Return the value used by the active node")
-			cmd.Flags().StringVarP(&writeValue, "write", "w", "", "Writed the value to the config file")
-			parent.AddCommand(cmd)
-		}
-	}
 }
 
 func setupConfigDefaults(configs map[string]interface{}, accessor string) {
@@ -221,11 +177,8 @@ func setupConfigDefaults(configs map[string]interface{}, accessor string) {
 
 func GetConfigMap() map[string]interface{} {
 
-	if ConfigDir == nil {
-		fmt.Println("No config folder found, aborting")
-	}
 	var conf map[string]interface{}
-	data, err := ConfigDir.ReadFile("config.json")
+	data, err := ioutil.ReadFile(viper.ConfigFileUsed())
 	if err != nil {
 		fmt.Println("Error while loading configuration file")
 		return nil
@@ -271,7 +224,7 @@ func SaveToConfig(value interface{}, keys []string) {
 
 	//write back the file
 	data, _ := json.MarshalIndent(conf, "", "  ")
-	ConfigDir.WriteFile("config.json", data)
+	ioutil.WriteFile(viper.ConfigFileUsed(), data, 0644)
 }
 
 func GetDefaultNodeFolder() string {

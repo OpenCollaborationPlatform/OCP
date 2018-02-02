@@ -19,9 +19,13 @@ var isConnected bool = false
 var (
 	onlineCMDs []func(*node.Node) //all functions needed to setup the online commands
 	ocpNode    *node.Node
+	configPath string
 )
 
 func Execute() {
+
+	//flags
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "", "", "Set configfile to use instead of system config")
 
 	rootCmd.AddCommand(cmdVersion, cmdStart, cmdStop, cmdInit, cmdConfig)
 	rootCmd.Execute()
@@ -105,6 +109,9 @@ func onlineCommand(name string, f func([]string) string) func(*cobra.Command, []
 }
 
 func setup(pidPortPanic bool) {
+
+	//config from flag
+	utils.InitConfig(configPath)
 
 	//try to get the client to our running node
 	pid, port, err := utils.ReadPidPort()
