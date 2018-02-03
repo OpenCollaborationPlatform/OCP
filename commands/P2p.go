@@ -48,7 +48,7 @@ var cmdP2PPeers = &cobra.Command{
 				if err != nil {
 					return fmt.Sprintf("Error while parsing adresses: %s", err)
 				}
-				result += fmt.Sprintf("%s", addrs[0].String())
+				result += fmt.Sprintf("%s\n", addrs[0].String())
 			} else {
 				result += peer.Pretty() + "\n"
 			}
@@ -105,11 +105,19 @@ var cmdP2PConnect = &cobra.Command{
 
 var cmdP2PClose = &cobra.Command{
 	Use:   "close",
-	Short: "List all peers the node is connected to",
+	Short: "close [peer] Close connection to given peer",
+	Args:  cobra.ExactArgs(1),
 
 	Run: onlineCommand("p2p.close", func(args []string, flags map[string]interface{}) string {
 
-		result := fmt.Sprintf("%v", ocpNode.Host.Peers())
-		return result
+		pid, err := p2p.IDFromString(args[0])
+		if err != nil {
+			return err.Error()
+		}
+		err = ocpNode.Host.CloseConnection(pid)
+		if err != nil {
+			return err.Error()
+		}
+		return "Connection successfully closed"
 	}),
 }

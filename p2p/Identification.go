@@ -13,6 +13,16 @@ type PeerID struct {
 	peer.ID
 }
 
+func IDFromString(id string) (PeerID, error) {
+
+	pid, err := peer.IDFromString(id)
+
+	if err != nil {
+		return PeerID{}, err
+	}
+	return PeerID{pid}, nil
+}
+
 func LoadPeerIDFromPublicKeyFile(file string) PeerID {
 
 	content, err := ioutil.ReadFile(file)

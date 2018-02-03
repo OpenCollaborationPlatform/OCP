@@ -93,14 +93,16 @@ func onlineCommand(name string, f func([]string, map[string]interface{}) string)
 		//build the flag list
 		var flags = make(wamp.Dict, 0)
 		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
-			fmt.Printf("Set flag %s with type %s\n", flag.Name, flag.Value.Type())
-			switch flag.Value.Type() {
 
+			switch flag.Value.Type() {
 			case "string":
 				val, _ := cmd.Flags().GetString(flag.Name)
 				flags[flag.Name] = val
 			case "bool":
 				val, _ := cmd.Flags().GetBool(flag.Name)
+				flags[flag.Name] = val
+			case "int":
+				val, _ := cmd.Flags().GetInt(flag.Name)
 				flags[flag.Name] = val
 			default:
 				log.Fatalf("Unsupported flag type, please implement: %s", flag.Value.Type())

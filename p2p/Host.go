@@ -144,6 +144,10 @@ func (h *Host) Connect(ipfsaddr ma.Multiaddr) error {
 	return nil
 }
 
+func (h *Host) CloseConnection(peer PeerID) error {
+	return h.host.Network().ClosePeer(peer.ID)
+}
+
 func (h *Host) Peers() []PeerID {
 
 	result := make([]PeerID, len(h.host.Network().Peers()))
