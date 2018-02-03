@@ -60,6 +60,11 @@ var cmdConfig = &cobra.Command{
 				}
 			}
 
+			//groups got a newine for better visual separation, do the same for ungrouped entries
+			if len(parts) == 1 && len(groups) >= 1 {
+				fmt.Println("")
+			}
+
 			//write the groups
 			groups = groups[:firstChanged]
 			for i := firstChanged; i < len(parts)-1; i++ {

@@ -90,7 +90,9 @@ func (h *Host) Start() error {
 	netw := (*swarm.Network)(swrm)
 
 	ctx := context.Background()
-	opts := bhost.HostOpts{EnableRelay: false}
+	opts := bhost.HostOpts{
+		EnableRelay: false,
+		NATManager:  bhost.NewNATManager(netw)}
 	h.host, err = bhost.NewHost(ctx, netw, &opts)
 	if err != nil {
 		return err
@@ -102,26 +104,11 @@ func (h *Host) Start() error {
 
 		ipfsaddr, err := ma.NewMultiaddr(value)
 		if err != nil {
-			log.Fatalln(err)
+			log.Printf("Not a valid bootstrap node: %s", err)
 		}
-
-		pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS)
-		if err != nil {
-			log.Fatalln(err)
+		if err := h.Connect(ipfsaddr); err != nil {
+			log.Printf("Bootstrap error: %s", err)
 		}
-
-		peerid, err := peer.IDB58Decode(pid)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		// Decapsulate the /ipfs/<peerID> part from the target
-		// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
-		targetPeerAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)))
-		targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
-
-		h.host.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
-		h.host.Connect(ctx, h.host.Peerstore().PeerInfo(peerid))
 	}
 
 	log.Printf("Host successful stated at %s", addr.String())
@@ -134,7 +121,63 @@ func (h *Host) Stop() error {
 	return h.host.Close()
 }
 
-func (h *Host) Peers() []peer.ID {
+func (h *Host) Connect(ipfsaddr ma.Multiaddr) error {
 
-	return h.host.Network().Peers()
+	pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS)
+	if err != nil {
+		return err
+	}
+
+	peerid, err := peer.IDB58Decode(pid)
+	if err != nil {
+		return err
+	}
+
+	// Decapsulate the /ipfs/<peerID> part from the target
+	// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
+	targetPeerAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)))
+	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
+
+	h.host.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
+	h.host.Connect(context.Background(), h.host.Peerstore().PeerInfo(peerid))
+
+	return nil
+}
+
+func (h *Host) Peers() []PeerID {
+
+	result := make([]PeerID, len(h.host.Network().Peers()))
+	for i, peer := range h.host.Network().Peers() {
+		result[i] = PeerID{peer}
+	}
+	return result
+}
+
+func (h *Host) OwnAddresses() []ma.Multiaddr {
+
+	proto := ma.ProtocolWithCode(ma.P_IPFS).Name
+	p2paddr, _ := ma.NewMultiaddr("/" + proto + "/" + h.host.ID().Pretty())
+
+	var addrs []ma.Multiaddr
+	for _, addr := range h.host.AllAddrs() {
+		addrs = append(addrs, addr.Encapsulate(p2paddr))
+	}
+	return addrs
+}
+
+func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {
+
+	proto := ma.ProtocolWithCode(ma.P_IPFS).Name
+	p2paddr, err := ma.NewMultiaddr("/" + proto + "/" + peer.Pretty())
+	if err != nil {
+		return nil, err
+	}
+
+	pi := h.host.Peerstore().PeerInfo(peer.ID)
+	var addrs []ma.Multiaddr
+	for _, addr := range pi.Addrs {
+		addrs = append(addrs, addr.Encapsulate(p2paddr))
+	}
+
+	return addrs, nil
 }

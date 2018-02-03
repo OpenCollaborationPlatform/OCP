@@ -10,7 +10,9 @@ import (
 
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
+	golog "github.com/ipfs/go-log"
 	"github.com/spf13/cobra"
+	gologging "github.com/whyrusleeping/go-logging"
 )
 
 var nodeClient *nxclient.Client = nil
@@ -20,12 +22,14 @@ var (
 	onlineCMDs []func(*node.Node) //all functions needed to setup the online commands
 	ocpNode    *node.Node
 	configPath string
+	verbose    bool
 )
 
 func Execute() {
 
 	//flags
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "", "", "Set configfile to use instead of system config")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable extra output like debug messages")
 
 	rootCmd.AddCommand(cmdVersion, cmdStart, cmdStop, cmdInit, cmdConfig)
 	rootCmd.Execute()
@@ -112,6 +116,11 @@ func setup(pidPortPanic bool) {
 
 	//config from flag
 	utils.InitConfig(configPath)
+
+	//output from flag
+	if verbose {
+		golog.SetAllLoggers(gologging.DEBUG)
+	}
 
 	//try to get the client to our running node
 	pid, port, err := utils.ReadPidPort()
