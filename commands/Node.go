@@ -17,17 +17,15 @@ import (
 
 //flag variables
 var (
-	createNodeDir bool
-	forceCreation bool
-	nodeDir       string
+	clean bool
+	force bool
 )
 
 func init() {
 
 	//add flags
-	cmdInit.Flags().BoolVarP(&createNodeDir, "create", "c", false, "Create directory if it does not exist")
-	cmdInit.Flags().BoolVarP(&forceCreation, "force", "f", false, "Creates the directory even if there already exists one")
-	cmdInit.Flags().StringVarP(&nodeDir, "path", "p", "", "Specify alternative folder to be used")
+	cmdInit.Flags().BoolVarP(&clean, "clean", "c", false, "If the given dir exist it gets cleaned and newly initialized")
+	cmdInit.Flags().BoolVarP(&force, "force", "f", false, "Initialize new directory even if there is one already")
 
 	utils.AddConfigFlag(cmdStart, "connection.port")
 }
@@ -73,7 +71,7 @@ var cmdStop = &cobra.Command{
 	Long: `The node will be sttoped if there is one running. Otherwise an 
 			error will be printed`,
 
-	Run: onlineCommand("stop", func([]string) string {
+	Run: onlineCommand("stop", func(args []string, flags map[string]interface{}) string {
 		defer func() { ocpNode.Stop("Shutdown request received") }()
 		return ""
 	}),
@@ -95,20 +93,22 @@ var cmdInit = &cobra.Command{
 			return
 		}
 
-		if nodeDir == "" {
-			nodeDir = utils.GetDefaultNodeFolder()
+		//user may have specified something special
+		nodeDir := utils.GetDefaultNodeFolder()
+		if len(args) == 1 {
+			nodeDir = args[0]
 		}
 
 		//see if we have a folder already
 		currentDir := viper.GetString("directory")
 		_, err := os.Stat(currentDir)
-		if err == nil {
-			if nodeDir == currentDir {
+		if !os.IsNotExist(err) {
+			if nodeDir == currentDir && !force {
 				fmt.Println("Specified directiory already initialized. Nothing done.")
 				return
 			}
-			if !forceCreation {
-				fmt.Printf("There is a initialized directiory already, use --force to override: %s\n", currentDir)
+			if !force {
+				fmt.Println("There is a initialized directiory already, use --force to override")
 				return
 			}
 		}
@@ -117,19 +117,27 @@ var cmdInit = &cobra.Command{
 		_, err = os.Stat(nodeDir)
 		if os.IsNotExist(err) {
 
-			if createNodeDir {
-				if err := os.MkdirAll(nodeDir, os.ModePerm); err != nil {
-					fmt.Printf("Error creating the node folder \"%s\": %s\n", nodeDir, err)
-					return
-				}
-			} else {
-				fmt.Println("Folder does not exist. Please create it or use -c flag")
+			if err := os.MkdirAll(nodeDir, os.ModePerm); err != nil {
+				fmt.Printf("Error creating the node folder \"%s\": %s\n", nodeDir, err)
+				return
+			}
+		} else {
+			if !clean {
+				fmt.Println("Folder exists, but clean was not specified: nothing done")
+				return
+			}
+			//clean means: delete it and recreate
+			if err := os.RemoveAll(nodeDir); err != nil {
+				fmt.Printf("Error cleaning the node folder \"%s\": %s", nodeDir, err)
+				return
+			}
+			if err := os.MkdirAll(nodeDir, os.ModePerm); err != nil {
+				fmt.Printf("Error cleaning the node folder \"%s\": %s\n", nodeDir, err)
 				return
 			}
 		}
 
 		utils.SaveToConfigV(nodeDir, "directory")
-		fmt.Printf("Node directory was initialized: %s\n", nodeDir)
 
 		//Generate our node keys (and hence identity)
 		priv, pub, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)
@@ -151,5 +159,8 @@ var cmdInit = &cobra.Command{
 			fmt.Printf("Could not create private key file: %s\n", err)
 			return
 		}
+
+		fmt.Printf("Node directory was initialized: %s\n", nodeDir)
+
 	},
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/gammazero/nexus/wamp"
 	golog "github.com/ipfs/go-log"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	gologging "github.com/whyrusleeping/go-logging"
 )
 
@@ -48,7 +49,7 @@ func initOnlineCommands() {
 
 //this is a herlper function which setups a function to be accessible via the router
 //so that it can be called by normal cobra command
-func onlineCommand(name string, f func([]string) string) func(*cobra.Command, []string) {
+func onlineCommand(name string, f func([]string, map[string]interface{}) string) func(*cobra.Command, []string) {
 
 	onlineCMDs = append(onlineCMDs, func(node *node.Node) {
 
@@ -59,7 +60,7 @@ func onlineCommand(name string, f func([]string) string) func(*cobra.Command, []
 		}
 
 		//make a wrapper function that is WAMP callable
-		wrapper := func(ctx context.Context, wampargs wamp.List, wampkwargs, wampdetails wamp.Dict) *nxclient.InvokeResult {
+		wrapper := func(ctx context.Context, wampargs wamp.List, wampkwargs wamp.Dict, wampdetails wamp.Dict) *nxclient.InvokeResult {
 
 			//a string argument list
 			slice := make([]string, len(wampargs))
@@ -68,7 +69,7 @@ func onlineCommand(name string, f func([]string) string) func(*cobra.Command, []
 			}
 
 			//call the function
-			result := f(slice)
+			result := f(slice, wampkwargs)
 
 			//postprocess the result
 			return &nxclient.InvokeResult{Args: wamp.List{result}}
@@ -89,6 +90,23 @@ func onlineCommand(name string, f func([]string) string) func(*cobra.Command, []
 			return
 		}
 
+		//build the flag list
+		var flags = make(wamp.Dict, 0)
+		cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+			fmt.Printf("Set flag %s with type %s\n", flag.Name, flag.Value.Type())
+			switch flag.Value.Type() {
+
+			case "string":
+				val, _ := cmd.Flags().GetString(flag.Name)
+				flags[flag.Name] = val
+			case "bool":
+				val, _ := cmd.Flags().GetBool(flag.Name)
+				flags[flag.Name] = val
+			default:
+				log.Fatalf("Unsupported flag type, please implement: %s", flag.Value.Type())
+			}
+		})
+
 		//build the wamp argument list
 		slice := make(wamp.List, len(args))
 		for i, value := range args {
@@ -97,7 +115,7 @@ func onlineCommand(name string, f func([]string) string) func(*cobra.Command, []
 
 		//call the node command
 		ctx := context.Background()
-		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, nil, "")
+		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, flags, "")
 		if err != nil {
 			fmt.Println("Error:", err)
 		}
@@ -164,7 +182,7 @@ var rootCmd = &cobra.Command{
 		setup(true)
 	},
 
-	Run: onlineCommand("ocp", func(args []string) string {
+	Run: onlineCommand("ocp", func(args []string, flags map[string]interface{}) string {
 
 		s := "OCP node running:\n"
 		s += fmt.Sprintf("Version: 	%s", ocpNode.Version)
