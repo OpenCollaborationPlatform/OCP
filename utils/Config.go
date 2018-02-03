@@ -23,15 +23,15 @@ import (
 // - Setup the subcommands for the main config command
 func InitConfig(path string) {
 
-	if path == "" {
-		configDirs := configdir.New("ocp", "")
-		folders := configDirs.QueryFolders(configdir.Global)
-		if len(folders) < 1 {
-			fmt.Println("No folder for config found")
-			return
-		}
+	configDirs := configdir.New("ocp", "")
+	folders := configDirs.QueryFolders(configdir.Global)
+	if len(folders) < 1 {
+		fmt.Println("No folder for config found")
+		return
+	}
+	ConfigDir := folders[0]
 
-		ConfigDir := folders[0]
+	if path == "" {
 
 		//we aways need to have a config file
 		if !ConfigDir.Exists("config.json") {
@@ -50,15 +50,30 @@ func InitConfig(path string) {
 
 	} else {
 
-		if _, err := os.Stat(path); os.IsNotExist(err) {
-			log.Fatalln("Invalid path to config file")
-		}
+		//check if it is a full path or a config file name
 		dir, file := filepath.Split(path)
 		parts := strings.Split(file, ".")
 
-		viper.SetConfigName(parts[0])
-		viper.SetConfigType(parts[1])
-		viper.AddConfigPath(dir)
+		if dir == "" && len(parts) == 1 {
+			//we load from default forlder, but special name
+			if !ConfigDir.Exists(parts[0] + ".json") {
+				log.Fatalf("Given config file does not exist")
+			}
+
+			viper.SetConfigName(parts[0])
+			viper.SetConfigType("json")
+			viper.AddConfigPath(ConfigDir.Path)
+
+		} else {
+			//full file path is given
+			if _, err := os.Stat(path); os.IsNotExist(err) {
+				log.Fatalln("Invalid path to config file")
+			}
+
+			viper.SetConfigName(parts[0])
+			viper.SetConfigType(parts[1])
+			viper.AddConfigPath(dir)
+		}
 	}
 
 	err := viper.ReadInConfig()
@@ -235,4 +250,72 @@ func GetDefaultNodeFolder() string {
 	}
 
 	return filepath.Join(dir, ".ocp")
+}
+
+func CreateConfigFile(name string) (string, error) {
+
+	dir, file := filepath.Split(name)
+	if dir != "" {
+		return "", fmt.Errorf("Config file name is not allowed to contain a path")
+	}
+	if file == "" {
+		return "", fmt.Errorf("Name is invalid")
+	}
+
+	parts := strings.Split(file, ".")
+	if len(parts) > 1 && parts[2] != "json" {
+		return "", fmt.Errorf("No file ending is allowd exept json. Best to provide name only")
+	}
+
+	configDirs := configdir.New("ocp", "")
+	folders := configDirs.QueryFolders(configdir.Global)
+	if len(folders) < 1 {
+		return "", fmt.Errorf("No folder for config found")
+	}
+
+	ConfigDir := folders[0]
+
+	//Only single file per name
+	if ConfigDir.Exists(parts[0] + ".json") {
+		return "", fmt.Errorf("Config file already exists")
+	}
+
+	//now we can fiinally create it
+	if _, err := ConfigDir.Create(parts[0] + ".json"); err != nil {
+		return "", fmt.Errorf("Couldn't create the config file: ", err)
+	}
+
+	//setup a readable dummy
+	dummy := make(map[string]interface{})
+	bytes, _ := json.Marshal(dummy)
+	ConfigDir.WriteFile(parts[0]+".json", bytes)
+
+	return parts[0], nil
+}
+
+func RemoveConfigFile(name string) error {
+
+	parts := strings.Split(name, ".")
+	if len(parts) > 1 && parts[2] != "json" {
+		return fmt.Errorf("Config files are always .json")
+	}
+
+	configDirs := configdir.New("ocp", "")
+	folders := configDirs.QueryFolders(configdir.Global)
+	if len(folders) < 1 {
+		return fmt.Errorf("No folder for config found")
+	}
+
+	ConfigDir := folders[0]
+
+	//Only single file per name
+	if !ConfigDir.Exists(parts[0] + ".json") {
+		return fmt.Errorf("Config file does not exist")
+	}
+
+	//now we can finally remove it
+	path := filepath.Join(ConfigDir.Path, parts[0]+".json")
+	err := os.Remove(path)
+
+	return err
 }

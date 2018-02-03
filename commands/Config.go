@@ -13,7 +13,7 @@ import (
 
 func init() {
 
-	cmdConfig.AddCommand(cmdConfigWrite)
+	cmdConfig.AddCommand(cmdConfigWrite, cmdConfigCreate, cmdConfigRemove)
 }
 
 var cmdConfig = &cobra.Command{
@@ -21,6 +21,9 @@ var cmdConfig = &cobra.Command{
 	Short: `This command allows you to acces and modify the permanent configuration 
 			of the ocp node. A node restart is required for changes to take effect`,
 	Args: cobra.MaximumNArgs(1),
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		setup(false)
+	},
 
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -88,7 +91,7 @@ var cmdConfig = &cobra.Command{
 
 var cmdConfigWrite = &cobra.Command{
 	Use:   "write",
-	Short: "write [accessor] [value]",
+	Short: "write [accessor] [value] Writes value for given config to the file",
 	Long:  "Writes a config value to the config file. The setting will not be used by a already running node",
 	Args:  cobra.ExactArgs(2),
 
@@ -101,5 +104,40 @@ var cmdConfigWrite = &cobra.Command{
 		}
 
 		utils.SaveToConfigV(args[1], args[0])
+	},
+}
+
+var cmdConfigCreate = &cobra.Command{
+	Use:   "create",
+	Short: "create [name] Creates new config file with given name",
+	Long: "Creates a named config file which can be used as alternativ to the default one. It will be stored in the " +
+		"default config folder. The create file can be used via the global --config flag, e.g\n" +
+		"ocp new MyConfigFile \nocp start --config MyConfigFile",
+	Args: cobra.ExactArgs(1),
+
+	Run: func(cmd *cobra.Command, args []string) {
+
+		name, err := utils.CreateConfigFile(args[0])
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		fmt.Printf("Successfully created config file. Use it with --config %s\n", name)
+	},
+}
+
+var cmdConfigRemove = &cobra.Command{
+	Use:   "remove",
+	Short: "remove [name] Removes config file with given name",
+	Args:  cobra.ExactArgs(1),
+
+	Run: func(cmd *cobra.Command, args []string) {
+
+		err := utils.RemoveConfigFile(args[0])
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+		fmt.Printf("Successfully removed config file")
 	},
 }
