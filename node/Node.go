@@ -35,7 +35,7 @@ func NewNode() *Node {
 func (n *Node) Start() {
 
 	//load ID and establish the p2p network
-	n.ID = p2p.LoadPeerIDFromPublicKeyFile(filepath.Join(viper.GetString("directory"), "public"))
+	n.ID = p2p.PeerIDFromPublicKeyFile(filepath.Join(viper.GetString("directory"), "public"))
 	log.Printf("Node ID set to %s", n.ID.Pretty())
 	n.Host = p2p.NewHost()
 	n.Host.Start()

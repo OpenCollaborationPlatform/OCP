@@ -3,8 +3,12 @@ package commands
 
 import (
 	"CollaborationNode/p2p"
+	"crypto/rand"
 	"fmt"
+	"io"
+	mrand "math/rand"
 
+	"github.com/libp2p/go-libp2p-crypto"
 	"github.com/libp2p/go-libp2p-peer"
 	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
@@ -14,8 +18,11 @@ func init() {
 
 	//flags
 	cmdP2PPeers.Flags().BoolP("address", "a", false, "Print full adress instead of ID (only one of possibly multiple)")
+	cmdP2PSwarmCreate.Flags().IntP("seed", "s", 0, "set a seed for swarm key generation for deterministic outcomes instead of random keys")
+	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")
 
-	cmdP2P.AddCommand(cmdP2PPeers, cmdP2PAddrs, cmdP2PConnect, cmdP2PClose)
+	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd)
+	cmdP2P.AddCommand(cmdP2PPeers, cmdP2PAddrs, cmdP2PConnect, cmdP2PClose, cmdP2PSwarm)
 	rootCmd.AddCommand(cmdP2P)
 }
 
@@ -110,7 +117,7 @@ var cmdP2PClose = &cobra.Command{
 
 	Run: onlineCommand("p2p.close", func(args []string, flags map[string]interface{}) string {
 
-		pid, err := p2p.IDFromString(args[0])
+		pid, err := p2p.PeerIDFromString(args[0])
 		if err != nil {
 			return err.Error()
 		}
@@ -119,5 +126,80 @@ var cmdP2PClose = &cobra.Command{
 			return err.Error()
 		}
 		return "Connection successfully closed"
+	}),
+}
+
+var cmdP2PSwarm = &cobra.Command{
+	Use:   "swarm",
+	Short: "lists all open swarms and allows to handle them via subcommands",
+	Args:  cobra.ExactArgs(0),
+
+	Run: onlineCommand("p2p.swarm", func(args []string, flags map[string]interface{}) string {
+
+		var result string
+		for _, swarm := range ocpNode.Host.Swarms() {
+
+			result += swarm.ID.Pretty()
+			if swarm.IsPublic() {
+				result += " (public)"
+			} else {
+				result += " (private)"
+			}
+		}
+		return result
+	}),
+}
+
+var cmdP2PSwarmCreate = &cobra.Command{
+	Use:   "create",
+	Short: "create [id] [options] creates a new swarm with given id",
+	Args:  cobra.ExactArgs(1),
+
+	Run: onlineCommand("p2p.swarm.create", func(args []string, flags map[string]interface{}) string {
+
+		seed := int(flags["seed"].(float64))
+		var r io.Reader
+		if seed == 0 {
+			r = rand.Reader
+		} else {
+			r = mrand.New(mrand.NewSource(int64(seed)))
+		}
+		priv, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
+		if err != nil {
+			return fmt.Sprintf("Error at key generation: %s", err)
+		}
+
+		ocpNode.Host.CreateSwarm(p2p.SwarmID(args[0]), priv, flags["public"].(bool))
+		return "Successfull created swarm"
+	}),
+}
+
+var cmdP2PSwarmAdd = &cobra.Command{
+	Use:   "add",
+	Short: "add [swarm] [peer] adds a peer to a swarm",
+	Args:  cobra.ExactArgs(2),
+
+	Run: onlineCommand("p2p.swarm.add", func(args []string, flags map[string]interface{}) string {
+
+		sid := p2p.SwarmID(args[0])
+		pid, err := p2p.PeerIDFromString(args[1])
+		if err != nil {
+			return fmt.Sprintf("Error reading PeerID: %s", err)
+		}
+
+		if !ocpNode.Host.IsConnected(pid) {
+			return "Peer is not connected, can't be added"
+		}
+
+		swarm, err := ocpNode.Host.GetSwarm(sid)
+		if err != nil {
+			return err.Error()
+		}
+
+		if err := swarm.AddPeer(pid); err != nil {
+			return fmt.Sprintf("Error adding PeerID to swarm: %s", err)
+		}
+
+		return "Successfully added peer"
 	}),
 }

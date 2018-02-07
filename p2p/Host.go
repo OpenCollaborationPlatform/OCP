@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"path/filepath"
+	"sync"
 
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -21,13 +22,17 @@ import (
 )
 
 type Host struct {
-	host *bhost.BasicHost
+	host       *bhost.BasicHost
+	swarmMutex sync.RWMutex
+	swarms     []*Swarm
+
+	swarmProto *swarmProtocol
 }
 
 //Host creates p2p host which manages all peer connections
 func NewHost() *Host {
 
-	return &Host{}
+	return &Host{swarms: make([]*Swarm, 0)}
 }
 
 // Starts the listening for connections and the bootstrap prozess
@@ -111,6 +116,9 @@ func (h *Host) Start() error {
 		}
 	}
 
+	//add the protocols
+	h.swarmProto = newSwarmProtocol(h)
+
 	log.Printf("Host successful stated at %s", addr.String())
 
 	return nil
@@ -146,6 +154,19 @@ func (h *Host) Connect(ipfsaddr ma.Multiaddr) error {
 
 func (h *Host) CloseConnection(peer PeerID) error {
 	return h.host.Network().ClosePeer(peer.ID)
+}
+
+func (h *Host) IsConnected(peer PeerID) bool {
+
+	for _, p := range h.host.Network().Peers() {
+		if peer.ID == p {
+			if len(h.host.Network().ConnsToPeer(peer.ID)) > 0 {
+				return true
+			}
+			return false
+		}
+	}
+	return false
 }
 
 func (h *Host) Peers() []PeerID {
@@ -184,4 +205,32 @@ func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {
 	}
 
 	return addrs, nil
+}
+
+/*		Swarm Handling
+****************************** */
+
+func (h *Host) Swarms() []*Swarm {
+	h.swarmMutex.RLock()
+	defer h.swarmMutex.RUnlock()
+	return h.swarms
+}
+
+func (h *Host) CreateSwarm(id SwarmID, privKey crypto.PrivKey, public bool) *Swarm {
+
+	h.swarmMutex.Lock()
+	defer h.swarmMutex.Unlock()
+	swarm := newSwarm(h, id, public, privKey, privKey.GetPublic())
+	h.swarms = append(h.swarms, swarm)
+	return swarm
+}
+
+func (h *Host) GetSwarm(id SwarmID) (*Swarm, error) {
+
+	for _, swarm := range h.swarms {
+		if swarm.ID == id {
+			return swarm, nil
+		}
+	}
+	return nil, fmt.Errorf("No such swarm exists")
 }

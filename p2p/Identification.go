@@ -13,17 +13,21 @@ type PeerID struct {
 	peer.ID
 }
 
-func IDFromString(id string) (PeerID, error) {
+func PeerIDFromString(id string) (PeerID, error) {
 
-	pid, err := peer.IDFromString(id)
-
+	peerid, err := peer.IDB58Decode(id)
 	if err != nil {
 		return PeerID{}, err
 	}
-	return PeerID{pid}, nil
+	return PeerID{peerid}, nil
 }
 
-func LoadPeerIDFromPublicKeyFile(file string) PeerID {
+func PeerIDFromPublicKey(pk crypto.PubKey) (PeerID, error) {
+	id, err := peer.IDFromPublicKey(pk)
+	return PeerID{id}, err
+}
+
+func PeerIDFromPublicKeyFile(file string) PeerID {
 
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
