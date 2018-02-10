@@ -20,12 +20,14 @@ const (
 	ERROR       MessageType = 1
 	PARTICIPATE MessageType = 2
 	SUCCESS     MessageType = 3
+	EVENT       MessageType = 4
 )
 
 var mtStrings = map[MessageType]string{
 	ERROR:       "ERROR",
 	PARTICIPATE: "PARTICIPATE",
 	SUCCESS:     "SUCCESS",
+	EVENT:       "EVENT",
 }
 
 // String returns the message type string.
@@ -40,6 +42,8 @@ func NewMessage(t MessageType) Message {
 		return &Participate{}
 	case SUCCESS:
 		return &Success{}
+	case EVENT:
+		return &Event{}
 	}
 	return nil
 }
@@ -53,8 +57,8 @@ func (msg Error) MessageType() MessageType { return ERROR }
 
 // Sent by a Peer to say for which swarm the given stream is intended
 type Participate struct {
-	Swarm     SwarmID
-	Signature string
+	Swarm SwarmID
+	Role  string
 }
 
 func (msg Participate) MessageType() MessageType { return PARTICIPATE }
@@ -63,3 +67,12 @@ func (msg Participate) MessageType() MessageType { return PARTICIPATE }
 type Success struct{}
 
 func (msg Success) MessageType() MessageType { return SUCCESS }
+
+// Event msg which transports events
+type Event struct {
+	Uri    string
+	KwArgs Dict
+	Args   List
+}
+
+func (msg Event) MessageType() MessageType { return EVENT }

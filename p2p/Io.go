@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/libp2p/go-libp2p-net"
@@ -47,7 +48,7 @@ func (w *streamWriter) Close() error {
 }
 
 func newStreamReader(s net.Stream, maxSize int) *streamReader {
-	return &streamReader{s, bufio.NewReader(s), nil, maxSize}
+	return &streamReader{s, bufio.NewReader(s), nil, maxSize, nil}
 }
 
 type streamReader struct {
@@ -55,6 +56,7 @@ type streamReader struct {
 	reader  *bufio.Reader
 	buf     []byte
 	maxSize int
+	forward chan Message
 }
 
 func (r *streamReader) ReadMsg() (Message, error) {
@@ -79,6 +81,25 @@ func (r *streamReader) ReadMsg() (Message, error) {
 
 func (r *streamReader) Close() error {
 	r.Stream.Close()
+	return nil
+}
+
+func (r *streamReader) ForwardMsg(channel chan Message) error {
+
+	if r.forward != nil {
+		return fmt.Errorf("Messages already forwarded")
+	}
+	r.forward = channel
+	go func() {
+		for {
+			msg, err := r.ReadMsg()
+			if err != nil {
+				r.Close()
+				break
+			}
+			channel <- msg
+		}
+	}()
 	return nil
 }
 

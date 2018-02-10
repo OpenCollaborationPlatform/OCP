@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
+	"strings"
 
 	"github.com/libp2p/go-libp2p-crypto"
 	"github.com/libp2p/go-libp2p-peer"
@@ -21,7 +22,7 @@ func init() {
 	cmdP2PSwarmCreate.Flags().IntP("seed", "s", 0, "set a seed for swarm key generation for deterministic outcomes instead of random keys")
 	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")
 
-	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd)
+	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent)
 	cmdP2P.AddCommand(cmdP2PPeers, cmdP2PAddrs, cmdP2PConnect, cmdP2PClose, cmdP2PSwarm)
 	rootCmd.AddCommand(cmdP2P)
 }
@@ -196,10 +197,38 @@ var cmdP2PSwarmAdd = &cobra.Command{
 			return err.Error()
 		}
 
-		if err := swarm.AddPeer(pid); err != nil {
+		if err := swarm.AddPeer(pid, false); err != nil {
 			return fmt.Sprintf("Error adding PeerID to swarm: %s", err)
 		}
 
 		return "Successfully added peer"
+	}),
+}
+
+var cmdP2PSwarmEvent = &cobra.Command{
+	Use:   "event",
+	Short: "event [swarm] [uri] [kwargs] send a event with given keyword arguments into swarm",
+	Args:  cobra.MinimumNArgs(2),
+
+	Run: onlineCommand("p2p.swarm.event", func(args []string, flags map[string]interface{}) string {
+
+		sid := p2p.SwarmID(args[0])
+		swarm, err := ocpNode.Host.GetSwarm(sid)
+		if err != nil {
+			return err.Error()
+		}
+
+		//build the keyword arguments
+		d := p2p.Dict{}
+		for _, arg := range args[2:] {
+			parts := strings.Split(arg, ":")
+			if len(parts) != 2 {
+				return "Arguments must be of form name:value"
+			}
+			d[parts[0]] = parts[1]
+		}
+
+		swarm.PostEvent(args[1], d)
+		return "Successfully posted event"
 	}),
 }
