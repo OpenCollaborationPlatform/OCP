@@ -17,17 +17,23 @@ type List []interface{}
 
 // Message Codes and Direction
 const (
-	ERROR       MessageType = 1
-	PARTICIPATE MessageType = 2
-	SUCCESS     MessageType = 3
-	EVENT       MessageType = 4
+	ERROR        MessageType = 1
+	PARTICIPATE  MessageType = 2
+	SUCCESS      MessageType = 3
+	EVENT        MessageType = 4
+	SHAREDFILE   MessageType = 5
+	REQUESTBLOCK MessageType = 6
+	BLOCKDATA    MessageType = 7
 )
 
 var mtStrings = map[MessageType]string{
-	ERROR:       "ERROR",
-	PARTICIPATE: "PARTICIPATE",
-	SUCCESS:     "SUCCESS",
-	EVENT:       "EVENT",
+	ERROR:        "ERROR",
+	PARTICIPATE:  "PARTICIPATE",
+	SUCCESS:      "SUCCESS",
+	EVENT:        "EVENT",
+	SHAREDFILE:   "SHAREDFILE",
+	REQUESTBLOCK: "REQUESTBLOCK",
+	BLOCKDATA:    "BLOCKDATA",
 }
 
 // String returns the message type string.
@@ -44,6 +50,12 @@ func NewMessage(t MessageType) Message {
 		return &Success{}
 	case EVENT:
 		return &Event{}
+	case SHAREDFILE:
+		return &SharedFile{}
+	case REQUESTBLOCK:
+		return RequestBlock{}
+	case BLOCKDATA:
+		return BlockData{}
 	}
 	return nil
 }
@@ -76,3 +88,25 @@ type Event struct {
 }
 
 func (msg Event) MessageType() MessageType { return EVENT }
+
+//msg that a file is shared over the stream
+type SharedFile struct {
+	File file
+}
+
+func (msg SharedFile) MessageType() MessageType { return SHAREDFILE }
+
+//msg that requests a file block
+type RequestBlock struct {
+	Block block
+}
+
+func (msg RequestBlock) MessageType() MessageType { return REQUESTBLOCK }
+
+//msg that requests a file block
+type BlockData struct {
+	Block block
+	Data  []byte
+}
+
+func (msg BlockData) MessageType() MessageType { return BLOCKDATA }

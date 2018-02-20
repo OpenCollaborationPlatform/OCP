@@ -207,6 +207,10 @@ func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {
 	return addrs, nil
 }
 
+func (h *Host) ID() PeerID {
+	return PeerID{h.host.ID()}
+}
+
 /*		Swarm Handling
 ****************************** */
 
@@ -221,12 +225,16 @@ func (h *Host) CreateSwarm(id SwarmID, privKey crypto.PrivKey, public bool) *Swa
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
 	swarm := newSwarm(h, id, public, privKey, privKey.GetPublic())
-	h.swarms = append(h.swarms, swarm)
+	if swarm != nil {
+		h.swarms = append(h.swarms, swarm)
+	}
 	return swarm
 }
 
 func (h *Host) GetSwarm(id SwarmID) (*Swarm, error) {
 
+	h.swarmMutex.RLock()
+	defer h.swarmMutex.RUnlock()
 	for _, swarm := range h.swarms {
 		if swarm.ID == id {
 			return swarm, nil

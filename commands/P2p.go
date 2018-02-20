@@ -21,6 +21,7 @@ func init() {
 	cmdP2PPeers.Flags().BoolP("address", "a", false, "Print full adress instead of ID (only one of possibly multiple)")
 	cmdP2PSwarmCreate.Flags().IntP("seed", "s", 0, "set a seed for swarm key generation for deterministic outcomes instead of random keys")
 	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")
+	cmdP2PSwarmAdd.Flags().BoolP("readonly", "r", false, "the peer is only allowed to read from the swarm")
 
 	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent)
 	cmdP2P.AddCommand(cmdP2PPeers, cmdP2PAddrs, cmdP2PConnect, cmdP2PClose, cmdP2PSwarm)
@@ -197,7 +198,7 @@ var cmdP2PSwarmAdd = &cobra.Command{
 			return err.Error()
 		}
 
-		if err := swarm.AddPeer(pid, false); err != nil {
+		if err := swarm.AddPeer(pid, flags["readonly"].(bool)); err != nil {
 			return fmt.Sprintf("Error adding PeerID to swarm: %s", err)
 		}
 

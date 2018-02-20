@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -127,4 +128,113 @@ func (sm *streamMessenger) Close() error {
 	//reader and writer have the same stream, one close is enough
 	sm.reader.Close()
 	return nil
+}
+
+//Special messenger  for the stream participation logic.
+//This messenger makes sure a connection always exist. Even if a stream is closed
+//this messenger stays alive and creates a new stream with the next msg call.
+
+type participationMessenger struct {
+	host      *Host
+	reader    *streamReader
+	writer    *streamWriter
+	role      string
+	targetPid PeerID
+	targetSid SwarmID
+	valid     bool
+	running   bool //default false is correct for defaultconstructed messengers
+}
+
+func newParticipationMessenger(host *Host, swarm SwarmID, target PeerID, role string) participationMessenger {
+
+	return participationMessenger{host: host,
+		role:      role,
+		targetPid: target,
+		targetSid: swarm,
+		valid:     false,
+		running:   true}
+}
+
+func (pm *participationMessenger) invalidate() {
+	pm.valid = false
+	pm.writer.Close()
+	pm.reader.Close()
+}
+
+func (pm *participationMessenger) prepare() error {
+
+	if !pm.running {
+		return fmt.Errorf("Messenger already closed")
+	}
+
+	//make a new stream if needed
+	if !pm.valid {
+		stream, err := pm.host.host.NewStream(context.Background(), pm.targetPid.ID, swarmURI)
+		pm.reader = newStreamReader(stream, 2048)
+		pm.writer = newStreamWriter(stream)
+
+		//communicate what we want
+		msg := Participate{Swarm: pm.targetSid, Role: pm.role}
+		err = pm.writer.WriteMsg(msg)
+		if err != nil {
+			pm.invalidate()
+			return err
+		}
+
+		//see if we are allowed to
+		ret, err := pm.reader.ReadMsg()
+		if err != nil {
+			pm.invalidate()
+			return err
+		}
+
+		if ret.MessageType() != SUCCESS {
+			pm.invalidate()
+			return fmt.Errorf("Participation negotiation failed")
+		}
+		pm.valid = true
+	}
+	return nil
+}
+
+func (pm *participationMessenger) WriteMsg(msg Message) error {
+
+	err := pm.prepare()
+	if err != nil {
+		pm.invalidate()
+		return err
+	}
+
+	err = pm.writer.WriteMsg(msg)
+	if err != nil {
+		pm.invalidate()
+	}
+	return err
+}
+
+func (pm *participationMessenger) ReadMsg() (Message, error) {
+
+	err := pm.prepare()
+	if err != nil {
+		pm.invalidate()
+		return nil, err
+	}
+
+	msg, err := pm.reader.ReadMsg()
+	if err != nil {
+		pm.invalidate()
+		return nil, err
+	}
+
+	return msg, nil
+}
+
+func (pm *participationMessenger) Close() {
+	pm.invalidate()
+	pm.running = false
+}
+
+//check if the
+func (pm *participationMessenger) Connected() bool {
+	return pm.running
 }
