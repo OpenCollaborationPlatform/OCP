@@ -23,7 +23,8 @@ func init() {
 	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")
 	cmdP2PSwarmAdd.Flags().BoolP("readonly", "r", false, "the peer is only allowed to read from the swarm")
 
-	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent)
+	cmdP2PSwarmFile.AddCommand(cmdP2PSwarmFileAdd)
+	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent, cmdP2PSwarmFile)
 	cmdP2P.AddCommand(cmdP2PPeers, cmdP2PAddrs, cmdP2PConnect, cmdP2PClose, cmdP2PSwarm)
 	rootCmd.AddCommand(cmdP2P)
 }
@@ -231,5 +232,52 @@ var cmdP2PSwarmEvent = &cobra.Command{
 
 		swarm.PostEvent(args[1], d)
 		return "Successfully posted event"
+	}),
+}
+
+var cmdP2PSwarmFile = &cobra.Command{
+	Use:   "file",
+	Short: "file [swarm] [filename] lists all available files, or the blocks of a given file",
+	Args:  cobra.MinimumNArgs(1),
+
+	Run: onlineCommand("p2p.swarm.file", func(args []string, flags map[string]interface{}) string {
+
+		sid := p2p.SwarmID(args[0])
+		swarm, err := ocpNode.Host.GetSwarm(sid)
+		if err != nil {
+			return err.Error()
+		}
+
+		//get the files to print them
+		files := swarm.Files()
+		var ret string
+		for _, file := range files {
+			ret += fmt.Sprintln(file)
+		}
+
+		return ret
+	}),
+}
+
+var cmdP2PSwarmFileAdd = &cobra.Command{
+	Use:   "add",
+	Short: "add [swarm] [path] Adds the file from given path to the swarm",
+	Args:  cobra.MinimumNArgs(2),
+
+	Run: onlineCommand("p2p.swarm.file.add", func(args []string, flags map[string]interface{}) string {
+
+		sid := p2p.SwarmID(args[0])
+		swarm, err := ocpNode.Host.GetSwarm(sid)
+		if err != nil {
+			return err.Error()
+		}
+
+		//get the files to print them
+		str, err := swarm.DistributeFile(args[1])
+		if err != nil {
+			return err.Error()
+		}
+
+		return fmt.Sprintf("Posted file as %s", str)
 	}),
 }

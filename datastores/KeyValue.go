@@ -92,9 +92,22 @@ func (kv *KeyValueStore) Has(key string) error {
 
 	parts := strings.Split(key, ".")
 
-	return kv.db.View(func(tx *bolt.Tx) error {
+	var result bool
+	kv.db.View(func(tx *bolt.Tx) error {
+		
+		bucket := tx.Bucket([]byte(kv.name))
+		if len(parts) > 1 {
+		for _, part := range subs[:(len(parts) - 1)] {
 
-		bucket := getOrCreateSubBucket(tx.Bucket([]byte(kv.name)), parts)
-		return bucket.Delete([]byte(parts[len(parts)-1]))
+			bucket_ := bucket.Bucket([]byte(part))
+			if bucket_ == nil {
+				result = false
+			} else {
+				bucket = bucket_
+			}
+		}
+		result = bucket.Get([]byte(parts[len(parts)-1])) != nil
 	})
+	
+	return result
 }

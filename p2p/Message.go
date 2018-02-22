@@ -98,6 +98,7 @@ func (msg SharedFile) MessageType() MessageType { return SHAREDFILE }
 
 //msg that requests a file block
 type RequestBlock struct {
+	File  file
 	Block block
 }
 
@@ -105,6 +106,7 @@ func (msg RequestBlock) MessageType() MessageType { return REQUESTBLOCK }
 
 //msg that requests a file block
 type BlockData struct {
+	File  file
 	Block block
 	Data  []byte
 }

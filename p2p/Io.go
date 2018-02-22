@@ -17,7 +17,7 @@ var (
 )
 
 func newStreamWriter(s net.Stream) *streamWriter {
-	return &streamWriter{s, make([]byte, 10)}
+	return &streamWriter{s, make([]byte, binary.MaxVarintLen64)}
 }
 
 type streamWriter struct {

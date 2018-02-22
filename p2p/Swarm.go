@@ -2,12 +2,14 @@
 package p2p
 
 import (
-	"CollaborationNode/datastores"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
+	"github.com/boltdb/bolt"
 	"github.com/libp2p/go-libp2p-crypto"
 	"github.com/libp2p/go-libp2p-net"
 	"github.com/spf13/viper"
@@ -99,11 +101,10 @@ type Swarm struct {
 	eventLock      sync.RWMutex
 	eventCallbacks map[string][]func(Dict)
 	eventChannels  map[string][]chan Dict
-
 	//data
-	fileStore datastore.KeyValueStore //store which blocks are available where
-	newFiles  chan file               //internal distribution of new files
-	newBlock  chan BlockData          //interal distribution of new blocks
+	fileStore *bolt.DB       //store which blocks are available where
+	newFiles  chan file      //internal distribution of new files
+	newBlock  chan BlockData //interal distribution of new blocks
 }
 
 type SwarmID string
@@ -116,11 +117,12 @@ func (id SwarmID) Pretty() string {
 func newSwarm(host *Host, id SwarmID, public bool, privKey crypto.PrivKey, pubKey crypto.PubKey) *Swarm {
 
 	dir := viper.GetString("directory")
-	path := filepath.Join(dir, "files", id.Pretty())
-	store, err := datastore.NewKeyValueStore(path, id.Pretty())
+	dir = filepath.Join(dir, "files")
+	os.MkdirAll(dir, os.ModePerm)
+	path := filepath.Join(dir, id.Pretty())
 
+	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		log.Printf("Error seting up swarm file datastore: %s", err.Error())
 		return nil
 	}
 
@@ -134,7 +136,7 @@ func newSwarm(host *Host, id SwarmID, public bool, privKey crypto.PrivKey, pubKe
 		peers:          make(map[PeerID]peerConnection, 0),
 		eventCallbacks: make(map[string][]func(Dict)),
 		eventChannels:  make(map[string][]chan Dict),
-		fileStore:      *store}
+		fileStore:      db}
 
 	return swarm
 }
@@ -232,22 +234,6 @@ func (s *Swarm) HasPeer(peer PeerID) bool {
 	defer s.peerLock.RUnlock()
 	_, ok := s.peers[peer]
 	return ok
-}
-
-/* Data handling
- *************  */
-
-func (s *Swarm) DistributeData(data []byte) string {
-
-	return ""
-}
-
-func (s *Swarm) DistributeFile(path string) string {
-	return ""
-}
-
-func (s *Swarm) DropDataOrFile(path string) string {
-	return ""
 }
 
 /* General functions
