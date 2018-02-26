@@ -21,7 +21,6 @@ const (
 	PARTICIPATE  MessageType = 2
 	SUCCESS      MessageType = 3
 	EVENT        MessageType = 4
-	SHAREDFILE   MessageType = 5
 	REQUESTBLOCK MessageType = 6
 	BLOCKDATA    MessageType = 7
 )
@@ -31,7 +30,6 @@ var mtStrings = map[MessageType]string{
 	PARTICIPATE:  "PARTICIPATE",
 	SUCCESS:      "SUCCESS",
 	EVENT:        "EVENT",
-	SHAREDFILE:   "SHAREDFILE",
 	REQUESTBLOCK: "REQUESTBLOCK",
 	BLOCKDATA:    "BLOCKDATA",
 }
@@ -50,12 +48,10 @@ func NewMessage(t MessageType) Message {
 		return &Success{}
 	case EVENT:
 		return &Event{}
-	case SHAREDFILE:
-		return &SharedFile{}
 	case REQUESTBLOCK:
-		return RequestBlock{}
+		return &RequestBlock{}
 	case BLOCKDATA:
-		return BlockData{}
+		return &BlockData{}
 	}
 	return nil
 }
@@ -89,26 +85,19 @@ type Event struct {
 
 func (msg Event) MessageType() MessageType { return EVENT }
 
-//msg that a file is shared over the stream
-type SharedFile struct {
-	File file
-}
-
-func (msg SharedFile) MessageType() MessageType { return SHAREDFILE }
-
 //msg that requests a file block
 type RequestBlock struct {
-	File  file
-	Block block
+	File  string
+	Block Dict
 }
 
 func (msg RequestBlock) MessageType() MessageType { return REQUESTBLOCK }
 
 //msg that requests a file block
 type BlockData struct {
-	File  file
-	Block block
-	Data  []byte
+	File  string
+	Block Dict
+	Data  string
 }
 
 func (msg BlockData) MessageType() MessageType { return BLOCKDATA }

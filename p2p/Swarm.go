@@ -2,6 +2,7 @@
 package p2p
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -31,16 +32,14 @@ type swarmProtocol struct {
 
 func (sp *swarmProtocol) RequestHandler(s net.Stream) {
 
-	log.Println("Swarm stream requested")
-
-	messenger := newStreamMessenger(s)
-	msg, err := messenger.ReadMsg()
+	messenger := newStreamMessenger(s, 2048)
+	msg, err := messenger.ReadMsg(false)
 	if err != nil {
 		log.Printf("Error reading stream in protocol /swarm/1.0.0/:  %s", err)
 	}
 
 	if msg.MessageType() != PARTICIPATE {
-		messenger.WriteMsg(Error{"Anticipated PARTICIPATE message"})
+		messenger.WriteMsg(Error{"Anticipated PARTICIPATE message"}, false)
 		messenger.Close()
 		return
 	}
@@ -49,7 +48,7 @@ func (sp *swarmProtocol) RequestHandler(s net.Stream) {
 	id := msg.(*Participate).Swarm
 	swarm, err := sp.host.GetSwarm(id)
 	if err != nil {
-		messenger.WriteMsg(Error{"Swarm does not exist"})
+		messenger.WriteMsg(Error{"Swarm does not exist"}, false)
 		messenger.Close()
 		return
 	}
@@ -63,14 +62,16 @@ func (sp *swarmProtocol) RequestHandler(s net.Stream) {
 type peerConnection struct {
 	WriteAccess bool
 	Event       participationMessenger
+	Data        participationMessenger
 }
 
 func (pc *peerConnection) Close() {
 	pc.Event.Close()
+	pc.Data.Close()
 }
 
 func (pc *peerConnection) Connected() bool {
-	return pc.Event.Connected()
+	return pc.Event.Connected() && pc.Data.Connected()
 }
 
 //Type that represents a collection if peers which are connected together and form
@@ -96,15 +97,17 @@ type Swarm struct {
 	pubKey   crypto.PubKey
 	peers    map[PeerID]peerConnection
 	public   bool
+	ctx      context.Context
+	cancel   context.CancelFunc
 
 	//events
 	eventLock      sync.RWMutex
 	eventCallbacks map[string][]func(Dict)
 	eventChannels  map[string][]chan Dict
 	//data
-	fileStore *bolt.DB       //store which blocks are available where
-	newFiles  chan file      //internal distribution of new files
-	newBlock  chan BlockData //interal distribution of new blocks
+	fileStore  *bolt.DB          //store which blocks are available where
+	newFiles   chan Dict         //internal distribution of new files
+	fetchBlock chan RequestBlock // channel for single blocks which are to be fetched
 }
 
 type SwarmID string
@@ -126,6 +129,9 @@ func newSwarm(host *Host, id SwarmID, public bool, privKey crypto.PrivKey, pubKe
 		return nil
 	}
 
+	//the context to use for all goroutines
+	ctx, cancel := context.WithCancel(context.Background())
+
 	swarm := &Swarm{
 		host:           host,
 		peerLock:       sync.RWMutex{},
@@ -136,7 +142,13 @@ func newSwarm(host *Host, id SwarmID, public bool, privKey crypto.PrivKey, pubKe
 		peers:          make(map[PeerID]peerConnection, 0),
 		eventCallbacks: make(map[string][]func(Dict)),
 		eventChannels:  make(map[string][]chan Dict),
-		fileStore:      db}
+		newFiles:       make(chan Dict),
+		fetchBlock:     make(chan RequestBlock),
+		fileStore:      db,
+		ctx:            ctx,
+		cancel:         cancel}
+
+	swarm.setupDataHandling()
 
 	return swarm
 }
@@ -184,6 +196,7 @@ func (s *Swarm) connectPeer(pid PeerID) error {
 
 	//open the streams for all needed functionality
 	pc.Event = newParticipationMessenger(s.host, s.ID, pid, "Event")
+	pc.Data = newParticipationMessenger(s.host, s.ID, pid, "Data")
 
 	//everything was successfull
 	s.peers[pid] = pc
@@ -197,28 +210,15 @@ func (s *Swarm) participate(pid PeerID, msg Participate, messenger streamMesseng
 	switch msg.Role {
 
 	case "Event":
-		messenger.WriteMsg(Success{})
+		messenger.WriteMsg(Success{}, false)
 		s.handleEventStream(pid, messenger)
 
 	case "Data":
-		/*
-			//this is a event publish stream, hence we shall listen for events. This
-			//we only do if the peer has write access to this stream
-			if !pc.WriteAccess {
-				messenger.WriteMsg(Error{"Peer does not have write access"})
-				messenger.Close()
-				return
-			}
-			//let's listen for those nice events!
-			err := messenger.WriteMsg(Success{})
-			if err != nil {
-				messenger.Close()
-				return
-			}
-			messenger.reader.ForwardMsg(s.events)
-		*/
+		messenger.WriteMsg(Success{}, false)
+		s.handleDataStream(pid, messenger)
+
 	default:
-		messenger.WriteMsg(Error{fmt.Sprintf("Unknown role: %s", msg.Role)})
+		messenger.WriteMsg(Error{fmt.Sprintf("Unknown role: %s", msg.Role)}, false)
 		messenger.Close()
 		return
 	}
@@ -243,12 +243,8 @@ func (s *Swarm) IsPublic() bool {
 	return s.public
 }
 
-/* Internal functions
- ******************  */
-
-func (s *Swarm) signatureMessage(conn net.Conn) []byte {
-	hashMsg := conn.RemotePeer().Pretty() + "_" +
-		conn.LocalPeer().Pretty() + "_" + string(s.ID)
-	fmt.Println(hashMsg)
-	return []byte(hashMsg)
+func (s *Swarm) Close() {
+	s.cancel()
+	close(s.newFiles)
+	close(s.fetchBlock)
 }

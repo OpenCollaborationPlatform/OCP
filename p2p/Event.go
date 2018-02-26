@@ -13,15 +13,15 @@ func (s *Swarm) PostEvent(uri string, kwargs Dict) {
 
 	//lets call all our peers! Note: Could happen that we don't have a event messenger
 	//if the other peer allows us as read only!
-	for _, data := range s.peers {
+	for key, data := range s.peers {
 		if data.Event.Connected() {
+			fmt.Printf("Send event to %s", key.Pretty())
 			go func() {
-				err := data.Event.WriteMsg(Event{uri, kwargs, List{}})
+				err := data.Event.WriteMsg(Event{uri, kwargs, List{}}, false)
 				if err != nil {
 					fmt.Printf("Error writing Event: %s", err)
 				}
 			}()
-
 		}
 	}
 }
@@ -59,7 +59,7 @@ func (s *Swarm) RegisterEventCallback(uri string, function func(Dict)) {
 func (s *Swarm) handleEventStream(pid PeerID, messenger streamMessenger) {
 
 	go func() {
-		msg, err := messenger.ReadMsg()
+		msg, err := messenger.ReadMsg(false)
 
 		if err != nil {
 			log.Printf("Error reading message: %s", err.Error())
@@ -88,9 +88,6 @@ func (s *Swarm) handleEventStream(pid PeerID, messenger streamMessenger) {
 				}
 			}
 			s.eventLock.RUnlock()
-
-		case SHAREDFILE:
-			s.newFiles <- msg.(*SharedFile).File
 		}
 	}()
 }

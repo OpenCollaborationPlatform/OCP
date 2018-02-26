@@ -12,21 +12,61 @@ import (
 )
 
 var (
-	errSmallBuffer = errors.New("Buffer Too Small")
-	errLargeValue  = errors.New("Value is Larger than 64 bits")
+	errBlocked = errors.New("Blocked stream")
 )
 
-func newStreamWriter(s net.Stream) *streamWriter {
-	return &streamWriter{s, make([]byte, binary.MaxVarintLen64)}
+func newStreamMessenger(s net.Stream, maxSize int) streamMessenger {
+
+	//default channel with initialized allowance
+	channel := make(chan int, 1)
+	channel <- 1
+
+	return streamMessenger{s, make([]byte, binary.MaxVarintLen64),
+		bufio.NewReader(s), nil, maxSize, channel}
 }
 
-type streamWriter struct {
-	Stream net.Stream
-	lenBuf []byte
+type streamMessenger struct {
+	Stream   net.Stream
+	writeBuf []byte
+	reader   *bufio.Reader
+	readBuf  []byte
+	maxSize  int
+	blocked  chan int
 }
 
-func (w *streamWriter) WriteMsg(msg Message) error {
+func (sm *streamMessenger) lock(returnWhenBlocked bool) bool {
+	//make sure we have the stream for us (as we need two writes, we need to make
+	//sure noone else is writing)
+	if returnWhenBlocked {
+		select {
+		case <-sm.blocked:
+			//do nothing, as we are allowed to use the stream
+		default:
+			//someone elese uses the stream, return
+			return false
+		}
+	} else {
+		<-sm.blocked
+	}
+	return true
+}
 
+func (sm *streamMessenger) unlock() {
+	sm.blocked <- 1
+}
+
+func (sm *streamMessenger) WriteMsg(msg Message, returnWhenBlocked bool) error {
+
+	if !sm.lock(returnWhenBlocked) {
+		return errBlocked
+	}
+	defer sm.unlock()
+
+	return sm.writeMsg(msg)
+}
+
+func (sm *streamMessenger) writeMsg(msg Message) error {
+	//send the message!
 	//TODO: this is a allocation for each msg. Use buffer to make this more elegant
 	data, err := Serialize(msg)
 	if err != nil {
@@ -34,99 +74,65 @@ func (w *streamWriter) WriteMsg(msg Message) error {
 	}
 
 	length := uint64(len(data))
-	n := binary.PutUvarint(w.lenBuf, length)
-	_, err = w.Stream.Write(w.lenBuf[:n])
+	n := binary.PutUvarint(sm.writeBuf, length)
+	_, err = sm.Stream.Write(sm.writeBuf[:n])
 	if err != nil {
 		return err
 	}
-	_, err = w.Stream.Write(data)
+	_, err = sm.Stream.Write(data)
 	return err
 }
 
-func (w *streamWriter) Close() error {
-	w.Stream.Close()
-	return nil
+func (sm *streamMessenger) ReadMsg(returnWhenBlocked bool) (Message, error) {
+
+	if !sm.lock(returnWhenBlocked) {
+		return nil, errBlocked
+	}
+	defer sm.unlock()
+
+	return sm.readMsg()
 }
 
-func newStreamReader(s net.Stream, maxSize int) *streamReader {
-	return &streamReader{s, bufio.NewReader(s), nil, maxSize, nil}
-}
+func (sm *streamMessenger) readMsg() (Message, error) {
 
-type streamReader struct {
-	Stream  net.Stream
-	reader  *bufio.Reader
-	buf     []byte
-	maxSize int
-	forward chan Message
-}
-
-func (r *streamReader) ReadMsg() (Message, error) {
-	length64, err := binary.ReadUvarint(r.reader)
+	length64, err := binary.ReadUvarint(sm.reader)
 	if err != nil {
 		return Error{err.Error()}, err
 	}
 	length := int(length64)
-	if length < 0 || length > r.maxSize {
+	if length < 0 || length > sm.maxSize {
 		return Error{"Stream read failed: too short buffer"}, io.ErrShortBuffer
 	}
-	if len(r.buf) < length {
-		r.buf = make([]byte, length)
+	if len(sm.readBuf) < length {
+		sm.readBuf = make([]byte, length)
 	}
-	buf := r.buf[:length]
-	_, err = io.ReadFull(r.reader, buf)
+	buf := sm.readBuf[:length]
+	_, err = io.ReadFull(sm.reader, buf)
 	if err != nil {
 		return Error{err.Error()}, err
 	}
 	return Deserialize(buf)
 }
 
-func (r *streamReader) Close() error {
-	r.Stream.Close()
-	return nil
-}
+//sends a message and gets the imediate return
+func (sm *streamMessenger) SendRequest(msg Message, returnWhenBlocked bool) (Message, error) {
 
-func (r *streamReader) ForwardMsg(channel chan Message) error {
-
-	if r.forward != nil {
-		return fmt.Errorf("Messages already forwarded")
+	if !sm.lock(returnWhenBlocked) {
+		return nil, errBlocked
 	}
-	r.forward = channel
-	go func() {
-		for {
-			msg, err := r.ReadMsg()
-			if err != nil {
-				r.Close()
-				break
-			}
-			channel <- msg
-		}
-	}()
-	return nil
-}
+	defer sm.unlock()
 
-func newStreamMessenger(s net.Stream) streamMessenger {
-	reader := newStreamReader(s, 2048)
-	writer := newStreamWriter(s)
-
-	return streamMessenger{reader, writer}
-}
-
-type streamMessenger struct {
-	reader *streamReader
-	writer *streamWriter
-}
-
-func (sm *streamMessenger) WriteMsg(msg Message) error {
-	return sm.writer.WriteMsg(msg)
-}
-
-func (sm *streamMessenger) ReadMsg() (Message, error) {
-	return sm.reader.ReadMsg()
+	err := sm.writeMsg(msg)
+	if err != nil {
+		return nil, err
+	}
+	return sm.readMsg()
 }
 
 func (sm *streamMessenger) Close() error {
-	//reader and writer have the same stream, one close is enough
-	sm.reader.Close()
+	sm.Stream.Close()
+	close(sm.blocked)
+	<-sm.blocked
 	return nil
 }
 
@@ -136,8 +142,7 @@ func (sm *streamMessenger) Close() error {
 
 type participationMessenger struct {
 	host      *Host
-	reader    *streamReader
-	writer    *streamWriter
+	messenger streamMessenger
 	role      string
 	targetPid PeerID
 	targetSid SwarmID
@@ -156,9 +161,10 @@ func newParticipationMessenger(host *Host, swarm SwarmID, target PeerID, role st
 }
 
 func (pm *participationMessenger) invalidate() {
+	if pm.valid {
+		pm.messenger.Close()
+	}
 	pm.valid = false
-	pm.writer.Close()
-	pm.reader.Close()
 }
 
 func (pm *participationMessenger) prepare() error {
@@ -170,19 +176,23 @@ func (pm *participationMessenger) prepare() error {
 	//make a new stream if needed
 	if !pm.valid {
 		stream, err := pm.host.host.NewStream(context.Background(), pm.targetPid.ID, swarmURI)
-		pm.reader = newStreamReader(stream, 2048)
-		pm.writer = newStreamWriter(stream)
+		if err != nil {
+			return err
+		}
+		pm.messenger = newStreamMessenger(stream, 2<<(10*2))
+		pm.valid = true //need to set valid to true here already, to ensure messenger is closed on further
+		//invalid calls
 
 		//communicate what we want
 		msg := Participate{Swarm: pm.targetSid, Role: pm.role}
-		err = pm.writer.WriteMsg(msg)
+		err = pm.messenger.WriteMsg(msg, false)
 		if err != nil {
 			pm.invalidate()
 			return err
 		}
 
 		//see if we are allowed to
-		ret, err := pm.reader.ReadMsg()
+		ret, err := pm.messenger.ReadMsg(false)
 		if err != nil {
 			pm.invalidate()
 			return err
@@ -192,12 +202,11 @@ func (pm *participationMessenger) prepare() error {
 			pm.invalidate()
 			return fmt.Errorf("Participation negotiation failed")
 		}
-		pm.valid = true
 	}
 	return nil
 }
 
-func (pm *participationMessenger) WriteMsg(msg Message) error {
+func (pm *participationMessenger) WriteMsg(msg Message, returnWhenBlocked bool) error {
 
 	err := pm.prepare()
 	if err != nil {
@@ -205,14 +214,14 @@ func (pm *participationMessenger) WriteMsg(msg Message) error {
 		return err
 	}
 
-	err = pm.writer.WriteMsg(msg)
-	if err != nil {
+	err = pm.messenger.WriteMsg(msg, returnWhenBlocked)
+	if err != nil && err != errBlocked {
 		pm.invalidate()
 	}
 	return err
 }
 
-func (pm *participationMessenger) ReadMsg() (Message, error) {
+func (pm *participationMessenger) ReadMsg(returnWhenBlocked bool) (Message, error) {
 
 	err := pm.prepare()
 	if err != nil {
@@ -220,13 +229,34 @@ func (pm *participationMessenger) ReadMsg() (Message, error) {
 		return nil, err
 	}
 
-	msg, err := pm.reader.ReadMsg()
+	msg, err := pm.messenger.ReadMsg(returnWhenBlocked)
+	if err != nil {
+		if err != errBlocked {
+			pm.invalidate()
+		}
+		return nil, err
+	}
+
+	return msg, nil
+}
+
+func (pm *participationMessenger) SendRequest(msg Message, returnWhenBlocked bool) (Message, error) {
+
+	err := pm.prepare()
 	if err != nil {
 		pm.invalidate()
 		return nil, err
 	}
 
-	return msg, nil
+	ret, err := pm.messenger.SendRequest(msg, returnWhenBlocked)
+	if err != nil {
+		if err != errBlocked {
+			pm.invalidate()
+		}
+		return nil, err
+	}
+
+	return ret, nil
 }
 
 func (pm *participationMessenger) Close() {

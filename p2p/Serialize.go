@@ -71,7 +71,7 @@ func listToMsg(msgType MessageType, vlist []interface{}) (Message, error) {
 		val = val.Elem()
 	}
 	// Iterate each field of the target message and populate the field with
-	// corresponding value from the WAMP message.
+	// corresponding value from the p2p message.
 	for i := 0; i < val.NumField() && i < len(vlist)-1; i++ {
 		f := val.Field(i)
 		if vlist[i+1] == nil {
