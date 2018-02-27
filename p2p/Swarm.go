@@ -32,7 +32,7 @@ type swarmProtocol struct {
 
 func (sp *swarmProtocol) RequestHandler(s net.Stream) {
 
-	messenger := newStreamMessenger(s, 2048)
+	messenger := newStreamMessenger(s, 2<<(10*2)) //2mb per message max size
 	msg, err := messenger.ReadMsg(false)
 	if err != nil {
 		log.Printf("Error reading stream in protocol /swarm/1.0.0/:  %s", err)

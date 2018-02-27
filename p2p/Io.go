@@ -179,8 +179,8 @@ func (pm *participationMessenger) prepare() error {
 		if err != nil {
 			return err
 		}
-		pm.messenger = newStreamMessenger(stream, 2<<(10*2))
-		pm.valid = true //need to set valid to true here already, to ensure messenger is closed on further
+		pm.messenger = newStreamMessenger(stream, 2<<(10*2)) //2mb per message max size
+		pm.valid = true                                      //need to set valid to true here already, to ensure messenger is closed on further
 		//invalid calls
 
 		//communicate what we want
