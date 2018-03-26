@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE language SYSTEM "language.dtd">
+<language name="DML" version="5" kateversion="5.0" section="Scripts" extensions="*.dml"
+          mimetype="text/x-dml;application/x-dml" indenter="cstyle"
+          author="Stefan Tröger (stefantroeger@gmx.net)" license="LGPL">
+  <highlighting>
+    <list name="elements">
+      <item>Group</item>
+      <item>Vector</item>
+      <item>Map</item>
+      <item>StateMachine</item>
+      <item>State</item>
+      <item>Transition</item>
+    </list>
+    <list name="types">
+      <item>string</item>
+      <item>int</item>
+      <item>bool</item>
+      <item>double</item>
+     </list>
+    <contexts>
+      <context attribute="Normal Text" lineEndContext="#stay" name="Normal">
+        <DetectSpaces/>
+        <WordDetect attribute="Import" context="Import" String="import"/>
+        <keyword attribute="Elements" context="#stay" String="elements" />
+        <WordDetect attribute="Keywords" context="Event" String="event" />
+        <WordDetect attribute="Keywords" context="Property" String="default property" />
+        <WordDetect attribute="Keywords" context="Property" String="property" />
+        <DetectChar attribute="String" context="String" char="&quot;" />
+        <DetectChar attribute="Normal Text" context="Object" char="{" beginRegion="Brace" />
+        <IncludeRules context="Normal##JavaScript" />
+      </context>
+      <context attribute="ImportValue" lineEndContext="#pop" name="Import">
+      </context>
+      <context attribute="Normal Text" lineEndContext="#pop" name="Property">
+        <WordDetect attribute="Property Type" context="#stay" String="alias" />
+        <keyword attribute="Property Type" context="#stay" String="types" />
+        <DetectSpaces />
+        <DetectIdentifier />
+        <DetectSpaces />
+        <DetectChar char=":" context="#pop" />
+      </context>
+      <context attribute="Normal Text" lineEndContext="#pop" name="Event">
+        <DetectSpaces />
+        <DetectIdentifier />
+        <DetectChar char="(" context="EventParameter" />
+      </context>
+      <context attribute="Normal Text" name="EventParameter" lineEndContext="#pop">
+        <DetectSpaces />
+        <keyword attribute="Property Type" context="#stay" String="types" />
+        <DetectSpaces />
+        <DetectIdentifier />
+        <DetectSpaces />
+        <AnyChar String=")" context="#pop"/>
+      </context>
+      <!-- QML supports multi-line strings, which are not supported by Javascript -->
+      <context attribute="String" lineEndContext="#stay" name="String">
+        <HlCStringChar attribute="Escape" />
+        <RegExpr attribute="Escape" String="\\u[0-9a-fA-F]{4}" />
+        <DetectChar attribute="String" context="#pop" char="&quot;" />
+      </context>
+      <context attribute="Normal Text" lineEndContext="#stay" name="Object">
+        <!--DetectIdentifier-->
+        <RegExpr attribute="Property Type" String="[a-zA-Z_$][\w$]*\s*(?=:)" />
+        <DetectChar attribute="Normal Text" char="}" endRegion="Brace" context="#pop" />
+        <IncludeRules context="Normal" />
+      </context>
+    </contexts>
+    <itemDatas>
+      <itemData name="Normal Text"  defStyleNum="dsNormal"  spellChecking="false" />
+      <itemData name="Import"  defStyleNum="dsKeyword"  spellChecking="false" />
+      <itemData name="ImportValue"  defStyleNum="dsString"  spellChecking="false" />
+      <itemData name="Keywords"  defStyleNum="dsKeyword"  spellChecking="false" />
+      <itemData name="Elements" defStyleNum="dsKeyword" color="#008000" selColor="#00ffff" bold="0" italic="0" spellChecking="false"/>
+      <itemData name="Property Type" defStyleNum="dsDataType" spellChecking="false" />
+      <itemData name="String"       defStyleNum="dsString" />
+      <itemData name="Escape"       defStyleNum="dsSpecialChar" spellChecking="false" />
+    </itemDatas>
+  </highlighting>
+  <general>
+    <comments>
+      <comment name="singleLine" start="//" />
+      <comment name="multiLine" start="/*" end="*/" />
+    </comments>
+    <keywords casesensitive="1" />
+  </general>
+</language>
+
+<!-- kate: tab-width 2; replace-tabs on; indent-width 2; -->

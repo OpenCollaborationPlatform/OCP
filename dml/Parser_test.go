@@ -13,9 +13,14 @@ func TestSimpleObject(t *testing.T) {
 	Convey("Given some simple toplevel dml object,", t, func() {
 
 		var text = `
-		Test{ 
-			.id: 1
-			.name: "my funny \" sting"
+		/**multiline comments
+		 * should be fine
+		 */
+		Test{
+			.id: 1 //with comment
+
+			//and even more comments
+			.name: "my funny \" string"
 		}`
 
 		Convey("and parsing it with the object parser", func() {
@@ -32,15 +37,15 @@ func TestSimpleObject(t *testing.T) {
 				So(dml.Object, ShouldNotBeNil)
 				obj := dml.Object
 				So(obj.Identifier, ShouldEqual, "Test")
-				So(len(obj.Properties), ShouldEqual, 2)
+				So(len(obj.Assignments), ShouldEqual, 2)
 
-				prop := obj.Properties[0]
+				prop := obj.Assignments[0]
 				So(prop.Key, ShouldEqual, "id")
 				So(*prop.Value.Int, ShouldEqual, 1)
 
-				prop = obj.Properties[1]
+				prop = obj.Assignments[1]
 				So(prop.Key, ShouldEqual, "name")
-				So(*prop.Value.String, ShouldEqual, `my funny " sting`)
+				So(*prop.Value.String, ShouldEqual, `my funny " string`)
 			})
 		})
 	})
@@ -51,16 +56,16 @@ func TestNestedObject(t *testing.T) {
 	Convey("Given some nested dml object,", t, func() {
 
 		var text = `
-		Test{ 
+		Test{
 			.id: 1
-			.name: "my funny \" sting" 
-			
+			.name: "my funny \" string"
+
 			SubObject {
 				.id: 1.1
 				.value: false
-				
+
 				SubSubObject1 {
-					.id: "Who cares"	
+					.id: "Who cares"
 				}
 				SubSubObject2 {
 
@@ -82,19 +87,70 @@ func TestNestedObject(t *testing.T) {
 				So(dml.Object, ShouldNotBeNil)
 				obj := dml.Object
 				So(obj.Identifier, ShouldEqual, "Test")
-				So(len(obj.Properties), ShouldEqual, 2)
+				So(len(obj.Assignments), ShouldEqual, 2)
 				So(len(obj.Objects), ShouldEqual, 1)
 
 				obj = obj.Objects[0]
 				So(obj.Identifier, ShouldEqual, "SubObject")
-				So(len(obj.Properties), ShouldEqual, 2)
-				prop := obj.Properties[0]
+				So(len(obj.Assignments), ShouldEqual, 2)
+				prop := obj.Assignments[0]
 				So(prop.Key, ShouldEqual, "id")
 				So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
-				prop = obj.Properties[1]
+				prop = obj.Assignments[1]
 				So(prop.Key, ShouldEqual, "value")
 				So(*prop.Value.Bool, ShouldEqual, `false`)
 				So(len(obj.Objects), ShouldEqual, 2)
+			})
+		})
+	})
+}
+
+func TestJavascriptFunctions(t *testing.T) {
+
+	Convey("Given some nested dml object,", t, func() {
+
+		var text = `
+		Test{
+			.name: "my funny \" string"
+			
+			SubObject {
+				.id: 1.1
+
+				function MySubFunc(vara, varb) {
+					could be annything
+				}
+			}
+
+			function MyFunc(vara, varb) {
+				could be annything
+			}
+			
+			.id: 1
+		}`
+
+		Convey("and parsing it with the object parser", func() {
+
+			dml := &DML{}
+			parser, perr := participle.Build(&DML{}, &dmlDefinition{})
+			err := parser.ParseString(text, dml)
+
+			Convey("The parsing should not throw an error", func() {
+				So(perr, ShouldBeNil)
+				So(err, ShouldBeNil)
+			})
+			Convey("and the result should match the input", func() {
+				So(dml.Object, ShouldNotBeNil)
+				obj := dml.Object
+				So(obj.Identifier, ShouldEqual, "Test")
+				So(len(obj.Assignments), ShouldEqual, 2)
+				So(len(obj.Objects), ShouldEqual, 1)
+
+				obj = obj.Objects[0]
+				So(obj.Identifier, ShouldEqual, "SubObject")
+				So(len(obj.Assignments), ShouldEqual, 1)
+				prop := obj.Assignments[0]
+				So(prop.Key, ShouldEqual, "id")
+				So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
 			})
 		})
 	})

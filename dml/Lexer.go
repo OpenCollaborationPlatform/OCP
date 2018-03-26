@@ -19,7 +19,7 @@ func init() {
 
 	//all types in important order of parsing
 	types = make([]string, 0)
-	types = append(types, `EOF`, `Char`, `Ident`, `String`, `Float`, `Int`)
+	types = append(types, `EOF`, `Char`, `Func`, `AnymFunc`, `Ident`, `String`, `Float`, `Int`)
 
 	//build all required expressions for stuff we want to do with regexp
 	expressions = make(map[string]*regexp.Regexp, 0)
@@ -51,8 +51,8 @@ func (d *dmlDefinition) Lex(r io.Reader) lexer.Lexer {
 			Column:   1,
 			Offset:   0,
 		},
-		buf:       b,
-		wspattern: regexp.MustCompile(`^[ \t\r\n]+`),
+		buf:          b,
+		patternCache: make(map[string]*regexp.Regexp, 0),
 	}
 }
 
@@ -64,10 +64,10 @@ func (d *dmlDefinition) Symbols() map[string]rune {
 // - ignores all comments
 // - has a special token for JavaScript code
 type dmlLexer struct {
-	cursor    lexer.Position
-	buf       []byte
-	wspattern *regexp.Regexp
-	peek      *lexer.Token
+	cursor       lexer.Position
+	buf          []byte
+	patternCache map[string]*regexp.Regexp
+	peek         *lexer.Token
 }
 
 func (self *dmlLexer) Peek() lexer.Token {
@@ -76,10 +76,16 @@ func (self *dmlLexer) Peek() lexer.Token {
 	}
 
 	if len(self.buf) > self.cursor.Offset {
-		self.skipWS()
+		self.skipUnneeded()
 
 		//catch non-regex stuff
 		tok, ok := self.matchString()
+		if ok {
+			self.peek = &tok
+			return tok
+		}
+
+		tok, ok = self.matchJSFunction()
 		if ok {
 			self.peek = &tok
 			return tok
@@ -149,7 +155,82 @@ func (self *dmlLexer) match(pattern *regexp.Regexp) (lexer.Token, bool) {
 	return lexer.Token{}, false
 }
 
-// Match a string
+// Match a string. TODO: use runes and charachters, not bytes on iterating
+func (self *dmlLexer) matchJSFunction() (lexer.Token, bool) {
+
+	//everything begins with function keyword. We can use match, as if this is found
+	//we never need to go back, it can only  be a function
+	_, ok := self.match(self.compile(`^function`))
+	if !ok {
+		return lexer.Token{}, false
+	}
+	self.skipUnneeded()
+
+	//maybe there is a identifier, otherwise it is annonymous
+	id, named := self.match(expressions["Ident"])
+	self.skipUnneeded()
+
+	//now the parameters must come
+	param, ok := self.match(self.compile(`\(.*?\)`))
+	if !ok {
+		lexer.Panic(self.cursor, "expected function parameters(...)")
+	}
+	self.skipUnneeded()
+
+	//now we will have a arbitrarily nested function body, let's get it!
+	if self.buf[self.cursor.Offset] != '{' {
+		lexer.Panicf(self.cursor, "expected function body opening '{' instead of %s", string(self.buf[self.cursor.Offset]))
+	}
+	exp := self.compile(`(\{)|(\})`)
+	add := 1
+	for cnt := 1; cnt != 0; {
+
+		//little safety: never go over the end of the buffer!
+		if len(self.buf) <= self.cursor.Offset+add {
+			lexer.Panic(self.cursor, "expected '}' at end of function body")
+		}
+
+		//match opeing or closing
+		idx := exp.FindSubmatchIndex(self.buf[(self.cursor.Offset + add):])
+		if idx == nil || idx[0] < 0 {
+			lexer.Panic(self.cursor, "expected '}' at end of function body")
+		}
+		//and adopt accordingly
+		if idx[3] >= 0 {
+			cnt++
+			add += idx[3]
+		} else {
+			cnt--
+			add += idx[5]
+		}
+	}
+
+	//we found our body, let's build the token
+	tok := lexer.Token{Pos: self.cursor, Type: symbols["AnymFunc"]}
+
+	match := "function "
+	if named {
+		match += string(id.Value)
+		tok.Type = symbols["Func"]
+	}
+	match += string(param.Value) + " " + string(self.buf[self.cursor.Offset:(self.cursor.Offset+add)])
+
+	tok.Value = match
+
+	//update the lexer
+	self.cursor.Offset += add
+	bmatch := []byte(match)
+	lines := bytes.Count(bmatch, []byte("\n"))
+	self.cursor.Line += lines
+	if lines == 0 {
+		self.cursor.Column += utf8.RuneCount(bmatch)
+	} else {
+		self.cursor.Column = utf8.RuneCount(bmatch[bytes.LastIndex([]byte(match), []byte("\n")):])
+	}
+	return tok, true
+}
+
+// Match a javascript function, either normal or annonymous
 func (self *dmlLexer) matchString() (lexer.Token, bool) {
 
 	//first charachter must be string opening
@@ -164,7 +245,7 @@ func (self *dmlLexer) matchString() (lexer.Token, bool) {
 
 			//build the token
 			match := self.buf[(self.cursor.Offset):(self.cursor.Offset + i + 1)]
-			interpreted, _ := strconv.Unquote(string(match))
+			interpreted, _ := strconv.Unquote(string(match)) //unquote and interprete all escapes
 			token := lexer.Token{
 				Pos:   self.cursor,
 				Value: interpreted,
@@ -189,6 +270,21 @@ func (self *dmlLexer) matchString() (lexer.Token, bool) {
 }
 
 //remove whitespace
-func (self *dmlLexer) skipWS() {
-	self.match(self.wspattern)
+func (self *dmlLexer) skipUnneeded() {
+	//remove whitespace and comment as long as available
+	exp := self.compile(`^(([ \t\r\n]+)|(\/\/.*)|(\/\*(?s).*?\*\/))`)
+	ok := true
+	for ok {
+		_, ok = self.match(exp)
+	}
+}
+
+//pattern cache
+func (self *dmlLexer) compile(pattern string) *regexp.Regexp {
+	regc, ok := self.patternCache[pattern]
+	if !ok {
+		regc = regexp.MustCompile(pattern)
+		self.patternCache[pattern] = regc
+	}
+	return regc
 }

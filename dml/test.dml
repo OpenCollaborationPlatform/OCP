@@ -1,0 +1,24 @@
+ //comment
+ Group {
+    
+    event test(p1, p2)
+    property test2: "Hallo"
+    
+    StateMachine{
+        
+        State {
+            
+        }
+        //you know
+        Transition {
+            /*stupid"*/
+            
+        }
+    }
+    
+    function Test() {
+     
+        var num
+        num = 1+1
+    }
+ }
