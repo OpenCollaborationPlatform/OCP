@@ -1,21 +1,36 @@
 package dml
 
 import (
+	"CollaborationNode/datastores"
 	"fmt"
 	"os"
 
 	"github.com/alecthomas/participle"
 	"github.com/dop251/goja"
+	"github.com/dop251/goja_nodejs/console"
+	"github.com/dop251/goja_nodejs/require"
 )
 
-type CreatorFunc func() Object
+type CreatorFunc func(datastore *datastore.Datastore, name string) Object
+
+func NewRuntime(ds *datastore.Datastore) Runtime {
+
+	//js runtime with console support
+	js := goja.New()
+	new(require.Registry).Enable(js)
+	console.Enable(js)
+
+	cr := make(map[string]CreatorFunc, 0)
+	return Runtime{cr, js, ds, nil}
+}
 
 //builds a datastructure from a file
 // - existing types must be registered to be recognized during parsing
 type Runtime struct {
-	creators map[string]CreatorFunc
-	jsvm     *goja.Runtime
-	mainObj  Object
+	creators  map[string]CreatorFunc
+	jsvm      *goja.Runtime
+	datastore *datastore.Datastore
+	mainObj   Object
 }
 
 func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
@@ -35,23 +50,38 @@ func (self *Runtime) ParseFile(path string) error {
 	ast := &DML{}
 	parser, err := participle.Build(&DML{}, &dmlDefinition{})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	//read in the file and parse
 	filereader, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	//bufferedReader := bufio.NewReader(filereader)
 	err = parser.Parse(filereader, ast)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	//process the AST into usable objects
 	obj, err := self.buildObject(ast.Object)
+	if err != nil {
+		return err
+		//TODO clear the database entries...
+	}
 	self.mainObj = obj
 	return err
+}
+
+func (self *Runtime) RunJavaScript(code string) (interface{}, error) {
+
+	val, err := self.jsvm.RunString(code)
+
+	if err != nil {
+		return nil, err
+	}
+	return val.Export(), nil
 }
 
 //due to recursive nature og objects we need an extra function
@@ -62,27 +92,46 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	if !ok {
 		return nil, fmt.Errorf("No object type \"%s\" exists", astObj.Identifier)
 	}
-	obj := creator()
 
-	//first we create all additional properties
+	//we need the objects name first. Search for the id property assignment
+	var objName string
+	for _, astAssign := range astObj.Assignments {
+		if astAssign.Key == "id" {
+			objName = *astAssign.Value.String
+		}
+	}
+	if objName == "" {
+		panic("we need the ID proeprty, otherwise everything falls appart...")
+	}
+
+	//setup the object including datastore and expose it to js
+	obj := creator(self.datastore, objName)
+	jsobj := self.jsvm.NewObject()
+	self.jsvm.Set(objName, jsobj)
+
+	//Now we create all additional properties and set them up in js
 	for _, astProp := range astObj.Properties {
-		prop, err := self.buildProperty(astProp)
+		prop, err := self.buildProperty(obj.GetDataStore(), astProp)
 		if err != nil {
 			return nil, err
 		}
 		obj.AddProperty(astProp.Key, prop)
 	}
+	err := obj.SetupJSProperties(self.jsvm, jsobj)
+	if err != nil {
+		return nil, err
+	}
 
 	//now we create all new events
-	for _, evt := range astObj.Events {
+	/*	for _, evt := range astObj.Events {
 
-	}
+		}
 
-	//than all functions
-	for _, fnc := range astObj.Functions {
+		//than all functions
+		for _, fnc := range astObj.Functions {
 
-	}
-
+		}
+	*/
 	//go on with all subobjects
 	for _, astChild := range astObj.Objects {
 		child, err := self.buildObject(astChild)
@@ -93,17 +142,17 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	}
 
 	//with everything in place we are able to process the assignments
-	for _, assign := range astObj.Assignments {
+	/*	for _, assign := range astObj.Assignments {
 
-	}
+		}*/
 
 	return obj, nil
 }
 
-func (self *Runtime) buildProperty(astProp *astProperty) (Property, error) {
+func (self *Runtime) buildProperty(ds datastore.Store, astProp *astProperty) (Property, error) {
 
-	var dt DataType
-	switch astProp.Type {
+	var dt PropertyType
+	switch astProp.Type.Type {
 	case "string":
 		dt = String
 	case "int":
@@ -114,7 +163,7 @@ func (self *Runtime) buildProperty(astProp *astProperty) (Property, error) {
 		dt = Bool
 	}
 
-	prop, err := MakeProperty(dt)
+	prop, err := NewProperty(astProp.Key, dt, ds)
 	if err != nil {
 		return nil, err
 	}

@@ -1,113 +1,201 @@
-// KeyValue.go
+// KeyValue datastore: The key value database saves the multople stores within a
+// single bolt db, one bucket for each store.
 package datastore
 
 import (
+	"encoding/json"
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/boltdb/bolt"
 )
 
-func NewKeyValueStore(path string, name string) (*KeyValueStore, error) {
+func NewKeyValueDatabase(path string, name string) (*keyValueDatabase, error) {
 
 	//make sure the path exist...
-	dir, _ := filepath.Split(path)
-	os.MkdirAll(dir, os.ModePerm)
+	os.MkdirAll(path, os.ModePerm)
+	path = filepath.Join(path, name+".db")
 
+	fmt.Println(path)
 	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return nil, err
 	}
 
-	return &KeyValueStore{db, name}, nil
+	stores := make(map[string]keyValueStore, 0)
+
+	return &keyValueDatabase{db, stores}, nil
 }
 
-type KeyValueStore struct {
-	db   *bolt.DB
-	name string
+//implements the database interface
+type keyValueDatabase struct {
+	db     *bolt.DB
+	stores map[string]keyValueStore
 }
 
-//retrieve the bucket for the given key
-func getOrCreateSubBucket(bucket *bolt.Bucket, subs []string) *bolt.Bucket {
+func (self *keyValueDatabase) HasStore(name string) bool {
 
-	if len(subs) > 1 {
-		for _, sub := range subs[:(len(subs) - 1)] {
+	_, ok := self.stores[name]
+	return ok
+}
 
-			bucket_ := bucket.Bucket([]byte(sub))
-			if bucket_ == nil {
-				bucket, _ = bucket.CreateBucket([]byte(sub))
-			} else {
-				bucket = bucket_
-			}
-		}
+func (self *keyValueDatabase) GetOrCreateStore(name string) Store {
+
+	if !self.HasStore(name) {
+		//make sure the bucket exists
+		self.db.Update(func(tx *bolt.Tx) error {
+			tx.CreateBucketIfNotExists([]byte(name))
+			return nil
+		})
+		self.stores[name] = keyValueStore{self.db, name,
+			make(map[string]keyValueEntry, 0)}
 	}
-	return bucket
+
+	store := self.stores[name]
+	return &store
 }
 
-func (kv *KeyValueStore) Write(key string, data []byte) error {
+func (self *keyValueDatabase) Close() {
+	self.db.Close()
+}
 
-	parts := strings.Split(key, ".")
+//The store itself is very simple, as all the access logic will be in the entry type
+//this is only to manage the existing entries
+type keyValueStore struct {
+	db      *bolt.DB
+	name    string
+	entries map[string]keyValueEntry
+}
 
-	return kv.db.Update(func(tx *bolt.Tx) error {
+func (self *keyValueStore) GetOrCreateEntry(name string) Entry {
 
-		bucket := getOrCreateSubBucket(tx.Bucket([]byte(kv.name)), parts)
-		return bucket.Put([]byte(parts[len(parts)-1]), data)
+	if !self.HasEntry(name) {
+
+		//make sure the entry exists in the db with null value
+		self.db.Update(func(tx *bolt.Tx) error {
+			bucket := tx.Bucket([]byte(self.name))
+			bucket.Put([]byte(name), make([]byte, 0))
+			return nil
+		})
+
+		//build the entry
+		entry := keyValueEntry{self.db, self.name, name}
+		self.entries[name] = entry
+	}
+
+	entry := self.entries[name]
+	return &entry
+}
+
+func (self *keyValueStore) HasEntry(name string) bool {
+
+	_, ok := self.entries[name]
+	return ok
+}
+
+func (self *keyValueStore) RemoveEntry(name string) {
+
+	if !self.HasEntry(name) {
+		return
+	}
+
+	entry := self.entries[name]
+	entry.Remove()
+	delete(self.entries, name)
+}
+
+type keyValueEntry struct {
+	db     *bolt.DB
+	bucket string
+	key    string
+}
+
+func (self *keyValueEntry) Write(value interface{}) error {
+
+	bts, err := getBytes(value)
+	if err != nil {
+		return err
+	}
+
+	return self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte(self.bucket))
+		return bucket.Put([]byte(self.key), bts)
 	})
 }
 
-func (kv *KeyValueStore) Read(key string, data []byte) ([]byte, error) {
+func (self *keyValueEntry) IsValid() bool {
 
-	parts := strings.Split(key, ".")
+	if self.bucket == "" || self.key == "" {
+		return false
+	}
 
-	var result []byte
-	err := kv.db.View(func(tx *bolt.Tx) error {
+	if self.db == nil {
+		return false
+	}
 
-		bucket := getOrCreateSubBucket(tx.Bucket([]byte(kv.name)), parts)
-		data := bucket.Get([]byte(parts[len(parts)-1]))
-		copy(data, result)
+	var result bool
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte(self.bucket))
+		result = bucket.Get([]byte(self.key)) != nil
 		return nil
+	})
+
+	return result
+}
+
+func (self *keyValueEntry) Read() (interface{}, error) {
+
+	var result interface{}
+	err := self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte(self.bucket))
+		data := bucket.Get([]byte(self.key))
+		if len(data) == 0 {
+			return fmt.Errorf("Value was not set before read")
+		}
+		res, err := getInterface(data)
+		result = res
+		return err
 	})
 
 	if err != nil {
 		return nil, err
 	}
 
-	return result, nil
+	return result, err
 }
 
-func (kv *KeyValueStore) Delete(key string) error {
+func (self *keyValueEntry) Remove() bool {
 
-	parts := strings.Split(key, ".")
+	err := self.db.View(func(tx *bolt.Tx) error {
 
-	return kv.db.View(func(tx *bolt.Tx) error {
-
-		bucket := getOrCreateSubBucket(tx.Bucket([]byte(kv.name)), parts)
-		return bucket.Delete([]byte(parts[len(parts)-1]))
+		bucket := tx.Bucket([]byte(self.bucket))
+		return bucket.Delete([]byte(self.key))
 	})
+	return err == nil
 }
 
-func (kv *KeyValueStore) Has(key string) error {
-	/*
-		parts := strings.Split(key, ".")
+//helper functions
+func getBytes(data interface{}) ([]byte, error) {
 
-		var result bool
-			kv.db.View(func(tx *bolt.Tx) error {
+	return json.Marshal(data)
+}
 
-			bucket := tx.Bucket([]byte(kv.name))
-			if len(parts) > 1 {
-			for _, part := range subs[:(len(parts) - 1)] {
+func getInterface(bts []byte) (interface{}, error) {
 
-				bucket_ := bucket.Bucket([]byte(part))
-				if bucket_ == nil {
-					result = false
-				} else {
-					bucket = bucket_
-				}
-			}
-			result = bucket.Get([]byte(parts[len(parts)-1])) != nil
-		})*/
+	var res interface{}
+	err := json.Unmarshal(bts, &res)
 
-	return nil
+	//json does not distuinguish between float and int
+	num, ok := res.(float64)
+	if ok && num == math.Trunc(num) {
+		return int64(num), nil
+	}
+
+	return res, err
 }

@@ -1,24 +1,8 @@
  //comment
  Group {
-    
-    event test(p1, p2)
-    property test2: "Hallo"
-    
-    StateMachine{
-        
-        State {
-            
-        }
-        //you know
-        Transition {
-            /*stupid"*/
-            
-        }
-    }
-    
-    function Test() {
-     
-        var num
-        num = 1+1
-    }
- }
+    .id: "Document"
+
+    property string 	testS: "Hallo"
+    property int 	testI: 1
+	property bool 	testB: true
+}

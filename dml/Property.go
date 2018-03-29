@@ -1,168 +1,142 @@
 package dml
 
 import (
+	"CollaborationNode/datastores"
 	"fmt"
+	"log"
 
 	"github.com/dop251/goja"
 )
 
-type DataType int
+type PropertyType int
 
 const (
-	String DataType = 1
-	Int    DataType = 2
-	Float  DataType = 3
-	Bool   DataType = 4
-	File   DataType = 5
-	Raw    DataType = 6
+	String PropertyType = 1
+	Int    PropertyType = 2
+	Float  PropertyType = 3
+	Bool   PropertyType = 4
+	File   PropertyType = 5
+	Raw    PropertyType = 6
 )
+
+func typeToString(t PropertyType) string {
+
+	switch t {
+	case String:
+		return "string"
+	case Int:
+		return "int"
+	case Float:
+		return "float"
+	case Bool:
+		return "bool"
+	case File:
+		return "file"
+	case Raw:
+		return "raw"
+	}
+	return ""
+}
 
 //Defines the default Property interface under which different data types can be stored.
 //It uses a getter setter interface for better interactibility between dml, js and go
 type Property interface {
 	EventHandler
 
-	Type() DataType
+	Type() PropertyType
 
 	SetValue(value interface{}) error
 	GetValue() interface{}
 }
 
-func MakeProperty(dtype DataType) (Property, error) {
+func NewProperty(name string, dtype PropertyType, store datastore.Store) (Property, error) {
 
 	var prop Property
 
 	switch dtype {
-	case Int:
-		prop = &intProperty{}
-	case Float:
-		prop = &floatProperty{}
-	case String:
-		prop = &stringProperty{}
-	case Bool:
-		prop = &boolProperty{}
+	case Int, Float, String, Bool:
+		db := store.GetOrCreateEntry(name)
+		prop = &DataProperty{NewEventHandler(), dtype, db}
 	default:
 		return nil, fmt.Errorf("Unknown type")
 	}
 
 	//add all required events
-	prop.AddEvent("onChange", makeEvent(dtype))
+	prop.AddEvent("onChanged", makeEvent(dtype))
 
 	return prop, nil
 }
 
-//Integer data property
+//Data properties
 //*********************
-type intProperty struct {
+type DataProperty struct {
 	eventHandler
-	value int64
-	js    goja.Value
+	propertyType PropertyType
+	db           datastore.Entry
 }
 
-func (self intProperty) Type() DataType {
-	return Int
+func (self DataProperty) Type() PropertyType {
+	return self.propertyType
 }
 
-func (self *intProperty) SetValue(val interface{}) error {
+func (self *DataProperty) SetValue(val interface{}) error {
 
-	intVal, ok := val.(int64)
-	if !ok {
-		return fmt.Errorf("Wrong type: must be int64")
+	//check if the type is correct
+	switch val.(type) {
+	case int, int32, int64:
+		if self.propertyType != Int {
+			return fmt.Errorf(`wrong type, got 'int' and expected '%s'`, typeToString(self.propertyType))
+		}
+	case float32, float64:
+		if self.propertyType != Float {
+			return fmt.Errorf(`wrong type, got 'float' and expected '%s'`, typeToString(self.propertyType))
+		}
+	case string:
+		if self.propertyType != String {
+			return fmt.Errorf(`wrong type, got 'string' and expected '%s'`, typeToString(self.propertyType))
+		}
+	case bool:
+		if self.propertyType != String {
+			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, typeToString(self.propertyType))
+		}
 	}
 
-	self.value = intVal
-	return self.GetEvent("onChanged").Emit(self.value)
+	//store it
+	if !self.db.IsValid() {
+		return fmt.Errorf("Invalid database entry")
+	}
+	err := self.db.Write(val)
+	if err != nil {
+		return err
+	}
+	return self.GetEvent("onChanged").Emit(val)
 }
 
-func (self *intProperty) GetValue() interface{} {
-	return self.value
-}
+func (self *DataProperty) GetValue() interface{} {
 
-//Float data property
-//*******************
-type floatProperty struct {
-	eventHandler
-	value float64
-}
-
-func (self floatProperty) Type() DataType {
-	return Float
-}
-
-func (self *floatProperty) SetValue(val interface{}) error {
-
-	floatVal, ok := val.(float64)
-	if !ok {
-		return fmt.Errorf("Wrong type: must be float64")
+	if !self.db.IsValid() {
+		return nil
 	}
 
-	self.value = floatVal
-	return self.GetEvent("onChanged").Emit(self.value)
-}
-
-func (self *floatProperty) GetValue() interface{} {
-	return self.value
-}
-
-//String data property
-//*********************
-type stringProperty struct {
-	eventHandler
-	value string
-}
-
-func (self stringProperty) Type() DataType {
-	return String
-}
-
-func (self *stringProperty) SetValue(val interface{}) error {
-
-	stringVal, ok := val.(string)
-	if !ok {
-		return fmt.Errorf("Wrong type: must be string")
+	val, err := self.db.Read()
+	if err != nil {
+		log.Printf("Error reading value: %s", err)
+		return nil
 	}
-
-	self.value = stringVal
-	return self.GetEvent("onChanged").Emit(self.value)
-}
-
-func (self *stringProperty) GetValue() interface{} {
-	return self.value
-}
-
-//Bool data property
-//*********************
-type boolProperty struct {
-	eventHandler
-	value bool
-}
-
-func (self boolProperty) Type() DataType {
-	return Bool
-}
-
-func (self *boolProperty) SetValue(val interface{}) error {
-
-	boolVal, ok := val.(bool)
-	if !ok {
-		return fmt.Errorf("Wrong type: must be bool")
-	}
-
-	self.value = boolVal
-	return self.GetEvent("onChanged").Emit(self.value)
-}
-
-func (self *boolProperty) GetValue() interface{} {
-	return self.value
+	return val
 }
 
 //Property handler, which defines a interface for holding and using multiple properties
 type PropertyHandler interface {
 	HasProperty(name string) bool
 	AddProperty(name string, evt Property) error
-	GetProperty(name string) *Property
+	GetProperty(name string) Property
 
-	SetupJSProperties(obj *goja.Object) error
+	SetupJSProperties(vm *goja.Runtime, obj *goja.Object) error
+}
+
+func NewPropertyHandler() propertyHandler {
+	return propertyHandler{make(map[string]Property, 0)}
 }
 
 //unifies handling of multiple properties
@@ -192,13 +166,14 @@ func (self *propertyHandler) GetProperty(name string) Property {
 
 func (self *propertyHandler) SetupJSProperties(vm *goja.Runtime, obj *goja.Object) error {
 
-	for name, prop := range self.properties {
+	for name, _ := range self.properties {
 
+		var propname string = name
 		getter := vm.ToValue(func(call goja.FunctionCall) goja.Value {
-			return vm.ToValue(prop.GetValue())
+			return vm.ToValue(self.GetProperty(propname).GetValue())
 		})
 		setter := vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
-			prop.SetValue(call.Argument(0).Export())
+			self.GetProperty(propname).SetValue(call.Argument(0).Export())
 			return
 		})
 

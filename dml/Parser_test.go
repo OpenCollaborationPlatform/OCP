@@ -10,7 +10,7 @@ import (
 
 func TestSimpleObject(t *testing.T) {
 
-	Convey("Given some simple toplevel dml object,", t, func() {
+	Convey("Parsing a simple toplevel dml object,", t, func() {
 
 		var text = `
 		/**multiline comments
@@ -21,39 +21,46 @@ func TestSimpleObject(t *testing.T) {
 
 			//and even more comments
 			.name: "my funny \" string"
+
+			property int 	myprop: 1
+			property float 	myseco: 1.1
 		}`
 
-		Convey("and parsing it with the object parser", func() {
+		dml := &DML{}
+		parser, perr := participle.Build(&DML{}, &dmlDefinition{})
+		err := parser.ParseString(text, dml)
+		So(perr, ShouldBeNil)
+		So(err, ShouldBeNil)
 
-			dml := &DML{}
-			parser, perr := participle.Build(&DML{}, &dmlDefinition{})
-			err := parser.ParseString(text, dml)
+		Convey("the result should match the input", func() {
+			So(dml.Object, ShouldNotBeNil)
+			obj := dml.Object
+			So(obj.Identifier, ShouldEqual, "Test")
+			So(len(obj.Assignments), ShouldEqual, 2)
 
-			Convey("The parsing should not throw an error", func() {
-				So(perr, ShouldBeNil)
-				So(err, ShouldBeNil)
-			})
-			Convey("and the result should match the input", func() {
-				So(dml.Object, ShouldNotBeNil)
-				obj := dml.Object
-				So(obj.Identifier, ShouldEqual, "Test")
-				So(len(obj.Assignments), ShouldEqual, 2)
+			prop := obj.Assignments[0]
+			So(prop.Key, ShouldEqual, "id")
+			So(*prop.Value.Int, ShouldEqual, 1)
 
-				prop := obj.Assignments[0]
-				So(prop.Key, ShouldEqual, "id")
-				So(*prop.Value.Int, ShouldEqual, 1)
+			prop = obj.Assignments[1]
+			So(prop.Key, ShouldEqual, "name")
+			So(*prop.Value.String, ShouldEqual, `my funny " string`)
+		})
+		Convey("and the properties should be created correctly", func() {
 
-				prop = obj.Assignments[1]
-				So(prop.Key, ShouldEqual, "name")
-				So(*prop.Value.String, ShouldEqual, `my funny " string`)
-			})
+			obj := dml.Object
+			So(len(obj.Properties), ShouldEqual, 2)
+			newprop := obj.Properties[0]
+			So(newprop.Type.Type, ShouldEqual, "int")
+			So(newprop.Key, ShouldEqual, "myprop")
+			So(*newprop.Default.Int, ShouldEqual, 1)
 		})
 	})
 }
 
 func TestNestedObject(t *testing.T) {
 
-	Convey("Given some nested dml object,", t, func() {
+	Convey("Parsing a nested dml object,", t, func() {
 
 		var text = `
 		Test{
@@ -73,41 +80,37 @@ func TestNestedObject(t *testing.T) {
 			}
 		}`
 
-		Convey("and parsing it with the object parser", func() {
+		dml := &DML{}
+		parser, perr := participle.Build(&DML{}, &dmlDefinition{})
+		err := parser.ParseString(text, dml)
 
-			dml := &DML{}
-			parser, perr := participle.Build(&DML{}, &dmlDefinition{})
-			err := parser.ParseString(text, dml)
+		So(perr, ShouldBeNil)
+		So(err, ShouldBeNil)
 
-			Convey("The parsing should not throw an error", func() {
-				So(perr, ShouldBeNil)
-				So(err, ShouldBeNil)
-			})
-			Convey("and the result should match the input", func() {
-				So(dml.Object, ShouldNotBeNil)
-				obj := dml.Object
-				So(obj.Identifier, ShouldEqual, "Test")
-				So(len(obj.Assignments), ShouldEqual, 2)
-				So(len(obj.Objects), ShouldEqual, 1)
+		Convey("the result should match the input", func() {
+			So(dml.Object, ShouldNotBeNil)
+			obj := dml.Object
+			So(obj.Identifier, ShouldEqual, "Test")
+			So(len(obj.Assignments), ShouldEqual, 2)
+			So(len(obj.Objects), ShouldEqual, 1)
 
-				obj = obj.Objects[0]
-				So(obj.Identifier, ShouldEqual, "SubObject")
-				So(len(obj.Assignments), ShouldEqual, 2)
-				prop := obj.Assignments[0]
-				So(prop.Key, ShouldEqual, "id")
-				So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
-				prop = obj.Assignments[1]
-				So(prop.Key, ShouldEqual, "value")
-				So(*prop.Value.Bool, ShouldEqual, `false`)
-				So(len(obj.Objects), ShouldEqual, 2)
-			})
+			obj = obj.Objects[0]
+			So(obj.Identifier, ShouldEqual, "SubObject")
+			So(len(obj.Assignments), ShouldEqual, 2)
+			prop := obj.Assignments[0]
+			So(prop.Key, ShouldEqual, "id")
+			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
+			prop = obj.Assignments[1]
+			So(prop.Key, ShouldEqual, "value")
+			So(bool(*prop.Value.Bool), ShouldBeFalse)
+			So(len(obj.Objects), ShouldEqual, 2)
 		})
 	})
 }
 
 func TestJavascriptFunctions(t *testing.T) {
 
-	Convey("Given some nested dml object,", t, func() {
+	Convey("Parsing a dml object with js functions,", t, func() {
 
 		var text = `
 		Test{
@@ -128,30 +131,25 @@ func TestJavascriptFunctions(t *testing.T) {
 			.id: 1
 		}`
 
-		Convey("and parsing it with the object parser", func() {
+		dml := &DML{}
+		parser, perr := participle.Build(&DML{}, &dmlDefinition{})
+		err := parser.ParseString(text, dml)
+		So(perr, ShouldBeNil)
+		So(err, ShouldBeNil)
 
-			dml := &DML{}
-			parser, perr := participle.Build(&DML{}, &dmlDefinition{})
-			err := parser.ParseString(text, dml)
+		Convey("the result should match the input", func() {
+			So(dml.Object, ShouldNotBeNil)
+			obj := dml.Object
+			So(obj.Identifier, ShouldEqual, "Test")
+			So(len(obj.Assignments), ShouldEqual, 2)
+			So(len(obj.Objects), ShouldEqual, 1)
 
-			Convey("The parsing should not throw an error", func() {
-				So(perr, ShouldBeNil)
-				So(err, ShouldBeNil)
-			})
-			Convey("and the result should match the input", func() {
-				So(dml.Object, ShouldNotBeNil)
-				obj := dml.Object
-				So(obj.Identifier, ShouldEqual, "Test")
-				So(len(obj.Assignments), ShouldEqual, 2)
-				So(len(obj.Objects), ShouldEqual, 1)
-
-				obj = obj.Objects[0]
-				So(obj.Identifier, ShouldEqual, "SubObject")
-				So(len(obj.Assignments), ShouldEqual, 1)
-				prop := obj.Assignments[0]
-				So(prop.Key, ShouldEqual, "id")
-				So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
-			})
+			obj = obj.Objects[0]
+			So(obj.Identifier, ShouldEqual, "SubObject")
+			So(len(obj.Assignments), ShouldEqual, 1)
+			prop := obj.Assignments[0]
+			So(prop.Key, ShouldEqual, "id")
+			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
 		})
 	})
 }

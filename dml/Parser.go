@@ -29,20 +29,28 @@ type astAssignment struct {
 }
 
 type astProperty struct {
-	Key     string    `"property" @Ident`
-	Type    string    `@String`
+	Type    *astType  `"property" @@`
+	Key     string    `@Ident`
 	Default *astValue `[":" @@]`
 }
 
 type astEvent struct {
-	Key     string   `"event" @Ident`
-	Params  []string `"(" "string" | "bool" | "int" | "float" ")"`
-	Default string   `[":" @AnymFunc]`
+	Key     string     `"event" @Ident`
+	Params  []*astType `"(" { @@ } ")"`
+	Default string     `[":" @AnymFunc]`
 }
+
+type Boolean bool
+
+func (b *Boolean) Capture(v []string) error { *b = v[0] == "true"; return nil }
 
 type astValue struct {
 	String *string  `  @String`
 	Number *float64 `| @Float`
 	Int    *int64   `| @Int`
-	Bool   *string  `| @( "true" | "false" )`
+	Bool   *Boolean `| @('true'|'false')`
+}
+
+type astType struct {
+	Type string `@("string" | "bool" | "int" | "float")`
 }

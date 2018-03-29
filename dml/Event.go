@@ -7,12 +7,12 @@ type Event interface {
 	RegisterCallback(cb func(...interface{}))
 }
 
-func makeEvent(args ...DataType) Event {
+func makeEvent(args ...PropertyType) Event {
 	return &event{args, make([]func(...interface{}), 0)}
 }
 
 type event struct {
-	parameterTypes []DataType
+	parameterTypes []PropertyType
 	callbacks      []func(...interface{})
 }
 
@@ -35,6 +35,10 @@ type EventHandler interface {
 	HasEvent(name string) bool
 	AddEvent(name string, evt Event) error
 	GetEvent(name string) Event
+}
+
+func NewEventHandler() eventHandler {
+	return eventHandler{make(map[string]Event, 0)}
 }
 
 //unifies handling of multiple events
