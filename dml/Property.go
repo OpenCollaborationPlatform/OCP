@@ -57,6 +57,31 @@ func stringToType(t string) PropertyType {
 	return Int
 }
 
+func mustBeType(pt PropertyType, val interface{}) error {
+	//check if the type is correct
+	switch val.(type) {
+	case int, int32, int64:
+		if pt != Int {
+			return fmt.Errorf(`wrong type, got 'int' and expected '%s'`, typeToString(pt))
+		}
+	case float32, float64:
+		if pt != Float {
+			return fmt.Errorf(`wrong type, got 'float' and expected '%s'`, typeToString(pt))
+		}
+	case string:
+		if pt != String {
+			return fmt.Errorf(`wrong type, got 'string' and expected '%s'`, typeToString(pt))
+		}
+	case bool:
+		if pt != Bool {
+			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, typeToString(pt))
+		}
+	default:
+		return fmt.Errorf("Unknown type: %T", val)
+	}
+	return nil
+}
+
 //Defines the default Property interface under which different data types can be stored.
 //It uses a getter setter interface for better interactibility between dml, js and go
 type Property interface {
@@ -101,30 +126,16 @@ func (self DataProperty) Type() PropertyType {
 func (self *DataProperty) SetValue(val interface{}) error {
 
 	//check if the type is correct
-	switch val.(type) {
-	case int, int32, int64:
-		if self.propertyType != Int {
-			return fmt.Errorf(`wrong type, got 'int' and expected '%s'`, typeToString(self.propertyType))
-		}
-	case float32, float64:
-		if self.propertyType != Float {
-			return fmt.Errorf(`wrong type, got 'float' and expected '%s'`, typeToString(self.propertyType))
-		}
-	case string:
-		if self.propertyType != String {
-			return fmt.Errorf(`wrong type, got 'string' and expected '%s'`, typeToString(self.propertyType))
-		}
-	case bool:
-		if self.propertyType != String {
-			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, typeToString(self.propertyType))
-		}
+	err := mustBeType(self.propertyType, val)
+	if err != nil {
+		return err
 	}
 
 	//store it
 	if !self.db.IsValid() {
 		return fmt.Errorf("Invalid database entry")
 	}
-	err := self.db.Write(val)
+	err = self.db.Write(val)
 	if err != nil {
 		return err
 	}
@@ -192,7 +203,10 @@ func (self *propertyHandler) SetupJSProperties(vm *goja.Runtime, obj *goja.Objec
 			return vm.ToValue(self.GetProperty(propname).GetValue())
 		})
 		setter := vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
-			self.GetProperty(propname).SetValue(call.Argument(0).Export())
+			err := self.GetProperty(propname).SetValue(call.Argument(0).Export())
+			if err != nil {
+				panic(vm.ToValue(err))
+			}
 			return
 		})
 

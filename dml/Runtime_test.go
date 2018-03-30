@@ -41,28 +41,30 @@ func TestDmlFile(t *testing.T) {
 			value, ok = val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
+
+			code = `Document.testI = "hello"`
+			val, err = rntm.RunJavaScript(code)
+			So(err, ShouldNotBeNil)
 		})
 
 		Convey("and eventhandling should work", func() {
 
 			code := `
 					fnc = function(a, b) {
-						console.log("Should be int: ", a)
-						console.log("Should be string: ", b)
+						if (a != 2 || b != "hello") {
+							throw "wrong arguments"
+						}
 					}
 					Document.testE.RegisterCallback(fnc)
 					Document.testE.Emit(2, "hello")
 				`
-			/*code := `
-			var propValue;
-			for(var propName in Document.testE) {
-			    propValue = Document.testE[propName]
-
-			    console.log(propName,propValue);
-			}`*/
-
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
+
+			code = `Document.testE.Emit("hello", "2")`
+			_, err = rntm.RunJavaScript(code)
+			So(err, ShouldNotBeNil)
+
 		})
 	})
 }

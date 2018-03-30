@@ -200,7 +200,7 @@ func (self *Runtime) buildProperty(ds datastore.Store, astProp *astProperty) (Pr
 		err = prop.SetValue(*astProp.Default.Number)
 
 	} else if astProp.Default.Bool != nil {
-		err = prop.SetValue(*astProp.Default.Bool)
+		err = prop.SetValue(bool(*astProp.Default.Bool))
 	}
 
 	if err != nil {

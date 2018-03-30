@@ -26,6 +26,12 @@ func (self *event) Emit(args ...interface{}) error {
 	if len(args) != len(self.parameterTypes) {
 		return fmt.Errorf("No enough types provided, expected %i, received %i", len(self.parameterTypes), len(args))
 	}
+	for i, pt := range self.parameterTypes {
+		err := mustBeType(pt, args[i])
+		if err != nil {
+			return err
+		}
+	}
 
 	//now call all registered functions
 	for _, fnc := range self.callbacks {
