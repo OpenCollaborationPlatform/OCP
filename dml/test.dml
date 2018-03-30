@@ -6,5 +6,7 @@
     property int 	testI: 1
 	property bool 	testB: true
 	
-	event testE(int, string)
+	event testE(int, string): function(a,b) {
+		console.log("call from dml: ", a,b)
+	}
 }

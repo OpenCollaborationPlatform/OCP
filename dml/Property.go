@@ -8,92 +8,18 @@ import (
 	"github.com/dop251/goja"
 )
 
-type PropertyType int
-
-const (
-	String PropertyType = 1
-	Int    PropertyType = 2
-	Float  PropertyType = 3
-	Bool   PropertyType = 4
-	File   PropertyType = 5
-	Raw    PropertyType = 6
-)
-
-func typeToString(t PropertyType) string {
-
-	switch t {
-	case String:
-		return "string"
-	case Int:
-		return "int"
-	case Float:
-		return "float"
-	case Bool:
-		return "bool"
-	case File:
-		return "file"
-	case Raw:
-		return "raw"
-	}
-	return ""
-}
-
-func stringToType(t string) PropertyType {
-
-	switch t {
-	case "string":
-		return String
-	case "int":
-		return Int
-	case "float":
-		return Float
-	case "bool":
-		return Bool
-	case "file":
-		return File
-	case "raw":
-		return Raw
-	}
-	return Int
-}
-
-func mustBeType(pt PropertyType, val interface{}) error {
-	//check if the type is correct
-	switch val.(type) {
-	case int, int32, int64:
-		if pt != Int {
-			return fmt.Errorf(`wrong type, got 'int' and expected '%s'`, typeToString(pt))
-		}
-	case float32, float64:
-		if pt != Float {
-			return fmt.Errorf(`wrong type, got 'float' and expected '%s'`, typeToString(pt))
-		}
-	case string:
-		if pt != String {
-			return fmt.Errorf(`wrong type, got 'string' and expected '%s'`, typeToString(pt))
-		}
-	case bool:
-		if pt != Bool {
-			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, typeToString(pt))
-		}
-	default:
-		return fmt.Errorf("Unknown type: %T", val)
-	}
-	return nil
-}
-
 //Defines the default Property interface under which different data types can be stored.
 //It uses a getter setter interface for better interactibility between dml, js and go
 type Property interface {
 	EventHandler
 
-	Type() PropertyType
+	Type() DataType
 
 	SetValue(value interface{}) error
 	GetValue() interface{}
 }
 
-func NewProperty(name string, dtype PropertyType, store datastore.Store) (Property, error) {
+func NewProperty(name string, dtype DataType, store datastore.Store, vm *goja.Runtime) (Property, error) {
 
 	var prop Property
 
@@ -106,7 +32,7 @@ func NewProperty(name string, dtype PropertyType, store datastore.Store) (Proper
 	}
 
 	//add all required events
-	prop.AddEvent("onChanged", NewEvent(dtype))
+	prop.AddEvent("onChanged", NewEvent(vm, dtype))
 
 	return prop, nil
 }
@@ -115,11 +41,11 @@ func NewProperty(name string, dtype PropertyType, store datastore.Store) (Proper
 //*********************
 type DataProperty struct {
 	eventHandler
-	propertyType PropertyType
+	propertyType DataType
 	db           datastore.Entry
 }
 
-func (self DataProperty) Type() PropertyType {
+func (self DataProperty) Type() DataType {
 	return self.propertyType
 }
 

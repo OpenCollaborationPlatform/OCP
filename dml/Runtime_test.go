@@ -47,7 +47,7 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldNotBeNil)
 		})
 
-		Convey("and eventhandling should work", func() {
+		Convey("and event handling should work", func() {
 
 			code := `
 					fnc = function(a, b) {

@@ -11,7 +11,7 @@ import (
 	"github.com/dop251/goja_nodejs/require"
 )
 
-type CreatorFunc func(datastore *datastore.Datastore, name string) Object
+type CreatorFunc func(datastore *datastore.Datastore, name string, vm *goja.Runtime) Object
 
 func NewRuntime(ds *datastore.Datastore) Runtime {
 
@@ -105,7 +105,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	}
 
 	//setup the object including datastore and expose it to js
-	obj := creator(self.datastore, objName)
+	obj := creator(self.datastore, objName, self.jsvm)
 	jsobj := self.jsvm.NewObject()
 	self.jsvm.Set(objName, jsobj)
 
@@ -129,9 +129,12 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		if err != nil {
 			return nil, err
 		}
-		obj.AddEvent(astEvent.Key, event)
+		err = obj.AddEvent(astEvent.Key, event)
+		if err != nil {
+			return nil, err
+		}
+		jsobj.Set(astEvent.Key, obj.GetEvent(astEvent.Key).GetJSObject())
 	}
-	obj.SetupJSEvents(self.jsvm, jsobj)
 
 	/*
 		//than all functions
@@ -159,17 +162,42 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
 
 	//build the arguements slice
-	args := make([]PropertyType, len(astEvt.Params))
+	args := make([]DataType, len(astEvt.Params))
 	for i, ptype := range astEvt.Params {
 		args[i] = stringToType(ptype.Type)
 	}
 
-	return NewEvent(args...), nil
+	//build the event
+	evt := NewEvent(self.jsvm, args...)
+
+	//and see if we should add a default callback
+	if astEvt.Default != "" {
+		//wrap it into something that can be processed by goja
+		//(a anonymous function on its own is not allowed)
+		code := "fnc = " + astEvt.Default
+		val, err := self.jsvm.RunString(code)
+		if err != nil {
+			return nil, err
+		}
+		fnc, ok := val.Export().(func(goja.FunctionCall) goja.Value)
+		if !ok {
+			return nil, fmt.Errorf("Must be function")
+		}
+		evt.RegisterJSCallback(fnc)
+
+		//cleanup the global var we needed
+		_, err = self.jsvm.RunString("delete fnc")
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return evt, nil
 }
 
 func (self *Runtime) buildProperty(ds datastore.Store, astProp *astProperty) (Property, error) {
 
-	var dt PropertyType
+	var dt DataType
 	switch astProp.Type.Type {
 	case "string":
 		dt = String
@@ -181,7 +209,7 @@ func (self *Runtime) buildProperty(ds datastore.Store, astProp *astProperty) (Pr
 		dt = Bool
 	}
 
-	prop, err := NewProperty(astProp.Key, dt, ds)
+	prop, err := NewProperty(astProp.Key, dt, ds, self.jsvm)
 	if err != nil {
 		return nil, err
 	}

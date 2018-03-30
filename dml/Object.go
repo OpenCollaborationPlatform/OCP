@@ -3,6 +3,8 @@ package dml
 import (
 	"CollaborationNode/datastores"
 	"fmt"
+
+	"github.com/dop251/goja"
 )
 
 type Object interface {
@@ -40,7 +42,7 @@ func (self *Group) GetDataStore() datastore.Store {
 	return self.store
 }
 
-func NewGroup(ds *datastore.Datastore, name string) Object {
+func NewGroup(ds *datastore.Datastore, name string, vm *goja.Runtime) Object {
 	grp := Group{
 		NewPropertyHandler(),
 		NewEventHandler(),
@@ -49,7 +51,7 @@ func NewGroup(ds *datastore.Datastore, name string) Object {
 		make(map[string]Object, 0),
 	}
 
-	id, err := NewProperty("id", String, grp.GetDataStore())
+	id, err := NewProperty("id", String, grp.GetDataStore(), vm)
 	if err != nil {
 		return nil
 	}

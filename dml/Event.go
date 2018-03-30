@@ -6,18 +6,59 @@ import (
 	"github.com/dop251/goja"
 )
 
+type EventCallback func(...interface{})
+
 type Event interface {
+	JSObject
+
 	Emit(args ...interface{}) error
-	RegisterCallback(cb func(...interface{})) error
+	RegisterCallback(cb EventCallback) error
+	RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error
 }
 
-func NewEvent(args ...PropertyType) Event {
-	return &event{args, make([]func(...interface{}), 0)}
+func NewEvent(vm *goja.Runtime, args ...DataType) Event {
+
+	evt := &event{parameterTypes: args, callbacks: make([]EventCallback, 0)}
+
+	//now the js object
+	evtObj := vm.NewObject()
+
+	fnc := vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
+		err := evt.Emit(extractArgs(call.Arguments)...)
+		if err != nil {
+			panic(vm.ToValue(err.Error()))
+		}
+		return
+	})
+	evtObj.Set("Emit", fnc)
+
+	fnc = vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
+
+		//we get a normal goja function. this must be bridged to our callback format
+		jsFnc, ok := call.Argument(0).Export().(func(goja.FunctionCall) goja.Value)
+		if !ok {
+			panic(vm.ToValue("Argument is not a function!"))
+		}
+		err := evt.RegisterJSCallback(jsFnc)
+		if err != nil {
+			panic(vm.ToValue(err.Error()))
+		}
+		return
+	})
+	evtObj.Set("RegisterCallback", fnc)
+
+	evt.jsobj = evtObj
+	evt.jsvm = vm
+
+	return evt
 }
 
 type event struct {
-	parameterTypes []PropertyType
-	callbacks      []func(...interface{})
+	parameterTypes []DataType
+	callbacks      []EventCallback
+
+	jsvm  *goja.Runtime
+	jsobj *goja.Object
 }
 
 func (self *event) Emit(args ...interface{}) error {
@@ -41,18 +82,31 @@ func (self *event) Emit(args ...interface{}) error {
 	return nil
 }
 
-func (self *event) RegisterCallback(cb func(...interface{})) error {
+func (self *event) RegisterCallback(cb EventCallback) error {
 
 	self.callbacks = append(self.callbacks, cb)
 	return nil
+}
+
+func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error {
+
+	return self.RegisterCallback(func(args ...interface{}) {
+		jsArgs := make([]goja.Value, len(args))
+		for i, arg := range args {
+			jsArgs[i] = self.jsvm.ToValue(arg)
+		}
+		cb(goja.FunctionCall{This: self.jsobj, Arguments: jsArgs})
+	})
+}
+
+func (self *event) GetJSObject() *goja.Object {
+	return self.jsobj
 }
 
 type EventHandler interface {
 	HasEvent(name string) bool
 	AddEvent(name string, evt Event) error
 	GetEvent(name string) Event
-
-	SetupJSEvents(vm *goja.Runtime, obj *goja.Object) error
 }
 
 func NewEventHandler() eventHandler {
@@ -92,51 +146,4 @@ func extractArgs(values []goja.Value) []interface{} {
 		res[i] = val.Export()
 	}
 	return res
-}
-
-func (self *eventHandler) SetupJSEvents(vm *goja.Runtime, obj *goja.Object) error {
-
-	//a event is a object within the object, which allows to add callbacks, emit etc...
-	for name, _ := range self.events {
-
-		evtName := name //to not use references in the created anym functions
-		evtObj := vm.NewObject()
-
-		//add the functions to it
-		fnc := vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
-			err := self.GetEvent(evtName).Emit(extractArgs(call.Arguments)...)
-			if err != nil {
-				panic(vm.ToValue(err.Error()))
-			}
-			return
-		})
-		evtObj.Set("Emit", fnc)
-
-		fnc = vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
-
-			//we get a normal goja function. this must be bridged to our callback format
-			jsFnc, ok := call.Argument(0).Export().(func(goja.FunctionCall) goja.Value)
-			if !ok {
-				panic(vm.ToValue("Argument is not a function!"))
-			}
-			err := self.GetEvent(evtName).RegisterCallback(func(args ...interface{}) {
-				jsArgs := make([]goja.Value, len(args))
-				for i, arg := range args {
-					jsArgs[i] = vm.ToValue(arg)
-				}
-				jsFnc(goja.FunctionCall{This: evtObj, Arguments: jsArgs})
-			})
-			if err != nil {
-				panic(vm.ToValue(err.Error()))
-			}
-			return
-		})
-		evtObj.Set("RegisterCallback", fnc)
-
-		err := obj.Set(evtName, evtObj)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
