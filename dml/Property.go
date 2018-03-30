@@ -38,6 +38,25 @@ func typeToString(t PropertyType) string {
 	return ""
 }
 
+func stringToType(t string) PropertyType {
+
+	switch t {
+	case "string":
+		return String
+	case "int":
+		return Int
+	case "float":
+		return Float
+	case "bool":
+		return Bool
+	case "file":
+		return File
+	case "raw":
+		return Raw
+	}
+	return Int
+}
+
 //Defines the default Property interface under which different data types can be stored.
 //It uses a getter setter interface for better interactibility between dml, js and go
 type Property interface {
@@ -62,7 +81,7 @@ func NewProperty(name string, dtype PropertyType, store datastore.Store) (Proper
 	}
 
 	//add all required events
-	prop.AddEvent("onChanged", makeEvent(dtype))
+	prop.AddEvent("onChanged", NewEvent(dtype))
 
 	return prop, nil
 }

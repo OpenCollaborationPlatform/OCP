@@ -36,10 +36,11 @@ type astProperty struct {
 
 type astEvent struct {
 	Key     string     `"event" @Ident`
-	Params  []*astType `"(" { @@ } ")"`
+	Params  []*astType `"(" { @@ ["," @@] } ")"`
 	Default string     `[":" @AnymFunc]`
 }
 
+//special type to make bool handling easier
 type Boolean bool
 
 func (b *Boolean) Capture(v []string) error { *b = v[0] == "true"; return nil }

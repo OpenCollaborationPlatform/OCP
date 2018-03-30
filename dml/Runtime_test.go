@@ -42,5 +42,27 @@ func TestDmlFile(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
 		})
+
+		Convey("and eventhandling should work", func() {
+
+			code := `
+					fnc = function(a, b) {
+						console.log("Should be int: ", a)
+						console.log("Should be string: ", b)
+					}
+					Document.testE.RegisterCallback(fnc)
+					Document.testE.Emit(2, "hello")
+				`
+			/*code := `
+			var propValue;
+			for(var propName in Document.testE) {
+			    propValue = Document.testE[propName]
+
+			    console.log(propName,propValue);
+			}`*/
+
+			_, err := rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+		})
 	})
 }

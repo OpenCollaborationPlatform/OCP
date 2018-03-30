@@ -5,4 +5,6 @@
     property string 	testS: "Hallo"
     property int 	testI: 1
 	property bool 	testB: true
+	
+	event testE(int, string)
 }

@@ -101,7 +101,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		}
 	}
 	if objName == "" {
-		panic("we need the ID proeprty, otherwise everything falls appart...")
+		return nil, fmt.Errorf("we need the ID proeprty, otherwise everything falls appart")
 	}
 
 	//setup the object including datastore and expose it to js
@@ -123,10 +123,17 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	}
 
 	//now we create all new events
-	/*	for _, evt := range astObj.Events {
+	for _, astEvent := range astObj.Events {
 
+		event, err := self.buildEvent(astEvent)
+		if err != nil {
+			return nil, err
 		}
+		obj.AddEvent(astEvent.Key, event)
+	}
+	obj.SetupJSEvents(self.jsvm, jsobj)
 
+	/*
 		//than all functions
 		for _, fnc := range astObj.Functions {
 
@@ -147,6 +154,17 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		}*/
 
 	return obj, nil
+}
+
+func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
+
+	//build the arguements slice
+	args := make([]PropertyType, len(astEvt.Params))
+	for i, ptype := range astEvt.Params {
+		args[i] = stringToType(ptype.Type)
+	}
+
+	return NewEvent(args...), nil
 }
 
 func (self *Runtime) buildProperty(ds datastore.Store, astProp *astProperty) (Property, error) {
