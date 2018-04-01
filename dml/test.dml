@@ -7,6 +7,14 @@
 	property bool 	testB: true
 	
 	event testE(int, string): function(a,b) {
-		console.log("call from dml: ", a,b)
+		Document.testB = false
+	}
+	
+	event testE2(): function() {
+		this.testI = -10
+	}
+	
+	function testFnc(a) {
+		this.testI = a
 	}
 }

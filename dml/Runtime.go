@@ -4,6 +4,7 @@ import (
 	"CollaborationNode/datastores"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/participle"
 	"github.com/dop251/goja"
@@ -106,7 +107,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 
 	//setup the object including datastore and expose it to js
 	obj := creator(self.datastore, objName, self.jsvm)
-	jsobj := self.jsvm.NewObject()
+	jsobj := obj.GetJSObject()
 	self.jsvm.Set(objName, jsobj)
 
 	//Now we create all additional properties and set them up in js
@@ -136,12 +137,17 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		jsobj.Set(astEvent.Key, obj.GetEvent(astEvent.Key).GetJSObject())
 	}
 
-	/*
-		//than all functions
-		for _, fnc := range astObj.Functions {
+	//than all methods
+	for _, fnc := range astObj.Functions {
 
+		method, err := self.buildMethod(fnc)
+		if err != nil {
+			return nil, err
 		}
-	*/
+		obj.AddMethod(*fnc.Name, method)
+	}
+	obj.SetupJSMethods(self.jsvm, jsobj)
+
 	//go on with all subobjects
 	for _, astChild := range astObj.Objects {
 		child, err := self.buildObject(astChild)
@@ -159,6 +165,31 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	return obj, nil
 }
 
+//this function adds the javascript method directly to the object
+func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
+
+	if astFnc.Name == nil {
+		return nil, fmt.Errorf("Object method must have a name")
+	}
+
+	code := *astFnc.Name + "= function(" +
+		strings.Join(astFnc.Parameters[:], ",") + ")" +
+		astFnc.Body
+
+	val, err := self.jsvm.RunString(code)
+	if err != nil {
+		return nil, err
+	}
+
+	//cleanup the global var we needed
+	_, err = self.jsvm.RunString("delete " + *astFnc.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewMethod(val.Export())
+}
+
 func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
 
 	//build the arguements slice
@@ -171,11 +202,13 @@ func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
 	evt := NewEvent(self.jsvm, args...)
 
 	//and see if we should add a default callback
-	if astEvt.Default != "" {
+	if astEvt.Default != nil {
 		//wrap it into something that can be processed by goja
 		//(a anonymous function on its own is not allowed)
-		code := "fnc = " + astEvt.Default
-		val, err := self.jsvm.RunString(code)
+		val, err := self.jsvm.RunString("fnc = function(" +
+			strings.Join(astEvt.Default.Parameters[:], ",") +
+			")" + astEvt.Default.Body)
+
 		if err != nil {
 			return nil, err
 		}

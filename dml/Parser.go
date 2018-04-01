@@ -18,14 +18,14 @@ type astObject struct {
 	Assignments []*astAssignment `{ @@ `
 	Properties  []*astProperty   `| @@`
 	Events      []*astEvent      `| @@`
-	Functions   []string         `| @Func`
+	Functions   []*astFunction   `| @@`
 	Objects     []*astObject     `| @@ } "}"`
 }
 
 type astAssignment struct {
-	Key      string    `"." @Ident {@"." @Ident} ":"`
-	Value    *astValue `  @@`
-	Function string    `| @AnymFunc`
+	Key      string       `"." @Ident ":"`
+	Value    *astValue    `(@@`
+	Function *astFunction `| @@)`
 }
 
 type astProperty struct {
@@ -35,9 +35,15 @@ type astProperty struct {
 }
 
 type astEvent struct {
-	Key     string     `"event" @Ident`
-	Params  []*astType `"(" { @@ ["," @@] } ")"`
-	Default string     `[":" @AnymFunc]`
+	Key     string       `"event" @Ident`
+	Params  []*astType   `"(" { @@ [","] } ")"`
+	Default *astFunction `[":" @@]`
+}
+
+type astFunction struct {
+	Name       *string  `Function [@Ident]`
+	Parameters []string `"(" {@Ident [","]} ")"`
+	Body       string   `@FunctionBody`
 }
 
 //special type to make bool handling easier

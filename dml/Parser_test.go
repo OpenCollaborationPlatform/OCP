@@ -140,6 +140,7 @@ func TestJavascriptFunctions(t *testing.T) {
 		Convey("the result should match the input", func() {
 			So(dml.Object, ShouldNotBeNil)
 			obj := dml.Object
+
 			So(obj.Identifier, ShouldEqual, "Test")
 			So(len(obj.Assignments), ShouldEqual, 2)
 			So(len(obj.Objects), ShouldEqual, 1)

@@ -47,13 +47,14 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldNotBeNil)
 		})
 
-		Convey("and event handling should work", func() {
+		Convey("and event handling should work.", func() {
 
 			code := `
 					fnc = function(a, b) {
 						if (a != 2 || b != "hello") {
 							throw "wrong arguments"
 						}
+						Document.testI = 0
 					}
 					Document.testE.RegisterCallback(fnc)
 					Document.testE.Emit(2, "hello")
@@ -61,10 +62,36 @@ func TestDmlFile(t *testing.T) {
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 
+			code = `Document.testI`
+			val, err := rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+			value, ok := val.(int64)
+			So(ok, ShouldBeTrue)
+			So(value, ShouldEqual, 0)
+
 			code = `Document.testE.Emit("hello", "2")`
 			_, err = rntm.RunJavaScript(code)
 			So(err, ShouldNotBeNil)
 
+			code = `Document.testB`
+			val, err = rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+			bvalue, ok := val.(bool)
+			So(ok, ShouldBeTrue)
+			So(bvalue, ShouldBeFalse)
+		})
+
+		Convey("Also functions should be callable", func() {
+
+			code := `
+			Document.testFnc(42)
+			Document.testI`
+
+			val, err := rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+			value, ok := val.(int64)
+			So(ok, ShouldBeTrue)
+			So(value, ShouldEqual, 42)
 		})
 	})
 }

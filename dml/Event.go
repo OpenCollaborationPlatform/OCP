@@ -10,6 +10,7 @@ type EventCallback func(...interface{})
 
 type Event interface {
 	JSObject
+	MethodHandler
 
 	Emit(args ...interface{}) error
 	RegisterCallback(cb EventCallback) error
@@ -18,42 +19,28 @@ type Event interface {
 
 func NewEvent(vm *goja.Runtime, args ...DataType) Event {
 
-	evt := &event{parameterTypes: args, callbacks: make([]EventCallback, 0)}
+	evt := &event{methodHandler: NewMethodHandler(),
+		parameterTypes: args,
+		callbacks:      make([]EventCallback, 0)}
 
 	//now the js object
 	evtObj := vm.NewObject()
 
-	fnc := vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
-		err := evt.Emit(extractArgs(call.Arguments)...)
-		if err != nil {
-			panic(vm.ToValue(err.Error()))
-		}
-		return
-	})
-	evtObj.Set("Emit", fnc)
-
-	fnc = vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
-
-		//we get a normal goja function. this must be bridged to our callback format
-		jsFnc, ok := call.Argument(0).Export().(func(goja.FunctionCall) goja.Value)
-		if !ok {
-			panic(vm.ToValue("Argument is not a function!"))
-		}
-		err := evt.RegisterJSCallback(jsFnc)
-		if err != nil {
-			panic(vm.ToValue(err.Error()))
-		}
-		return
-	})
-	evtObj.Set("RegisterCallback", fnc)
+	emitMethod, _ := NewMethod(evt.Emit)
+	evt.AddMethod("Emit", emitMethod)
+	registerMethod, _ := NewMethod(evt.RegisterJSCallback)
+	evt.AddMethod("RegisterCallback", registerMethod)
 
 	evt.jsobj = evtObj
 	evt.jsvm = vm
+	evt.SetupJSMethods(vm, evtObj)
 
 	return evt
 }
 
 type event struct {
+	methodHandler
+
 	parameterTypes []DataType
 	callbacks      []EventCallback
 
@@ -65,7 +52,7 @@ func (self *event) Emit(args ...interface{}) error {
 
 	//check if all required types are given
 	if len(args) != len(self.parameterTypes) {
-		return fmt.Errorf("No enough types provided, expected %i, received %i", len(self.parameterTypes), len(args))
+		return fmt.Errorf("Not enough types provided, expected %i, received %i", len(self.parameterTypes), len(args))
 	}
 	for i, pt := range self.parameterTypes {
 		err := mustBeType(pt, args[i])

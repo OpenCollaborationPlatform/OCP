@@ -19,7 +19,7 @@ func init() {
 
 	//all types in important order of parsing
 	types = make([]string, 0)
-	types = append(types, `EOF`, `Char`, `Func`, `AnymFunc`, `Ident`, `String`, `Float`, `Int`)
+	types = append(types, `EOF`, `Char`, `Function`, `FunctionBody`, `Ident`, `String`, `Float`, `Int`)
 
 	//build all required expressions for stuff we want to do with regexp
 	expressions = make(map[string]*regexp.Regexp, 0)
@@ -64,10 +64,11 @@ func (d *dmlDefinition) Symbols() map[string]rune {
 // - ignores all comments
 // - has a special token for JavaScript code
 type dmlLexer struct {
-	cursor       lexer.Position
-	buf          []byte
-	patternCache map[string]*regexp.Regexp
-	peek         *lexer.Token
+	cursor        lexer.Position
+	buf           []byte
+	patternCache  map[string]*regexp.Regexp
+	peek          *lexer.Token
+	fncProzessing bool
 }
 
 func (self *dmlLexer) Peek() lexer.Token {
@@ -85,13 +86,22 @@ func (self *dmlLexer) Peek() lexer.Token {
 			return tok
 		}
 
+		self.skipUnneeded()
 		tok, ok = self.matchJSFunction()
 		if ok {
 			self.peek = &tok
 			return tok
 		}
 
+		self.skipUnneeded()
+		tok, ok = self.matchJSFunctionBody()
+		if ok {
+			self.peek = &tok
+			return tok
+		}
+
 		//not returned? search the remaining regexp tokens!
+		self.skipUnneeded()
 		for _, name := range types {
 
 			expr, ok := expressions[name]
@@ -160,26 +170,20 @@ func (self *dmlLexer) matchJSFunction() (lexer.Token, bool) {
 
 	//everything begins with function keyword. We can use match, as if this is found
 	//we never need to go back, it can only  be a function
-	_, ok := self.match(self.compile(`^function`))
-	if !ok {
+	tok, ok := self.match(self.compile(`^function`))
+	if ok {
+		//we found the keyword, lets remember that we are prozessing a function
+		self.fncProzessing = true
+		tok.Type = symbols["Function"]
+	}
+	return tok, ok
+}
+
+func (self *dmlLexer) matchJSFunctionBody() (lexer.Token, bool) {
+
+	//we will have a arbitrarily nested function body, let's get it!
+	if !self.fncProzessing || self.buf[self.cursor.Offset] != '{' {
 		return lexer.Token{}, false
-	}
-	self.skipUnneeded()
-
-	//maybe there is a identifier, otherwise it is annonymous
-	id, named := self.match(expressions["Ident"])
-	self.skipUnneeded()
-
-	//now the parameters must come
-	param, ok := self.match(self.compile(`\(.*?\)`))
-	if !ok {
-		lexer.Panic(self.cursor, "expected function parameters(...)")
-	}
-	self.skipUnneeded()
-
-	//now we will have a arbitrarily nested function body, let's get it!
-	if self.buf[self.cursor.Offset] != '{' {
-		lexer.Panicf(self.cursor, "expected function body opening '{' instead of %s", string(self.buf[self.cursor.Offset]))
 	}
 	exp := self.compile(`(\{)|(\})`)
 	add := 1
@@ -206,27 +210,23 @@ func (self *dmlLexer) matchJSFunction() (lexer.Token, bool) {
 	}
 
 	//we found our body, let's build the token
-	tok := lexer.Token{Pos: self.cursor, Type: symbols["AnymFunc"]}
-
-	match := "function "
-	if named {
-		match += string(id.Value)
-		tok.Type = symbols["Func"]
-	}
-	match += string(param.Value) + " " + string(self.buf[self.cursor.Offset:(self.cursor.Offset+add)])
-
-	tok.Value = match
+	tok := lexer.Token{Pos: self.cursor, Type: symbols["FunctionBody"]}
+	tok.Value = string(self.buf[self.cursor.Offset:(self.cursor.Offset + add)])
 
 	//update the lexer
 	self.cursor.Offset += add
-	bmatch := []byte(match)
+	bmatch := []byte(tok.Value)
 	lines := bytes.Count(bmatch, []byte("\n"))
 	self.cursor.Line += lines
 	if lines == 0 {
 		self.cursor.Column += utf8.RuneCount(bmatch)
 	} else {
-		self.cursor.Column = utf8.RuneCount(bmatch[bytes.LastIndex([]byte(match), []byte("\n")):])
+		self.cursor.Column = utf8.RuneCount(bmatch[bytes.LastIndex([]byte(tok.Value), []byte("\n")):])
 	}
+
+	//remember we are done with function processing...
+	self.fncProzessing = false
+
 	return tok, true
 }
 
