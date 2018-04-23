@@ -2,7 +2,6 @@ package dml
 
 import (
 	"CollaborationNode/datastores"
-	"fmt"
 
 	"github.com/dop251/goja"
 )
@@ -16,7 +15,13 @@ type Object interface {
 	GetDataStore() datastore.Store
 
 	//Object functions
-	AddChild(name string, obj Object) error
+	Id() string
+
+	AddChild(obj Object)
+	GetChildren() []Object
+	GetChildById(id string) Object
+	SetParent(parent Object)
+	GetParent() Object
 }
 
 //the most basic implementation of an dml Object. All it does is to allow adding
@@ -30,19 +35,36 @@ type Group struct {
 
 	store     datastore.Store
 	functions map[string]interface{}
-	children  map[string]Object
+	children  []Object
+	parent    Object
+	id        string
 
 	jsobj *goja.Object
 }
 
-func (self *Group) AddChild(name string, obj Object) error {
+func (self *Group) Id() string {
+	return self.id
+}
 
-	_, ok := self.children[name]
-	if ok {
-		return fmt.Errorf("Child already exist")
-	}
-	self.children[name] = obj
+func (self *Group) AddChild(obj Object) {
+
+	self.children = append(self.children, obj)
+}
+
+func (self *Group) GetChildren() []Object {
+	return self.children
+}
+
+func (self *Group) GetChildById(id string) Object {
 	return nil
+}
+
+func (self *Group) SetParent(parent Object) {
+	self.parent = parent
+}
+
+func (self *Group) GetParent() Object {
+	return self.parent
 }
 
 func (self *Group) GetDataStore() datastore.Store {
@@ -63,7 +85,9 @@ func NewGroup(ds *datastore.Datastore, name string, vm *goja.Runtime) Object {
 		NewMethodHandler(),
 		ds.GetOrCreateStore(datastore.KeyValue, name),
 		make(map[string]interface{}, 0),
-		make(map[string]Object, 0),
+		make([]Object, 0),
+		nil,
+		name,
 		jsobj,
 	}
 

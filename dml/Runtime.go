@@ -59,7 +59,6 @@ func (self *Runtime) ParseFile(path string) error {
 	if err != nil {
 		return err
 	}
-	//bufferedReader := bufio.NewReader(filereader)
 	err = parser.Parse(filereader, ast)
 	if err != nil {
 		return err
@@ -83,6 +82,10 @@ func (self *Runtime) RunJavaScript(code string) (interface{}, error) {
 		return nil, err
 	}
 	return val.Export(), nil
+}
+
+func (self *Runtime) GetObject() Object {
+	return self.mainObj
 }
 
 //due to recursive nature og objects we need an extra function
@@ -154,15 +157,94 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		if err != nil {
 			return nil, err
 		}
-		obj.AddChild(astChild.Identifier, child)
+		obj.AddChild(child)
+		child.SetParent(obj)
 	}
 
 	//with everything in place we are able to process the assignments
-	/*	for _, assign := range astObj.Assignments {
+	for _, assign := range astObj.Assignments {
 
-		}*/
+		parts := strings.Split(assign.Key, `.`)
+		assign.Key = strings.Join(parts[1:], `.`)
+		if obj.HasProperty(parts[0]) {
+			err := assignProperty(assign, obj.GetProperty(parts[0]))
+			if err != nil {
+				return nil, err
+			}
+		} else if obj.HasEvent(parts[0]) {
+			err := assignEvent(assign, obj.GetEvent(parts[0]))
+			if err != nil {
+				return nil, err
+			}
+
+		} else {
+			return nil, fmt.Errorf("Key of assignment is not a property or event")
+		}
+	}
+
+	//ant last we add the general object properties: children etc...
+	children := obj.GetChildren()
+	jsChildren := make([]goja.Value, len(children))
+	for i, child := range children {
+		//collect children jsvalue for later use as property
+		jsChildren[i] = self.jsvm.Get(child.Id())
+	}
+	jsobj.DefineDataProperty("children", self.jsvm.ToValue(jsChildren), goja.FLAG_FALSE, goja.FLAG_TRUE, goja.FLAG_TRUE)
+
+	getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+		if obj.GetParent() != nil {
+			return self.jsvm.Get(obj.GetParent().Id())
+		}
+		return self.jsvm.ToValue(nil)
+	})
+	jsobj.DefineAccessorProperty("parent", getter, nil, goja.FLAG_TRUE, goja.FLAG_TRUE)
 
 	return obj, nil
+}
+
+func assignProperty(asgn *astAssignment, prop Property) error {
+
+	parts := strings.Split(asgn.Key, ".")
+	if len(parts) > 0 && parts[0] != "" {
+		asgn.Key = strings.Join(parts[1:], `.`)
+		if prop.HasEvent(parts[0]) {
+			return assignEvent(asgn, prop.GetEvent(parts[0]))
+		} else {
+			return fmt.Errorf("Property does not provide event with key %s", parts[0])
+		}
+	}
+
+	//we found the right property, lets assign
+	if asgn.Function != nil {
+		return fmt.Errorf("A function cannot be assigned to a property")
+	}
+
+	if asgn.Value.Int != nil {
+		prop.SetValue(*asgn.Value.Int)
+	} else if asgn.Value.String != nil {
+		prop.SetValue(*asgn.Value.String)
+	} else if asgn.Value.Number != nil {
+		prop.SetValue(*asgn.Value.Number)
+	} else if asgn.Value.Bool != nil {
+		prop.SetValue(*asgn.Value.Bool)
+	}
+	return nil
+}
+
+func assignEvent(asgn *astAssignment, evt Event) error {
+
+	//the key must end here
+	parts := strings.Split(asgn.Key, ".")
+	if len(parts) != 0 {
+		return fmt.Errorf("Event does not provide given key")
+	}
+	if asgn.Function == nil {
+		return fmt.Errorf("Only function can be asigned to event")
+	}
+
+	//evt.GetEvent(parts[0]).
+
+	return nil
 }
 
 //this function adds the javascript method directly to the object
@@ -189,6 +271,8 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 
 	return NewMethod(val.Export())
 }
+
+//func (self *Runtime) registerEvtFunction
 
 func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
 
