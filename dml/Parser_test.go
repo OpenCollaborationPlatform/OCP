@@ -39,11 +39,12 @@ func TestSimpleObject(t *testing.T) {
 			So(len(obj.Assignments), ShouldEqual, 2)
 
 			prop := obj.Assignments[0]
-			So(prop.Key, ShouldEqual, "id")
+			So(len(prop.Key), ShouldEqual, 1)
+			So(prop.Key[0], ShouldEqual, "id")
 			So(*prop.Value.Int, ShouldEqual, 1)
 
 			prop = obj.Assignments[1]
-			So(prop.Key, ShouldEqual, "name")
+			So(prop.Key[0], ShouldEqual, "name")
 			So(*prop.Value.String, ShouldEqual, `my funny " string`)
 		})
 		Convey("and the properties should be created correctly", func() {
@@ -98,10 +99,10 @@ func TestNestedObject(t *testing.T) {
 			So(obj.Identifier, ShouldEqual, "SubObject")
 			So(len(obj.Assignments), ShouldEqual, 2)
 			prop := obj.Assignments[0]
-			So(prop.Key, ShouldEqual, "id")
+			So(prop.Key[0], ShouldEqual, "id")
 			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
 			prop = obj.Assignments[1]
-			So(prop.Key, ShouldEqual, "value")
+			So(prop.Key[0], ShouldEqual, "value")
 			So(bool(*prop.Value.Bool), ShouldBeFalse)
 			So(len(obj.Objects), ShouldEqual, 2)
 		})
@@ -149,7 +150,7 @@ func TestJavascriptFunctions(t *testing.T) {
 			So(obj.Identifier, ShouldEqual, "SubObject")
 			So(len(obj.Assignments), ShouldEqual, 1)
 			prop := obj.Assignments[0]
-			So(prop.Key, ShouldEqual, "id")
+			So(prop.Key[0], ShouldEqual, "id")
 			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
 		})
 	})

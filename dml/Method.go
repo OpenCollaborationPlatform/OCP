@@ -26,6 +26,14 @@ func NewMethod(fnc interface{}) (Method, error) {
 	return &method{value}, nil
 }
 
+func MustNewMethod(fnc interface{}) Method {
+	m, err := NewMethod(fnc)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
 type method struct {
 	fnc reflect.Value
 }

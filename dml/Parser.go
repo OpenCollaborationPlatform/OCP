@@ -23,7 +23,7 @@ type astObject struct {
 }
 
 type astAssignment struct {
-	Key      string       `"." @Ident ":"`
+	Key      []string     `"." @Ident {"." @Ident} ":"`
 	Value    *astValue    `(@@`
 	Function *astFunction `| @@)`
 }

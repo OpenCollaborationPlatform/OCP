@@ -4,13 +4,18 @@
           mimetype="text/x-dml;application/x-dml" indenter="cstyle"
           author="Stefan Tröger (stefantroeger@gmx.net)" license="LGPL">
   <highlighting>
-    <list name="elements">
+    <list name="data">
       <item>Group</item>
       <item>Vector</item>
       <item>Map</item>
       <item>StateMachine</item>
       <item>State</item>
       <item>Transition</item>
+    </list>
+	<list name="behaviour">
+      <item>Access</item>
+      <item>Version</item>
+      <item>Transaction</item>
     </list>
     <list name="types">
       <item>string</item>
@@ -22,7 +27,8 @@
       <context attribute="Normal Text" lineEndContext="#stay" name="Normal">
         <DetectSpaces/>
         <WordDetect attribute="Import" context="Import" String="import"/>
-        <keyword attribute="Elements" context="#stay" String="elements" />
+        <keyword attribute="data" context="#stay" String="data" />
+		<keyword attribute="behaviour" context="#stay" String="behaviour" />
         <WordDetect attribute="Keywords" context="Event" String="event" />
         <WordDetect attribute="Keywords" context="Property" String="default property" />
         <WordDetect attribute="Keywords" context="Property" String="property" />
@@ -71,7 +77,8 @@
       <itemData name="Import"  defStyleNum="dsKeyword"  spellChecking="false" />
       <itemData name="ImportValue"  defStyleNum="dsString"  spellChecking="false" />
       <itemData name="Keywords"  defStyleNum="dsKeyword"  spellChecking="false" />
-      <itemData name="Elements" defStyleNum="dsKeyword" color="#008000" selColor="#00ffff" bold="0" italic="0" spellChecking="false"/>
+      <itemData name="data" defStyleNum="dsKeyword" color="#008000" selColor="#00ffff" bold="0" italic="0" spellChecking="false"/>
+	  <itemData name="behaviour" defStyleNum="dsKeyword" color="#000080" selColor="#00ffff" bold="0" italic="0" spellChecking="false"/>
       <itemData name="Property Type" defStyleNum="dsDataType" spellChecking="false" />
       <itemData name="String"       defStyleNum="dsString" />
       <itemData name="Escape"       defStyleNum="dsSpecialChar" spellChecking="false" />

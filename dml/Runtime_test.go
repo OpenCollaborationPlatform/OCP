@@ -28,21 +28,21 @@ func TestDmlFile(t *testing.T) {
 
 		Convey("the properties shall be accessible via js", func() {
 
-			code := `Document.testI`
+			code := `Document.testI.value`
 			val, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)
 
-			code = `Document.testI = 5`
+			code = `Document.testI.value = 5`
 			val, err = rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 			value, ok = val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
 
-			code = `Document.testI = "hello"`
+			code = `Document.testI.value = "hello"`
 			val, err = rntm.RunJavaScript(code)
 			So(err, ShouldNotBeNil)
 		})
@@ -54,7 +54,7 @@ func TestDmlFile(t *testing.T) {
 						if (a != 2 || b != "hello") {
 							throw "wrong arguments"
 						}
-						Document.testI = 0
+						Document.testI.value = 0
 					}
 					Document.testE.RegisterCallback(fnc)
 					Document.testE.Emit(2, "hello")
@@ -62,7 +62,7 @@ func TestDmlFile(t *testing.T) {
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 
-			code = `Document.testI`
+			code = `Document.testI.value`
 			val, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
@@ -78,20 +78,28 @@ func TestDmlFile(t *testing.T) {
 			_, err = rntm.RunJavaScript(code)
 			So(err, ShouldNotBeNil)
 
-			code = `Document.testB`
+			code = `Document.testB.value`
 			val, err = rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 			bvalue, ok := val.(bool)
 			So(ok, ShouldBeTrue)
 			So(bvalue, ShouldBeFalse)
 
+			code = `
+				Document.testC = 1.1
+				if ( Math.abs(Document.testC.value - 1.1) > 1e-6 ) {
+					throw "floating point number dosn't work"
+				}`
+
+			_, err = rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
 		})
 
 		Convey("Also functions should be callable", func() {
 
 			code := `
 			Document.testFnc(42)
-			Document.testI`
+			Document.testI.value`
 
 			val, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
@@ -106,7 +114,7 @@ func TestDmlFile(t *testing.T) {
 				if (Document.children.length != 1) {
 					throw "It must have exactly 1 child"
 				}
-				if (Document.children[0].id != "DocumentObject") {
+				if (Document.children[0].id.value != "DocumentObject") {
 					throw "child access seems not to work"
 				}
 				if (Document.parent != null) {

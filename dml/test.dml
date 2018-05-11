@@ -5,13 +5,16 @@
     property string 	testS: "Hallo"
     property int 	testI: 1
 	property bool 	testB: true
+	property float	testC 
+	
+	.testC.onChanged: function(val) {Document.testI = val}
 	
 	event testE(int, string): function(a,b) {
-		Document.testB = false
+		Document.testB.value = false
 	}
 	
 	function testFnc(a) {
-		this.testI = a
+		this.testI.value = a
 	}
 	
 	Group {

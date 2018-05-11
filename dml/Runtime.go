@@ -100,7 +100,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	//we need the objects name first. Search for the id property assignment
 	var objName string
 	for _, astAssign := range astObj.Assignments {
-		if astAssign.Key == "id" {
+		if astAssign.Key[0] == "id" {
 			objName = *astAssign.Value.String
 		}
 	}
@@ -164,15 +164,15 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	//with everything in place we are able to process the assignments
 	for _, assign := range astObj.Assignments {
 
-		parts := strings.Split(assign.Key, `.`)
-		assign.Key = strings.Join(parts[1:], `.`)
+		parts := assign.Key
+		assign.Key = parts[1:]
 		if obj.HasProperty(parts[0]) {
-			err := assignProperty(assign, obj.GetProperty(parts[0]))
+			err := self.assignProperty(assign, obj.GetProperty(parts[0]))
 			if err != nil {
 				return nil, err
 			}
 		} else if obj.HasEvent(parts[0]) {
-			err := assignEvent(assign, obj.GetEvent(parts[0]))
+			err := self.assignEvent(assign, obj.GetEvent(parts[0]))
 			if err != nil {
 				return nil, err
 			}
@@ -182,7 +182,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		}
 	}
 
-	//ant last we add the general object properties: children etc...
+	//ant last we add the general object properties: children, parent etc...
 	children := obj.GetChildren()
 	jsChildren := make([]goja.Value, len(children))
 	for i, child := range children {
@@ -202,13 +202,13 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	return obj, nil
 }
 
-func assignProperty(asgn *astAssignment, prop Property) error {
+func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 
-	parts := strings.Split(asgn.Key, ".")
+	parts := asgn.Key
 	if len(parts) > 0 && parts[0] != "" {
-		asgn.Key = strings.Join(parts[1:], `.`)
+		asgn.Key = parts[1:]
 		if prop.HasEvent(parts[0]) {
-			return assignEvent(asgn, prop.GetEvent(parts[0]))
+			return self.assignEvent(asgn, prop.GetEvent(parts[0]))
 		} else {
 			return fmt.Errorf("Property does not provide event with key %s", parts[0])
 		}
@@ -231,10 +231,10 @@ func assignProperty(asgn *astAssignment, prop Property) error {
 	return nil
 }
 
-func assignEvent(asgn *astAssignment, evt Event) error {
+func (self *Runtime) assignEvent(asgn *astAssignment, evt Event) error {
 
 	//the key must end here
-	parts := strings.Split(asgn.Key, ".")
+	parts := asgn.Key
 	if len(parts) != 0 {
 		return fmt.Errorf("Event does not provide given key")
 	}
@@ -242,7 +242,26 @@ func assignEvent(asgn *astAssignment, evt Event) error {
 		return fmt.Errorf("Only function can be asigned to event")
 	}
 
-	//evt.GetEvent(parts[0]).
+	//wrap it into something that can be processed by goja
+	//(a anonymous function on its own is not allowed)
+	val, err := self.jsvm.RunString("fnc = function(" +
+		strings.Join(asgn.Function.Parameters[:], ",") +
+		")" + asgn.Function.Body)
+
+	if err != nil {
+		return err
+	}
+	fnc, ok := val.Export().(func(goja.FunctionCall) goja.Value)
+	if !ok {
+		return fmt.Errorf("Must be function")
+	}
+	evt.RegisterJSCallback(fnc)
+
+	//cleanup the global var we needed
+	_, err = self.jsvm.RunString("delete fnc")
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
