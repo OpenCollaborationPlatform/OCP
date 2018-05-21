@@ -21,7 +21,7 @@ func TestDmlFile(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		rntm := NewRuntime(store)
-		rntm.RegisterObjectCreator("Group", NewGroup)
+		rntm.RegisterObjectCreator("Data", NewData)
 
 		err = rntm.ParseFile("/home/stefan/Projects/Go/src/CollaborationNode/dml/test.dml")
 		So(err, ShouldBeNil)

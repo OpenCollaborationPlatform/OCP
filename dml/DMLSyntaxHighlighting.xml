@@ -5,7 +5,7 @@
           author="Stefan Tröger (stefantroeger@gmx.net)" license="LGPL">
   <highlighting>
     <list name="data">
-      <item>Group</item>
+      <item>Data</item>
       <item>Vector</item>
       <item>Map</item>
       <item>StateMachine</item>

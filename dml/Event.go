@@ -90,6 +90,10 @@ func (self *event) GetJSObject() *goja.Object {
 	return self.jsobj
 }
 
+func (self *event) GetJSRuntime() *goja.Runtime {
+	return self.jsvm
+}
+
 type EventHandler interface {
 	HasEvent(name string) bool
 	AddEvent(name string, evt Event) error

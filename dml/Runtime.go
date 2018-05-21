@@ -115,11 +115,10 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 
 	//Now we create all additional properties and set them up in js
 	for _, astProp := range astObj.Properties {
-		prop, err := self.buildProperty(obj.GetDataStore(), astProp)
+		err := self.addProperty(obj, astProp)
 		if err != nil {
 			return nil, err
 		}
-		obj.AddProperty(astProp.Key, prop)
 	}
 	err := obj.SetupJSProperties(self.jsvm, jsobj)
 	if err != nil {
@@ -331,7 +330,7 @@ func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
 	return evt, nil
 }
 
-func (self *Runtime) buildProperty(ds datastore.Store, astProp *astProperty) (Property, error) {
+func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
 	var dt DataType
 	switch astProp.Type.Type {
@@ -345,31 +344,31 @@ func (self *Runtime) buildProperty(ds datastore.Store, astProp *astProperty) (Pr
 		dt = Bool
 	}
 
-	prop, err := NewProperty(astProp.Key, dt, ds, self.jsvm)
+	err := obj.AddProperty(astProp.Key, dt)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if astProp.Default == nil {
-		return prop, nil
+		return nil
 	}
 
 	if astProp.Default.String != nil {
-		err = prop.SetValue(*astProp.Default.String)
+		err = obj.GetProperty(astProp.Key).SetValue(*astProp.Default.String)
 
 	} else if astProp.Default.Int != nil {
-		err = prop.SetValue(*astProp.Default.Int)
+		err = obj.GetProperty(astProp.Key).SetValue(*astProp.Default.Int)
 
 	} else if astProp.Default.Number != nil {
-		err = prop.SetValue(*astProp.Default.Number)
+		err = obj.GetProperty(astProp.Key).SetValue(*astProp.Default.Number)
 
 	} else if astProp.Default.Bool != nil {
-		err = prop.SetValue(bool(*astProp.Default.Bool))
+		err = obj.GetProperty(astProp.Key).SetValue(bool(*astProp.Default.Bool))
 	}
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return prop, nil
+	return nil
 }

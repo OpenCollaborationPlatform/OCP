@@ -9,6 +9,7 @@ import (
 //should be implemented by everythign that is exposed to JS
 type JSObject interface {
 	GetJSObject() *goja.Object
+	GetJSRuntime() *goja.Runtime
 }
 
 type DataType int

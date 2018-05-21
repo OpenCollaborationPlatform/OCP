@@ -1,5 +1,5 @@
  //comment
- Group {
+ Data {
     .id: "Document"
 
     property string 	testS: "Hallo"
@@ -17,7 +17,7 @@
 		this.testI.value = a
 	}
 	
-	Group {
+	Data {
 		.id: "DocumentObject"
 	}
 }
