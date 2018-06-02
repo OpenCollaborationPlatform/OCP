@@ -75,6 +75,7 @@ type MethodHandler interface {
 	AddMethod(name string, method Method)
 	HasMethod(name string) bool
 	GetMethod(name string) Method
+	Methods() []string
 
 	SetupJSMethods(vm *goja.Runtime, obj *goja.Object) error
 }
@@ -102,6 +103,16 @@ func (self *methodHandler) AddMethod(name string, method Method) {
 
 func (self *methodHandler) GetMethod(name string) Method {
 	return self.methods[name]
+}
+
+func (self *methodHandler) Methods() []string {
+
+	meths := make([]string, 0)
+	for name, _ := range self.methods {
+		meths = append(meths, name)
+	}
+
+	return meths
 }
 
 func (self *methodHandler) SetupJSMethods(vm *goja.Runtime, obj *goja.Object) error {

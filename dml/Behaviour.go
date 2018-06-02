@@ -10,10 +10,27 @@ package dml
  *  - Provides Methods to override and hence customice the behaviour
  */
 type Behaviour interface {
-	EventHandler
-	MethodHandler
-	PropertyHandler
-	JSObject
+	Object
+
+	SetupDefaults()
+}
+
+//Behaviour implementation with ability to have default methods
+type behaviour struct {
+	object
+
+	Defaults methodHandler
+}
+
+//all methods that are not provided by the user are setup
+func (self *behaviour) SetupDefaults() {
+
+	meths := self.Defaults.Methods()
+	for _, meth := range meths {
+		if !self.HasMethod(meth) {
+			self.AddMethod(meth, self.Defaults.GetMethod(meth))
+		}
+	}
 }
 
 /*

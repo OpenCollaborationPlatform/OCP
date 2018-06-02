@@ -1,6 +1,11 @@
 package dml
 
-import "github.com/dop251/goja"
+import (
+	"CollaborationNode/datastores"
+	"fmt"
+
+	"github.com/dop251/goja"
+)
 
 //Interface of an object: All objects, data and behaviour, must be able to handle
 //  - Properties
@@ -15,6 +20,7 @@ type Object interface {
 
 	//Object functions
 	Id() string
+	GetDataStore() datastore.Store
 
 	//Object hirarchy
 	AddChild(obj Object)
@@ -34,6 +40,7 @@ type object struct {
 	children []Object
 	parent   Object
 	id       string
+	store    datastore.Store
 
 	jsobj *goja.Object
 	jsrtm *goja.Runtime
@@ -64,6 +71,10 @@ func (self *object) GetParent() Object {
 	return self.parent
 }
 
+func (self *object) GetDataStore() datastore.Store {
+	return self.store
+}
+
 func (self *object) GetJSObject() *goja.Object {
 	return self.jsobj
 }
@@ -72,7 +83,24 @@ func (self *object) GetJSRuntime() *goja.Runtime {
 	return self.jsrtm
 }
 
-func NewObject(name string, vm *goja.Runtime) *object {
+//missing function from property handler
+func (self *object) AddProperty(name string, dtype DataType) error {
+
+	if self.HasProperty(name) {
+		return fmt.Errorf("Property %s already exists", name)
+	}
+
+	//we add properties!
+	prop, err := NewProperty(name, dtype, self.GetDataStore(), self.GetJSRuntime())
+	if err != nil {
+		return err
+	}
+
+	self.propertyHandler.properties[name] = prop
+	return nil
+}
+
+func NewObject(name string, vm *goja.Runtime, store datastore.Store) *object {
 
 	jsobj := vm.NewObject()
 
@@ -83,6 +111,7 @@ func NewObject(name string, vm *goja.Runtime) *object {
 		make([]Object, 0),
 		nil,
 		name,
+		store,
 		jsobj,
 		vm,
 	}
