@@ -28,21 +28,21 @@ func TestDmlFile(t *testing.T) {
 
 		Convey("the properties shall be accessible via js", func() {
 
-			code := `Document.testI.value`
+			code := `Document.testI`
 			val, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)
 
-			code = `Document.testI.value = 5`
+			code = `Document.testI = 5`
 			val, err = rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 			value, ok = val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
 
-			code = `Document.testI.value = "hello"`
+			code = `Document.testI = "hello"`
 			val, err = rntm.RunJavaScript(code)
 			So(err, ShouldNotBeNil)
 		})
@@ -54,7 +54,7 @@ func TestDmlFile(t *testing.T) {
 						if (a != 2 || b != "hello") {
 							throw "wrong arguments"
 						}
-						Document.testI.value = 0
+						Document.testI = 0
 					}
 					Document.testE.RegisterCallback(fnc)
 					Document.testE.Emit(2, "hello")
@@ -62,7 +62,7 @@ func TestDmlFile(t *testing.T) {
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 
-			code = `Document.testI.value`
+			code = `Document.testI`
 			val, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
@@ -70,7 +70,9 @@ func TestDmlFile(t *testing.T) {
 			So(value, ShouldEqual, 0)
 
 			//check direct go access
-			value, ok = rntm.GetObject().GetProperty(`testI`).GetValue().(int64)
+			obj, err := rntm.GetObject()
+			So(err, ShouldBeNil)
+			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 0)
 
@@ -78,7 +80,7 @@ func TestDmlFile(t *testing.T) {
 			_, err = rntm.RunJavaScript(code)
 			So(err, ShouldNotBeNil)
 
-			code = `Document.testB.value`
+			code = `Document.testB`
 			val, err = rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 			bvalue, ok := val.(bool)
@@ -86,20 +88,28 @@ func TestDmlFile(t *testing.T) {
 			So(bvalue, ShouldBeFalse)
 
 			code = `
-				Document.testC = 1.1
-				if ( Math.abs(Document.testC.value - 1.1) > 1e-6 ) {
+				Document.testF = 1.1
+				/*if ( Math.abs(Document.testF - 1) > 1e-6 ) {
+					console.log("error")
 					throw "floating point number dosn't work"
-				}`
-
+				}*/
+				console.log("Success")
+			`
 			_, err = rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
+
+			//testI must be one if the function was called correctly
+			obj, _ = rntm.GetObject()
+			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
+			So(ok, ShouldBeTrue)
+			So(value, ShouldEqual, 1)
 		})
 
 		Convey("Also functions should be callable", func() {
 
 			code := `
 			Document.testFnc(42)
-			Document.testI.value`
+			Document.testI`
 
 			val, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
@@ -114,7 +124,7 @@ func TestDmlFile(t *testing.T) {
 				if (Document.children.length != 1) {
 					throw "It must have exactly 1 child"
 				}
-				if (Document.children[0].id.value != "DocumentObject") {
+				if (Document.children[0].id != "DocumentObject") {
 					throw "child access seems not to work"
 				}
 				if (Document.parent != null) {

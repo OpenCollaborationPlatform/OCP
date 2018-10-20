@@ -12,6 +12,9 @@ type JSObject interface {
 	GetJSRuntime() *goja.Runtime
 }
 
+//user type to store data about a user
+type User string
+
 type DataType int
 
 const (

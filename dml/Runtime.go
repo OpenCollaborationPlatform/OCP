@@ -1,3 +1,18 @@
+/*
+DML Runtime is the execution point for a dml data structure. It provides parsing of dml files,
+loading the data from the existing storage (or creating a new storage) and handling of all
+logic that makes up the dml structure (events, access, transaction, versioning etc.)
+
+Key features:
+ - Parsing of dml files and setting up of data structures and storages
+ - Full handling of dml logic, events, functions, behaviours etc.
+ - Providing access to the entities for read, write and call
+
+Note:
+ - It is not enbled for concurrentcy. It is task of the user to ensure syncronized
+   access
+*/
+
 package dml
 
 import (
@@ -5,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/participle"
 	"github.com/dop251/goja"
@@ -12,7 +28,14 @@ import (
 	"github.com/dop251/goja_nodejs/require"
 )
 
+//Function prototype that can create new object types in DML
 type CreatorFunc func(datastore *datastore.Datastore, name string, vm *goja.Runtime) Object
+
+//struct that describes the runtime state and is shared between all runtime objects
+type RuntimeState struct {
+	Ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
+	CurrentUser User    //user that currently access the runtime
+}
 
 func NewRuntime(ds *datastore.Datastore) Runtime {
 
@@ -22,7 +45,14 @@ func NewRuntime(ds *datastore.Datastore) Runtime {
 	console.Enable(js)
 
 	cr := make(map[string]CreatorFunc, 0)
-	return Runtime{cr, js, ds, nil}
+	return Runtime{
+		creators:  cr,
+		jsvm:      js,
+		datastore: ds,
+		mainObj:   nil,
+		mutex:     &sync.Mutex{},
+		state:     &RuntimeState{Ready: false, CurrentUser: "none"},
+	}
 }
 
 //builds a datastructure from a file
@@ -32,8 +62,14 @@ type Runtime struct {
 	jsvm      *goja.Runtime
 	datastore *datastore.Datastore
 	mainObj   Object
+	mutex     *sync.Mutex
+	state     *RuntimeState
 }
 
+// Setup / creation Methods
+// ************************
+
+//Function to extend the available data and behaviour types for this runtime
 func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 
 	_, ok := self.creators[name]
@@ -45,7 +81,13 @@ func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 	return nil
 }
 
+//Parses the dml file and setups the full structure
 func (self *Runtime) ParseFile(path string) error {
+
+	//no double loading
+	if self.state.Ready == true {
+		return fmt.Errorf("Runtime is already setup")
+	}
 
 	//we start with building the AST
 	ast := &DML{}
@@ -71,9 +113,15 @@ func (self *Runtime) ParseFile(path string) error {
 		//TODO clear the database entries...
 	}
 	self.mainObj = obj
+	self.state.Ready = true
+
 	return err
 }
 
+// 						Accessing / executing Methods
+//*********************************************************************************
+
+//run arbitrary javascript code on the loaded structure
 func (self *Runtime) RunJavaScript(code string) (interface{}, error) {
 
 	val, err := self.jsvm.RunString(code)
@@ -84,9 +132,12 @@ func (self *Runtime) RunJavaScript(code string) (interface{}, error) {
 	return val.Export(), nil
 }
 
-func (self *Runtime) GetObject() Object {
-	return self.mainObj
+func (self *Runtime) GetObject() (Object, error) {
+	return self.mainObj, nil
 }
+
+// 							Internal Functions
+//*********************************************************************************
 
 //due to recursive nature og objects we need an extra function
 func (self *Runtime) buildObject(astObj *astObject) (Object, error) {

@@ -5,16 +5,16 @@
     property string 	testS: "Hallo"
     property int 	testI: 1
 	property bool 	testB: true
-	property float	testC 
+	property float	testF 
 	
-	.testC.onChanged: function(val) {Document.testI = val}
+	.testF.onChanged: function(val) {Document.testI = Math.floor(val)}
 	
 	event testE(int, string): function(a,b) {
-		Document.testB.value = false
+		Document.testB = false
 	}
 	
 	function testFnc(a) {
-		this.testI.value = a
+		this.testI = a
 	}
 	
 	Data {

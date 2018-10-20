@@ -12,7 +12,6 @@ import (
 //It uses a getter setter interface for better interactibility between dml, js and go
 type Property interface {
 	EventHandler
-	MethodHandler
 
 	Type() DataType
 
@@ -30,7 +29,7 @@ func NewProperty(name string, dtype DataType, store datastore.Store, vm *goja.Ru
 	switch dtype {
 	case Int, Float, String, Bool:
 		db := store.GetOrCreateEntry(name)
-		prop = &dataProperty{NewEventHandler(), NewMethodHandler(), dtype, db}
+		prop = &dataProperty{NewEventHandler(), dtype, db}
 	default:
 		return nil, fmt.Errorf("Unknown type")
 	}
@@ -43,7 +42,6 @@ func NewProperty(name string, dtype DataType, store datastore.Store, vm *goja.Ru
 
 type dataProperty struct {
 	eventHandler
-	methodHandler
 	propertyType DataType
 	db           datastore.Entry
 }
@@ -122,10 +120,8 @@ func (self *propertyHandler) GetProperty(name string) Property {
 
 func (self *propertyHandler) SetupJSProperties(vm *goja.Runtime, obj *goja.Object) error {
 
-	for name, prop := range self.properties {
+	for name, _ := range self.properties {
 
-		jsprop := vm.NewObject()
-		obj.Set(name, jsprop)
 		var propname string = name
 		getter := vm.ToValue(func(call goja.FunctionCall) goja.Value {
 			return vm.ToValue(self.GetProperty(propname).GetValue())
@@ -133,18 +129,15 @@ func (self *propertyHandler) SetupJSProperties(vm *goja.Runtime, obj *goja.Objec
 		setter := vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
 			err := self.GetProperty(propname).SetValue(call.Argument(0).Export())
 			if err != nil {
-				panic(vm.ToValue(err))
+				panic(vm.ToValue(err.Error()))
 			}
 			return
 		})
 
-		err := jsprop.DefineAccessorProperty("value", getter, setter, goja.FLAG_TRUE, goja.FLAG_TRUE)
+		err := obj.DefineAccessorProperty(name, getter, setter, goja.FLAG_FALSE, goja.FLAG_TRUE)
 		if err != nil {
 			return err
 		}
-
-		prop.SetupJSMethods(vm, jsprop)
-
 	}
 	return nil
 }
