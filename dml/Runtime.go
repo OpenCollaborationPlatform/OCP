@@ -107,7 +107,7 @@ func (self *Runtime) ParseFile(path string) error {
 	}
 
 	//process the AST into usable objects
-	obj, err := self.buildObject(ast.Object)
+	obj, err := self.buildObject(ast.Object, nil)
 	if err != nil {
 		return err
 		//TODO clear the database entries...
@@ -140,7 +140,7 @@ func (self *Runtime) GetObject() (Object, error) {
 //*********************************************************************************
 
 //due to recursive nature og objects we need an extra function
-func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
+func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, error) {
 
 	//see if we can build it, and do so if possible
 	creator, ok := self.creators[astObj.Identifier]
@@ -159,10 +159,14 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		return nil, fmt.Errorf("we need the ID proeprty, otherwise everything falls appart")
 	}
 
-	//setup the object including datastore and expose it to js
+	//setup the object including datastore and expose it to js.
 	obj := creator(self.datastore, objName, self.jsvm)
 	jsobj := obj.GetJSObject()
-	self.jsvm.Set(objName, jsobj)
+	if parent != nil {
+		parent.GetJSObject().Set(objName, jsobj)
+	} else {
+		self.jsvm.Set(objName, jsobj)
+	}
 
 	//Now we create all additional properties and set them up in js
 	for _, astProp := range astObj.Properties {
@@ -202,13 +206,15 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	obj.SetupJSMethods(self.jsvm, jsobj)
 
 	//go on with all subobjects
+	jsChildren := make([]goja.Value, 0)
 	for _, astChild := range astObj.Objects {
-		child, err := self.buildObject(astChild)
+		child, err := self.buildObject(astChild, obj)
 		if err != nil {
 			return nil, err
 		}
 		obj.AddChild(child)
 		child.SetParent(obj)
+		jsChildren = append(jsChildren, child.GetJSObject())
 	}
 
 	//with everything in place we are able to process the assignments
@@ -233,21 +239,12 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	}
 
 	//ant last we add the general object properties: children, parent etc...
-	children := obj.GetChildren()
-	jsChildren := make([]goja.Value, len(children))
-	for i, child := range children {
-		//collect children jsvalue for later use as property
-		jsChildren[i] = self.jsvm.Get(child.Id())
+	jsobj.DefineDataProperty("children", self.jsvm.ToValue(jsChildren), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
+	if parent != nil {
+		jsobj.DefineDataProperty("parent", parent.GetJSObject(), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
+	} else {
+		jsobj.DefineDataProperty("parent", self.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	}
-	jsobj.DefineDataProperty("children", self.jsvm.ToValue(jsChildren), goja.FLAG_FALSE, goja.FLAG_TRUE, goja.FLAG_TRUE)
-
-	getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
-		if obj.GetParent() != nil {
-			return self.jsvm.Get(obj.GetParent().Id())
-		}
-		return self.jsvm.ToValue(nil)
-	})
-	jsobj.DefineAccessorProperty("parent", getter, nil, goja.FLAG_TRUE, goja.FLAG_TRUE)
 
 	return obj, nil
 }

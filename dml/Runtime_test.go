@@ -132,7 +132,11 @@ func TestDmlFile(t *testing.T) {
 				}
 				if (Document.children[0].parent != Document) {
 					throw "parent is not set correctly"
-				}`
+				}
+				if (Document.DocumentObject.id != "DocumentObject") {
+					throw "no direkt children access possible"
+				}
+				`
 
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
