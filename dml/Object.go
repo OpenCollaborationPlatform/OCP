@@ -19,7 +19,7 @@ type Object interface {
 	JSObject
 
 	//Object functions
-	Id() string
+	Id() identifier
 	GetDataStore() datastore.Store
 
 	//Object hirarchy
@@ -39,14 +39,15 @@ type object struct {
 
 	children []Object
 	parent   Object
-	id       string
+	id       identifier
+	oType    string
 	store    datastore.Store
 
 	jsobj *goja.Object
 	jsrtm *goja.Runtime
 }
 
-func (self *object) Id() string {
+func (self *object) Id() identifier {
 	return self.id
 }
 
@@ -65,6 +66,7 @@ func (self *object) GetChildById(id string) Object {
 
 func (self *object) SetParent(parent Object) {
 	self.parent = parent
+	self.id.Parent = parent.Id().hash()
 }
 
 func (self *object) GetParent() Object {
@@ -100,7 +102,7 @@ func (self *object) AddProperty(name string, dtype DataType) error {
 	return nil
 }
 
-func NewObject(name string, vm *goja.Runtime, store datastore.Store) *object {
+func NewObject(name string, oType string, vm *goja.Runtime, store datastore.Store) *object {
 
 	jsobj := vm.NewObject()
 
@@ -110,7 +112,8 @@ func NewObject(name string, vm *goja.Runtime, store datastore.Store) *object {
 		NewMethodHandler(),
 		make([]Object, 0),
 		nil,
-		name,
+		identifier{[32]byte{}, oType, name},
+		oType,
 		store,
 		jsobj,
 		vm,

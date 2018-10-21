@@ -159,8 +159,22 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 		return nil, fmt.Errorf("we need the ID proeprty, otherwise everything falls appart")
 	}
 
-	//setup the object including datastore and expose it to js.
+	//setup the object including datastore and check for uniqueness
 	obj := creator(self.datastore, objName, self.jsvm)
+	if parent != nil {
+		objId := obj.Id()
+		//if unique in the parents childrens we are generaly unique, as parent is part of our ID
+		for _, sibling := range parent.GetChildren() {
+			if sibling.Id().Type == objId.Type &&
+				sibling.Id().Name == objId.Name {
+
+				return nil, fmt.Errorf("Object with same type (%s) and ID (%s) already exists", objId.Type, objId.Name)
+			}
+		}
+		obj.SetParent(parent)
+	}
+
+	//expose to javascript
 	jsobj := obj.GetJSObject()
 	if parent != nil {
 		parent.GetJSObject().Set(objName, jsobj)
@@ -213,7 +227,6 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 			return nil, err
 		}
 		obj.AddChild(child)
-		child.SetParent(obj)
 		jsChildren = append(jsChildren, child.GetJSObject())
 	}
 
