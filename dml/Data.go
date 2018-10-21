@@ -20,7 +20,7 @@ func NewData(ds *datastore.Datastore, name string, vm *goja.Runtime) Object {
 	obj := NewObject(name, "Data", vm, ds)
 	dat := data{obj}
 
-	dat.AddProperty("id", String)
+	dat.AddProperty("id", String, true)
 
 	return &dat
 }

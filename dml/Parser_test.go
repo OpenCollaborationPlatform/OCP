@@ -22,8 +22,9 @@ func TestSimpleObject(t *testing.T) {
 			//and even more comments
 			.name: "my funny \" string"
 
-			property int 	myprop: 1
-			property float 	myseco: 1.1
+			property int 		myprop: 	 1 
+			property float 		myseco: 	 1.1
+			const property int 	myconst:	 2
 		}`
 
 		dml := &DML{}
@@ -47,14 +48,26 @@ func TestSimpleObject(t *testing.T) {
 			So(prop.Key[0], ShouldEqual, "name")
 			So(*prop.Value.String, ShouldEqual, `my funny " string`)
 		})
-		Convey("and the properties should be created correctly", func() {
+		Convey("and the properties should be created correctly,", func() {
 
 			obj := dml.Object
-			So(len(obj.Properties), ShouldEqual, 2)
+			So(len(obj.Properties), ShouldEqual, 3)
 			newprop := obj.Properties[0]
 			So(newprop.Type.Type, ShouldEqual, "int")
 			So(newprop.Key, ShouldEqual, "myprop")
 			So(*newprop.Default.Int, ShouldEqual, 1)
+			So(newprop.Const, ShouldEqual, "")
+			So(newprop.Normal, ShouldNotEqual, "")
+		})
+		Convey("with const value being read only", func() {
+
+			obj := dml.Object
+			newprop := obj.Properties[2]
+			So(newprop.Type.Type, ShouldEqual, "int")
+			So(newprop.Key, ShouldEqual, "myconst")
+			So(*newprop.Default.Int, ShouldEqual, 2)
+			So(newprop.Const, ShouldNotEqual, "")
+			So(newprop.Normal, ShouldEqual, "")
 		})
 	})
 }

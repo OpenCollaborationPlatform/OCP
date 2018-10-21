@@ -172,7 +172,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 			}
 		}
 		obj.SetParent(parent)
-	}
+	} //TODO: make sure datastore ID is created afer parent is set, not before!
 
 	//expose to javascript
 	jsobj := obj.GetJSObject()
@@ -189,6 +189,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 			return nil, err
 		}
 	}
+
 	err := obj.SetupJSProperties(self.jsvm, jsobj)
 	if err != nil {
 		return nil, err
@@ -405,12 +406,20 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 		dt = Bool
 	}
 
-	err := obj.AddProperty(astProp.Key, dt)
+	var constprop bool = false
+	if astProp.Const != "" {
+		constprop = true
+	}
+
+	err := obj.AddProperty(astProp.Key, dt, constprop)
 	if err != nil {
 		return err
 	}
 
 	if astProp.Default == nil {
+		if constprop {
+			return fmt.Errorf("Constant property needs to have a value assigned")
+		}
 		return nil
 	}
 

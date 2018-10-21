@@ -29,7 +29,9 @@ type astAssignment struct {
 }
 
 type astProperty struct {
-	Type    *astType  `"property" @@`
+	Const   string    `(@("const" "property") |`
+	Normal  string    `@"property")`
+	Type    *astType  `@@`
 	Key     string    `@Ident`
 	Default *astValue `[":" @@]`
 }

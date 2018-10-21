@@ -47,6 +47,10 @@ func TestDmlFile(t *testing.T) {
 			code = `Document.testI = "hello"`
 			val, err = rntm.RunJavaScript(code)
 			So(err, ShouldNotBeNil)
+
+			code = `Document.testConst = 1`
+			val, err = rntm.RunJavaScript(code)
+			So(err, ShouldNotBeNil)
 		})
 
 		Convey("and event handling should work.", func() {
@@ -91,11 +95,10 @@ func TestDmlFile(t *testing.T) {
 
 			code = `
 				Document.testF = 1.1
-				/*if ( Math.abs(Document.testF - 1) > 1e-6 ) {
+				if ( Math.abs(Document.testF - 1.1) > 1e-6 ) {
 					console.log("error")
 					throw "floating point number dosn't work"
-				}*/
-				console.log("Success")
+				}
 			`
 			_, err = rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)

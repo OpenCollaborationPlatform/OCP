@@ -14,24 +14,31 @@ type Property interface {
 	EventHandler
 
 	Type() DataType
+	IsConst() bool
 
 	SetValue(value interface{}) error
 	GetValue() interface{}
 }
 
-//Data property
-//**************
-
-func NewProperty(name string, dtype DataType, entry datastore.KeyValueSet, vm *goja.Runtime) (Property, error) {
+func NewProperty(name string, dtype DataType, entry datastore.KeyValueSet, vm *goja.Runtime, constprop bool) (Property, error) {
 
 	var prop Property
 
-	switch dtype {
-	case Int, Float, String, Bool:
-		db := entry.GetOrCreateKey([]byte(name))
-		prop = &dataProperty{NewEventHandler(), dtype, db}
-	default:
-		return nil, fmt.Errorf("Unknown type")
+	if !constprop {
+		switch dtype {
+		case Int, Float, String, Bool:
+			db := entry.GetOrCreateKey([]byte(name))
+			prop = &dataProperty{NewEventHandler(), dtype, db}
+		default:
+			return nil, fmt.Errorf("Unknown type")
+		}
+	} else {
+		switch dtype {
+		case Int, Float, String, Bool:
+			prop = &constProperty{NewEventHandler(), dtype, nil}
+		default:
+			return nil, fmt.Errorf("Unknown type")
+		}
 	}
 
 	//add all required events
@@ -39,6 +46,9 @@ func NewProperty(name string, dtype DataType, entry datastore.KeyValueSet, vm *g
 
 	return prop, nil
 }
+
+//Data property
+//**************
 
 type dataProperty struct {
 	eventHandler
@@ -48,6 +58,10 @@ type dataProperty struct {
 
 func (self dataProperty) Type() DataType {
 	return self.propertyType
+}
+
+func (self dataProperty) IsConst() bool {
+	return false
 }
 
 func (self *dataProperty) SetValue(val interface{}) error {
@@ -83,14 +97,49 @@ func (self *dataProperty) GetValue() interface{} {
 	return val
 }
 
+//TODO: Is this needed here? what does it do??
 type Data interface {
 	Object
+}
+
+//Const property
+//**************
+
+type constProperty struct {
+	eventHandler
+	propertyType DataType
+	value        interface{}
+}
+
+func (self constProperty) Type() DataType {
+	return self.propertyType
+}
+
+func (self constProperty) IsConst() bool {
+	return true
+}
+
+func (self *constProperty) SetValue(val interface{}) error {
+
+	//check if the type is correct
+	err := mustBeType(self.propertyType, val)
+	if err != nil {
+		return err
+	}
+
+	self.value = val
+	return self.GetEvent("onChanged").Emit(val)
+}
+
+func (self *constProperty) GetValue() interface{} {
+
+	return self.value
 }
 
 //Property handler, which defines a interface for holding and using multiple properties
 type PropertyHandler interface {
 	HasProperty(name string) bool
-	AddProperty(name string, dtype DataType) error
+	AddProperty(name string, dtype DataType, constprop bool) error
 	GetProperty(name string) Property
 
 	SetupJSProperties(vm *goja.Runtime, obj *goja.Object) error
@@ -126,15 +175,22 @@ func (self *propertyHandler) SetupJSProperties(vm *goja.Runtime, obj *goja.Objec
 		getter := vm.ToValue(func(call goja.FunctionCall) goja.Value {
 			return vm.ToValue(self.GetProperty(propname).GetValue())
 		})
+
 		setter := vm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
-			err := self.GetProperty(propname).SetValue(call.Argument(0).Export())
+			p := self.GetProperty(propname)
+			if p.IsConst() {
+				//panic becomes exception in JS
+				panic(vm.ToValue(fmt.Sprintf("Property %s is constant", propname)))
+			}
+			err := p.SetValue(call.Argument(0).Export())
 			if err != nil {
+				//panic becomes exception in JS
 				panic(vm.ToValue(err.Error()))
 			}
 			return
 		})
-
 		err := obj.DefineAccessorProperty(name, getter, setter, goja.FLAG_FALSE, goja.FLAG_TRUE)
+
 		if err != nil {
 			return err
 		}
