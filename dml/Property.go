@@ -22,7 +22,7 @@ type Property interface {
 //Data property
 //**************
 
-func NewProperty(name string, dtype DataType, entry datastore.KeyValueEntry, vm *goja.Runtime) (Property, error) {
+func NewProperty(name string, dtype DataType, entry datastore.KeyValueSet, vm *goja.Runtime) (Property, error) {
 
 	var prop Property
 

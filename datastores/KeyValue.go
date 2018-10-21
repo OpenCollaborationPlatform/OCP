@@ -32,7 +32,7 @@ type KeyValueDatabase struct {
 	db *bolt.DB
 }
 
-func (self KeyValueDatabase) HasEntry(entry [32]byte) bool {
+func (self KeyValueDatabase) HasSet(set [32]byte) bool {
 
 	if self.db == nil {
 		return false
@@ -40,33 +40,33 @@ func (self KeyValueDatabase) HasEntry(entry [32]byte) bool {
 
 	var result bool
 	self.db.View(func(tx *bolt.Tx) error {
-		result = tx.Bucket(entry[:]) != nil
+		result = tx.Bucket(set[:]) != nil
 		return nil
 	})
 
 	return result
 }
 
-func (self KeyValueDatabase) GetOrCreateEntry(entry [32]byte) Entry {
+func (self KeyValueDatabase) GetOrCreateSet(set [32]byte) Set {
 
-	if !self.HasEntry(entry) {
+	if !self.HasSet(set) {
 		//make sure the bucket exists
 		self.db.Update(func(tx *bolt.Tx) error {
-			tx.CreateBucketIfNotExists(entry[:])
+			tx.CreateBucketIfNotExists(set[:])
 			return nil
 		})
 	}
 
-	return KeyValueEntry{self.db, entry[:], make([][]byte, 0)}
+	return KeyValueSet{self.db, set[:], make([][]byte, 0)}
 }
 
-func (self KeyValueDatabase) RemoveEntry(entry [32]byte) error {
+func (self KeyValueDatabase) RemoveSet(set [32]byte) error {
 
-	if self.HasEntry(entry) {
+	if self.HasSet(set) {
 
 		var result error
 		self.db.Update(func(tx *bolt.Tx) error {
-			result = tx.DeleteBucket(entry[:])
+			result = tx.DeleteBucket(set[:])
 			return nil
 		})
 
@@ -80,15 +80,15 @@ func (self KeyValueDatabase) Close() {
 	self.db.Close()
 }
 
-//The store itself is very simple, as all the access logic will be in the entry type
+//The store itself is very simple, as all the access logic will be in the set type
 //this is only to manage the existing entries
-type KeyValueEntry struct {
+type KeyValueSet struct {
 	db         *bolt.DB
 	mainbucket []byte
 	subbuckets [][]byte
 }
 
-func (self KeyValueEntry) IsValid() bool {
+func (self KeyValueSet) IsValid() bool {
 
 	if self.db == nil {
 		return false
@@ -116,7 +116,7 @@ func (self KeyValueEntry) IsValid() bool {
 	return result
 }
 
-func (self *KeyValueEntry) HasKey(key []byte) bool {
+func (self *KeyValueSet) HasKey(key []byte) bool {
 
 	var result bool
 	self.db.View(func(tx *bolt.Tx) error {
@@ -131,11 +131,11 @@ func (self *KeyValueEntry) HasKey(key []byte) bool {
 	return result
 }
 
-func (self *KeyValueEntry) GetOrCreateKey(key []byte) KeyValuePair {
+func (self *KeyValueSet) GetOrCreateKey(key []byte) KeyValuePair {
 
 	if !self.HasKey(key) {
 
-		//make sure the entry exists in the db with null value
+		//make sure the set exists in the db with null value
 		self.db.Update(func(tx *bolt.Tx) error {
 
 			//get correct bucket
@@ -151,7 +151,7 @@ func (self *KeyValueEntry) GetOrCreateKey(key []byte) KeyValuePair {
 	return KeyValuePair{self.db, self.mainbucket, self.subbuckets, key}
 }
 
-func (self *KeyValueEntry) RemoveKey(key string) error {
+func (self *KeyValueSet) RemoveKey(key string) error {
 
 	err := self.db.View(func(tx *bolt.Tx) error {
 
@@ -166,7 +166,7 @@ func (self *KeyValueEntry) RemoveKey(key string) error {
 	return err
 }
 
-func (self *KeyValueEntry) HasSubEntry(entry []byte) bool {
+func (self *KeyValueSet) HasSubSet(set []byte) bool {
 
 	if self.db == nil {
 		return false
@@ -178,35 +178,35 @@ func (self *KeyValueEntry) HasSubEntry(entry []byte) bool {
 		for _, bkey := range self.subbuckets {
 			bucket = bucket.Bucket(bkey)
 		}
-		result = bucket.Bucket(entry[:]) != nil
+		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
 	return result
 }
 
-func (self *KeyValueEntry) GetOrCreateSubEntry(entry []byte) KeyValueEntry {
+func (self *KeyValueSet) GetOrCreateSubSet(set []byte) KeyValueSet {
 
-	if !self.HasSubEntry(entry) {
+	if !self.HasSubSet(set) {
 		//make sure the bucket exists
 		self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.mainbucket)
 			for _, bkey := range self.subbuckets {
 				bucket = bucket.Bucket(bkey)
 			}
-			bucket.CreateBucketIfNotExists(entry[:])
+			bucket.CreateBucketIfNotExists(set[:])
 			return nil
 		})
 	}
 
-	//build the entry
-	subs := append(self.subbuckets, entry)
-	return KeyValueEntry{self.db, self.mainbucket, subs}
+	//build the set
+	subs := append(self.subbuckets, set)
+	return KeyValueSet{self.db, self.mainbucket, subs}
 }
 
-func (self *KeyValueEntry) RemoveSubEntry(entry []byte) error {
+func (self *KeyValueSet) RemoveSubSet(set []byte) error {
 
-	if self.HasSubEntry(entry) {
+	if self.HasSubSet(set) {
 
 		var result error
 		self.db.Update(func(tx *bolt.Tx) error {
@@ -214,7 +214,7 @@ func (self *KeyValueEntry) RemoveSubEntry(entry []byte) error {
 			for _, bkey := range self.subbuckets {
 				bucket = bucket.Bucket(bkey)
 			}
-			result = bucket.DeleteBucket(entry[:])
+			result = bucket.DeleteBucket(set[:])
 			return nil
 		})
 

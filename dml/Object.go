@@ -93,11 +93,11 @@ func (self *object) AddProperty(name string, dtype DataType) error {
 	}
 
 	//we add properties!
-	entry, ok := self.GetDataStore().GetOrCreateEntry(datastore.KeyValue, self.Id().hash()).(datastore.KeyValueEntry)
+	set, ok := self.GetDataStore().GetOrCreateSet(datastore.KeyValue, self.Id().hash()).(datastore.KeyValueSet)
 	if !ok {
-		return fmt.Errorf("Unable to create database entry")
+		return fmt.Errorf("Unable to create database set")
 	}
-	prop, err := NewProperty(name, dtype, entry, self.GetJSRuntime())
+	prop, err := NewProperty(name, dtype, set, self.GetJSRuntime())
 	if err != nil {
 		return err
 	}

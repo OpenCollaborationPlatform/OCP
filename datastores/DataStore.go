@@ -7,9 +7,9 @@
  *            relational database etc. A database lives within a Datastorage and is
  *            managed by it. It provides access to its functionality in sub entries,
  *            meaning it provides its special storage for multiple keys.
- * Entry:     A entry in a database for a certain key. The Database has a entry for
- *            each key. Entry means seperated group, and can contain a hughe amount
- *            of data. E.g. a Entry for a KeyValue database is just a group of keys,
+ * Set:     A set in a database for a certain key. The Database has a set for
+ *            each key. Set means seperated group, and can contain a hughe amount
+ *            of data. E.g. a Set for a KeyValue database is just a group of keys,
  *            and can have unlimited key value pairs.
  *
  */
@@ -23,13 +23,13 @@ import (
 //Describes a
 type DataBase interface {
 	Close()
-	HasEntry(entry [32]byte) bool
-	GetOrCreateEntry(entry [32]byte) Entry
-	RemoveEntry(entry [32]byte) error
+	HasSet(set [32]byte) bool
+	GetOrCreateSet(set [32]byte) Set
+	RemoveSet(set [32]byte) error
 }
 
-//Describes a single entry in a store and allows to access it
-type Entry interface {
+//Describes a single set in a store and allows to access it
+type Set interface {
 	//GetDatabase() DataBase
 	IsValid() bool
 }
@@ -74,14 +74,14 @@ func (self *Datastore) GetDatabase(kind StorageType) DataBase {
 	return store
 }
 
-func (self *Datastore) GetOrCreateEntry(kind StorageType, entry [32]byte) Entry {
+func (self *Datastore) GetOrCreateSet(kind StorageType, set [32]byte) Set {
 
 	store, ok := self.stores[kind]
 	if !ok {
 		panic("no such storage available")
 	}
 
-	return store.GetOrCreateEntry(entry)
+	return store.GetOrCreateSet(set)
 }
 
 func (self *Datastore) Close() {

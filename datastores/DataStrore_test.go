@@ -11,7 +11,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func makeEntryFromString(name string) [32]byte {
+func makeSetFromString(name string) [32]byte {
 
 	data, err := json.Marshal(name)
 	if err != nil {
@@ -43,50 +43,50 @@ func TestKeyValue(t *testing.T) {
 
 		Convey("from which entries and subentries can be creaded and deleted,", func() {
 
-			name := makeEntryFromString("test")
-			So(db.HasEntry(name), ShouldBeFalse)
+			name := makeSetFromString("test")
+			So(db.HasSet(name), ShouldBeFalse)
 
-			//test creation of entry
-			entry := db.GetOrCreateEntry(name)
-			So(entry, ShouldNotBeNil)
-			So(db.HasEntry(name), ShouldBeTrue)
+			//test creation of set
+			set := db.GetOrCreateSet(name)
+			So(set, ShouldNotBeNil)
+			So(db.HasSet(name), ShouldBeTrue)
 
-			kventry, ok := entry.(KeyValueEntry)
+			kvset, ok := set.(KeyValueSet)
 			So(ok, ShouldBeTrue)
 
-			//check creation of subentry
-			name2 := makeEntryFromString("test2")
-			subentry := kventry.GetOrCreateSubEntry(name2[:])
-			So(subentry, ShouldNotBeNil)
-			So(kventry.HasSubEntry(name2[:]), ShouldBeTrue)
+			//check creation of subset
+			name2 := makeSetFromString("test2")
+			subset := kvset.GetOrCreateSubSet(name2[:])
+			So(subset, ShouldNotBeNil)
+			So(kvset.HasSubSet(name2[:]), ShouldBeTrue)
 
-			//get or create should return the same entry as bevore, with our subentry
-			entry2 := db.GetOrCreateEntry(name)
-			So(entry2, ShouldNotBeNil)
-			kventry2 := entry.(KeyValueEntry)
-			So(kventry2.HasSubEntry(name2[:]), ShouldBeTrue)
+			//get or create should return the same set as bevore, with our subset
+			set2 := db.GetOrCreateSet(name)
+			So(set2, ShouldNotBeNil)
+			kvset2 := set.(KeyValueSet)
+			So(kvset2.HasSubSet(name2[:]), ShouldBeTrue)
 
 			//test removing entries and subentries
-			err = kventry2.RemoveSubEntry(name2[:])
+			err = kvset2.RemoveSubSet(name2[:])
 			So(err, ShouldBeNil)
-			So(kventry2.HasSubEntry(name2[:]), ShouldBeFalse)
-			So(kventry.HasSubEntry(name2[:]), ShouldBeFalse)
+			So(kvset2.HasSubSet(name2[:]), ShouldBeFalse)
+			So(kvset.HasSubSet(name2[:]), ShouldBeFalse)
 
-			err := db.RemoveEntry(name)
+			err := db.RemoveSet(name)
 			So(err, ShouldBeNil)
-			So(db.HasEntry(name), ShouldBeFalse)
+			So(db.HasSet(name), ShouldBeFalse)
 		})
 
 		Convey("and to which data can be written and restored.", func() {
 
-			name := makeEntryFromString("test")
-			entry := db.GetOrCreateEntry(name).(KeyValueEntry)
+			name := makeSetFromString("test")
+			set := db.GetOrCreateSet(name).(KeyValueSet)
 
 			key1 := []byte("key1")
-			So(entry.HasKey(key1), ShouldBeFalse)
-			pair := entry.GetOrCreateKey(key1)
+			So(set.HasKey(key1), ShouldBeFalse)
+			pair := set.GetOrCreateKey(key1)
 			So(pair, ShouldNotBeNil)
-			So(entry.HasKey(key1), ShouldBeTrue)
+			So(set.HasKey(key1), ShouldBeTrue)
 
 			var data int64 = 1
 			err := pair.Write(data)
@@ -97,14 +97,14 @@ func TestKeyValue(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(num, ShouldEqual, 1)
 
-			name2 := makeEntryFromString("test2")
-			subentry := entry.GetOrCreateSubEntry(name2[:])
+			name2 := makeSetFromString("test2")
+			subset := set.GetOrCreateSubSet(name2[:])
 
 			key2 := []byte("key2")
-			pair2 := subentry.GetOrCreateKey(key2)
+			pair2 := subset.GetOrCreateKey(key2)
 			So(pair2, ShouldNotBeNil)
-			So(subentry.HasKey(key2), ShouldBeTrue)
-			So(entry.HasKey(key2), ShouldBeFalse)
+			So(subset.HasKey(key2), ShouldBeTrue)
+			So(set.HasKey(key2), ShouldBeFalse)
 
 			var sdata string = "test string"
 			err = pair2.Write(sdata)
