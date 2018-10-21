@@ -14,6 +14,7 @@ func TestDmlFile(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
+	defer os.RemoveAll(path)
 
 	Convey("Establishing a datastore and runtime,", t, func() {
 
@@ -143,6 +144,4 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldBeNil)
 		})
 	})
-
-	os.RemoveAll(path)
 }

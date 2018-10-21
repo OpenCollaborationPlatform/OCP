@@ -19,7 +19,6 @@ func NewKeyValueDatabase(path string, name string) (*KeyValueDatabase, error) {
 	os.MkdirAll(path, os.ModePerm)
 	path = filepath.Join(path, name+".db")
 
-	fmt.Println(path)
 	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return nil, err
@@ -33,7 +32,7 @@ type KeyValueDatabase struct {
 	db *bolt.DB
 }
 
-func (self *KeyValueDatabase) HasEntry(entry [32]byte) bool {
+func (self KeyValueDatabase) HasEntry(entry [32]byte) bool {
 
 	if self.db == nil {
 		return false
@@ -48,7 +47,7 @@ func (self *KeyValueDatabase) HasEntry(entry [32]byte) bool {
 	return result
 }
 
-func (self *KeyValueDatabase) GetOrCreateEntry(entry [32]byte) Entry {
+func (self KeyValueDatabase) GetOrCreateEntry(entry [32]byte) Entry {
 
 	if !self.HasEntry(entry) {
 		//make sure the bucket exists
@@ -61,12 +60,12 @@ func (self *KeyValueDatabase) GetOrCreateEntry(entry [32]byte) Entry {
 	return KeyValueEntry{self.db, entry[:], make([][]byte, 0)}
 }
 
-func (self *KeyValueDatabase) RemoveEntry(entry [32]byte) error {
+func (self KeyValueDatabase) RemoveEntry(entry [32]byte) error {
 
 	if self.HasEntry(entry) {
 
 		var result error
-		self.db.View(func(tx *bolt.Tx) error {
+		self.db.Update(func(tx *bolt.Tx) error {
 			result = tx.DeleteBucket(entry[:])
 			return nil
 		})
@@ -77,7 +76,7 @@ func (self *KeyValueDatabase) RemoveEntry(entry [32]byte) error {
 	return nil
 }
 
-func (self *KeyValueDatabase) Close() {
+func (self KeyValueDatabase) Close() {
 	self.db.Close()
 }
 
@@ -210,7 +209,7 @@ func (self *KeyValueEntry) RemoveSubEntry(entry []byte) error {
 	if self.HasSubEntry(entry) {
 
 		var result error
-		self.db.View(func(tx *bolt.Tx) error {
+		self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.mainbucket)
 			for _, bkey := range self.subbuckets {
 				bucket = bucket.Bucket(bkey)
