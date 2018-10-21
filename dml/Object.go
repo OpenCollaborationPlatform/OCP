@@ -20,7 +20,7 @@ type Object interface {
 
 	//Object functions
 	Id() identifier
-	GetDataStore() datastore.Store
+	GetDataStore() *datastore.Datastore
 
 	//Object hirarchy
 	AddChild(obj Object)
@@ -41,7 +41,7 @@ type object struct {
 	parent   Object
 	id       identifier
 	oType    string
-	store    datastore.Store
+	store    *datastore.Datastore
 
 	jsobj *goja.Object
 	jsrtm *goja.Runtime
@@ -73,7 +73,7 @@ func (self *object) GetParent() Object {
 	return self.parent
 }
 
-func (self *object) GetDataStore() datastore.Store {
+func (self *object) GetDataStore() *datastore.Datastore {
 	return self.store
 }
 
@@ -93,7 +93,11 @@ func (self *object) AddProperty(name string, dtype DataType) error {
 	}
 
 	//we add properties!
-	prop, err := NewProperty(name, dtype, self.GetDataStore(), self.GetJSRuntime())
+	entry, ok := self.GetDataStore().GetOrCreateEntry(datastore.KeyValue, self.Id().hash()).(datastore.KeyValueEntry)
+	if !ok {
+		return fmt.Errorf("Unable to create database entry")
+	}
+	prop, err := NewProperty(name, dtype, entry, self.GetJSRuntime())
 	if err != nil {
 		return err
 	}
@@ -102,7 +106,7 @@ func (self *object) AddProperty(name string, dtype DataType) error {
 	return nil
 }
 
-func NewObject(name string, oType string, vm *goja.Runtime, store datastore.Store) *object {
+func NewObject(name string, oType string, vm *goja.Runtime, store *datastore.Datastore) *object {
 
 	jsobj := vm.NewObject()
 

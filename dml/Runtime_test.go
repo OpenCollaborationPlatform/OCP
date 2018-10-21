@@ -4,6 +4,7 @@ package dml
 import (
 	"CollaborationNode/datastores"
 	"io/ioutil"
+	"os"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -142,4 +143,6 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldBeNil)
 		})
 	})
+
+	os.RemoveAll(path)
 }

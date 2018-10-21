@@ -1,3 +1,18 @@
+/* Data stores as base for persistence
+ *
+ * Datastore: A folder that holds all the relevant data and in which a multitude of
+ *            different databases can be placed. The datastore handles the creation
+ *            and management of all different databases
+ * Database:  Special type of storage with unique properties, e.g. KeyValue database,
+ *            relational database etc. A database lives within a Datastorage and is
+ *            managed by it. It provides access to its functionality in sub entries,
+ *            meaning it provides its special storage for multiple keys.
+ * Entry:     A entry in a database for a certain key. The Database has a entry for
+ *            each key. Entry means seperated group, and can contain a hughe amount
+ *            of data. E.g. a Entry for a KeyValue database is just a group of keys,
+ *            and can have unlimited key value pairs.
+ *
+ */
 package datastore
 
 import (
@@ -5,33 +20,25 @@ import (
 	"path/filepath"
 )
 
+//Describes a
+type DataBase interface {
+	Close()
+	HasEntry(entry [32]byte) bool
+	GetOrCreateEntry(entry [32]byte) Entry
+	RemoveEntry(entry [32]byte) error
+}
+
+//Describes a single entry in a store and allows to access it
+type Entry interface {
+	//GetDatabase() DataBase
+	IsValid() bool
+}
+
 type StorageType int
 
 const (
 	KeyValue StorageType = 1
 )
-
-type DataBase interface {
-	Close()
-	HasStore(name string) bool
-	GetOrCreateStore(name string) Store
-}
-
-//the interface of all the different storages, no matter the underlaying type
-type Store interface {
-	HasEntry(name string) bool
-	GetOrCreateEntry(name string) Entry
-	RemoveEntry(name string)
-}
-
-//Describes a single entry in a store and allows to access it
-type Entry interface {
-	IsValid() bool
-	Read() (interface{}, error)
-	Write(interface{}) error
-
-	Remove() bool
-}
 
 func NewDatastore(path string) (*Datastore, error) {
 
@@ -57,14 +64,24 @@ type Datastore struct {
 	stores map[StorageType]DataBase
 }
 
-func (self *Datastore) GetOrCreateStore(kind StorageType, name string) Store {
+func (self *Datastore) GetDatabase(kind StorageType) DataBase {
 
 	store, ok := self.stores[kind]
 	if !ok {
 		panic("no such storage available")
 	}
 
-	return store.GetOrCreateStore(name)
+	return store
+}
+
+func (self *Datastore) GetOrCreateEntry(kind StorageType, entry [32]byte) Entry {
+
+	store, ok := self.stores[kind]
+	if !ok {
+		panic("no such storage available")
+	}
+
+	return store.GetOrCreateEntry(entry)
 }
 
 func (self *Datastore) Close() {

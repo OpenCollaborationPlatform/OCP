@@ -22,13 +22,13 @@ type Property interface {
 //Data property
 //**************
 
-func NewProperty(name string, dtype DataType, store datastore.Store, vm *goja.Runtime) (Property, error) {
+func NewProperty(name string, dtype DataType, entry datastore.KeyValueEntry, vm *goja.Runtime) (Property, error) {
 
 	var prop Property
 
 	switch dtype {
 	case Int, Float, String, Bool:
-		db := store.GetOrCreateEntry(name)
+		db := entry.GetOrCreateKey([]byte(name))
 		prop = &dataProperty{NewEventHandler(), dtype, db}
 	default:
 		return nil, fmt.Errorf("Unknown type")
@@ -43,7 +43,7 @@ func NewProperty(name string, dtype DataType, store datastore.Store, vm *goja.Ru
 type dataProperty struct {
 	eventHandler
 	propertyType DataType
-	db           datastore.Entry
+	db           datastore.KeyValuePair
 }
 
 func (self dataProperty) Type() DataType {
