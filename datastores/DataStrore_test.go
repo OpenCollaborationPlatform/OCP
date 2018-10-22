@@ -41,7 +41,7 @@ func TestKeyValue(t *testing.T) {
 			So(ok, ShouldBeTrue)
 		})
 
-		Convey("from which entries and subentries can be creaded and deleted,", func() {
+		Convey("from which entries can be creaded and deleted,", func() {
 
 			name := makeSetFromString("test")
 			So(db.HasSet(name), ShouldBeFalse)
@@ -51,27 +51,6 @@ func TestKeyValue(t *testing.T) {
 			So(set, ShouldNotBeNil)
 			So(db.HasSet(name), ShouldBeTrue)
 
-			kvset, ok := set.(KeyValueSet)
-			So(ok, ShouldBeTrue)
-
-			//check creation of subset
-			name2 := makeSetFromString("test2")
-			subset := kvset.GetOrCreateSubSet(name2[:])
-			So(subset, ShouldNotBeNil)
-			So(kvset.HasSubSet(name2[:]), ShouldBeTrue)
-
-			//get or create should return the same set as bevore, with our subset
-			set2 := db.GetOrCreateSet(name)
-			So(set2, ShouldNotBeNil)
-			kvset2 := set.(KeyValueSet)
-			So(kvset2.HasSubSet(name2[:]), ShouldBeTrue)
-
-			//test removing entries and subentries
-			err = kvset2.RemoveSubSet(name2[:])
-			So(err, ShouldBeNil)
-			So(kvset2.HasSubSet(name2[:]), ShouldBeFalse)
-			So(kvset.HasSubSet(name2[:]), ShouldBeFalse)
-
 			err := db.RemoveSet(name)
 			So(err, ShouldBeNil)
 			So(db.HasSet(name), ShouldBeFalse)
@@ -80,7 +59,7 @@ func TestKeyValue(t *testing.T) {
 		Convey("and to which data can be written and restored.", func() {
 
 			name := makeSetFromString("test")
-			set := db.GetOrCreateSet(name).(KeyValueSet)
+			set := db.GetOrCreateSet(name).(*KeyValueSet)
 
 			key1 := []byte("key1")
 			So(set.HasKey(key1), ShouldBeFalse)
@@ -97,14 +76,10 @@ func TestKeyValue(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(num, ShouldEqual, 1)
 
-			name2 := makeSetFromString("test2")
-			subset := set.GetOrCreateSubSet(name2[:])
-
 			key2 := []byte("key2")
-			pair2 := subset.GetOrCreateKey(key2)
+			pair2 := set.GetOrCreateKey(key2)
 			So(pair2, ShouldNotBeNil)
-			So(subset.HasKey(key2), ShouldBeTrue)
-			So(set.HasKey(key2), ShouldBeFalse)
+			So(set.HasKey(key2), ShouldBeTrue)
 
 			var sdata string = "test string"
 			err = pair2.Write(sdata)
@@ -114,6 +89,14 @@ func TestKeyValue(t *testing.T) {
 			str, ok := res2.(string)
 			So(ok, ShouldBeTrue)
 			So(str, ShouldEqual, sdata)
+
+			err = pair2.Write("annother test")
+			So(err, ShouldBeNil)
+			res3, err := pair2.Read()
+			So(err, ShouldBeNil)
+			str, ok = res3.(string)
+			So(ok, ShouldBeTrue)
+			So(str, ShouldEqual, "annother test")
 		})
 	})
 }

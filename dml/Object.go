@@ -20,7 +20,9 @@ type Object interface {
 
 	//Object functions
 	Id() identifier
-	GetDataStore() *datastore.Datastore
+
+	//storage functions
+	GetDatabaseSet(storetype datastor.StorageType) *datastore.Set
 
 	//Object hirarchy
 	AddChild(obj Object)
@@ -37,12 +39,13 @@ type object struct {
 	eventHandler
 	methodHandler
 
+	//object
 	children []Object
 	parent   Object
 	id       identifier
 	oType    string
-	store    *datastore.Datastore
 
+	//javascript
 	jsobj *goja.Object
 	jsrtm *goja.Runtime
 }
@@ -71,10 +74,6 @@ func (self *object) SetParent(parent Object) {
 
 func (self *object) GetParent() Object {
 	return self.parent
-}
-
-func (self *object) GetDataStore() *datastore.Datastore {
-	return self.store
 }
 
 func (self *object) GetJSObject() *goja.Object {
@@ -119,6 +118,7 @@ func NewObject(name string, oType string, vm *goja.Runtime, store *datastore.Dat
 		identifier{[32]byte{}, oType, name},
 		oType,
 		store,
+		make(map[datastore.StorageType]*datastore.Set),
 		jsobj,
 		vm,
 	}

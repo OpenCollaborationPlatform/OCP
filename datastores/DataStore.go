@@ -18,6 +18,9 @@ package datastore
 import (
 	"os"
 	"path/filepath"
+	"time"
+
+	"github.com/boltdb/bolt"
 )
 
 //Describes a
@@ -30,7 +33,8 @@ type DataBase interface {
 
 //Describes a single set in a store and allows to access it
 type Set interface {
-	//GetDatabase() DataBase
+	VersionedData
+
 	IsValid() bool
 }
 
@@ -49,7 +53,14 @@ func NewDatastore(path string) (*Datastore, error) {
 		return nil, err
 	}
 
-	keyvalue, err := NewKeyValueDatabase(dir, "keyvalue")
+	//build the default blt db
+	path = filepath.Join(path, "bolt.db")
+	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
+	if err != nil {
+		return nil, err
+	}
+
+	keyvalue, err := NewKeyValueDatabase(db)
 	if err != nil {
 		return nil, err
 	}
@@ -57,10 +68,11 @@ func NewDatastore(path string) (*Datastore, error) {
 	stores := make(map[StorageType]DataBase, 0)
 	stores[KeyValue] = keyvalue
 
-	return &Datastore{stores}, nil
+	return &Datastore{db, stores}, nil
 }
 
 type Datastore struct {
+	boltdb *bolt.DB
 	stores map[StorageType]DataBase
 }
 
@@ -89,4 +101,7 @@ func (self *Datastore) Close() {
 	for _, store := range self.stores {
 		store.Close()
 	}
+
+	//close the boltdb
+	self.boltdb.Close()
 }
