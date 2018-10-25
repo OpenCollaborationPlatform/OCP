@@ -122,11 +122,24 @@ func (self *KeyValueSet) IsValid() bool {
 
 func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 
+	//check if opertion is possible
+	cv, err := self.GetCurrentVersion()
+	if err != nil {
+		return VersionID(0), err
+	}
+	lv, err := self.GetLatestVersion()
+	if err != nil {
+		return VersionID(0), err
+	}
+	if cv != lv {
+		return VersionID(0), fmt.Errorf("Unable to create version if newest is not checked out")
+	}
+
 	//we iterate over all entries and get the sequence number to store as current
 	//state
 	versionkey := []byte("versions")
 	version := make(map[string]string)
-	err := self.db.View(func(tx *bolt.Tx) error {
+	err = self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("keyvalue"))
 		bucket = bucket.Bucket(self.setkey)
@@ -144,8 +157,19 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 				if subbucket == nil {
 					return fmt.Errorf("Accessing entry in set failed")
 				}
+
+				//create a new version inside the subbucket
+				cid := subbucket.Sequence()
+				data := subbucket.Get(itob(cid))
+				nid, err := subbucket.NextSequence()
+				if err != nil {
+					return err
+				}
+				subbucket.Put(itob(nid), data)
+
+				//save the old version as the correct entry
 				strkey := base58.Encode(key)
-				version[strkey] = base58.Encode(itob(subbucket.Sequence()))
+				version[strkey] = base58.Encode(itob(cid))
 			}
 		}
 		return nil
@@ -155,11 +179,31 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 	}
 
 	//sage the new version as entry in the "version" keyvalue entry
-	vp, err := self.GetOrCreateKey(versionkey)
+	_, err = self.GetOrCreateKey(versionkey)
 	if err != nil {
 		return VersionID(0), err
 	}
-	err = vp.Write(version)
+
+	//write the new version into store
+	var currentVersion uint64
+	err = self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("keyvalue"))
+		for _, bkey := range [][]byte{self.setkey, versionkey} {
+			bucket = bucket.Bucket(bkey)
+		}
+		currentVersion, err = bucket.NextSequence()
+		if err != nil {
+			return nil
+		}
+		data, err := getBytes(version)
+		if err != nil {
+			return err
+		}
+		bucket.Put(itob(currentVersion), data)
+		return nil
+	})
+
 	if err != nil {
 		return VersionID(0), err
 	}
@@ -169,14 +213,11 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 
 		bucket := tx.Bucket([]byte("keyvalue"))
 		bucket = bucket.Bucket(self.setkey)
-		bucket.Put([]byte("currentversion"), itob(uint64(vp.LatestVersion())))
+		bucket.Put([]byte("currentversion"), itob(uint64(currentVersion)))
 		return nil
 	})
 
-	//Todo: it is quite likely that individual key value pairs have multiple sub-versions
-	//      between the last and the new global version. They can be cleaned up.
-
-	return VersionID(vp.CurrentVersion()), err
+	return VersionID(currentVersion), err
 }
 
 func (self *KeyValueSet) LoadVersion(id VersionID) error {
@@ -286,6 +327,7 @@ func (self *KeyValueSet) GetCurrentVersion() (VersionID, error) {
 }
 
 func (self *KeyValueSet) RemoveVersionsUpTo(VersionID) error {
+
 	return nil
 }
 
@@ -409,7 +451,7 @@ func (self *KeyValuePair) Write(value interface{}) error {
 		for _, bkey := range [][]byte{self.setkey, self.key} {
 			bucket = bucket.Bucket(bkey)
 		}
-		id, _ := bucket.NextSequence()
+		id := bucket.Sequence()
 		return bucket.Put(itob(id), bts)
 	})
 }

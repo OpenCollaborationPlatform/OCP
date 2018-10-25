@@ -126,7 +126,7 @@ func TestKeyValueVersioning(t *testing.T) {
 
 		})
 
-		Convey("Adding data to the set should have version information", func() {
+		Convey("Adding data to the set should not have version information", func() {
 
 			kvset, _ := set.(*KeyValueSet)
 			pair1, err := kvset.GetOrCreateKey([]byte("data1"))
@@ -138,16 +138,16 @@ func TestKeyValueVersioning(t *testing.T) {
 
 			pair1.Write("hello guys")
 			So(pair1.IsValid(), ShouldBeTrue)
-			So(pair1.CurrentVersion(), ShouldEqual, 1)
-			So(pair1.LatestVersion(), ShouldEqual, 1)
+			So(pair1.CurrentVersion(), ShouldEqual, 0)
+			So(pair1.LatestVersion(), ShouldEqual, 0)
 
 			pair1.Write("override")
 			So(pair1.IsValid(), ShouldBeTrue)
-			So(pair1.CurrentVersion(), ShouldEqual, 2)
-			So(pair1.LatestVersion(), ShouldEqual, 2)
+			So(pair1.CurrentVersion(), ShouldEqual, 0)
+			So(pair1.LatestVersion(), ShouldEqual, 0)
 		})
 
-		Convey("and the old version should be reloadable", func() {
+		Convey("and the old version should be reloadable.", func() {
 
 			//fix current state as a new version
 			version, err := set.FixStateAsVersion()
@@ -197,7 +197,6 @@ func TestKeyValueVersioning(t *testing.T) {
 
 			err = pair2.Write(12)
 			So(err, ShouldBeNil)
-
 		})
 
 	})
