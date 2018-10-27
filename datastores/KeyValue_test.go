@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -26,7 +27,7 @@ func TestKeyValueData(t *testing.T) {
 		_, ok := db.(*KeyValueDatabase)
 		So(ok, ShouldBeTrue)
 
-		Convey("entries can be creaded and deleted,", func() {
+		Convey("sets can be creaded and deleted,", func() {
 
 			name := makeSetFromString("test")
 			So(db.HasSet(name), ShouldBeFalse)
@@ -92,7 +93,8 @@ func TestKeyValueVersioning(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
+	fmt.Println(path)
+	//defer os.RemoveAll(path)
 
 	Convey("Setting up a KeyValue database with a single set,", t, func() {
 
@@ -106,11 +108,13 @@ func TestKeyValueVersioning(t *testing.T) {
 
 			version, err := set.GetLatestVersion()
 			So(err, ShouldBeNil)
-			So(uint64(version), ShouldEqual, 0)
+			So(version.IsValid(), ShouldBeFalse)
+			So(version.IsHead(), ShouldBeFalse)
 
 			version, err = set.GetCurrentVersion()
 			So(err, ShouldBeNil)
-			So(uint64(version), ShouldEqual, 0)
+			So(version.IsHead(), ShouldBeTrue)
+			So(version.IsValid(), ShouldBeTrue)
 
 			version, err = set.FixStateAsVersion()
 			So(err, ShouldBeNil)
@@ -122,7 +126,7 @@ func TestKeyValueVersioning(t *testing.T) {
 
 			version, err = set.GetCurrentVersion()
 			So(err, ShouldBeNil)
-			So(uint64(version), ShouldEqual, 1)
+			So(version.IsHead(), ShouldBeTrue)
 
 		})
 
@@ -133,18 +137,18 @@ func TestKeyValueVersioning(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			So(pair1.IsValid(), ShouldBeTrue)
-			So(pair1.CurrentVersion(), ShouldEqual, 0)
-			So(pair1.LatestVersion(), ShouldEqual, 0)
+			So(pair1.CurrentVersion().IsHead(), ShouldBeTrue)
+			So(pair1.LatestVersion().IsValid(), ShouldBeFalse)
 
 			pair1.Write("hello guys")
 			So(pair1.IsValid(), ShouldBeTrue)
-			So(pair1.CurrentVersion(), ShouldEqual, 0)
-			So(pair1.LatestVersion(), ShouldEqual, 0)
+			So(pair1.CurrentVersion().IsHead(), ShouldBeTrue)
+			So(pair1.LatestVersion().IsValid(), ShouldBeFalse)
 
 			pair1.Write("override")
 			So(pair1.IsValid(), ShouldBeTrue)
-			So(pair1.CurrentVersion(), ShouldEqual, 0)
-			So(pair1.LatestVersion(), ShouldEqual, 0)
+			So(pair1.CurrentVersion().IsHead(), ShouldBeTrue)
+			So(pair1.LatestVersion().IsValid(), ShouldBeFalse)
 		})
 
 		Convey("and the old version should be reloadable.", func() {
@@ -191,12 +195,81 @@ func TestKeyValueVersioning(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, "override")
 
-			//new data should be creatable
+			//new data should not be creatable
+			pair2, err = kvset.GetOrCreateKey([]byte("data2"))
+			So(err, ShouldNotBeNil)
+
+			//new data should be creatable in HEAD
+			err = set.LoadVersion(VersionID(HEAD))
+			So(err, ShouldBeNil)
+			So(pair1.IsValid(), ShouldBeTrue)
+			data, err = pair1.Read()
+			So(err, ShouldBeNil)
+			value, ok = data.(string)
+			So(ok, ShouldBeTrue)
+			So(value, ShouldEqual, "override")
+
 			pair2, err = kvset.GetOrCreateKey([]byte("data2"))
 			So(err, ShouldBeNil)
-
 			err = pair2.Write(12)
 			So(err, ShouldBeNil)
+
+		})
+
+		Convey("It must be possible to delete older versions", func() {
+
+			kvset, _ := set.(*KeyValueSet)
+			pair1, _ := kvset.GetOrCreateKey([]byte("data1"))
+			pair2, _ := kvset.GetOrCreateKey([]byte("data2"))
+			pair3, _ := kvset.GetOrCreateKey([]byte("data3"))
+
+			So(pair1.Write("next"), ShouldBeNil)
+			So(pair2.Write(29), ShouldBeNil)
+			So(pair3.Write(1.32), ShouldBeNil)
+
+			version, err := set.FixStateAsVersion()
+			So(err, ShouldBeNil)
+
+			So(pair1.Write("again"), ShouldBeNil)
+			So(pair2.Write(-5), ShouldBeNil)
+			So(pair3.Remove(), ShouldBeTrue)
+			set.FixStateAsVersion()
+
+			So(set.RemoveVersionsUpTo(version), ShouldBeNil)
+			So(pair1.IsValid(), ShouldBeTrue)
+			So(pair2.IsValid(), ShouldBeTrue)
+			So(pair3.IsValid(), ShouldBeFalse)
+
+			val, _ := pair1.Read()
+			So(val.(string), ShouldEqual, "again")
+			val, _ = pair2.Read()
+			So(val.(int64), ShouldEqual, -5)
+			val, err = pair3.Read()
+			So(err, ShouldNotBeNil)
+
+			So(set.LoadVersion(1), ShouldNotBeNil)
+			So(set.LoadVersion(version), ShouldBeNil)
+			val, _ = pair1.Read()
+			So(val.(string), ShouldEqual, "next")
+			val, _ = pair2.Read()
+			So(val.(int64), ShouldEqual, 29)
+			So(pair3.IsValid(), ShouldBeTrue)
+			val, _ = pair3.Read()
+			So(val.(float64), ShouldAlmostEqual, 1.32)
+
+			So(set.LoadVersion(VersionID(HEAD)), ShouldBeNil)
+			val, _ = pair1.Read()
+			So(val.(string), ShouldEqual, "again")
+			val, _ = pair2.Read()
+			So(val.(int64), ShouldEqual, -5)
+			So(pair3.IsValid(), ShouldBeFalse)
+			_, err = pair3.Read()
+			So(err, ShouldNotBeNil)
+
+		})
+
+		Convey("as well as new versions", func() {
+
 		})
 
 	})

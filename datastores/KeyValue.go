@@ -1,6 +1,36 @@
-// KeyValue database: The key value database saves the multiple entries within a
-// single bolt db, one bucket for each store.
+// KeyValue database: The key value database saves the multiple entries per set which
+// are accessed by keys.
 package datastore
+
+/*
+Data layout of versioned key value store:
+
+bucket(SetKey) [
+	entry(CURRENT) = HEAD
+	bucket(versions) [
+		entry(1) = Versionmap(key1->1, key2->1)
+		entry(2) = Versionmap(key1->2, key2->1)
+	]
+	bucket(key1) [
+		entry(1) = "first value"
+		entry(2) = "second vale"
+		entry(CURRENT) = HEAD
+		entry(HEAD) = "current value"
+	]
+	bucket(key2) [
+		entry(1) = 14
+		entry(CURRENT) = HEAD
+		entry(HEAD) = 29
+	]
+]
+
+Definitions:
+- CURRENT 	in keys gives the used version number. It is set to INVALID if it does
+         	not has a valid version for the checked out key version
+- HEAD    	gives the currently worked on value. It is set to []byte{} and hence made
+		  	invalid on removal
+- Bucket sequence: Is alwas on the latest version existing in the bucket
+*/
 
 import (
 	"bytes"
@@ -12,6 +42,18 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/mr-tron/base58/base58"
 )
+
+const (
+	CURRENT  uint64 = math.MaxUint64 - 10
+	VERSIONS uint64 = math.MaxUint64 - 11
+)
+
+var INVALID_VALUE = make([]byte, 0)
+
+func isInvalid(val []byte) bool {
+
+	return (val != nil) && (len(val) == 0)
+}
 
 func NewKeyValueDatabase(db *bolt.DB) (*KeyValueDatabase, error) {
 
@@ -57,8 +99,8 @@ func (self KeyValueDatabase) GetOrCreateSet(set [32]byte) Set {
 			}
 
 			//set default values
-			newbucket.Put([]byte("currentversion"), itob(0))
-			newbucket.CreateBucketIfNotExists([]byte("versions"))
+			newbucket.Put(itob(CURRENT), itob(HEAD))
+			newbucket.CreateBucketIfNotExists(itob(VERSIONS))
 
 			return nil
 		})
@@ -113,11 +155,83 @@ func (self *KeyValueSet) IsValid() bool {
 			result = false
 			return nil
 		}
-		result = bucket.Bucket(self.setkey) == nil
+		result = bucket.Bucket(self.setkey) != nil
 		return nil
 	})
 
 	return result
+}
+
+func (self *KeyValueSet) Print() {
+
+	if !self.IsValid() {
+		fmt.Println("Invalid set")
+		return
+	}
+
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("keyvalue"))
+		bucket = bucket.Bucket(self.setkey)
+
+		bucket.ForEach(func(k []byte, v []byte) error {
+
+			if bytes.Equal(k, itob(CURRENT)) {
+				if btoi(v) == HEAD {
+					fmt.Printf("CURRENT: HEAD\n")
+				} else {
+					fmt.Printf("CURRENT: %v\n", btoi(v))
+				}
+
+			} else if bytes.Equal(k, itob(VERSIONS)) {
+				fmt.Println("VERSIONS:")
+				//print the versions out
+				subbucket := bucket.Bucket(k)
+				subbucket.ForEach(func(sk []byte, sv []byte) error {
+					inter, _ := getInterface(sv)
+					data := inter.(map[string]interface{})
+					//build the versioning string
+					str := ""
+					for mk, mv := range data {
+						str = str + string(stob(mk)) + ": %v,  "
+						mvid := stoi(mv.(string))
+						if mvid == INVALID {
+							str = fmt.Sprintf(str, "INVALID")
+						} else {
+							str = fmt.Sprintf(str, mvid)
+						}
+					}
+
+					fmt.Printf("    %v: %v\n", btoi(sk), str)
+					return nil
+				})
+			} else {
+				fmt.Printf("%s:\n", string(k))
+				subbucket := bucket.Bucket(k)
+				subbucket.ForEach(func(sk []byte, sv []byte) error {
+					inter, _ := getInterface(sv)
+					key := btoi(sk)
+					if key == HEAD {
+						fmt.Printf("    HEAD: %v\n", inter)
+					} else if key == CURRENT {
+						if btoi(sv) == HEAD {
+							fmt.Printf("    CURRENT: HEAD\n")
+						} else if btoi(sv) == INVALID {
+							fmt.Printf("    CURRENT: INVALID\n")
+						} else {
+							fmt.Printf("    CURRENT: %v\n", btoi(sv))
+						}
+					} else {
+						fmt.Printf("    %v: %v\n", key, inter)
+					}
+					return nil
+				})
+			}
+			return nil
+		})
+
+		return nil
+	})
 }
 
 func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
@@ -125,19 +239,14 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 	//check if opertion is possible
 	cv, err := self.GetCurrentVersion()
 	if err != nil {
-		return VersionID(0), err
+		return VersionID(INVALID), err
 	}
-	lv, err := self.GetLatestVersion()
-	if err != nil {
-		return VersionID(0), err
-	}
-	if cv != lv {
-		return VersionID(0), fmt.Errorf("Unable to create version if newest is not checked out")
+	if !cv.IsHead() {
+		return VersionID(INVALID), fmt.Errorf("Unable to create version if HEAD is not checked out")
 	}
 
 	//we iterate over all entries and get the sequence number to store as current
 	//state
-	versionkey := []byte("versions")
 	version := make(map[string]string)
 	err = self.db.Update(func(tx *bolt.Tx) error {
 
@@ -152,36 +261,34 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 
 			//do nothing for versions bucket or any key value pair (only buckets are
 			// versioned key value pairs)
-			if !bytes.Equal(key, versionkey) && val == nil {
+			if !bytes.Equal(key, itob(VERSIONS)) && val == nil {
+
 				subbucket := bucket.Bucket(key)
 				if subbucket == nil {
 					return fmt.Errorf("Accessing entry in set failed")
 				}
 
-				//create a new version inside the subbucket
-				cid := subbucket.Sequence()
-				data := subbucket.Get(itob(cid))
-				nid, err := subbucket.NextSequence()
-				if err != nil {
-					return err
+				//create a new version inside the subbucket if the value changed
+				vid := subbucket.Sequence()
+				olddata := subbucket.Get(itob(vid))
+				data := subbucket.Get(itob(HEAD))
+
+				if (olddata == nil) || !bytes.Equal(data, olddata) {
+					vid, err = subbucket.NextSequence()
+					if err != nil {
+						return err
+					}
+					subbucket.Put(itob(vid), data)
 				}
-				subbucket.Put(itob(nid), data)
 
 				//save the old version as the correct entry
-				strkey := base58.Encode(key)
-				version[strkey] = base58.Encode(itob(cid))
+				version[btos(key)] = itos(vid)
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return VersionID(0), err
-	}
-
-	//sage the new version as entry in the "version" keyvalue entry
-	_, err = self.GetOrCreateKey(versionkey)
-	if err != nil {
-		return VersionID(0), err
+		return VersionID(INVALID), err
 	}
 
 	//write the new version into store
@@ -189,54 +296,35 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 	err = self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, versionkey} {
+		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
 			bucket = bucket.Bucket(bkey)
-		}
-		currentVersion, err = bucket.NextSequence()
-		if err != nil {
-			return nil
 		}
 		data, err := getBytes(version)
 		if err != nil {
 			return err
+		}
+		currentVersion, err = bucket.NextSequence()
+		if err != nil {
+			return nil
 		}
 		bucket.Put(itob(currentVersion), data)
 		return nil
 	})
 
 	if err != nil {
-		return VersionID(0), err
+		return VersionID(INVALID), err
 	}
-
-	//save as current version
-	self.db.Update(func(tx *bolt.Tx) error {
-
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
-		bucket.Put([]byte("currentversion"), itob(uint64(currentVersion)))
-		return nil
-	})
 
 	return VersionID(currentVersion), err
 }
 
-func (self *KeyValueSet) LoadVersion(id VersionID) error {
+func (self *KeyValueSet) getVersionInfo(id VersionID) (map[string]interface{}, error) {
 
-	//we write the current version
-	self.db.Update(func(tx *bolt.Tx) error {
-
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
-		bucket.Put([]byte("currentversion"), itob(uint64(id)))
-		return nil
-	})
-
-	//we grab the version data
 	version := make(map[string]interface{})
 	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte("keyvalue"))
 		bucket = bucket.Bucket(self.setkey)
-		bucket = bucket.Bucket([]byte("versions"))
+		bucket = bucket.Bucket(itob(VERSIONS))
 		data := bucket.Get(itob(uint64(id)))
 		if data == nil || len(data) == 0 {
 			return fmt.Errorf("Version does not exist")
@@ -253,11 +341,29 @@ func (self *KeyValueSet) LoadVersion(id VersionID) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return nil, err
+	}
+	return version, nil
+}
+
+func (self *KeyValueSet) LoadVersion(id VersionID) error {
+
+	if cv, _ := self.GetCurrentVersion(); cv == id {
+		return nil
+	}
+
+	//grab the needed verion
+	var version map[string]interface{}
+	if !id.IsHead() {
+		var err error
+		version, err = self.getVersionInfo(id)
+		if err != nil {
+			return err
+		}
 	}
 
 	//make sure all subentries have loaded the correct subversion
-	err = self.db.Update(func(tx *bolt.Tx) error {
+	err := self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("keyvalue"))
 		bucket = bucket.Bucket(self.setkey)
@@ -267,25 +373,28 @@ func (self *KeyValueSet) LoadVersion(id VersionID) error {
 		c := bucket.Cursor()
 		for key, val := c.First(); key != nil; key, val = c.Next() {
 
-			if !bytes.Equal(key, []byte("versions")) && val == nil {
+			if !bytes.Equal(key, itob(VERSIONS)) && val == nil {
 
 				data := base58.Encode(key)
 				subbucket := bucket.Bucket(key)
-				vers, ok := version[data]
 
 				var err error
-				if !ok {
-					err = subbucket.SetSequence(math.MaxUint64)
+				if id.IsHead() {
+					err = subbucket.Put(itob(CURRENT), itob(HEAD))
+
 				} else {
-					verstr, ok := vers.(string)
+
+					vers, ok := version[data]
+
 					if !ok {
-						return fmt.Errorf("Stored version information is not a VersionID")
+						err = subbucket.Put(itob(CURRENT), itob(INVALID))
+					} else {
+						verstr, ok := vers.(string)
+						if !ok {
+							return fmt.Errorf("Stored version information is not a VersionID")
+						}
+						err = subbucket.Put(itob(CURRENT), stob(verstr))
 					}
-					versdata, err := base58.Decode(verstr)
-					if err != nil {
-						return fmt.Errorf("Stored version information could not be decoded to VersionID")
-					}
-					err = subbucket.SetSequence(btoi(versdata))
 				}
 				if err != nil {
 					return err
@@ -295,15 +404,24 @@ func (self *KeyValueSet) LoadVersion(id VersionID) error {
 		return nil
 	})
 
+	//we write the current version
+	self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("keyvalue"))
+		bucket = bucket.Bucket(self.setkey)
+		bucket.Put(itob(CURRENT), itob(uint64(id)))
+		return nil
+	})
+
 	return err
 }
 
 func (self *KeyValueSet) GetLatestVersion() (VersionID, error) {
 
 	//read the last version we created
-	vp, err := self.GetOrCreateKey([]byte("versions"))
+	vp, err := self.GetOrCreateKey(itob(VERSIONS))
 	if err != nil {
-		return VersionID(0), err
+		return VersionID(INVALID), err
 	}
 	return vp.LatestVersion(), nil
 }
@@ -316,9 +434,9 @@ func (self *KeyValueSet) GetCurrentVersion() (VersionID, error) {
 
 		bucket := tx.Bucket([]byte("keyvalue"))
 		bucket = bucket.Bucket(self.setkey)
-		versdata := bucket.Get([]byte("currentversion"))
+		versdata := bucket.Get(itob(CURRENT))
 		if versdata == nil {
-			return fmt.Errorf("Could not access sets version data")
+			return fmt.Errorf("Could not access sets version information")
 		}
 		currentVersion = btoi(versdata)
 		return nil
@@ -326,13 +444,165 @@ func (self *KeyValueSet) GetCurrentVersion() (VersionID, error) {
 	return VersionID(currentVersion), err
 }
 
-func (self *KeyValueSet) RemoveVersionsUpTo(VersionID) error {
+func (self *KeyValueSet) RemoveVersionsUpTo(ID VersionID) error {
 
-	return nil
+	cv, _ := self.GetCurrentVersion()
+	if cv < ID {
+		return fmt.Errorf("Cannot delete curretnly loaded version")
+	}
+
+	//get the version info
+	version, err := self.getVersionInfo(ID)
+	if err != nil {
+		return err
+	}
+
+	//remove everything that is not needed anymore
+	for key, value := range version {
+
+		valuestr, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("Stored version information is not a VersionID")
+		}
+		valuedata := stoi(valuestr)
+		keydata := stob(key)
+
+		//delete what is not needed anymore: the whole bucket or subentries
+		self.db.Update(func(tx *bolt.Tx) error {
+
+			setBucket := tx.Bucket([]byte("keyvalue")).Bucket(self.setkey)
+			keyBucket := setBucket.Bucket(keydata)
+
+			versionData := keyBucket.Get(itob(valuedata))
+			if isInvalid(versionData) {
+				//if the verrsion for this bucket points to INVALID_DATA we know it
+				//was removed, hence can be fully deleted.
+				setBucket.DeleteBucket(keydata)
+
+			} else {
+				//delete each entry that belongs to older versions. We use the fact
+				//that versions have always increasing numbers
+				todelete := make([][]byte, 0)
+				keyBucket.ForEach(func(k, v []byte) error {
+					val := btoi(k)
+					if val < valuedata {
+						todelete = append(todelete, k)
+					}
+					return nil
+				})
+				for _, k := range todelete {
+					keyBucket.Delete(k)
+				}
+			}
+			return nil
+		})
+	}
+
+	//with all data cleared we can delete the version entries
+	err = self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("keyvalue"))
+		bucket = bucket.Bucket(self.setkey)
+		bucket = bucket.Bucket(itob(VERSIONS))
+
+		todelete := make([][]byte, 0)
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			if val < uint64(ID) {
+				todelete = append(todelete, k)
+			}
+			return nil
+		})
+		for _, k := range todelete {
+			bucket.Delete(k)
+		}
+		return nil
+	})
+
+	return err
 }
 
-func (self *KeyValueSet) RemoveVersionsUpFrom(VersionID) error {
-	return nil
+func (self *KeyValueSet) RemoveVersionsUpFrom(ID VersionID) error {
+
+	cv, _ := self.GetCurrentVersion()
+	if cv > ID {
+		return fmt.Errorf("Cannot delete curretnly loaded version")
+	}
+
+	//get the version info
+	version, err := self.getVersionInfo(ID)
+	if err != nil {
+		return err
+	}
+
+	err = self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("keyvalue"))
+		bucket = bucket.Bucket(self.setkey)
+
+		//we want to search all entries
+		c := bucket.Cursor()
+		for key, val := c.First(); key != nil; key, val = c.Next() {
+
+			if !bytes.Equal(key, itob(VERSIONS)) && val == nil {
+
+				ifval, ok := version[btos(key)]
+				if !ok {
+					//if this bucket is not in the version map it belongs to a newer
+					//version, hence can be deleted
+					bucket.DeleteBucket(key)
+				} else {
+
+					//we are already available in the given version. But we can delete
+					//all bucket versions that are too new
+					strval, ok := ifval.(string)
+					if !ok {
+						return fmt.Errorf("Stored data is not version ID")
+					}
+					idval := stoi(strval)
+					subbucket := bucket.Bucket(key)
+					todelete := make([][]byte, 0)
+					err = subbucket.ForEach(func(k, v []byte) error {
+						val := btoi(k)
+						if val > idval {
+							todelete = append(todelete, k)
+						}
+						return nil
+					})
+					for _, k := range todelete {
+						subbucket.Delete(k)
+					}
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+		return nil
+	})
+
+	//with all data cleared we can delete the version entries
+	err = self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("keyvalue"))
+		bucket = bucket.Bucket(itob(VERSIONS))
+
+		todelete := make([][]byte, 0)
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			if val > uint64(ID) {
+				todelete = append(todelete, k)
+			}
+			return nil
+		})
+		for _, k := range todelete {
+			bucket.Delete(k)
+		}
+
+		return nil
+	})
+
+	return err
 }
 
 /*
@@ -360,23 +630,32 @@ func (self *KeyValueSet) GetOrCreateKey(key []byte) (*KeyValuePair, error) {
 		if err != nil {
 			return nil, err
 		}
-		late, err := self.GetLatestVersion()
-		if err != nil {
-			return nil, err
-		}
-		if curr != late {
-			return nil, fmt.Errorf("Key does not exist and cannot be created when old version is loaded")
+		if !curr.IsHead() {
+			return nil, fmt.Errorf("Key does not exist and cannot be created when version is loaded")
 		}
 
 		//make sure the set exists in the db with null value
-		self.db.Update(func(tx *bolt.Tx) error {
+		err = self.db.Update(func(tx *bolt.Tx) error {
 
 			//get correct bucket
 			bucket := tx.Bucket([]byte("keyvalue"))
 			bucket = bucket.Bucket(self.setkey)
-			_, err := bucket.CreateBucketIfNotExists(key)
+			bucket, err = bucket.CreateBucketIfNotExists(key)
+			if err != nil {
+				return err
+			}
+
+			//setup the basic structure
+			err = bucket.Put(itob(CURRENT), itob(HEAD))
+			if err != nil {
+				return err
+			}
+
 			return err
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &KeyValuePair{self.db, self.setkey, key}, nil
@@ -384,15 +663,17 @@ func (self *KeyValueSet) GetOrCreateKey(key []byte) (*KeyValuePair, error) {
 
 func (self *KeyValueSet) RemoveKey(key []byte) error {
 
-	err := self.db.View(func(tx *bolt.Tx) error {
-
-		//get correct bucket
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
-		//and delete
-		return bucket.DeleteBucket(key)
-	})
-	return err
+	if !self.HasKey(key) {
+		return fmt.Errorf("key does not exists, cannot be removed")
+	}
+	pair, err := self.GetOrCreateKey(key)
+	if err != nil {
+		return err
+	}
+	if !pair.Remove() {
+		return fmt.Errorf("Unable to remove key")
+	}
+	return nil
 }
 
 /*
@@ -407,37 +688,25 @@ type KeyValuePair struct {
 
 func (self *KeyValuePair) Write(value interface{}) error {
 
-	//check if we are allowed to write: is the set current version the maximum version?
-	var currentVersion, latestVersion uint64
-	latestVersion = 0
+	//check if we are allowed to write: are we in HEAD?
 	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
-		versdata := bucket.Get([]byte("currentversion"))
-		if versdata == nil {
-			return fmt.Errorf("Could not access sets version data")
+		for _, bkey := range [][]byte{self.setkey, self.key} {
+			bucket = bucket.Bucket(bkey)
 		}
-		currentVersion = btoi(versdata)
-
-		bucket = bucket.Bucket([]byte("versions"))
-		if bucket == nil {
-			return fmt.Errorf("Versions bucket does not exist")
+		val := bucket.Get(itob(CURRENT))
+		if btoi(val) != HEAD {
+			return fmt.Errorf("Can only write data when in HEAD")
 		}
-		bucket.ForEach(func(k, v []byte) error {
-			val := btoi(k)
-			if val > latestVersion {
-				latestVersion = val
-			}
-			return nil
-		})
+		val = bucket.Get(itob(HEAD))
+		if isInvalid(val) {
+			return fmt.Errorf("Key was invalidadet, writing not possbile anymore")
+		}
 		return nil
 	})
 	if err != nil {
 		return err
-	}
-	if currentVersion != latestVersion {
-		return fmt.Errorf("Cannot write, older version is loaded")
 	}
 
 	bts, err := getBytes(value)
@@ -451,8 +720,7 @@ func (self *KeyValuePair) Write(value interface{}) error {
 		for _, bkey := range [][]byte{self.setkey, self.key} {
 			bucket = bucket.Bucket(bkey)
 		}
-		id := bucket.Sequence()
-		return bucket.Put(itob(id), bts)
+		return bucket.Put(itob(HEAD), bts)
 	})
 }
 
@@ -476,10 +744,13 @@ func (self *KeyValuePair) IsValid() bool {
 		if bucket == nil {
 			result = false
 		}
-		seq := bucket.Sequence()
-		if seq == math.MaxUint64 {
+		cur := bucket.Get(itob(CURRENT))
+		if cur == nil || btoi(cur) == INVALID {
 			result = false
+			return nil
 		}
+		cur = bucket.Get(cur)
+		result = !isInvalid(cur)
 		return nil
 	})
 
@@ -496,13 +767,15 @@ func (self *KeyValuePair) Read() (interface{}, error) {
 			bucket = bucket.Bucket(bkey)
 		}
 		//check if we are valid in the current version
-		seq := bucket.Sequence()
-		if seq == math.MaxUint64 {
+		cur := bucket.Get(itob(CURRENT))
+		if btoi(cur) == INVALID {
 			return fmt.Errorf("Key Value pair does not exist in currently loaded version")
 		}
-
-		data := bucket.Get(itob(seq))
-		if data == nil || len(data) == 0 {
+		data := bucket.Get(cur)
+		if isInvalid(data) {
+			return fmt.Errorf("Key Value pair does not exist in currently loaded version")
+		}
+		if data == nil {
 			return fmt.Errorf("Value was not set before read")
 		}
 		res, err := getInterface(data)
@@ -519,13 +792,15 @@ func (self *KeyValuePair) Read() (interface{}, error) {
 
 func (self *KeyValuePair) Remove() bool {
 
-	err := self.db.View(func(tx *bolt.Tx) error {
+	//removing does not mean to delete everything. We need the data for loading older
+	//versions. It just means we set it as "not existing".
+	err := self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("keyvalue"))
 		for _, bkey := range [][]byte{self.setkey, self.key} {
 			bucket = bucket.Bucket(bkey)
 		}
-		return bucket.Delete(itob(bucket.Sequence()))
+		return bucket.Put(itob(HEAD), INVALID_VALUE)
 	})
 	return err == nil
 }
@@ -539,7 +814,7 @@ func (self *KeyValuePair) CurrentVersion() VersionID {
 		for _, bkey := range [][]byte{self.setkey, self.key} {
 			bucket = bucket.Bucket(bkey)
 		}
-		version = bucket.Sequence()
+		version = btoi(bucket.Get(itob(CURRENT)))
 		return nil
 	})
 
@@ -549,23 +824,30 @@ func (self *KeyValuePair) CurrentVersion() VersionID {
 func (self *KeyValuePair) LatestVersion() VersionID {
 
 	var version uint64 = 0
+	found := false
 	self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("keyvalue"))
 		for _, bkey := range [][]byte{self.setkey, self.key} {
 			bucket = bucket.Bucket(bkey)
 		}
-		//could be that we have the sequence set to any value, must not be the latest
-		//hence we iterate over all and search for the biggest
+		//look at each entry and get the largest version
 		bucket.ForEach(func(k, v []byte) error {
 			val := btoi(k)
-			if val > version {
-				version = val
+			if val != HEAD && val != CURRENT {
+				found = true
+				if val > version {
+					version = val
+				}
 			}
 			return nil
 		})
 		return nil
 	})
+
+	if !found {
+		return VersionID(INVALID)
+	}
 
 	return VersionID(version)
 }
@@ -598,4 +880,24 @@ func itob(v uint64) []byte {
 
 func btoi(b []byte) uint64 {
 	return binary.BigEndian.Uint64(b)
+}
+
+func btos(val []byte) string {
+	return base58.Encode(val)
+}
+
+func stob(val string) []byte {
+	data, err := base58.Decode(val)
+	if err != nil {
+		panic("Stored version information could not be decoded to VersionID")
+	}
+	return data
+}
+
+func itos(val uint64) string {
+	return btos(itob(val))
+}
+
+func stoi(val string) uint64 {
+	return btoi(stob(val))
 }

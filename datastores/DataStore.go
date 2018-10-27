@@ -36,6 +36,7 @@ type Set interface {
 	VersionedData
 
 	IsValid() bool
+	Print()
 }
 
 type StorageType int

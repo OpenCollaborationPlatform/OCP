@@ -1,6 +1,21 @@
 package datastore
 
+import "math"
+
 type VersionID uint64
+
+const (
+	INVALID uint64 = math.MaxUint64
+	HEAD    uint64 = math.MaxUint64 - 1
+)
+
+func (self VersionID) IsHead() bool {
+	return uint64(self) == HEAD
+}
+
+func (self VersionID) IsValid() bool {
+	return uint64(self) != INVALID
+}
 
 /* VersionedData interface: Handle any kind of data according to versioning rules
  *
