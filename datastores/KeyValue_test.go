@@ -270,6 +270,20 @@ func TestKeyValueVersioning(t *testing.T) {
 
 		Convey("as well as new versions", func() {
 
+			kvset, _ := set.(*KeyValueSet)
+			pair1, _ := kvset.GetOrCreateKey([]byte("data1"))
+			pair2, _ := kvset.GetOrCreateKey([]byte("data2"))
+			pair4, _ := kvset.GetOrCreateKey([]byte("data4"))
+
+			So(pair1.Write("hmm"), ShouldBeNil)
+			So(pair2.Write(1070), ShouldBeNil)
+			So(pair4.Write(-6.5), ShouldBeNil)
+
+			v, _ := set.FixStateAsVersion()
+			So(uint64(v), ShouldEqual, 5)
+			So(set.RemoveVersionsUpFrom(VersionID(4)), ShouldNotBeNil)
+			set.LoadVersion(VersionID(4))
+			So(set.RemoveVersionsUpFrom(VersionID(4)), ShouldBeNil)
 		})
 
 	})

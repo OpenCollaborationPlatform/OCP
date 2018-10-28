@@ -7,7 +7,7 @@ Data layout of versioned key value store:
 
 bucket(SetKey) [
 	entry(CURRENT) = HEAD
-	bucket(versions) [
+	bucket(VERSIONS) [
 		entry(1) = Versionmap(key1->1, key2->1)
 		entry(2) = Versionmap(key1->2, key2->1)
 	]
@@ -63,12 +63,13 @@ func NewKeyValueDatabase(db *bolt.DB) (*KeyValueDatabase, error) {
 		return nil
 	})
 
-	return &KeyValueDatabase{db}, nil
+	return &KeyValueDatabase{db, []byte("keyvalue")}, nil
 }
 
 //implements the database interface
 type KeyValueDatabase struct {
-	db *bolt.DB
+	db    *bolt.DB
+	dbkey []byte
 }
 
 func (self KeyValueDatabase) HasSet(set [32]byte) bool {
@@ -79,7 +80,7 @@ func (self KeyValueDatabase) HasSet(set [32]byte) bool {
 
 	var result bool
 	self.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte("keyvalue"))
+		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
@@ -92,7 +93,7 @@ func (self KeyValueDatabase) GetOrCreateSet(set [32]byte) Set {
 	if !self.HasSet(set) {
 		//make sure the bucket exists
 		self.db.Update(func(tx *bolt.Tx) error {
-			bucket := tx.Bucket([]byte("keyvalue"))
+			bucket := tx.Bucket(self.dbkey)
 			newbucket, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
 				return err
@@ -106,7 +107,7 @@ func (self KeyValueDatabase) GetOrCreateSet(set [32]byte) Set {
 		})
 	}
 
-	return &KeyValueSet{self.db, set[:]}
+	return &KeyValueSet{self.db, self.dbkey, [][]byte{set[:]}}
 }
 
 func (self KeyValueDatabase) RemoveSet(set [32]byte) error {
@@ -115,7 +116,7 @@ func (self KeyValueDatabase) RemoveSet(set [32]byte) error {
 
 		var result error
 		self.db.Update(func(tx *bolt.Tx) error {
-			bucket := tx.Bucket([]byte("keyvalue"))
+			bucket := tx.Bucket(self.dbkey)
 			result = bucket.DeleteBucket(set[:])
 			return nil
 		})
@@ -134,7 +135,8 @@ func (self KeyValueDatabase) Close() {
 //this is only to manage the existing entries
 type KeyValueSet struct {
 	db     *bolt.DB
-	setkey []byte
+	dbkey  []byte
+	setkey [][]byte
 }
 
 /*
@@ -147,15 +149,21 @@ func (self *KeyValueSet) IsValid() bool {
 		return false
 	}
 
-	var result bool
+	var result bool = true
 	self.db.View(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
+		bucket := tx.Bucket(self.dbkey)
 		if bucket == nil {
 			result = false
 			return nil
 		}
-		result = bucket.Bucket(self.setkey) != nil
+		for _, sk := range self.setkey {
+			bucket = bucket.Bucket(sk)
+			if bucket == nil {
+				result = false
+				return nil
+			}
+		}
 		return nil
 	})
 
@@ -171,8 +179,10 @@ func (self *KeyValueSet) Print() {
 
 	self.db.View(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range self.setkey {
+			bucket = bucket.Bucket(sk)
+		}
 
 		bucket.ForEach(func(k []byte, v []byte) error {
 
@@ -250,8 +260,10 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 	version := make(map[string]string)
 	err = self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range self.setkey {
+			bucket = bucket.Bucket(sk)
+		}
 		if bucket == nil {
 			return fmt.Errorf("Unable to get set data")
 		}
@@ -295,8 +307,8 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 	var currentVersion uint64
 	err = self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, itob(VERSIONS)) {
 			bucket = bucket.Bucket(bkey)
 		}
 		data, err := getBytes(version)
@@ -322,9 +334,10 @@ func (self *KeyValueSet) getVersionInfo(id VersionID) (map[string]interface{}, e
 
 	version := make(map[string]interface{})
 	err := self.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
-		bucket = bucket.Bucket(itob(VERSIONS))
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range append(self.setkey, itob(VERSIONS)) {
+			bucket = bucket.Bucket(sk)
+		}
 		data := bucket.Get(itob(uint64(id)))
 		if data == nil || len(data) == 0 {
 			return fmt.Errorf("Version does not exist")
@@ -365,8 +378,10 @@ func (self *KeyValueSet) LoadVersion(id VersionID) error {
 	//make sure all subentries have loaded the correct subversion
 	err := self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range self.setkey {
+			bucket = bucket.Bucket(sk)
+		}
 
 		//it could happen that the loaded version does not include some entries.
 		//to catch them we need to go thorugh all entires that are versionized
@@ -407,8 +422,10 @@ func (self *KeyValueSet) LoadVersion(id VersionID) error {
 	//we write the current version
 	self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range self.setkey {
+			bucket = bucket.Bucket(sk)
+		}
 		bucket.Put(itob(CURRENT), itob(uint64(id)))
 		return nil
 	})
@@ -432,8 +449,10 @@ func (self *KeyValueSet) GetCurrentVersion() (VersionID, error) {
 	var currentVersion uint64
 	err := self.db.View(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range self.setkey {
+			bucket = bucket.Bucket(sk)
+		}
 		versdata := bucket.Get(itob(CURRENT))
 		if versdata == nil {
 			return fmt.Errorf("Could not access sets version information")
@@ -469,8 +488,10 @@ func (self *KeyValueSet) RemoveVersionsUpTo(ID VersionID) error {
 
 		//delete what is not needed anymore: the whole bucket or subentries
 		self.db.Update(func(tx *bolt.Tx) error {
-
-			setBucket := tx.Bucket([]byte("keyvalue")).Bucket(self.setkey)
+			setBucket := tx.Bucket(self.dbkey)
+			for _, sk := range self.setkey {
+				setBucket = setBucket.Bucket(sk)
+			}
 			keyBucket := setBucket.Bucket(keydata)
 
 			versionData := keyBucket.Get(itob(valuedata))
@@ -501,9 +522,10 @@ func (self *KeyValueSet) RemoveVersionsUpTo(ID VersionID) error {
 	//with all data cleared we can delete the version entries
 	err = self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
-		bucket = bucket.Bucket(itob(VERSIONS))
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range append(self.setkey, itob(VERSIONS)) {
+			bucket = bucket.Bucket(sk)
+		}
 
 		todelete := make([][]byte, 0)
 		bucket.ForEach(func(k, v []byte) error {
@@ -537,8 +559,10 @@ func (self *KeyValueSet) RemoveVersionsUpFrom(ID VersionID) error {
 
 	err = self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range self.setkey {
+			bucket = bucket.Bucket(sk)
+		}
 
 		//we want to search all entries
 		c := bucket.Cursor()
@@ -564,17 +588,18 @@ func (self *KeyValueSet) RemoveVersionsUpFrom(ID VersionID) error {
 					todelete := make([][]byte, 0)
 					err = subbucket.ForEach(func(k, v []byte) error {
 						val := btoi(k)
-						if val > idval {
+						if val != CURRENT && val != HEAD && val > idval {
 							todelete = append(todelete, k)
 						}
 						return nil
 					})
-					for _, k := range todelete {
-						subbucket.Delete(k)
-					}
 					if err != nil {
 						return err
 					}
+					for _, k := range todelete {
+						subbucket.Delete(k)
+					}
+
 				}
 			}
 		}
@@ -584,8 +609,10 @@ func (self *KeyValueSet) RemoveVersionsUpFrom(ID VersionID) error {
 	//with all data cleared we can delete the version entries
 	err = self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(itob(VERSIONS))
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range append(self.setkey, itob(VERSIONS)) {
+			bucket = bucket.Bucket(sk)
+		}
 
 		todelete := make([][]byte, 0)
 		bucket.ForEach(func(k, v []byte) error {
@@ -613,8 +640,10 @@ func (self *KeyValueSet) HasKey(key []byte) bool {
 
 	var result bool
 	self.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte("keyvalue"))
-		bucket = bucket.Bucket(self.setkey)
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range self.setkey {
+			bucket = bucket.Bucket(sk)
+		}
 		result = bucket.Bucket(key) != nil
 		return nil
 	})
@@ -638,8 +667,10 @@ func (self *KeyValueSet) GetOrCreateKey(key []byte) (*KeyValuePair, error) {
 		err = self.db.Update(func(tx *bolt.Tx) error {
 
 			//get correct bucket
-			bucket := tx.Bucket([]byte("keyvalue"))
-			bucket = bucket.Bucket(self.setkey)
+			bucket := tx.Bucket(self.dbkey)
+			for _, sk := range self.setkey {
+				bucket = bucket.Bucket(sk)
+			}
 			bucket, err = bucket.CreateBucketIfNotExists(key)
 			if err != nil {
 				return err
@@ -658,7 +689,7 @@ func (self *KeyValueSet) GetOrCreateKey(key []byte) (*KeyValuePair, error) {
 		}
 	}
 
-	return &KeyValuePair{self.db, self.setkey, key}, nil
+	return &KeyValuePair{self.db, self.dbkey, self.setkey, key}, nil
 }
 
 func (self *KeyValueSet) RemoveKey(key []byte) error {
@@ -682,7 +713,8 @@ func (self *KeyValueSet) RemoveKey(key []byte) error {
  */
 type KeyValuePair struct {
 	db     *bolt.DB
-	setkey []byte
+	dbkey  []byte
+	setkey [][]byte
 	key    []byte
 }
 
@@ -691,8 +723,8 @@ func (self *KeyValuePair) Write(value interface{}) error {
 	//check if we are allowed to write: are we in HEAD?
 	err := self.db.View(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, self.key} {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
 		val := bucket.Get(itob(CURRENT))
@@ -716,8 +748,8 @@ func (self *KeyValuePair) Write(value interface{}) error {
 
 	return self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, self.key} {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
 		return bucket.Put(itob(HEAD), bts)
@@ -737,8 +769,8 @@ func (self *KeyValuePair) IsValid() bool {
 	var result bool = true
 	self.db.View(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, self.key} {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
 		if bucket == nil {
@@ -762,8 +794,8 @@ func (self *KeyValuePair) Read() (interface{}, error) {
 	var result interface{}
 	err := self.db.View(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, self.key} {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
 		//check if we are valid in the current version
@@ -796,8 +828,8 @@ func (self *KeyValuePair) Remove() bool {
 	//versions. It just means we set it as "not existing".
 	err := self.db.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, self.key} {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
 		return bucket.Put(itob(HEAD), INVALID_VALUE)
@@ -810,8 +842,8 @@ func (self *KeyValuePair) CurrentVersion() VersionID {
 	var version uint64
 	self.db.View(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, self.key} {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
 		version = btoi(bucket.Get(itob(CURRENT)))
@@ -827,8 +859,8 @@ func (self *KeyValuePair) LatestVersion() VersionID {
 	found := false
 	self.db.View(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket([]byte("keyvalue"))
-		for _, bkey := range [][]byte{self.setkey, self.key} {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
 		//look at each entry and get the largest version

@@ -43,6 +43,7 @@ type StorageType int
 
 const (
 	KeyValue StorageType = 1
+	MapType  StorageType = 2
 )
 
 func NewDatastore(path string) (*Datastore, error) {
@@ -63,11 +64,19 @@ func NewDatastore(path string) (*Datastore, error) {
 
 	keyvalue, err := NewKeyValueDatabase(db)
 	if err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	mapdb, err := NewMapDatabase(db)
+	if err != nil {
+		db.Close()
 		return nil, err
 	}
 
 	stores := make(map[StorageType]DataBase, 0)
 	stores[KeyValue] = keyvalue
+	stores[MapType] = mapdb
 
 	return &Datastore{db, stores}, nil
 }
