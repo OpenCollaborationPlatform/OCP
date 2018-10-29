@@ -10,7 +10,7 @@ import (
 
 /*
 Map database uses a keyvalue database underneath, just one level deeper in the
-hirarchy.  Each KeyValueSet is a single map.
+hirarchy.  Each ValueSet is a single map.
 
 Data layout of versioned map store:
 
@@ -20,8 +20,8 @@ bucket(SetKey) [
 		entry(1) = Versionmap(key1->1, key2->1)
 		entry(2) = Versionmap(key1->2, key2->1)
 	]
-	KeyValueSet(key1)
-	KeyValueSet(key2)
+	ValueSet(key1)
+	ValueSet(key2)
 ]
 */
 
@@ -168,7 +168,7 @@ func (self *MapSet) Print() {
 
 			} else {
 
-				kvset := KeyValueSet{self.db, self.dbkey, [][]byte{self.setkey, k}}
+				kvset := ValueSet{self.db, self.dbkey, [][]byte{self.setkey, k}}
 				kvset.Print()
 			}
 			return nil
@@ -297,12 +297,12 @@ func (self *MapSet) RemoveMap(key []byte) error {
  */
 
 type Map struct {
-	kvset KeyValueSet
+	kvset ValueSet
 }
 
 func newMap(db *bolt.DB, dbkey []byte, mapkeys [][]byte) *Map {
 
-	kv := KeyValueSet{db, dbkey, mapkeys}
+	kv := ValueSet{db, dbkey, mapkeys}
 	return &Map{kv}
 }
 

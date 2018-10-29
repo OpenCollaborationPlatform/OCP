@@ -1,4 +1,4 @@
-// KeyValue database: The key value database saves the multiple entries per set which
+// Value database: The key value database saves the multiple entries per set which
 // are accessed by keys.
 package datastore
 
@@ -55,7 +55,7 @@ func isInvalid(val []byte) bool {
 	return (val != nil) && (len(val) == 0)
 }
 
-func NewKeyValueDatabase(db *bolt.DB) (*KeyValueDatabase, error) {
+func NewValueDatabase(db *bolt.DB) (*ValueDatabase, error) {
 
 	//make sure key value store exists in bolts db:
 	db.Update(func(tx *bolt.Tx) error {
@@ -63,16 +63,16 @@ func NewKeyValueDatabase(db *bolt.DB) (*KeyValueDatabase, error) {
 		return nil
 	})
 
-	return &KeyValueDatabase{db, []byte("keyvalue")}, nil
+	return &ValueDatabase{db, []byte("keyvalue")}, nil
 }
 
 //implements the database interface
-type KeyValueDatabase struct {
+type ValueDatabase struct {
 	db    *bolt.DB
 	dbkey []byte
 }
 
-func (self KeyValueDatabase) HasSet(set [32]byte) bool {
+func (self ValueDatabase) HasSet(set [32]byte) bool {
 
 	if self.db == nil {
 		return false
@@ -88,7 +88,7 @@ func (self KeyValueDatabase) HasSet(set [32]byte) bool {
 	return result
 }
 
-func (self KeyValueDatabase) GetOrCreateSet(set [32]byte) Set {
+func (self ValueDatabase) GetOrCreateSet(set [32]byte) Set {
 
 	if !self.HasSet(set) {
 		//make sure the bucket exists
@@ -107,10 +107,10 @@ func (self KeyValueDatabase) GetOrCreateSet(set [32]byte) Set {
 		})
 	}
 
-	return &KeyValueSet{self.db, self.dbkey, [][]byte{set[:]}}
+	return &ValueSet{self.db, self.dbkey, [][]byte{set[:]}}
 }
 
-func (self KeyValueDatabase) RemoveSet(set [32]byte) error {
+func (self ValueDatabase) RemoveSet(set [32]byte) error {
 
 	if self.HasSet(set) {
 
@@ -127,13 +127,13 @@ func (self KeyValueDatabase) RemoveSet(set [32]byte) error {
 	return nil
 }
 
-func (self KeyValueDatabase) Close() {
+func (self ValueDatabase) Close() {
 
 }
 
 //The store itself is very simple, as all the access logic will be in the set type
 //this is only to manage the existing entries
-type KeyValueSet struct {
+type ValueSet struct {
 	db     *bolt.DB
 	dbkey  []byte
 	setkey [][]byte
@@ -143,7 +143,7 @@ type KeyValueSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *KeyValueSet) IsValid() bool {
+func (self *ValueSet) IsValid() bool {
 
 	if self.db == nil {
 		return false
@@ -170,7 +170,7 @@ func (self *KeyValueSet) IsValid() bool {
 	return result
 }
 
-func (self *KeyValueSet) Print() {
+func (self *ValueSet) Print() {
 
 	if !self.IsValid() {
 		fmt.Println("Invalid set")
@@ -244,7 +244,7 @@ func (self *KeyValueSet) Print() {
 	})
 }
 
-func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
+func (self *ValueSet) FixStateAsVersion() (VersionID, error) {
 
 	//check if opertion is possible
 	cv, err := self.GetCurrentVersion()
@@ -330,7 +330,7 @@ func (self *KeyValueSet) FixStateAsVersion() (VersionID, error) {
 	return VersionID(currentVersion), err
 }
 
-func (self *KeyValueSet) getVersionInfo(id VersionID) (map[string]interface{}, error) {
+func (self *ValueSet) getVersionInfo(id VersionID) (map[string]interface{}, error) {
 
 	version := make(map[string]interface{})
 	err := self.db.View(func(tx *bolt.Tx) error {
@@ -359,7 +359,7 @@ func (self *KeyValueSet) getVersionInfo(id VersionID) (map[string]interface{}, e
 	return version, nil
 }
 
-func (self *KeyValueSet) LoadVersion(id VersionID) error {
+func (self *ValueSet) LoadVersion(id VersionID) error {
 
 	if cv, _ := self.GetCurrentVersion(); cv == id {
 		return nil
@@ -433,7 +433,7 @@ func (self *KeyValueSet) LoadVersion(id VersionID) error {
 	return err
 }
 
-func (self *KeyValueSet) GetLatestVersion() (VersionID, error) {
+func (self *ValueSet) GetLatestVersion() (VersionID, error) {
 
 	//read the last version we created
 	vp, err := self.GetOrCreateKey(itob(VERSIONS))
@@ -443,7 +443,7 @@ func (self *KeyValueSet) GetLatestVersion() (VersionID, error) {
 	return vp.LatestVersion(), nil
 }
 
-func (self *KeyValueSet) GetCurrentVersion() (VersionID, error) {
+func (self *ValueSet) GetCurrentVersion() (VersionID, error) {
 
 	//read the last version we created
 	var currentVersion uint64
@@ -463,7 +463,7 @@ func (self *KeyValueSet) GetCurrentVersion() (VersionID, error) {
 	return VersionID(currentVersion), err
 }
 
-func (self *KeyValueSet) RemoveVersionsUpTo(ID VersionID) error {
+func (self *ValueSet) RemoveVersionsUpTo(ID VersionID) error {
 
 	cv, _ := self.GetCurrentVersion()
 	if cv < ID {
@@ -544,7 +544,7 @@ func (self *KeyValueSet) RemoveVersionsUpTo(ID VersionID) error {
 	return err
 }
 
-func (self *KeyValueSet) RemoveVersionsUpFrom(ID VersionID) error {
+func (self *ValueSet) RemoveVersionsUpFrom(ID VersionID) error {
 
 	cv, _ := self.GetCurrentVersion()
 	if cv > ID {
@@ -636,13 +636,13 @@ func (self *KeyValueSet) RemoveVersionsUpFrom(ID VersionID) error {
  * Key-Value functions
  * ********************************************************************************
  */
-func (self *KeyValueSet) HasKey(key []byte) bool {
+func (self *ValueSet) HasKey(key []byte) bool {
 
-	pair := KeyValuePair{self.db, self.dbkey, self.setkey, key}
+	pair := Value{self.db, self.dbkey, self.setkey, key}
 	return pair.IsValid()
 }
 
-func (self *KeyValueSet) GetOrCreateKey(key []byte) (*KeyValuePair, error) {
+func (self *ValueSet) GetOrCreateKey(key []byte) (*Value, error) {
 
 	if !self.HasKey(key) {
 
@@ -680,10 +680,10 @@ func (self *KeyValueSet) GetOrCreateKey(key []byte) (*KeyValuePair, error) {
 		}
 	}
 
-	return &KeyValuePair{self.db, self.dbkey, self.setkey, key}, nil
+	return &Value{self.db, self.dbkey, self.setkey, key}, nil
 }
 
-func (self *KeyValueSet) RemoveKey(key []byte) error {
+func (self *ValueSet) RemoveKey(key []byte) error {
 
 	if !self.HasKey(key) {
 		return fmt.Errorf("key does not exists, cannot be removed")
@@ -702,14 +702,14 @@ func (self *KeyValueSet) RemoveKey(key []byte) error {
  * Pair functions
  * ********************************************************************************
  */
-type KeyValuePair struct {
+type Value struct {
 	db     *bolt.DB
 	dbkey  []byte
 	setkey [][]byte
 	key    []byte
 }
 
-func (self *KeyValuePair) Write(value interface{}) error {
+func (self *Value) Write(value interface{}) error {
 
 	//check if we are allowed to write: are we in HEAD?
 	err := self.db.View(func(tx *bolt.Tx) error {
@@ -751,7 +751,7 @@ func (self *KeyValuePair) Write(value interface{}) error {
 // - setup correctly and writeable/readable
 // - is available in currently load version
 //Note: True does not mean that data was written and reading makes sense
-func (self *KeyValuePair) IsValid() bool {
+func (self *Value) IsValid() bool {
 
 	if self.db == nil {
 		return false
@@ -781,7 +781,7 @@ func (self *KeyValuePair) IsValid() bool {
 	return result
 }
 
-func (self *KeyValuePair) Read() (interface{}, error) {
+func (self *Value) Read() (interface{}, error) {
 
 	var result interface{}
 	err := self.db.View(func(tx *bolt.Tx) error {
@@ -814,7 +814,7 @@ func (self *KeyValuePair) Read() (interface{}, error) {
 	return result, err
 }
 
-func (self *KeyValuePair) Remove() bool {
+func (self *Value) Remove() bool {
 
 	//removing does not mean to delete everything. We need the data for loading older
 	//versions. It just means we set it as "not existing".
@@ -829,7 +829,7 @@ func (self *KeyValuePair) Remove() bool {
 	return err == nil
 }
 
-func (self *KeyValuePair) CurrentVersion() VersionID {
+func (self *Value) CurrentVersion() VersionID {
 
 	var version uint64
 	self.db.View(func(tx *bolt.Tx) error {
@@ -845,7 +845,7 @@ func (self *KeyValuePair) CurrentVersion() VersionID {
 	return VersionID(version)
 }
 
-func (self *KeyValuePair) LatestVersion() VersionID {
+func (self *Value) LatestVersion() VersionID {
 
 	var version uint64 = 0
 	found := false

@@ -3,13 +3,13 @@
  * Datastore: A folder that holds all the relevant data and in which a multitude of
  *            different databases can be placed. The datastore handles the creation
  *            and management of all different databases
- * Database:  Special type of storage with unique properties, e.g. KeyValue database,
+ * Database:  Special type of storage with unique properties, e.g. ValueType database,
  *            relational database etc. A database lives within a Datastorage and is
  *            managed by it. It provides access to its functionality in sub entries,
  *            meaning it provides its special storage for multiple keys.
  * Set:       A set in a database for a certain key. The Database has a set for
  *            each key. Set means seperated group, and can contain a hughe amount
- *            of data. E.g. a Set for a KeyValue database is just a group of keys,
+ *            of data. E.g. a Set for a ValueType database is just a group of keys,
  *            and can have unlimited key value pairs.
  *
  */
@@ -42,8 +42,8 @@ type Set interface {
 type StorageType int
 
 const (
-	KeyValue StorageType = 1
-	MapType  StorageType = 2
+	ValueType StorageType = 1
+	MapType   StorageType = 2
 )
 
 func NewDatastore(path string) (*Datastore, error) {
@@ -62,7 +62,7 @@ func NewDatastore(path string) (*Datastore, error) {
 		return nil, err
 	}
 
-	keyvalue, err := NewKeyValueDatabase(db)
+	keyvalue, err := NewValueDatabase(db)
 	if err != nil {
 		db.Close()
 		return nil, err
@@ -75,7 +75,7 @@ func NewDatastore(path string) (*Datastore, error) {
 	}
 
 	stores := make(map[StorageType]DataBase, 0)
-	stores[KeyValue] = keyvalue
+	stores[ValueType] = keyvalue
 	stores[MapType] = mapdb
 
 	return &Datastore{db, stores}, nil

@@ -10,7 +10,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestKeyValueData(t *testing.T) {
+func TestValueData(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
@@ -22,9 +22,9 @@ func TestKeyValueData(t *testing.T) {
 		defer store.Close()
 		So(err, ShouldBeNil)
 
-		db := store.GetDatabase(KeyValue)
+		db := store.GetDatabase(ValueType)
 		So(db, ShouldNotBeNil)
-		_, ok := db.(*KeyValueDatabase)
+		_, ok := db.(*ValueDatabase)
 		So(ok, ShouldBeTrue)
 
 		Convey("sets can be creaded and deleted,", func() {
@@ -45,7 +45,7 @@ func TestKeyValueData(t *testing.T) {
 		Convey("to which data can be written and restored.", func() {
 
 			name := makeSetFromString("test")
-			set := db.GetOrCreateSet(name).(*KeyValueSet)
+			set := db.GetOrCreateSet(name).(*ValueSet)
 
 			key1 := []byte("key1")
 			So(set.HasKey(key1), ShouldBeFalse)
@@ -89,19 +89,19 @@ func TestKeyValueData(t *testing.T) {
 	})
 }
 
-func TestKeyValueVersioning(t *testing.T) {
+func TestValueVersioning(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
 	fmt.Println(path)
 	//defer os.RemoveAll(path)
 
-	Convey("Setting up a KeyValue database with a single set,", t, func() {
+	Convey("Setting up a Value database with a single set,", t, func() {
 
 		store, _ := NewDatastore(path)
 		defer store.Close()
 
-		db := store.GetDatabase(KeyValue)
+		db := store.GetDatabase(ValueType)
 		set := db.GetOrCreateSet(makeSetFromString("test"))
 
 		Convey("initially all versioning commands must be callable.", func() {
@@ -132,7 +132,7 @@ func TestKeyValueVersioning(t *testing.T) {
 
 		Convey("Adding data to the set should not have version information", func() {
 
-			kvset, _ := set.(*KeyValueSet)
+			kvset, _ := set.(*ValueSet)
 			pair1, err := kvset.GetOrCreateKey([]byte("data1"))
 			So(err, ShouldBeNil)
 
@@ -167,7 +167,7 @@ func TestKeyValueVersioning(t *testing.T) {
 			//if we load the old version directly, the data pair should be invalid
 			err = set.LoadVersion(VersionID(1))
 			So(err, ShouldBeNil)
-			kvset, _ := set.(*KeyValueSet)
+			kvset, _ := set.(*ValueSet)
 			pair1, err := kvset.GetOrCreateKey([]byte("data1"))
 			So(err, ShouldNotBeNil)
 			So(pair1, ShouldBeNil)
@@ -216,7 +216,7 @@ func TestKeyValueVersioning(t *testing.T) {
 
 		Convey("It must be possible to delete older versions", func() {
 
-			kvset, _ := set.(*KeyValueSet)
+			kvset, _ := set.(*ValueSet)
 			pair1, _ := kvset.GetOrCreateKey([]byte("data1"))
 			pair2, _ := kvset.GetOrCreateKey([]byte("data2"))
 			pair3, _ := kvset.GetOrCreateKey([]byte("data3"))
@@ -268,7 +268,7 @@ func TestKeyValueVersioning(t *testing.T) {
 
 		Convey("as well as new versions", func() {
 
-			kvset, _ := set.(*KeyValueSet)
+			kvset, _ := set.(*ValueSet)
 			pair1, _ := kvset.GetOrCreateKey([]byte("data1"))
 			pair2, _ := kvset.GetOrCreateKey([]byte("data2"))
 			pair4, _ := kvset.GetOrCreateKey([]byte("data4"))
