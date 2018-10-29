@@ -638,17 +638,8 @@ func (self *KeyValueSet) RemoveVersionsUpFrom(ID VersionID) error {
  */
 func (self *KeyValueSet) HasKey(key []byte) bool {
 
-	var result bool
-	self.db.View(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(self.dbkey)
-		for _, sk := range self.setkey {
-			bucket = bucket.Bucket(sk)
-		}
-		result = bucket.Bucket(key) != nil
-		return nil
-	})
-
-	return result
+	pair := KeyValuePair{self.db, self.dbkey, self.setkey, key}
+	return pair.IsValid()
 }
 
 func (self *KeyValueSet) GetOrCreateKey(key []byte) (*KeyValuePair, error) {
@@ -775,6 +766,7 @@ func (self *KeyValuePair) IsValid() bool {
 		}
 		if bucket == nil {
 			result = false
+			return nil
 		}
 		cur := bucket.Get(itob(CURRENT))
 		if cur == nil || btoi(cur) == INVALID {

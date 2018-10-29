@@ -169,12 +169,8 @@ func TestKeyValueVersioning(t *testing.T) {
 			So(err, ShouldBeNil)
 			kvset, _ := set.(*KeyValueSet)
 			pair1, err := kvset.GetOrCreateKey([]byte("data1"))
-			So(err, ShouldBeNil)
-			So(pair1.IsValid(), ShouldBeFalse)
-			_, err = pair1.Read()
 			So(err, ShouldNotBeNil)
-			err = pair1.Write("some data")
-			So(err, ShouldNotBeNil)
+			So(pair1, ShouldBeNil)
 
 			//new data should not be creatable
 			pair2, err := kvset.GetOrCreateKey([]byte("data2"))
@@ -187,6 +183,8 @@ func TestKeyValueVersioning(t *testing.T) {
 
 			//we should be able to get back the first values
 			err = set.LoadVersion(VersionID(2))
+			So(err, ShouldBeNil)
+			pair1, err = kvset.GetOrCreateKey([]byte("data1"))
 			So(err, ShouldBeNil)
 			So(pair1.IsValid(), ShouldBeTrue)
 			data, err := pair1.Read()

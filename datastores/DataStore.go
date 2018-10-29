@@ -7,7 +7,7 @@
  *            relational database etc. A database lives within a Datastorage and is
  *            managed by it. It provides access to its functionality in sub entries,
  *            meaning it provides its special storage for multiple keys.
- * Set:     A set in a database for a certain key. The Database has a set for
+ * Set:       A set in a database for a certain key. The Database has a set for
  *            each key. Set means seperated group, and can contain a hughe amount
  *            of data. E.g. a Set for a KeyValue database is just a group of keys,
  *            and can have unlimited key value pairs.

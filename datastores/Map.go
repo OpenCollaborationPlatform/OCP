@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/boltdb/bolt"
@@ -63,10 +64,17 @@ func (self MapDatabase) GetOrCreateSet(set [32]byte) Set {
 		//make sure the bucket exists
 		self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
-			_, err := bucket.CreateBucketIfNotExists(set[:])
+			bucket, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
 				return err
 			}
+
+			//setup the basic structure
+			err = bucket.Put(itob(CURRENT), itob(HEAD))
+			if err != nil {
+				return err
+			}
+			_, err = bucket.CreateBucketIfNotExists(itob(VERSIONS))
 
 			return nil
 		})
@@ -110,10 +118,63 @@ type MapSet struct {
  */
 func (self *MapSet) IsValid() bool {
 
-	return false
+	return true
 }
 
 func (self *MapSet) Print() {
+
+	if !self.IsValid() {
+		fmt.Println("Invalid set")
+		return
+	}
+
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		bucket = bucket.Bucket(self.setkey)
+
+		bucket.ForEach(func(k []byte, v []byte) error {
+
+			if bytes.Equal(k, itob(CURRENT)) {
+				if btoi(v) == HEAD {
+					fmt.Printf("CURRENT: HEAD\n")
+				} else {
+					fmt.Printf("CURRENT: %v\n", btoi(v))
+				}
+
+			} else if bytes.Equal(k, itob(VERSIONS)) {
+
+				fmt.Println("VERSIONS:")
+				//print the versions out
+				subbucket := bucket.Bucket(k)
+				subbucket.ForEach(func(sk []byte, sv []byte) error {
+					inter, _ := getInterface(sv)
+					data := inter.(map[string]interface{})
+					//build the versioning string
+					str := ""
+					for mk, mv := range data {
+						str = str + string(stob(mk)) + ": %v,  "
+						mvid := stoi(mv.(string))
+						if mvid == INVALID {
+							str = fmt.Sprintf(str, "INVALID")
+						} else {
+							str = fmt.Sprintf(str, mvid)
+						}
+					}
+
+					fmt.Printf("    %v: %v\n", btoi(sk), str)
+					return nil
+				})
+
+			} else {
+
+				kvset := KeyValueSet{self.db, self.dbkey, [][]byte{self.setkey, k}}
+				kvset.Print()
+			}
+			return nil
+		})
+		return nil
+	})
 
 }
 
@@ -140,7 +201,20 @@ func (self *MapSet) GetLatestVersion() (VersionID, error) {
 
 func (self *MapSet) GetCurrentVersion() (VersionID, error) {
 
-	return VersionID(INVALID), nil
+	var version uint64
+	err := self.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		bucket = bucket.Bucket(self.setkey)
+
+		val := bucket.Get(itob(CURRENT))
+		if val == nil {
+			return fmt.Errorf("No current version set")
+		}
+		version = btoi(val)
+		return nil
+	})
+
+	return VersionID(version), err
 }
 
 func (self *MapSet) RemoveVersionsUpTo(ID VersionID) error {
@@ -154,7 +228,7 @@ func (self *MapSet) RemoveVersionsUpFrom(ID VersionID) error {
 }
 
 /*
- * Key-Value functions
+ * Map functions
  * ********************************************************************************
  */
 func (self *MapSet) HasMap(key []byte) bool {
