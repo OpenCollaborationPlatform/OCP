@@ -566,9 +566,13 @@ func newMap(db *bolt.DB, dbkey []byte, mapkeys [][]byte) Map {
 	return Map{kv}
 }
 
-func (self *Map) Write(key []byte, value interface{}) error {
+func (self *Map) Write(key interface{}, value interface{}) error {
 
-	pair, err := self.kvset.GetOrCreateKey(key)
+	k, err := getBytes(key)
+	if err != nil {
+		return err
+	}
+	pair, err := self.kvset.GetOrCreateKey(k)
 	if err != nil {
 		return err
 	}
@@ -580,23 +584,35 @@ func (self *Map) IsValid() bool {
 	return self.kvset.IsValid()
 }
 
-func (self *Map) HasKey(key []byte) bool {
+func (self *Map) HasKey(key interface{}) bool {
 
-	return self.kvset.HasKey(key)
+	k, err := getBytes(key)
+	if err != nil {
+		return false
+	}
+	return self.kvset.HasKey(k)
 }
 
-func (self *Map) Read(key []byte) (interface{}, error) {
+func (self *Map) Read(key interface{}) (interface{}, error) {
 
-	pair, err := self.kvset.GetOrCreateKey(key)
+	k, err := getBytes(key)
+	if err != nil {
+		return nil, err
+	}
+	pair, err := self.kvset.GetOrCreateKey(k)
 	if err != nil {
 		return nil, err
 	}
 	return pair.Read()
 }
 
-func (self *Map) Remove(key []byte) bool {
+func (self *Map) Remove(key interface{}) bool {
 
-	return self.kvset.removeKey(key) == nil
+	k, err := getBytes(key)
+	if err != nil {
+		return false
+	}
+	return self.kvset.removeKey(k) == nil
 }
 
 func (self *Map) CurrentVersion() VersionID {
