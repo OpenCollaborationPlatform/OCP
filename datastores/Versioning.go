@@ -29,6 +29,7 @@ func (self VersionID) IsValid() bool {
  */
 type VersionedData interface {
 	HasUpdates() bool
+	ResetHead()
 	FixStateAsVersion() (VersionID, error)
 	LoadVersion(id VersionID) error
 	GetLatestVersion() (VersionID, error)
@@ -73,6 +74,10 @@ func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) Set {
 func (self *VersionManagerImp) HasUpdates() bool {
 
 	return false
+}
+
+func (self *VersionManagerImp) ResetHead() {
+
 }
 
 func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {

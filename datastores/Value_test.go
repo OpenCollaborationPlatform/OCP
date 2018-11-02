@@ -133,8 +133,10 @@ func TestValueVersioning(t *testing.T) {
 		Convey("Adding data to the set should not have version information", func() {
 
 			kvset, _ := set.(*ValueSet)
+
 			So(kvset.HasUpdates(), ShouldBeFalse)
 			pair1, err := kvset.GetOrCreateKey([]byte("data1"))
+
 			So(kvset.HasUpdates(), ShouldBeTrue)
 			So(err, ShouldBeNil)
 
@@ -142,6 +144,9 @@ func TestValueVersioning(t *testing.T) {
 			So(pair1.CurrentVersion().IsHead(), ShouldBeTrue)
 			So(pair1.LatestVersion().IsValid(), ShouldBeFalse)
 			So(pair1.HasUpdates(), ShouldBeTrue)
+			data, err := pair1.Read()
+			So(err, ShouldNotBeNil)
+			So(data, ShouldBeNil)
 
 			pair1.Write("hello guys")
 			So(pair1.IsValid(), ShouldBeTrue)

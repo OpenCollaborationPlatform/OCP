@@ -2,7 +2,6 @@
 package datastore
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -168,16 +167,11 @@ func TestMapData(t *testing.T) {
 
 			name := makeSetFromString("test")
 			mset := db.GetOrCreateSet(name).(*MapSet)
-
-			fmt.Println("\n\n********************************************\n")
-			mset.Print()
+			mp, _ := mset.GetOrCreateMap([]byte("mymap"))
 
 			So(mset.RemoveVersionsUpTo(VersionID(2)), ShouldBeNil)
 			err := mset.LoadVersion(VersionID(1))
 			So(err, ShouldNotBeNil)
-
-			fmt.Println("\n\n********************************************\n")
-			mset.Print()
 
 			So(mset.RemoveVersionsUpFrom(VersionID(2)), ShouldNotBeNil)
 			So(mset.LoadVersion(VersionID(2)), ShouldBeNil)
@@ -185,9 +179,16 @@ func TestMapData(t *testing.T) {
 			err = mset.LoadVersion(VersionID(3))
 			So(err, ShouldNotBeNil)
 
-			fmt.Println("\n\n********************************************\n")
-			mset.Print()
-
+			//check if we can reset heads
+			So(mset.LoadVersion(VersionID(HEAD)), ShouldBeNil)
+			key3 := []byte("key3")
+			So(mp.Write(key3, 9.38), ShouldBeNil)
+			mset.ResetHead()
+			data, err := mp.Read(key3)
+			So(err, ShouldBeNil)
+			val, ok := data.(float64)
+			So(ok, ShouldBeTrue)
+			So(val, ShouldAlmostEqual, 1.34)
 		})
 	})
 }

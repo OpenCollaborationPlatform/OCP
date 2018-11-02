@@ -225,6 +225,14 @@ func (self *MapSet) HasUpdates() bool {
 	return false
 }
 
+func (self *MapSet) ResetHead() {
+
+	maps := self.collectMaps()
+	for _, mp := range maps {
+		mp.kvset.ResetHead()
+	}
+}
+
 func (self *MapSet) FixStateAsVersion() (VersionID, error) {
 
 	//check if opertion is possible

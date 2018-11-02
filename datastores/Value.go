@@ -50,9 +50,14 @@ const (
 
 var INVALID_VALUE = make([]byte, 0)
 
+//True if val is INVALID_VALUE. False if any other (including nil)
 func isInvalid(val []byte) bool {
 
-	return (val != nil) && (len(val) == 0)
+	//nil is valid
+	if val == nil {
+		return false
+	}
+	return bytes.Equal(val, INVALID_VALUE)
 }
 
 func NewValueDatabase(db *bolt.DB) (*ValueDatabase, error) {
@@ -253,9 +258,9 @@ func (self *ValueSet) Print(params ...int) {
 	})
 }
 
-func (self *ValueSet) HasUpdates() bool {
+func (self *ValueSet) collectValues() []Value {
 
-	updates := false
+	values := make([]Value, 0)
 	self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
@@ -263,41 +268,67 @@ func (self *ValueSet) HasUpdates() bool {
 			bucket = bucket.Bucket(bkey)
 		}
 
-		c := bucket.Cursor()
-		for key, val := c.First(); key != nil; key, val = c.Next() {
+		bucket.ForEach(func(k []byte, v []byte) error {
 
-			if bytes.Equal(key, itob(VERSIONS)) {
-				//if there is no version we always need a update, by definition update
-				//is needed if there is a change to the former version
-				subbucket := bucket.Bucket(key)
-				if subbucket.Sequence() == 0 {
-					updates = true
-					return nil
-				}
-
-			} else if val == nil {
-
-				subbucket := bucket.Bucket(key)
-				cur := subbucket.Get(itob(HEAD))
-
-				//if there is no version available yet we definitly have updates
-				if subbucket.Sequence() == 0 {
-					updates = true
-					return nil
-				}
-
-				old := subbucket.Get(itob(subbucket.Sequence()))
-
-				if !bytes.Equal(cur, old) {
-					updates = true
-					return nil
-				}
+			if !bytes.Equal(k, itob(VERSIONS)) && v == nil {
+				key := make([]byte, len(k))
+				copy(key, k)
+				val := Value{self.db, self.dbkey, self.setkey, key}
+				values = append(values, val)
 			}
+			return nil
+		})
+		return nil
+	})
+	return values
+}
+
+func (self *ValueSet) HasUpdates() bool {
+
+	updates := false
+	//check if there are versions available already
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, itob(VERSIONS)) {
+			bucket = bucket.Bucket(bkey)
+		}
+		//if there is no version we always need a update, by definition update
+		//is needed if there is a change to the former version
+		if bucket.Sequence() == 0 {
+			updates = true
 		}
 		return nil
 	})
 
+	//check if the individual values have updates
+	if !updates {
+		values := self.collectValues()
+		for _, val := range values {
+			if val.HasUpdates() {
+				return true
+			}
+		}
+	}
+
 	return updates
+}
+
+func (self *ValueSet) ResetHead() {
+
+	values := self.collectValues()
+	for _, val := range values {
+		latest := val.LatestVersion()
+		data, err := val.readVersion(latest)
+
+		//if the version is invalid we don't do anything
+		if err != nil {
+			return
+		}
+
+		//if head is invalid we do revert the change, hence no need to check!
+		val.Write(data)
+	}
 }
 
 func (self *ValueSet) FixStateAsVersion() (VersionID, error) {
@@ -760,7 +791,6 @@ func (self *ValueSet) GetOrCreateKey(key []byte) (*Value, error) {
 			if err != nil {
 				return err
 			}
-
 			return err
 		})
 		if err != nil {
@@ -875,6 +905,11 @@ func (self *Value) IsValid() bool {
 
 func (self *Value) Read() (interface{}, error) {
 
+	return self.readVersion(self.CurrentVersion())
+}
+
+func (self *Value) readVersion(ID VersionID) (interface{}, error) {
+
 	var result interface{}
 	err := self.db.View(func(tx *bolt.Tx) error {
 
@@ -882,12 +917,7 @@ func (self *Value) Read() (interface{}, error) {
 		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
-		//check if we are valid in the current version
-		cur := bucket.Get(itob(CURRENT))
-		if btoi(cur) == INVALID {
-			return fmt.Errorf("Key Value pair does not exist in currently loaded version")
-		}
-		data := bucket.Get(cur)
+		data := bucket.Get(itob(uint64(ID)))
 		if isInvalid(data) {
 			return fmt.Errorf("Key Value pair does not exist in currently loaded version")
 		}
@@ -970,9 +1000,6 @@ func (self *Value) LatestVersion() VersionID {
 
 func (self *Value) HasUpdates() bool {
 
-	if !self.IsValid() {
-		return false
-	}
 	updates := false
 	err := self.db.View(func(tx *bolt.Tx) error {
 
