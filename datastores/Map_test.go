@@ -54,6 +54,7 @@ func TestMapData(t *testing.T) {
 			So(mset.HasMap(mapkey), ShouldBeFalse)
 
 			mp, err := mset.GetOrCreateMap(mapkey)
+
 			So(err, ShouldBeNil)
 			So(mp, ShouldNotBeNil)
 			So(mset.HasMap(mapkey), ShouldBeTrue)
@@ -94,6 +95,38 @@ func TestMapData(t *testing.T) {
 			So(mp.HasKey(key1), ShouldBeFalse)
 			_, err = mp.Read(key1)
 			So(err, ShouldNotBeNil)
+		})
+
+		Convey("and versioning of that map data works well", func() {
+
+			name := makeSetFromString("test")
+			mset := db.GetOrCreateSet(name).(*MapSet)
+			mp, _ := mset.GetOrCreateMap([]byte("mymap"))
+
+			So(mp.HasUpdates(), ShouldBeTrue)
+
+			oldversion, err := mset.FixStateAsVersion()
+			So(err, ShouldBeNil)
+			So(oldversion, ShouldEqual, 1)
+			So(mp.HasUpdates(), ShouldBeFalse)
+
+			key1 := []byte("key1")
+			So(mp.HasKey(key1), ShouldBeFalse)
+			key2 := []byte("key2")
+			So(mp.HasKey(key2), ShouldBeTrue)
+
+			key3 := []byte("key3")
+			mp.Write(key3, 1.34)
+			newversion, err := mset.FixStateAsVersion()
+			So(err, ShouldBeNil)
+
+			So(mp.HasKey(key3), ShouldBeTrue)
+			err = mset.LoadVersion(oldversion)
+			So(err, ShouldBeNil)
+			So(mp.HasKey(key3), ShouldBeFalse)
+
+			mset.LoadVersion(newversion)
+
 		})
 	})
 }

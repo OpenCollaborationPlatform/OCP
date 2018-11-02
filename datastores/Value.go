@@ -170,11 +170,18 @@ func (self *ValueSet) IsValid() bool {
 	return result
 }
 
-func (self *ValueSet) Print() {
+func (self *ValueSet) Print(params ...int) {
 
 	if !self.IsValid() {
 		fmt.Println("Invalid set")
 		return
+	}
+
+	indent := ""
+	if len(params) > 0 {
+		for i := 0; i < params[0]; i++ {
+			indent = indent + "\t"
+		}
 	}
 
 	self.db.View(func(tx *bolt.Tx) error {
@@ -188,20 +195,20 @@ func (self *ValueSet) Print() {
 
 			if bytes.Equal(k, itob(CURRENT)) {
 				if btoi(v) == HEAD {
-					fmt.Printf("CURRENT: HEAD\n")
+					fmt.Printf("%sCURRENT: HEAD\n", indent)
 				} else {
-					fmt.Printf("CURRENT: %v\n", btoi(v))
+					fmt.Printf("%sCURRENT: %v\n", btoi(v), indent)
 				}
 
 			} else if bytes.Equal(k, itob(VERSIONS)) {
-				fmt.Println("VERSIONS:")
+				fmt.Printf("%sVERSIONS:\n", indent)
 				//print the versions out
 				subbucket := bucket.Bucket(k)
 				subbucket.ForEach(func(sk []byte, sv []byte) error {
 					inter, _ := getInterface(sv)
 					data := inter.(map[string]interface{})
 					//build the versioning string
-					str := ""
+					str := "["
 					for mk, mv := range data {
 						str = str + string(stob(mk)) + ": %v,  "
 						mvid := stoi(mv.(string))
@@ -212,27 +219,27 @@ func (self *ValueSet) Print() {
 						}
 					}
 
-					fmt.Printf("    %v: %v\n", btoi(sk), str)
+					fmt.Printf("%s\t%v: %v]\n", indent, btoi(sk), str)
 					return nil
 				})
 			} else {
-				fmt.Printf("%s:\n", string(k))
+				fmt.Printf("%s%s:\n", indent, string(k))
 				subbucket := bucket.Bucket(k)
 				subbucket.ForEach(func(sk []byte, sv []byte) error {
 					inter, _ := getInterface(sv)
 					key := btoi(sk)
 					if key == HEAD {
-						fmt.Printf("    HEAD: %v\n", inter)
+						fmt.Printf("%s\tHEAD: %v\n", indent, inter)
 					} else if key == CURRENT {
 						if btoi(sv) == HEAD {
-							fmt.Printf("    CURRENT: HEAD\n")
+							fmt.Printf("%s\tCURRENT: HEAD\n", indent)
 						} else if btoi(sv) == INVALID {
-							fmt.Printf("    CURRENT: INVALID\n")
+							fmt.Printf("%s\tCURRENT: INVALID\n", indent)
 						} else {
-							fmt.Printf("    CURRENT: %v\n", btoi(sv))
+							fmt.Printf("%s\tCURRENT: %v\n", btoi(sv), indent)
 						}
 					} else {
-						fmt.Printf("    %v: %v\n", key, inter)
+						fmt.Printf("%s\t%v: %v\n", indent, key, inter)
 					}
 					return nil
 				})
@@ -244,8 +251,47 @@ func (self *ValueSet) Print() {
 	})
 }
 
-func (self *ValueSet) FixStateAsVersion() (VersionID, error) {
+func (self *ValueSet) HasUpdates() bool {
 
+	updates := false
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range self.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		c := bucket.Cursor()
+		for key, val := c.First(); key != nil; key, val = c.Next() {
+
+			//do nothing for versions bucket or any key value pair (only buckets are
+			// versioned key value pairs)
+			if !bytes.Equal(key, itob(VERSIONS)) && val == nil {
+
+				subbucket := bucket.Bucket(key)
+				cur := subbucket.Get(itob(HEAD))
+
+				//if there is no version available yet we definitly have updates
+				if subbucket.Sequence() == 0 {
+					updates = true
+					return nil
+				}
+
+				old := subbucket.Get(itob(subbucket.Sequence()))
+
+				if !bytes.Equal(cur, old) {
+					updates = true
+					return nil
+				}
+			}
+		}
+		return nil
+	})
+
+	return updates
+}
+
+func (self *ValueSet) FixStateAsVersion() (VersionID, error) {
 	//check if opertion is possible
 	cv, err := self.GetCurrentVersion()
 	if err != nil {
@@ -507,7 +553,10 @@ func (self *ValueSet) RemoveVersionsUpTo(ID VersionID) error {
 				keyBucket.ForEach(func(k, v []byte) error {
 					val := btoi(k)
 					if val < valuedata {
-						todelete = append(todelete, k)
+						//deep copy of key, as the slice is invalid outside foreach
+						keycopy := make([]byte, len(k))
+						copy(keycopy, k)
+						todelete = append(todelete, keycopy)
 					}
 					return nil
 				})
@@ -531,7 +580,10 @@ func (self *ValueSet) RemoveVersionsUpTo(ID VersionID) error {
 		bucket.ForEach(func(k, v []byte) error {
 			val := btoi(k)
 			if val < uint64(ID) {
-				todelete = append(todelete, k)
+				//deep copy of key, as the slice is invalid outside foreach
+				keycopy := make([]byte, len(k))
+				copy(keycopy, k)
+				todelete = append(todelete, keycopy)
 			}
 			return nil
 		})
@@ -589,7 +641,10 @@ func (self *ValueSet) RemoveVersionsUpFrom(ID VersionID) error {
 					err = subbucket.ForEach(func(k, v []byte) error {
 						val := btoi(k)
 						if val != CURRENT && val != HEAD && val > idval {
-							todelete = append(todelete, k)
+							//deep copy of key, as the slice is invalid outside foreach
+							keycopy := make([]byte, len(k))
+							copy(keycopy, k)
+							todelete = append(todelete, keycopy)
 						}
 						return nil
 					})
@@ -599,7 +654,8 @@ func (self *ValueSet) RemoveVersionsUpFrom(ID VersionID) error {
 					for _, k := range todelete {
 						subbucket.Delete(k)
 					}
-
+					//make sure the sequence is always set to the highest version
+					subbucket.SetSequence(idval)
 				}
 			}
 		}
@@ -618,7 +674,10 @@ func (self *ValueSet) RemoveVersionsUpFrom(ID VersionID) error {
 		bucket.ForEach(func(k, v []byte) error {
 			val := btoi(k)
 			if val > uint64(ID) {
-				todelete = append(todelete, k)
+				//deep copy of key, as the slice is invalid outside foreach
+				keycopy := make([]byte, len(k))
+				copy(keycopy, k)
+				todelete = append(todelete, keycopy)
 			}
 			return nil
 		})
@@ -683,7 +742,7 @@ func (self *ValueSet) GetOrCreateKey(key []byte) (*Value, error) {
 	return &Value{self.db, self.dbkey, self.setkey, key}, nil
 }
 
-func (self *ValueSet) RemoveKey(key []byte) error {
+func (self *ValueSet) removeKey(key []byte) error {
 
 	if !self.HasKey(key) {
 		return fmt.Errorf("key does not exists, cannot be removed")
@@ -692,14 +751,18 @@ func (self *ValueSet) RemoveKey(key []byte) error {
 	if err != nil {
 		return err
 	}
-	if !pair.Remove() {
+	if !pair.remove() {
 		return fmt.Errorf("Unable to remove key")
 	}
 	return nil
 }
 
+func (self *ValueSet) getSetKey() []byte {
+	return self.setkey[len(self.setkey)-1]
+}
+
 /*
- * Pair functions
+ * Value functions
  * ********************************************************************************
  */
 type Value struct {
@@ -814,7 +877,7 @@ func (self *Value) Read() (interface{}, error) {
 	return result, err
 }
 
-func (self *Value) Remove() bool {
+func (self *Value) remove() bool {
 
 	//removing does not mean to delete everything. We need the data for loading older
 	//versions. It just means we set it as "not existing".
@@ -874,6 +937,39 @@ func (self *Value) LatestVersion() VersionID {
 	}
 
 	return VersionID(version)
+}
+
+func (self *Value) HasUpdates() bool {
+
+	if !self.IsValid() {
+		return false
+	}
+	updates := false
+	err := self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		//if there is no version available yet we definitly have updates
+		if bucket.Sequence() == 0 {
+			updates = true
+			return nil
+		}
+
+		cur := bucket.Get(itob(HEAD))
+		old := bucket.Get(itob(bucket.Sequence()))
+
+		updates = !bytes.Equal(cur, old)
+
+		return nil
+	})
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return updates
 }
 
 //helper functions

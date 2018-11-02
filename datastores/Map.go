@@ -15,8 +15,8 @@ hirarchy.  Each ValueSet is a single map.
 Data layout of versioned map store:
 
 bucket(SetKey) [
-	entry(CURRENT) = HEAD
-	bucket(VERSIONS) [
+    entry(CURRENT) = HEAD
+	ValueSet(VERSIONS) [
 		entry(1) = Versionmap(key1->1, key2->1)
 		entry(2) = Versionmap(key1->2, key2->1)
 	]
@@ -121,11 +121,18 @@ func (self *MapSet) IsValid() bool {
 	return true
 }
 
-func (self *MapSet) Print() {
+func (self *MapSet) Print(params ...int) {
 
 	if !self.IsValid() {
 		fmt.Println("Invalid set")
 		return
+	}
+
+	indent := ""
+	if len(params) > 0 {
+		for i := 0; i < params[0]; i++ {
+			indent = indent + "\t"
+		}
 	}
 
 	self.db.View(func(tx *bolt.Tx) error {
@@ -137,21 +144,21 @@ func (self *MapSet) Print() {
 
 			if bytes.Equal(k, itob(CURRENT)) {
 				if btoi(v) == HEAD {
-					fmt.Printf("CURRENT: HEAD\n")
+					fmt.Printf("%sCURRENT: HEAD\n", indent)
 				} else {
-					fmt.Printf("CURRENT: %v\n", btoi(v))
+					fmt.Printf("%sCURRENT: %v\n", indent, btoi(v))
 				}
 
 			} else if bytes.Equal(k, itob(VERSIONS)) {
 
-				fmt.Println("VERSIONS:")
+				fmt.Printf("%sVERSIONS:\n", indent)
 				//print the versions out
 				subbucket := bucket.Bucket(k)
 				subbucket.ForEach(func(sk []byte, sv []byte) error {
 					inter, _ := getInterface(sv)
 					data := inter.(map[string]interface{})
 					//build the versioning string
-					str := ""
+					str := "["
 					for mk, mv := range data {
 						str = str + string(stob(mk)) + ": %v,  "
 						mvid := stoi(mv.(string))
@@ -162,14 +169,18 @@ func (self *MapSet) Print() {
 						}
 					}
 
-					fmt.Printf("    %v: %v\n", btoi(sk), str)
+					fmt.Printf("%s\t%v: %v]\n", indent, btoi(sk), str)
 					return nil
 				})
 
 			} else {
-
+				fmt.Println(string(k))
 				kvset := ValueSet{self.db, self.dbkey, [][]byte{self.setkey, k}}
-				kvset.Print()
+				if len(params) > 0 {
+					kvset.Print(1 + params[0])
+				} else {
+					kvset.Print(1)
+				}
 			}
 			return nil
 		})
@@ -178,25 +189,196 @@ func (self *MapSet) Print() {
 
 }
 
+func (self *MapSet) collectMaps() []Map {
+
+	maps := make([]Map, 0)
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		bucket = bucket.Bucket(self.setkey)
+
+		bucket.ForEach(func(k []byte, v []byte) error {
+
+			if !bytes.Equal(k, itob(VERSIONS)) && v == nil {
+				//key must be copied, as it gets invalid outside of ForEach
+				var key = make([]byte, len(k))
+				copy(key, k)
+				mp := newMap(self.db, self.dbkey, [][]byte{self.setkey, key})
+				maps = append(maps, mp)
+			}
+			return nil
+		})
+		return nil
+	})
+	return maps
+}
+
+func (self *MapSet) HasUpdates() bool {
+
+	//we cycle through all maps and check if they have updates
+	maps := self.collectMaps()
+	for _, mp := range maps {
+		if mp.HasUpdates() {
+			return true
+		}
+	}
+	return false
+}
+
 func (self *MapSet) FixStateAsVersion() (VersionID, error) {
 
-	return VersionID(INVALID), nil
+	//check if opertion is possible
+	cv, err := self.GetCurrentVersion()
+	if err != nil {
+		return VersionID(INVALID), err
+	}
+	if !cv.IsHead() {
+		return VersionID(INVALID), fmt.Errorf("Unable to create version if HEAD is not checked out")
+	}
+
+	//collect all versions we need for the current version
+	version := make(map[string]string, 0)
+	maps := self.collectMaps()
+	for _, mp := range maps {
+		if mp.HasUpdates() {
+			v, err := mp.kvset.FixStateAsVersion()
+			if err != nil {
+				return VersionID(INVALID), err
+			}
+
+			version[btos(mp.getMapKey())] = itos(uint64(v))
+
+		} else {
+			v := mp.CurrentVersion()
+			version[btos(mp.getMapKey())] = itos(uint64(v))
+		}
+	}
+
+	//write the new version into store
+	var currentVersion uint64
+	err = self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
+			bucket = bucket.Bucket(bkey)
+		}
+		data, err := getBytes(version)
+		if err != nil {
+			return err
+		}
+		currentVersion, err = bucket.NextSequence()
+		if err != nil {
+			return nil
+		}
+		bucket.Put(itob(currentVersion), data)
+		return nil
+	})
+
+	return VersionID(currentVersion), nil
 }
 
 func (self *MapSet) getVersionInfo(id VersionID) (map[string]interface{}, error) {
 
 	version := make(map[string]interface{})
+	err := self.db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range [][]byte{self.setkey, itob(VERSIONS)} {
+			bucket = bucket.Bucket(sk)
+		}
+		data := bucket.Get(itob(uint64(id)))
+		if data == nil || len(data) == 0 {
+			return fmt.Errorf("Version does not exist")
+		}
+		res, err := getInterface(data)
+		if err != nil {
+			return err
+		}
+		resmap, ok := res.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("Problem with parsing the saved data")
+		}
+		version = resmap
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 	return version, nil
 }
 
 func (self *MapSet) LoadVersion(id VersionID) error {
 
-	return nil
+	if cv, _ := self.GetCurrentVersion(); cv == id {
+		return nil
+	}
+
+	//grab the needed verion
+	var version map[string]interface{}
+	if !id.IsHead() {
+		var err error
+		version, err = self.getVersionInfo(id)
+		if err != nil {
+			return err
+		}
+	}
+
+	//load the versions of the individual maps
+	maps := self.collectMaps()
+	for _, mp := range maps {
+
+		if id.IsHead() {
+			mp.kvset.LoadVersion(id)
+
+		} else {
+			v, ok := version[btos(mp.getMapKey())]
+			if !ok {
+				return fmt.Errorf("Unable to load version information for %v", string(mp.getMapKey()))
+			}
+			s, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("Stored version information has wrong format")
+			}
+			mp.kvset.LoadVersion(VersionID(stoi(s)))
+		}
+	}
+
+	//write the current version
+	err := self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		bucket = bucket.Bucket(self.setkey)
+
+		return bucket.Put(itob(CURRENT), itob(uint64(id)))
+	})
+
+	return err
 }
 
 func (self *MapSet) GetLatestVersion() (VersionID, error) {
 
-	return VersionID(INVALID), nil
+	var version uint64 = 0
+	found := false
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
+			bucket = bucket.Bucket(bkey)
+		}
+		//look at each entry and get the largest version
+		bucket.ForEach(func(k, v []byte) error {
+			found = true
+			if btoi(k) > version {
+				version = btoi(k)
+			}
+			return nil
+		})
+		return nil
+	})
+
+	if !found {
+		return VersionID(INVALID), nil
+	}
+
+	return VersionID(version), nil
 }
 
 func (self *MapSet) GetCurrentVersion() (VersionID, error) {
@@ -263,17 +445,12 @@ func (self *MapSet) GetOrCreateMap(key []byte) (*Map, error) {
 			//get correct bucket
 			bucket := tx.Bucket(self.dbkey)
 			bucket = bucket.Bucket(self.setkey)
-			bucket, err = bucket.CreateBucketIfNotExists(key)
+			newbucket, err := bucket.CreateBucketIfNotExists(key)
 			if err != nil {
 				return err
 			}
-
-			//setup the basic structure
-			err = bucket.Put(itob(CURRENT), itob(HEAD))
-			if err != nil {
-				return err
-			}
-			_, err = bucket.CreateBucketIfNotExists(itob(VERSIONS))
+			newbucket.Put(itob(CURRENT), itob(HEAD))
+			newbucket.CreateBucketIfNotExists(itob(VERSIONS))
 
 			return err
 		})
@@ -283,12 +460,8 @@ func (self *MapSet) GetOrCreateMap(key []byte) (*Map, error) {
 		}
 	}
 
-	return newMap(self.db, self.dbkey, [][]byte{self.setkey, key}), nil
-}
-
-func (self *MapSet) RemoveMap(key []byte) error {
-
-	return nil
+	mp := newMap(self.db, self.dbkey, [][]byte{self.setkey, key})
+	return &mp, nil
 }
 
 /*
@@ -300,10 +473,10 @@ type Map struct {
 	kvset ValueSet
 }
 
-func newMap(db *bolt.DB, dbkey []byte, mapkeys [][]byte) *Map {
+func newMap(db *bolt.DB, dbkey []byte, mapkeys [][]byte) Map {
 
 	kv := ValueSet{db, dbkey, mapkeys}
-	return &Map{kv}
+	return Map{kv}
 }
 
 func (self *Map) Write(key []byte, value interface{}) error {
@@ -336,7 +509,7 @@ func (self *Map) Read(key []byte) (interface{}, error) {
 
 func (self *Map) Remove(key []byte) bool {
 
-	return self.kvset.RemoveKey(key) == nil
+	return self.kvset.removeKey(key) == nil
 }
 
 func (self *Map) CurrentVersion() VersionID {
@@ -349,4 +522,13 @@ func (self *Map) LatestVersion() VersionID {
 
 	v, _ := self.kvset.GetLatestVersion()
 	return v
+}
+
+func (self *Map) HasUpdates() bool {
+
+	return self.kvset.HasUpdates()
+}
+
+func (self *Map) getMapKey() []byte {
+	return self.kvset.getSetKey()
 }

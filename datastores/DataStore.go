@@ -7,10 +7,13 @@
  *            relational database etc. A database lives within a Datastorage and is
  *            managed by it. It provides access to its functionality in sub entries,
  *            meaning it provides its special storage for multiple keys.
- * Set:       A set in a database for a certain key. The Database has a set for
- *            each key. Set means seperated group, and can contain a hughe amount
- *            of data. E.g. a Set for a ValueType database is just a group of keys,
- *            and can have unlimited key value pairs.
+ * Set:       A set in a database for a certain key. Set means seperated group, and
+ *            can contain a hughe amount of data. E.g. a Set for a ValueType database
+ *            is a group of multiple Values, accessed by keys. A MapType is a group
+ *            of Maps, each accessed by a key. Keys in a set cannot be removed and
+ *            must be added at the beginning, bevor versioning, as they are not part
+ *            of the versioning process. Versioning happens inside the set, e.g.
+ *            for a ValueType set the individual values are versioned.
  *
  */
 package datastore
@@ -36,7 +39,7 @@ type Set interface {
 	VersionedData
 
 	IsValid() bool
-	Print()
+	Print(params ...int)
 }
 
 type StorageType int

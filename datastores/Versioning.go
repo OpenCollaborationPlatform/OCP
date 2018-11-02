@@ -28,6 +28,7 @@ func (self VersionID) IsValid() bool {
  *   (in general this means forking or removal of version data)
  */
 type VersionedData interface {
+	HasUpdates() bool
 	FixStateAsVersion() (VersionID, error)
 	LoadVersion(id VersionID) error
 	GetLatestVersion() (VersionID, error)
@@ -67,6 +68,11 @@ func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) Set {
 		return self.store.GetOrCreateSet(sType, self.key)
 	}
 	return set
+}
+
+func (self *VersionManagerImp) HasUpdates() bool {
+
+	return false
 }
 
 func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
