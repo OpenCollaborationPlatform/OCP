@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -52,12 +53,16 @@ func TestMapData(t *testing.T) {
 
 			mapkey := []byte("mapkey")
 			So(mset.HasMap(mapkey), ShouldBeFalse)
+			So(mset.HasUpdates(), ShouldBeFalse)
 
 			mp, err := mset.GetOrCreateMap(mapkey)
-
 			So(err, ShouldBeNil)
 			So(mp, ShouldNotBeNil)
 			So(mset.HasMap(mapkey), ShouldBeTrue)
+
+			//new map means no version yet means there are updates
+			So(mp.HasUpdates(), ShouldBeTrue)
+			So(mset.HasUpdates(), ShouldBeTrue)
 		})
 
 		Convey("Maps can be created and data stored", func() {
@@ -150,6 +155,39 @@ func TestMapData(t *testing.T) {
 			version, err = mset.FixStateAsVersion()
 			So(err, ShouldBeNil)
 			So(version.IsValid(), ShouldBeTrue)
+			So(mset.LoadVersion(version), ShouldBeNil)
+			So(mp.HasKey(key1), ShouldBeFalse)
+			So(mp.HasKey(key4), ShouldBeTrue)
+			err = mset.LoadVersion(VersionID(HEAD))
+			So(err, ShouldBeNil)
+			So(mp.HasKey(key1), ShouldBeFalse)
+			So(mp.HasKey(key4), ShouldBeTrue)
+		})
+
+		Convey("Finally versions must be removable", func() {
+
+			name := makeSetFromString("test")
+			mset := db.GetOrCreateSet(name).(*MapSet)
+
+			fmt.Println("\n\n********************************************\n")
+			mset.Print()
+
+			So(mset.RemoveVersionsUpTo(VersionID(2)), ShouldBeNil)
+			err := mset.LoadVersion(VersionID(1))
+			So(err, ShouldNotBeNil)
+
+			fmt.Println("\n\n********************************************\n")
+			mset.Print()
+
+			So(mset.RemoveVersionsUpFrom(VersionID(2)), ShouldNotBeNil)
+			So(mset.LoadVersion(VersionID(2)), ShouldBeNil)
+			So(mset.RemoveVersionsUpFrom(VersionID(2)), ShouldBeNil)
+			err = mset.LoadVersion(VersionID(3))
+			So(err, ShouldNotBeNil)
+
+			fmt.Println("\n\n********************************************\n")
+			mset.Print()
+
 		})
 	})
 }

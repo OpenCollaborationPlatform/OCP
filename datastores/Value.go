@@ -197,7 +197,7 @@ func (self *ValueSet) Print(params ...int) {
 				if btoi(v) == HEAD {
 					fmt.Printf("%sCURRENT: HEAD\n", indent)
 				} else {
-					fmt.Printf("%sCURRENT: %v\n", btoi(v), indent)
+					fmt.Printf("%sCURRENT: %v\n", indent, btoi(v))
 				}
 
 			} else if bytes.Equal(k, itob(VERSIONS)) {
@@ -206,20 +206,22 @@ func (self *ValueSet) Print(params ...int) {
 				subbucket := bucket.Bucket(k)
 				subbucket.ForEach(func(sk []byte, sv []byte) error {
 					inter, _ := getInterface(sv)
-					data := inter.(map[string]interface{})
 					//build the versioning string
 					str := "["
-					for mk, mv := range data {
-						str = str + string(stob(mk)) + ": %v,  "
-						mvid := stoi(mv.(string))
-						if mvid == INVALID {
-							str = fmt.Sprintf(str, "INVALID")
-						} else {
-							str = fmt.Sprintf(str, mvid)
+					data, ok := inter.(map[string]interface{})
+					if ok {
+						for mk, mv := range data {
+							str = str + string(stob(mk)) + ": %v,  "
+							mvid := stoi(mv.(string))
+							if mvid == INVALID {
+								str = fmt.Sprintf(str, "INVALID")
+							} else {
+								str = fmt.Sprintf(str, mvid)
+							}
 						}
 					}
-
-					fmt.Printf("%s\t%v: %v]\n", indent, btoi(sk), str)
+					str = str + "]"
+					fmt.Printf("%s\t%v: %v\n", indent, btoi(sk), str)
 					return nil
 				})
 			} else {
@@ -236,7 +238,7 @@ func (self *ValueSet) Print(params ...int) {
 						} else if btoi(sv) == INVALID {
 							fmt.Printf("%s\tCURRENT: INVALID\n", indent)
 						} else {
-							fmt.Printf("%s\tCURRENT: %v\n", btoi(sv), indent)
+							fmt.Printf("%s\tCURRENT: %v\n", indent, btoi(sv))
 						}
 					} else {
 						fmt.Printf("%s\t%v: %v\n", indent, key, inter)
@@ -264,9 +266,16 @@ func (self *ValueSet) HasUpdates() bool {
 		c := bucket.Cursor()
 		for key, val := c.First(); key != nil; key, val = c.Next() {
 
-			//do nothing for versions bucket or any key value pair (only buckets are
-			// versioned key value pairs)
-			if !bytes.Equal(key, itob(VERSIONS)) && val == nil {
+			if bytes.Equal(key, itob(VERSIONS)) {
+				//if there is no version we always need a update, by definition update
+				//is needed if there is a change to the former version
+				subbucket := bucket.Bucket(key)
+				if subbucket.Sequence() == 0 {
+					updates = true
+					return nil
+				}
+
+			} else if val == nil {
 
 				subbucket := bucket.Bucket(key)
 				cur := subbucket.Get(itob(HEAD))
@@ -482,11 +491,31 @@ func (self *ValueSet) LoadVersion(id VersionID) error {
 func (self *ValueSet) GetLatestVersion() (VersionID, error) {
 
 	//read the last version we created
-	vp, err := self.GetOrCreateKey(itob(VERSIONS))
-	if err != nil {
-		return VersionID(INVALID), err
+	var version uint64 = 0
+	found := false
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, itob(VERSIONS)) {
+			bucket = bucket.Bucket(bkey)
+		}
+		//look at each entry and get the largest version
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			found = true
+			if val > version {
+				version = val
+			}
+			return nil
+		})
+		return nil
+	})
+
+	if !found {
+		return VersionID(INVALID), fmt.Errorf("No versions availble")
 	}
-	return vp.LatestVersion(), nil
+
+	return VersionID(version), nil
 }
 
 func (self *ValueSet) GetCurrentVersion() (VersionID, error) {

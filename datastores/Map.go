@@ -245,11 +245,13 @@ func (self *MapSet) FixStateAsVersion() (VersionID, error) {
 			if err != nil {
 				return VersionID(INVALID), err
 			}
-
 			version[btos(mp.getMapKey())] = itos(uint64(v))
 
 		} else {
-			v := mp.CurrentVersion()
+			v, err := mp.kvset.GetLatestVersion()
+			if err != nil {
+				return VersionID(INVALID), err
+			}
 			version[btos(mp.getMapKey())] = itos(uint64(v))
 		}
 	}
@@ -401,12 +403,97 @@ func (self *MapSet) GetCurrentVersion() (VersionID, error) {
 
 func (self *MapSet) RemoveVersionsUpTo(ID VersionID) error {
 
-	return nil
+	maps := self.collectMaps()
+	version, err := self.getVersionInfo(ID)
+	if err != nil {
+		return err
+	}
+
+	for _, mp := range maps {
+		//remove up to version
+		val := version[btos(mp.getMapKey())]
+		ival := stoi(val.(string))
+		err := mp.kvset.RemoveVersionsUpTo(VersionID(ival))
+		if err != nil {
+			return err
+		}
+	}
+
+	//remove the versions from the relevant bucket
+	err = self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range [][]byte{self.setkey, itob(VERSIONS)} {
+			bucket = bucket.Bucket(sk)
+		}
+
+		todelete := make([][]byte, 0)
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			if val < uint64(ID) {
+				//deep copy of key, as the slice is invalid outside foreach
+				keycopy := make([]byte, len(k))
+				copy(keycopy, k)
+				todelete = append(todelete, keycopy)
+			}
+			return nil
+		})
+		for _, k := range todelete {
+			bucket.Delete(k)
+		}
+
+		return nil
+	})
+
+	return err
 }
 
 func (self *MapSet) RemoveVersionsUpFrom(ID VersionID) error {
 
-	return nil
+	maps := self.collectMaps()
+	version, err := self.getVersionInfo(ID)
+	if err != nil {
+		return err
+	}
+
+	for _, mp := range maps {
+		//remove up to version
+		val := version[btos(mp.getMapKey())]
+		ival := stoi(val.(string))
+		fmt.Printf("Remove up from: %v\n", ival)
+		err := mp.kvset.RemoveVersionsUpFrom(VersionID(ival))
+		if err != nil {
+			return err
+		}
+	}
+
+	//remove the versions from the relevant bucket
+	err = self.db.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, sk := range [][]byte{self.setkey, itob(VERSIONS)} {
+			bucket = bucket.Bucket(sk)
+		}
+
+		todelete := make([][]byte, 0)
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			if val > uint64(ID) {
+				//deep copy of key, as the slice is invalid outside foreach
+				keycopy := make([]byte, len(k))
+				copy(keycopy, k)
+				todelete = append(todelete, keycopy)
+			}
+			return nil
+		})
+		for _, k := range todelete {
+			bucket.Delete(k)
+		}
+
+		return nil
+	})
+
+	return err
 }
 
 /*
