@@ -326,8 +326,16 @@ func (self *ValueSet) ResetHead() {
 			return
 		}
 
-		//if head is invalid we do revert the change, hence no need to check!
-		val.Write(data)
+		//normal write checks for invalid, but we want to override invalid too
+		self.db.Update(func(tx *bolt.Tx) error {
+
+			bucket := tx.Bucket(self.dbkey)
+			for _, bkey := range append(self.setkey, val.key) {
+				bucket = bucket.Bucket(bkey)
+			}
+			input, _ := getBytes(data)
+			return bucket.Put(itob(HEAD), input)
+		})
 	}
 }
 

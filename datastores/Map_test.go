@@ -189,6 +189,11 @@ func TestMapData(t *testing.T) {
 			val, ok := data.(float64)
 			So(ok, ShouldBeTrue)
 			So(val, ShouldAlmostEqual, 1.34)
+
+			mp.Remove(key3)
+			So(mp.HasKey(key3), ShouldBeFalse)
+			mset.ResetHead()
+			So(mp.HasKey(key3), ShouldBeTrue)
 		})
 	})
 }
