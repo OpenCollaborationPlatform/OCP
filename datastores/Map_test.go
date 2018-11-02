@@ -114,6 +114,7 @@ func TestMapData(t *testing.T) {
 			So(mp.HasKey(key1), ShouldBeFalse)
 			key2 := []byte("key2")
 			So(mp.HasKey(key2), ShouldBeTrue)
+			So(mp.Write(key2, "bye"), ShouldBeNil)
 
 			key3 := []byte("key3")
 			mp.Write(key3, 1.34)
@@ -124,9 +125,31 @@ func TestMapData(t *testing.T) {
 			err = mset.LoadVersion(oldversion)
 			So(err, ShouldBeNil)
 			So(mp.HasKey(key3), ShouldBeFalse)
+			val, err := mp.Read(key2)
+			So(err, ShouldBeNil)
+			So(val.(string), ShouldEqual, "hello")
 
-			mset.LoadVersion(newversion)
+			err = mset.LoadVersion(newversion)
+			So(err, ShouldBeNil)
+			So(mp.HasKey(key3), ShouldBeTrue)
+			val, err = mp.Read(key2)
+			So(err, ShouldBeNil)
+			So(val.(string), ShouldEqual, "bye")
 
+			key4 := []byte("key4")
+			So(mp.Write(key4, 1), ShouldNotBeNil)
+			version, err := mset.FixStateAsVersion()
+			So(err, ShouldNotBeNil)
+			So(version.IsValid(), ShouldBeFalse)
+
+			err = mset.LoadVersion(VersionID(HEAD))
+			So(err, ShouldBeNil)
+			So(mp.Write(key4, 1), ShouldBeNil)
+			So(mp.Remove(key2), ShouldBeTrue)
+
+			version, err = mset.FixStateAsVersion()
+			So(err, ShouldBeNil)
+			So(version.IsValid(), ShouldBeTrue)
 		})
 	})
 }
