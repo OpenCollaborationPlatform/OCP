@@ -763,6 +763,10 @@ func (self *ValueSet) RemoveVersionsUpFrom(ID VersionID) error {
  * Key-Value functions
  * ********************************************************************************
  */
+func (self ValueSet) GetType() StorageType {
+	return ValueType
+}
+
 func (self *ValueSet) HasKey(key []byte) bool {
 
 	pair := Value{self.db, self.dbkey, self.setkey, key}

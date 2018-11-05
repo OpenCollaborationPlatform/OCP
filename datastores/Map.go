@@ -508,6 +508,10 @@ func (self *MapSet) RemoveVersionsUpFrom(ID VersionID) error {
  * Map functions
  * ********************************************************************************
  */
+func (self MapSet) GetType() StorageType {
+	return MapType
+}
+
 func (self *MapSet) HasMap(key []byte) bool {
 
 	var result bool

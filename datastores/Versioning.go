@@ -1,6 +1,11 @@
 package datastore
 
-import "math"
+import (
+	"fmt"
+	"math"
+
+	"github.com/boltdb/bolt"
+)
 
 type VersionID uint64
 
@@ -38,7 +43,7 @@ type VersionedData interface {
 	RemoveVersionsUpFrom(VersionID) error
 }
 
-/* Makes version managing for a number of sets easy
+/* Makes version managing for a number of equal key sets easy
  *
  * It is possible to have multiple sets for the same key, just different kinds. As a
  * set is able to be versioned, it might be useful to version those sets with a
@@ -48,56 +53,280 @@ type VersionedData interface {
  */
 type VersionManager interface {
 	VersionedData
-	GetDatabaseSet(sType StorageType) Set
+	getDatabaseSet(sType StorageType) Set
 }
 
 func NewVersionManager(key [32]byte, ds *Datastore) VersionManager {
-	mngr := VersionManagerImp{key, ds, make(map[StorageType]Set)}
+	mngr := VersionManagerImp{key, ds}
+
+	//make sure the default data layout is available
+	ds.boltdb.Update(func(tx *bolt.Tx) error {
+
+		bucket, err := tx.CreateBucketIfNotExists([]byte("VersionManager"))
+		if err != nil {
+			return err
+		}
+		_, err = bucket.CreateBucketIfNotExists(key[:])
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
 	return &mngr
 }
 
 type VersionManagerImp struct {
 	key   [32]byte
 	store *Datastore
-	sets  map[StorageType]Set
 }
 
-func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) Set {
+/*
+Data layout for VersionManagerImp
 
-	set, ok := self.sets[sType]
-	if !ok {
-		return self.store.GetOrCreateSet(sType, self.key)
+bucket(SetKey) [
+	entry(1) = [KeyValue: 1, Map: 3]
+	entry(2) = [KeyValue: 2, Map: 3]
+	entry(CURRENT) = HEAD
+]
+*/
+
+func (self *VersionManagerImp) getDatabaseSet(sType StorageType) Set {
+	return self.store.GetOrCreateSet(sType, self.key)
+}
+
+//VerionedData interface
+//******************************************************************************
+func (self *VersionManagerImp) collectSets() []Set {
+
+	sets := make([]Set, 0)
+	for _, stype := range StorageTypes {
+		if self.store.GetDatabase(stype).HasSet(self.key) {
+			sets = append(sets, self.store.GetDatabase(stype).GetOrCreateSet(self.key))
+		}
 	}
-	return set
+
+	return sets
 }
 
 func (self *VersionManagerImp) HasUpdates() bool {
 
-	return false
+	//if we have no version yet we have updates to allow to come back to default
+	var updates bool
+	self.store.boltdb.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+		updates = bucket.Sequence() == 0
+		return nil
+	})
+
+	//if we already have versions check the individual sets
+	if !updates {
+
+		sets := self.collectSets()
+		for _, set := range sets {
+			if set.HasUpdates() {
+				return true
+			}
+		}
+	}
+
+	return updates
 }
 
 func (self *VersionManagerImp) ResetHead() {
 
+	sets := self.collectSets()
+	for _, set := range sets {
+		set.ResetHead()
+	}
 }
 
 func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 
-	return 1, nil
+	//we go over all sets and fix their version.
+	version := make(map[string]VersionID)
+	sets := self.collectSets()
+	for _, set := range sets {
+
+		if set.HasUpdates() {
+
+			//we need to create and store a new version
+			v, err := set.FixStateAsVersion()
+			if err != nil {
+				return v, err
+			}
+			version[itos(uint64(set.GetType()))] = v
+
+		} else {
+
+			//having no updates means we are able to reuse the latest version
+			//and don't need to add a new one
+			v, err := set.GetLatestVersion()
+			if err != nil {
+				return v, err
+			}
+			version[itos(uint64(set.GetType()))] = v
+		}
+	}
+
+	//store the version data
+	id := VersionID(INVALID)
+	err := self.store.boltdb.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+
+		data, err := getBytes(version)
+		if err != nil {
+			return err
+		}
+		intid, err := bucket.NextSequence()
+		if err != nil {
+			return err
+		}
+		err = bucket.Put(itob(intid), data)
+		if err != nil {
+			return err
+		}
+		id = VersionID(intid)
+		return nil
+	})
+
+	return id, err
+}
+
+func (self *VersionManagerImp) getVersionInfo(id VersionID) (map[string]interface{}, error) {
+
+	version := make(map[string]interface{})
+	err := self.store.boltdb.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+
+		data := bucket.Get(itob(uint64(id)))
+		if data == nil || len(data) == 0 {
+			return fmt.Errorf("Version does not exist")
+		}
+		res, err := getInterface(data)
+		if err != nil {
+			return err
+		}
+		resmap, ok := res.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("Problem with parsing the saved data, type: %T", res)
+		}
+		version = resmap
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return version, nil
 }
 
 func (self *VersionManagerImp) LoadVersion(id VersionID) error {
 
-	return nil
+	if cv, _ := self.GetCurrentVersion(); cv == id {
+		return nil
+	}
+
+	//grab the needed verion
+	var version map[string]interface{}
+	if !id.IsHead() {
+		var err error
+		version, err = self.getVersionInfo(id)
+		if err != nil {
+			return err
+		}
+	}
+
+	//go through all sets and set the version
+	for _, set := range self.collectSets() {
+
+		if id.IsHead() {
+			err := set.LoadVersion(id)
+			if err != nil {
+				return err
+			}
+
+		} else {
+			data, ok := version[itos(uint64(set.GetType()))]
+			if !ok {
+				return fmt.Errorf("No version saved for the set")
+			}
+			intid, ok := data.(float64)
+			if !ok {
+				return fmt.Errorf("Unable to read saved data: %T", data)
+			}
+			err := set.LoadVersion(VersionID(uint64(intid)))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	//we write the current version
+	err := self.store.boltdb.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+
+		bucket.Put(itob(CURRENT), itob(uint64(id)))
+		return nil
+	})
+
+	return err
 }
 
 func (self *VersionManagerImp) GetLatestVersion() (VersionID, error) {
 
-	return 1, nil
+	var version uint64 = 0
+	found := false
+	err := self.store.boltdb.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+
+		//look at each entry and get the largest version
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			if val != CURRENT {
+				found = true
+				if val > version {
+					version = val
+				}
+			}
+			return nil
+		})
+		return nil
+	})
+
+	if !found {
+		return VersionID(INVALID), fmt.Errorf("No versions saved yet")
+	}
+
+	return VersionID(version), err
 }
 
 func (self *VersionManagerImp) GetCurrentVersion() (VersionID, error) {
 
-	return 1, nil
+	current := INVALID
+	err := self.store.boltdb.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+
+		data := bucket.Get(itob(CURRENT))
+		if data == nil {
+			return fmt.Errorf("Current version invalid: was never set")
+		}
+		current = btoi(data)
+		return nil
+	})
+
+	return VersionID(current), err
 }
 
 func (self *VersionManagerImp) RemoveVersionsUpTo(VersionID) error {

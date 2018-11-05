@@ -15,6 +15,11 @@
  *            of the versioning process. Versioning happens inside the set, e.g.
  *            for a ValueType set the individual values are versioned.
  *
+ *
+ * General properties:
+ * - Not enabled for concurrent usage, user needs to ensure single access
+ * - Golang objects do not store any state, hence having multiple objects for the same
+ *   data works well
  */
 package datastore
 
@@ -38,16 +43,19 @@ type DataBase interface {
 type Set interface {
 	VersionedData
 
+	GetType() StorageType
 	IsValid() bool
 	Print(params ...int)
 }
 
-type StorageType int
+type StorageType uint64
 
 const (
 	ValueType StorageType = 1
 	MapType   StorageType = 2
 )
+
+var StorageTypes = []StorageType{ValueType, MapType}
 
 func NewDatastore(path string) (*Datastore, error) {
 
