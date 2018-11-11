@@ -26,9 +26,6 @@ func TestVersioning(t *testing.T) {
 
 		Convey("handling sets should behave normal", func() {
 
-			//initially without any version update must return true
-			//So(mngr.HasUpdates(), ShouldBeTrue)
-
 			//check value type
 			set := mngr.getDatabaseSet(ValueType)
 			So(set, ShouldNotBeNil)

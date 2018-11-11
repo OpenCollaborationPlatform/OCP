@@ -146,7 +146,7 @@ func (self *VersionManagerImp) ResetHead() {
 func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 
 	//we go over all sets and fix their version.
-	version := make(map[string]VersionID)
+	version := make(map[string]string)
 	sets := self.collectSets()
 	for _, set := range sets {
 
@@ -157,7 +157,7 @@ func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 			if err != nil {
 				return v, err
 			}
-			version[itos(uint64(set.GetType()))] = v
+			version[itos(uint64(set.GetType()))] = itos(uint64(v))
 
 		} else {
 
@@ -167,7 +167,7 @@ func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 			if err != nil {
 				return v, err
 			}
-			version[itos(uint64(set.GetType()))] = v
+			version[itos(uint64(set.GetType()))] = itos(uint64(v))
 		}
 	}
 
@@ -256,11 +256,11 @@ func (self *VersionManagerImp) LoadVersion(id VersionID) error {
 			if !ok {
 				return fmt.Errorf("No version saved for the set")
 			}
-			intid, ok := data.(float64)
+			strid, ok := data.(string)
 			if !ok {
 				return fmt.Errorf("Unable to read saved data: %T", data)
 			}
-			err := set.LoadVersion(VersionID(uint64(intid)))
+			err := set.LoadVersion(VersionID(stoi(strid)))
 			if err != nil {
 				return err
 			}
@@ -329,10 +329,92 @@ func (self *VersionManagerImp) GetCurrentVersion() (VersionID, error) {
 	return VersionID(current), err
 }
 
-func (self *VersionManagerImp) RemoveVersionsUpTo(VersionID) error {
-	return nil
+func (self *VersionManagerImp) RemoveVersionsUpTo(ID VersionID) error {
+
+	sets := self.collectSets()
+	version, err := self.getVersionInfo(ID)
+	if err != nil {
+		return err
+	}
+
+	for _, set := range sets {
+		//remove up to version
+		val := version[itos(uint64(set.GetType()))]
+		ival := stoi(val.(string))
+		err := set.RemoveVersionsUpTo(VersionID(ival))
+		if err != nil {
+			return err
+		}
+	}
+
+	//remove the versions from the relevant bucket
+	err = self.store.boltdb.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+
+		todelete := make([][]byte, 0)
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			if val < uint64(ID) {
+				//deep copy of key, as the slice is invalid outside foreach
+				keycopy := make([]byte, len(k))
+				copy(keycopy, k)
+				todelete = append(todelete, keycopy)
+			}
+			return nil
+		})
+		for _, k := range todelete {
+			bucket.Delete(k)
+		}
+
+		return nil
+	})
+
+	return err
 }
 
-func (self *VersionManagerImp) RemoveVersionsUpFrom(VersionID) error {
-	return nil
+func (self *VersionManagerImp) RemoveVersionsUpFrom(ID VersionID) error {
+
+	sets := self.collectSets()
+	version, err := self.getVersionInfo(ID)
+	if err != nil {
+		return err
+	}
+
+	for _, set := range sets {
+		//remove up to version
+		val := version[itos(uint64(set.GetType()))]
+		ival := stoi(val.(string))
+		err := set.RemoveVersionsUpFrom(VersionID(ival))
+		if err != nil {
+			return err
+		}
+	}
+
+	//remove the versions from the relevant bucket
+	err = self.store.boltdb.Update(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+
+		todelete := make([][]byte, 0)
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			if val > uint64(ID) {
+				//deep copy of key, as the slice is invalid outside foreach
+				keycopy := make([]byte, len(k))
+				copy(keycopy, k)
+				todelete = append(todelete, keycopy)
+			}
+			return nil
+		})
+		for _, k := range todelete {
+			bucket.Delete(k)
+		}
+
+		return nil
+	})
+
+	return err
 }
