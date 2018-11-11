@@ -29,7 +29,7 @@ import (
 )
 
 //Function prototype that can create new object types in DML
-type CreatorFunc func(datastore *datastore.Datastore, name string, vm *goja.Runtime) Object
+type CreatorFunc func(datastore *datastore.Datastore, name string, parent Object, vm *goja.Runtime) Object
 
 //struct that describes the runtime state and is shared between all runtime objects
 type RuntimeState struct {
@@ -160,7 +160,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 	}
 
 	//setup the object including datastore and check for uniqueness
-	obj := creator(self.datastore, objName, self.jsvm)
+	obj := creator(self.datastore, objName, parent, self.jsvm)
 	if parent != nil {
 		objId := obj.Id()
 		//if unique in the parents childrens we are generaly unique, as parent is part of our ID
@@ -171,8 +171,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 				return nil, fmt.Errorf("Object with same type (%s) and ID (%s) already exists", objId.Type, objId.Name)
 			}
 		}
-		obj.SetParent(parent)
-	} //TODO: make sure datastore ID is created afer parent is set, not before!
+	}
 
 	//expose to javascript
 	jsobj := obj.GetJSObject()

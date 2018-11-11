@@ -15,9 +15,9 @@ type data struct {
 	*object
 }
 
-func NewData(ds *datastore.Datastore, name string, vm *goja.Runtime) Object {
+func NewData(ds *datastore.Datastore, name string, parent Object, vm *goja.Runtime) Object {
 
-	obj := NewObject(name, "Data", vm, ds)
+	obj := NewObject(parent, name, "Data", vm, ds)
 	dat := data{obj}
 
 	dat.AddProperty("id", String, true)

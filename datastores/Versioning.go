@@ -53,10 +53,10 @@ type VersionedData interface {
  */
 type VersionManager interface {
 	VersionedData
-	getDatabaseSet(sType StorageType) Set
+	GetDatabaseSet(sType StorageType) Set
 }
 
-func NewVersionManager(key [32]byte, ds *Datastore) VersionManager {
+func NewVersionManager(key [32]byte, ds *Datastore) VersionManagerImp {
 	mngr := VersionManagerImp{key, ds}
 
 	//make sure the default data layout is available
@@ -73,7 +73,7 @@ func NewVersionManager(key [32]byte, ds *Datastore) VersionManager {
 		return nil
 	})
 
-	return &mngr
+	return mngr
 }
 
 type VersionManagerImp struct {
@@ -91,7 +91,7 @@ bucket(SetKey) [
 ]
 */
 
-func (self *VersionManagerImp) getDatabaseSet(sType StorageType) Set {
+func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) Set {
 	return self.store.GetOrCreateSet(sType, self.key)
 }
 

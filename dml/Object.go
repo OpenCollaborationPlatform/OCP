@@ -13,6 +13,7 @@ import (
 //  - Methods
 //Furthermore must both be available in JS, Global by id an in the child hirarchy
 type Object interface {
+	datastore.VersionManager
 	PropertyHandler
 	EventHandler
 	MethodHandler
@@ -20,9 +21,6 @@ type Object interface {
 
 	//Object functions
 	Id() identifier
-
-	//storage functions
-	GetDatabaseSet(storetype datastor.StorageType) *datastore.Set
 
 	//Object hirarchy
 	AddChild(obj Object)
@@ -35,6 +33,7 @@ type Object interface {
 //the most basic implementation of an dml Object. It is intended as dml grouping
 //object as well as base object for other types
 type object struct {
+	datastore.VersionManagerImp
 	propertyHandler
 	eventHandler
 	methodHandler
@@ -48,6 +47,32 @@ type object struct {
 	//javascript
 	jsobj *goja.Object
 	jsrtm *goja.Runtime
+}
+
+func NewObject(parent Object, name string, oType string, vm *goja.Runtime, store *datastore.Datastore) *object {
+
+	jsobj := vm.NewObject()
+
+	var hash [32]byte
+	if parent != nil {
+		hash = parent.Id().hash()
+	}
+	id := identifier{hash, oType, name}
+
+	obj := object{
+		datastore.NewVersionManager(id.hash(), store),
+		NewPropertyHandler(),
+		NewEventHandler(),
+		NewMethodHandler(),
+		make([]Object, 0),
+		parent,
+		id,
+		oType,
+		jsobj,
+		vm,
+	}
+
+	return &obj
 }
 
 func (self *object) Id() identifier {
@@ -91,8 +116,8 @@ func (self *object) AddProperty(name string, dtype DataType, constprop bool) err
 		return fmt.Errorf("Property %s already exists", name)
 	}
 
-	//we add properties!
-	set, ok := self.GetDataStore().GetOrCreateSet(datastore.KeyValue, self.Id().hash()).(datastore.KeyValueSet)
+	//we add properties
+	set, ok := self.GetDatabaseSet(datastore.ValueType).(*datastore.ValueSet)
 	if !ok {
 		return fmt.Errorf("Unable to create database set")
 	}
@@ -103,25 +128,4 @@ func (self *object) AddProperty(name string, dtype DataType, constprop bool) err
 
 	self.propertyHandler.properties[name] = prop
 	return nil
-}
-
-func NewObject(name string, oType string, vm *goja.Runtime, store *datastore.Datastore) *object {
-
-	jsobj := vm.NewObject()
-
-	obj := object{
-		NewPropertyHandler(),
-		NewEventHandler(),
-		NewMethodHandler(),
-		make([]Object, 0),
-		nil,
-		identifier{[32]byte{}, oType, name},
-		oType,
-		store,
-		make(map[datastore.StorageType]*datastore.Set),
-		jsobj,
-		vm,
-	}
-
-	return &obj
 }

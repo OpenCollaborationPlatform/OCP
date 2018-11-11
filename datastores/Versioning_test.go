@@ -27,7 +27,7 @@ func TestVersioning(t *testing.T) {
 		Convey("handling sets should behave normal", func() {
 
 			//check value type
-			set := mngr.getDatabaseSet(ValueType)
+			set := mngr.GetDatabaseSet(ValueType)
 			So(set, ShouldNotBeNil)
 			vset, ok := set.(*ValueSet)
 			So(ok, ShouldBeTrue)
@@ -38,7 +38,7 @@ func TestVersioning(t *testing.T) {
 			So(value.IsValid(), ShouldBeTrue)
 
 			//check map type
-			set = mngr.getDatabaseSet(MapType)
+			set = mngr.GetDatabaseSet(MapType)
 			mset, ok := set.(*MapSet)
 			So(ok, ShouldBeTrue)
 			mp, err := mset.GetOrCreateMap(key1)
