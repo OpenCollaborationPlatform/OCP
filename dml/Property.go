@@ -97,11 +97,6 @@ func (self *dataProperty) GetValue() interface{} {
 	return val
 }
 
-//TODO: Is this needed here? what does it do??
-type Data interface {
-	Object
-}
-
 //Const property
 //**************
 

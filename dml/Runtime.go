@@ -107,7 +107,7 @@ func (self *Runtime) ParseFile(path string) error {
 	}
 
 	//process the AST into usable objects
-	obj, err := self.buildObject(ast.Object, nil)
+	obj, err := self.buildObject(ast.Object, nil, make([]*astObject, 0))
 	if err != nil {
 		return err
 		//TODO clear the database entries...
@@ -124,23 +124,207 @@ func (self *Runtime) ParseFile(path string) error {
 //run arbitrary javascript code on the loaded structure
 func (self *Runtime) RunJavaScript(code string) (interface{}, error) {
 
-	val, err := self.jsvm.RunString(code)
-
+	state, err := self.preprocess()
 	if err != nil {
 		return nil, err
 	}
-	return val.Export(), nil
+
+	val, err := self.jsvm.RunString(code)
+
+	if err != nil {
+		self.postprocess(state, true)
+		return nil, err
+	}
+
+	err = self.postprocess(state, false)
+
+	return val.Export(), err
 }
 
-func (self *Runtime) GetObject() (Object, error) {
+func (self *Runtime) CallMethod(path string, method string, args ...interface{}) (interface{}, error) {
+
+	//first check if path is correct and method available
+	obj, err := self.getObjectFromPath(path)
+	if err != nil {
+		return nil, err
+	}
+	if !obj.HasMethod(method) {
+		return nil, fmt.Errorf("No method %v available in object %v", method, path)
+	}
+
+	//start preprocessing
+	state, err := self.preprocess()
+	if err != nil {
+		return nil, err
+	}
+
+	fnc := obj.GetMethod(method)
+	result := fnc.Call(args...)
+
+	//did somethign go wrong?
+	err, ok := result.(error)
+	if ok && err != nil {
+		self.postprocess(state, true)
+		return nil, err
+	}
+
+	//postprocess correctly
+	err = self.postprocess(state, false)
+
+	return result, err
+}
+
+func (self *Runtime) RegisterEvent(path string, event string, cb EventCallback) error {
+
+	//first check if path is correct and method available
+	obj, err := self.getObjectFromPath(path)
+	if err != nil {
+		return err
+	}
+	if !obj.HasEvent(event) {
+		return fmt.Errorf("No event %v available in object %v", event, path)
+	}
+
+	evt := obj.GetEvent(event)
+	return evt.RegisterCallback(cb)
+}
+
+func (self *Runtime) ReadProperty(path string, property string) (interface{}, error) {
+
+	//first check if path is correct and method available
+	obj, err := self.getObjectFromPath(path)
+	if err != nil {
+		return nil, err
+	}
+	if !obj.HasProperty(property) {
+		return nil, fmt.Errorf("No property %v available in object %v", property, path)
+	}
+
+	prop := obj.GetProperty(property)
+	return prop.GetValue(), nil
+}
+
+//for testing only, so unexportet
+func (self *Runtime) getObject() (Object, error) {
 	return self.mainObj, nil
 }
 
 // 							Internal Functions
 //*********************************************************************************
 
+//get the object from the identifier path list (e.g. myobj.childname.yourobject)
+func (self *Runtime) getObjectFromPath(path string) (Object, error) {
+
+	names := strings.Split(path, `.`)
+	if len(names) == 0 {
+		return nil, fmt.Errorf("Not a valid path to object: no IDs found")
+	}
+
+	if names[0] != self.mainObj.Id().Name {
+		return nil, fmt.Errorf("First identifier cannot be found")
+	}
+
+	obj := self.mainObj
+	for _, id := range names[1:] {
+		child, err := obj.GetChildById(id)
+		if err != nil {
+			return nil, err
+		}
+		obj = child
+	}
+	return obj, nil
+}
+
+//collect current state of objects for potential reset
+func (self *Runtime) preprocess() (map[identifier]datastore.VersionID, error) {
+
+	state := make(map[identifier]datastore.VersionID)
+	err := self.mainObj.ForEachSubobject(true, func(obj Object) error {
+		v, err := obj.GetLatestVersion()
+		if err != nil {
+			return err
+		}
+		state[obj.Id()] = v
+		return nil
+	})
+	return state, err
+}
+
+//postprocess for all done operations. Entry point for behaviours
+func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, rollbackOnly bool) error {
+
+	//if not a full rollback we check if something has changed and start the relevant
+	//behaviours. We only roll back if something goes wrong
+	if !rollbackOnly {
+
+		//check all objects if anything has changed
+		err := self.mainObj.ForEachSubobject(true, func(obj Object) error {
+			if obj.HasUpdates() {
+				//handle transaction behaviour
+
+				//fix the data
+				_, err := obj.FixStateAsVersion()
+				if err != nil {
+					return err
+				}
+
+				//handle the transaction behaviour
+			}
+			return nil
+		})
+
+		if err != nil {
+			rollbackOnly = true
+		}
+	}
+
+	//do rollback if required (caller requested or behaviours failed)
+	if rollbackOnly {
+		self.mainObj.ForEachSubobject(true, func(obj Object) error {
+
+			v, ok := prestate[obj.Id()]
+			if ok {
+				//ok means obj was there bevore and only need to be reset
+
+				latest, err := obj.GetLatestVersion()
+				if err != nil {
+					return err
+				}
+
+				if latest > v {
+					//a new version was already created, we need to delete the old one
+					//and reset the head accordingly
+					err = obj.LoadVersion(v)
+					if err != nil {
+						return err
+					}
+
+					err = obj.RemoveVersionsUpFrom(v)
+					if err != nil {
+						return err
+					}
+
+					obj.ResetHead()
+					err = obj.LoadVersion(datastore.VersionID(datastore.HEAD))
+					if err != nil {
+						return err
+					}
+
+				} else {
+					//no new version was created yet, a simple reset is enough
+					obj.ResetHead()
+				}
+			}
+			//TODO: Handle not ok: howto remove object correctly?
+
+			return nil
+		})
+	}
+	return nil
+}
+
 //due to recursive nature og objects we need an extra function
-func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, error) {
+func (self *Runtime) buildObject(astObj *astObject, parent Object, recBehaviours []*astObject) (Object, error) {
 
 	//see if we can build it, and do so if possible
 	creator, ok := self.creators[astObj.Identifier]
@@ -188,7 +372,6 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 			return nil, err
 		}
 	}
-
 	err := obj.SetupJSProperties(self.jsvm, jsobj)
 	if err != nil {
 		return nil, err
@@ -219,18 +402,53 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 	}
 	obj.SetupJSMethods(self.jsvm, jsobj)
 
-	//go on with all subobjects
-	jsChildren := make([]goja.Value, 0)
-	for _, astChild := range astObj.Objects {
-		child, err := self.buildObject(astChild, obj)
-		if err != nil {
-			return nil, err
+	//go on with all subobjects (if not behaviour)
+	_, isBehaviour := obj.(Behaviour)
+	if !isBehaviour {
+
+		//create our version of the recursive behaviour map to allow adding values for children
+		localRecBehaviours := make([]*astObject, len(recBehaviours))
+		copy(localRecBehaviours, recBehaviours)
+
+		//sort children to process behaviours first, so that recursive ones are
+		//ready for all children
+		objectToFrontIfAvailable(&astObj.Objects, `Transaction`)
+		objectToFrontIfAvailable(&astObj.Objects, `Version`)
+
+		//add the recursive Behaviours
+		for _, bvr := range recBehaviours {
+			addFrontIfNotAvailable(&astObj.Objects, bvr)
 		}
-		obj.AddChild(child)
-		jsChildren = append(jsChildren, child.GetJSObject())
+
+		jsChildren := make([]goja.Value, 0)
+
+		for _, astChild := range astObj.Objects {
+
+			//build the child
+			child, err := self.buildObject(astChild, obj, localRecBehaviours)
+			if err != nil {
+				return nil, err
+			}
+
+			//check if this child is a behaviour, and if so if it is recursive
+			behaviour, ok := child.(Behaviour)
+			if ok && behaviour.GetProperty(`recursive`).GetValue().(bool) {
+				localRecBehaviours = append(localRecBehaviours, astChild)
+			}
+
+			//handle hirarchy
+			obj.AddChild(child)
+			jsChildren = append(jsChildren, child.GetJSObject())
+		}
+
+		jsobj.DefineDataProperty("children", self.jsvm.ToValue(jsChildren), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
+
+	} else if len(astObj.Objects) > 0 {
+		return nil, fmt.Errorf("Behaviours cannot have child objects")
 	}
 
 	//with everything in place we are able to process the assignments
+	//needs to be here
 	for _, assign := range astObj.Assignments {
 
 		parts := assign.Key
@@ -252,7 +470,6 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object) (Object, erro
 	}
 
 	//ant last we add the general object properties: children, parent etc...
-	jsobj.DefineDataProperty("children", self.jsvm.ToValue(jsChildren), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	if parent != nil {
 		jsobj.DefineDataProperty("parent", parent.GetJSObject(), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	} else {
@@ -440,4 +657,36 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 	}
 
 	return nil
+}
+
+//helper to move certain object to the front ob the objectlist if they are in the list
+func objectToFrontIfAvailable(objects *[]*astObject, name string) {
+
+	if len((*objects)) == 0 || (*objects)[0].Identifier == name {
+		return
+	}
+	if (*objects)[len(*objects)-1].Identifier == name {
+		(*objects) = append([]*astObject{(*objects)[len(*objects)-1]}, (*objects)[:len(*objects)-1]...)
+		return
+	}
+	for p, x := range *objects {
+		if x.Identifier == name {
+			(*objects) = append([]*astObject{x}, append((*objects)[:p], (*objects)[p+1:]...)...)
+			break
+		}
+	}
+}
+
+//helper to add a astObject in the front of the slice if not yet in the slice
+func addFrontIfNotAvailable(objects *[]*astObject, obj *astObject) {
+
+	//check if already available
+	for _, x := range *objects {
+		if x.Identifier == obj.Identifier {
+			return
+		}
+	}
+
+	//add front
+	*objects = append([]*astObject{obj}, (*objects)...)
 }

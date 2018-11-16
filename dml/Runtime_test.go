@@ -76,7 +76,7 @@ func TestDmlFile(t *testing.T) {
 			So(value, ShouldEqual, 0)
 
 			//check direct go access
-			obj, err := rntm.GetObject()
+			obj, err := rntm.getObject()
 			So(err, ShouldBeNil)
 			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
 			So(ok, ShouldBeTrue)
@@ -104,7 +104,7 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			//testI must be one if the function was called correctly
-			obj, _ = rntm.GetObject()
+			obj, _ = rntm.getObject()
 			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)

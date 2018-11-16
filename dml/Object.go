@@ -25,9 +25,11 @@ type Object interface {
 	//Object hirarchy
 	AddChild(obj Object)
 	GetChildren() []Object
-	GetChildById(id string) Object
-	SetParent(parent Object)
+	GetChildById(id string) (Object, error)
 	GetParent() Object
+
+	//Subobject handling (child + extras)
+	ForEachSubobject(recursive bool, fnc func(obj Object) error) error //to be overriden
 }
 
 //the most basic implementation of an dml Object. It is intended as dml grouping
@@ -88,17 +90,36 @@ func (self *object) GetChildren() []Object {
 	return self.children
 }
 
-func (self *object) GetChildById(id string) Object {
-	return nil
-}
+func (self *object) GetChildById(id string) (Object, error) {
 
-func (self *object) SetParent(parent Object) {
-	self.parent = parent
-	self.id.Parent = parent.Id().hash()
+	for _, child := range self.children {
+
+		if child.Id().Name == id {
+			return child, nil
+		}
+	}
+
+	return nil, fmt.Errorf("No child available with id %v", id)
 }
 
 func (self *object) GetParent() Object {
 	return self.parent
+}
+
+//not only childs, but also other subobjects like vector elements. Must be
+//implemented by subclasses if other subobjects than children exist
+func (self *object) ForEachSubobject(recursive bool, fnc func(obj Object) error) error {
+
+	for _, child := range self.children {
+		fnc(child)
+		if recursive {
+			err := child.ForEachSubobject(true, fnc)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (self *object) GetJSObject() *goja.Object {

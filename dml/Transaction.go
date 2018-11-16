@@ -8,10 +8,23 @@ import (
 	"github.com/dop251/goja"
 )
 
-func NewTransaction(ds *datastore.Datastore, name string, vm *goja.Runtime) {
-
+type Transaction struct {
+	participants []identifier
 }
 
-type transaction struct {
-	behaviour
+func NewTransactionBehaviour(store *datastore.Datastore, name string, parent Object, vm *goja.Runtime) Object {
+
+	behaviour, _ := NewBehaviour(parent, name, `TransactionBehaviour`, vm, store)
+
+	//add default events
+	behaviour.AddEvent(`onChangedData`, NewEvent(vm))   //called once after finishing all changes on the parent object
+	behaviour.AddEvent(`onParticipation`, NewEvent(vm)) //called when added to a transaction
+	behaviour.AddEvent(`onAbortion`, NewEvent(vm))      //called when transaction, to which the parent was added, is aborted
+	behaviour.AddEvent(`onClosing`, NewEvent(vm))       //called when transaction, to which the parent was added, is closed (means finished)
+
+	return &transactionBehaviour{behaviour}
+}
+
+type transactionBehaviour struct {
+	*behaviour
 }
