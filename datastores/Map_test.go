@@ -21,7 +21,8 @@ func TestMap(t *testing.T) {
 		defer store.Close()
 		So(err, ShouldBeNil)
 
-		db := store.GetDatabase(MapType, false)
+		db, err := store.GetDatabase(MapType, false)
+		So(err, ShouldBeNil)
 		So(db, ShouldNotBeNil)
 		_, ok := db.(*MapDatabase)
 		So(ok, ShouldBeTrue)
@@ -111,7 +112,8 @@ func TestMapVersionedData(t *testing.T) {
 		defer store.Close()
 		So(err, ShouldBeNil)
 
-		db := store.GetDatabase(MapType, true)
+		db, err := store.GetDatabase(MapType, true)
+		So(err, ShouldBeNil)
 		So(db, ShouldNotBeNil)
 		_, ok := db.(*MapVersionedDatabase)
 		So(ok, ShouldBeTrue)

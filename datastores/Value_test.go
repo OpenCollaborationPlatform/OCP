@@ -22,7 +22,8 @@ func TestValueBasic(t *testing.T) {
 		defer store.Close()
 		So(err, ShouldBeNil)
 
-		db := store.GetDatabase(ValueType, false)
+		db, err := store.GetDatabase(ValueType, false)
+		So(err, ShouldBeNil)
 		So(db, ShouldNotBeNil)
 		_, ok := db.(*ValueDatabase)
 		So(ok, ShouldBeTrue)
@@ -52,6 +53,7 @@ func TestValueBasic(t *testing.T) {
 			value, err := set.GetOrCreateKey(key1)
 			So(err, ShouldBeNil)
 			So(value, ShouldNotBeNil)
+
 			So(set.HasKey(key1), ShouldBeTrue)
 
 			var data int64 = 1
@@ -101,7 +103,8 @@ func TestValueVersionedBasics(t *testing.T) {
 		defer store.Close()
 		So(err, ShouldBeNil)
 
-		db := store.GetDatabase(ValueType, true)
+		db, err := store.GetDatabase(ValueType, true)
+		So(err, ShouldBeNil)
 		So(db, ShouldNotBeNil)
 		_, ok := db.(*ValueVersionedDatabase)
 		So(ok, ShouldBeTrue)
@@ -180,7 +183,8 @@ func TestValueVersioned(t *testing.T) {
 		store, _ := NewDatastore(path)
 		defer store.Close()
 
-		db := store.GetDatabase(ValueType, true)
+		db, err := store.GetDatabase(ValueType, true)
+		So(err, ShouldBeNil)
 		set := db.GetOrCreateSet(makeSetFromString("test")).(VersionedSet)
 
 		Convey("initially all versioning commands must be callable.", func() {

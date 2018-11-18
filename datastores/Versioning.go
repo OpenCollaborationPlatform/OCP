@@ -53,7 +53,7 @@ type VersionedData interface {
  */
 type VersionManager interface {
 	VersionedData
-	GetDatabaseSet(sType StorageType) Set
+	GetDatabaseSet(sType StorageType) (Set, error)
 }
 
 func NewVersionManager(key [32]byte, ds *Datastore) VersionManagerImp {
@@ -91,7 +91,7 @@ bucket(SetKey) [
 ]
 */
 
-func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) Set {
+func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) (Set, error) {
 	return self.store.GetOrCreateSet(sType, true, self.key)
 }
 
@@ -101,8 +101,13 @@ func (self *VersionManagerImp) collectSets() []VersionedSet {
 
 	sets := make([]VersionedSet, 0)
 	for _, stype := range StorageTypes {
-		if self.store.GetDatabase(stype, true).HasSet(self.key) {
-			sets = append(sets, self.store.GetDatabase(stype, true).GetOrCreateSet(self.key).(VersionedSet))
+
+		db, err := self.store.GetDatabase(stype, true)
+		if err != nil {
+			continue
+		}
+		if db.HasSet(self.key) {
+			sets = append(sets, db.GetOrCreateSet(self.key).(VersionedSet))
 		}
 	}
 

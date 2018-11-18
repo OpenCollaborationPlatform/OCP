@@ -24,6 +24,7 @@
 package datastore
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -56,9 +57,10 @@ type StorageType uint64
 const (
 	ValueType StorageType = 1
 	MapType   StorageType = 3
+	IndexType StorageType = 4
 )
 
-var StorageTypes = []StorageType{ValueType, MapType}
+var StorageTypes = []StorageType{ValueType, MapType, IndexType}
 
 func NewDatastore(path string) (*Datastore, error) {
 
@@ -108,6 +110,13 @@ func NewDatastore(path string) (*Datastore, error) {
 	}
 	vdbs[MapType] = mapVersioned
 
+	index, err := NewIndexDatabase(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	dbs[IndexType] = index
+
 	return &Datastore{db, dbs, vdbs}, nil
 }
 
@@ -117,7 +126,7 @@ type Datastore struct {
 	vDbs   map[StorageType]DataBase
 }
 
-func (self *Datastore) GetDatabase(kind StorageType, versioned bool) DataBase {
+func (self *Datastore) GetDatabase(kind StorageType, versioned bool) (DataBase, error) {
 
 	var db DataBase
 	var ok bool
@@ -127,16 +136,19 @@ func (self *Datastore) GetDatabase(kind StorageType, versioned bool) DataBase {
 		db, ok = self.dbs[kind]
 	}
 	if !ok {
-		panic("no such storage available")
+		return nil, fmt.Errorf("No such database type available")
 	}
 
-	return db
+	return db, nil
 }
 
-func (self *Datastore) GetOrCreateSet(kind StorageType, versioned bool, set [32]byte) Set {
+func (self *Datastore) GetOrCreateSet(kind StorageType, versioned bool, set [32]byte) (Set, error) {
 
-	db := self.GetDatabase(kind, versioned)
-	return db.GetOrCreateSet(set)
+	db, err := self.GetDatabase(kind, versioned)
+	if err != nil {
+		return nil, err
+	}
+	return db.GetOrCreateSet(set), nil
 }
 
 func (self *Datastore) Close() {

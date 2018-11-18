@@ -33,7 +33,9 @@ func TestDataStore(t *testing.T) {
 		defer store.Close()
 		So(err, ShouldBeNil)
 
-		db := store.GetDatabase(ValueType, true)
+		db, err := store.GetDatabase(ValueType, true)
+		So(err, ShouldBeNil)
+
 		Convey("a key-value database must be creatable,", func() {
 
 			So(db, ShouldNotBeNil)
