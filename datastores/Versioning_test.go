@@ -41,7 +41,7 @@ func TestVersioning(t *testing.T) {
 			set = mngr.GetDatabaseSet(MapType)
 			mset, ok := set.(*MapVersionedSet)
 			So(ok, ShouldBeTrue)
-			mp, err := mset.GetOrCreateMapVersioned(key1)
+			mp, err := mset.GetOrCreateMap(key1)
 			So(err, ShouldBeNil)
 			So(mp.IsValid(), ShouldBeTrue)
 

@@ -468,7 +468,6 @@ func (self *MapVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 		//remove up to version
 		val := version[btos(mp.getMapVersionedKey())]
 		ival := stoi(val.(string))
-		fmt.Printf("Remove up from: %v\n", ival)
 		err := mp.kvset.RemoveVersionsUpFrom(VersionID(ival))
 		if err != nil {
 			return err
@@ -512,7 +511,7 @@ func (self MapVersionedSet) GetType() StorageType {
 	return MapType
 }
 
-func (self *MapVersionedSet) HasMapVersioned(key []byte) bool {
+func (self *MapVersionedSet) HasMap(key []byte) bool {
 
 	var result bool
 	self.db.View(func(tx *bolt.Tx) error {
@@ -526,9 +525,9 @@ func (self *MapVersionedSet) HasMapVersioned(key []byte) bool {
 	return result
 }
 
-func (self *MapVersionedSet) GetOrCreateMapVersioned(key []byte) (*MapVersioned, error) {
+func (self *MapVersionedSet) GetOrCreateMap(key []byte) (*MapVersioned, error) {
 
-	if !self.HasMapVersioned(key) {
+	if !self.HasMap(key) {
 
 		curr, err := self.GetCurrentVersion()
 		if err != nil {

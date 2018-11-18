@@ -94,6 +94,13 @@ func NewDatastore(path string) (*Datastore, error) {
 	}
 	vdbs[ValueType] = valueVersioned
 
+	map_, err := NewMapDatabase(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	dbs[MapType] = map_
+
 	mapVersioned, err := NewMapVersionedDatabase(db)
 	if err != nil {
 		db.Close()
