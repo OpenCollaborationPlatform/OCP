@@ -29,7 +29,7 @@ func TestVersioning(t *testing.T) {
 			//check value type
 			set := mngr.GetDatabaseSet(ValueType)
 			So(set, ShouldNotBeNil)
-			vset, ok := set.(*ValueSet)
+			vset, ok := set.(*ValueVersionedSet)
 			So(ok, ShouldBeTrue)
 
 			key1 := []byte("key1")
@@ -39,9 +39,9 @@ func TestVersioning(t *testing.T) {
 
 			//check map type
 			set = mngr.GetDatabaseSet(MapType)
-			mset, ok := set.(*MapSet)
+			mset, ok := set.(*MapVersionedSet)
 			So(ok, ShouldBeTrue)
-			mp, err := mset.GetOrCreateMap(key1)
+			mp, err := mset.GetOrCreateMapVersioned(key1)
 			So(err, ShouldBeNil)
 			So(mp.IsValid(), ShouldBeTrue)
 

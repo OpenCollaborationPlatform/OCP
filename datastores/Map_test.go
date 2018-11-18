@@ -9,21 +9,21 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestMapData(t *testing.T) {
+func TestMapVersionedData(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
 	defer os.RemoveAll(path)
 
-	Convey("Creating a temporary datastore with map database,", t, func() {
+	Convey("Creating a temporary datastore with mapVersioned database,", t, func() {
 
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
 
-		db := store.GetDatabase(MapType)
+		db := store.GetDatabase(MapType, true)
 		So(db, ShouldNotBeNil)
-		_, ok := db.(*MapDatabase)
+		_, ok := db.(*MapVersionedDatabase)
 		So(ok, ShouldBeTrue)
 
 		Convey("sets can be creaded and deleted,", func() {
@@ -36,7 +36,7 @@ func TestMapData(t *testing.T) {
 			So(set, ShouldNotBeNil)
 			So(db.HasSet(name), ShouldBeTrue)
 
-			mset, ok := set.(*MapSet)
+			mset, ok := set.(*MapVersionedSet)
 			So(ok, ShouldBeTrue)
 			So(mset, ShouldNotBeNil)
 
@@ -45,31 +45,31 @@ func TestMapData(t *testing.T) {
 			So(db.HasSet(name), ShouldBeFalse)
 		})
 
-		Convey("and maps can be created from the set.", func() {
+		Convey("and mapVersioneds can be created from the set.", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapSet)
+			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
 
-			mapkey := []byte("mapkey")
-			So(mset.HasMap(mapkey), ShouldBeFalse)
+			mapVersionedkey := []byte("mapVersionedkey")
+			So(mset.HasMapVersioned(mapVersionedkey), ShouldBeFalse)
 			So(mset.HasUpdates(), ShouldBeFalse)
 
-			mp, err := mset.GetOrCreateMap(mapkey)
+			mp, err := mset.GetOrCreateMapVersioned(mapVersionedkey)
 			So(err, ShouldBeNil)
 			So(mp, ShouldNotBeNil)
-			So(mset.HasMap(mapkey), ShouldBeTrue)
+			So(mset.HasMapVersioned(mapVersionedkey), ShouldBeTrue)
 
-			//new map means no version yet means there are updates
+			//new mapVersioned means no version yet means there are updates
 			So(mp.HasUpdates(), ShouldBeTrue)
 			So(mset.HasUpdates(), ShouldBeTrue)
 		})
 
-		Convey("Maps can be created and data stored", func() {
+		Convey("MapVersioneds can be created and data stored", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapSet)
+			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
 
-			mp, err := mset.GetOrCreateMap([]byte("mymap"))
+			mp, err := mset.GetOrCreateMapVersioned([]byte("mymapVersioned"))
 			So(err, ShouldBeNil)
 			So(mp, ShouldNotBeNil)
 
@@ -101,11 +101,11 @@ func TestMapData(t *testing.T) {
 			So(err, ShouldNotBeNil)
 		})
 
-		Convey("and versioning of that map data works well", func() {
+		Convey("and versioning of that mapVersioned data works well", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapSet)
-			mp, _ := mset.GetOrCreateMap([]byte("mymap"))
+			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
+			mp, _ := mset.GetOrCreateMapVersioned([]byte("mymapVersioned"))
 
 			So(mp.HasUpdates(), ShouldBeTrue)
 
@@ -166,8 +166,8 @@ func TestMapData(t *testing.T) {
 		Convey("Finally versions must be removable", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapSet)
-			mp, _ := mset.GetOrCreateMap([]byte("mymap"))
+			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
+			mp, _ := mset.GetOrCreateMapVersioned([]byte("mymapVersioned"))
 
 			So(mset.RemoveVersionsUpTo(VersionID(2)), ShouldBeNil)
 			err := mset.LoadVersion(VersionID(1))

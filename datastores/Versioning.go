@@ -92,17 +92,17 @@ bucket(SetKey) [
 */
 
 func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) Set {
-	return self.store.GetOrCreateSet(sType, self.key)
+	return self.store.GetOrCreateSet(sType, true, self.key)
 }
 
 //VerionedData interface
 //******************************************************************************
-func (self *VersionManagerImp) collectSets() []Set {
+func (self *VersionManagerImp) collectSets() []VersionedSet {
 
-	sets := make([]Set, 0)
+	sets := make([]VersionedSet, 0)
 	for _, stype := range StorageTypes {
-		if self.store.GetDatabase(stype).HasSet(self.key) {
-			sets = append(sets, self.store.GetDatabase(stype).GetOrCreateSet(self.key))
+		if self.store.GetDatabase(stype, true).HasSet(self.key) {
+			sets = append(sets, self.store.GetDatabase(stype, true).GetOrCreateSet(self.key).(VersionedSet))
 		}
 	}
 

@@ -1,19 +1,19 @@
-/* Data stores as base for persistence
+/* Data dbs as base for persistence
  *
  * Datastore: A folder that holds all the relevant data and in which a multitude of
  *            different databases can be placed. The datastore handles the creation
  *            and management of all different databases
- * Database:  Special type of storage with unique properties, e.g. ValueType database,
+ * Database:  Special type of storage with unique properties, e.g. ValueVersionedType database,
  *            relational database etc. A database lives within a Datastorage and is
  *            managed by it. It provides access to its functionality in sub entries,
  *            meaning it provides its special storage for multiple keys.
  * Set:       A set in a database for a certain key. Set means seperated group, and
- *            can contain a hughe amount of data. E.g. a Set for a ValueType database
- *            is a group of multiple Values, accessed by keys. A MapType is a group
- *            of Maps, each accessed by a key. Keys in a set cannot be removed and
+ *            can contain a hughe amount of data. E.g. a Set for a ValueVersionedType database
+ *            is a group of multiple ValueVersioneds, accessed by keys. A MapVersionedType is a group
+ *            of MapVersioneds, each accessed by a key. Keys in a set cannot be removed and
  *            must be added at the beginning, bevor versioning, as they are not part
  *            of the versioning process. Versioning happens inside the set, e.g.
- *            for a ValueType set the individual values are versioned.
+ *            for a ValueVersionedType set the individual valueVersioneds are versioned.
  *
  *
  * General properties:
@@ -41,18 +41,21 @@ type DataBase interface {
 
 //Describes a single set in a store and allows to access it
 type Set interface {
-	VersionedData
-
 	GetType() StorageType
 	IsValid() bool
 	Print(params ...int)
+}
+
+type VersionedSet interface {
+	VersionedData
+	Set
 }
 
 type StorageType uint64
 
 const (
 	ValueType StorageType = 1
-	MapType   StorageType = 2
+	MapType   StorageType = 3
 )
 
 var StorageTypes = []StorageType{ValueType, MapType}
@@ -66,6 +69,10 @@ func NewDatastore(path string) (*Datastore, error) {
 		return nil, err
 	}
 
+	//database storages
+	dbs := make(map[StorageType]DataBase, 0)
+	vdbs := make(map[StorageType]DataBase, 0)
+
 	//build the default blt db
 	path = filepath.Join(path, "bolt.db")
 	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
@@ -73,53 +80,64 @@ func NewDatastore(path string) (*Datastore, error) {
 		return nil, err
 	}
 
-	keyvalue, err := NewValueDatabase(db)
+	value, err := NewValueDatabase(db)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
+	dbs[ValueType] = value
 
-	mapdb, err := NewMapDatabase(db)
+	valueVersioned, err := NewValueVersionedDatabase(db)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
+	vdbs[ValueType] = valueVersioned
 
-	stores := make(map[StorageType]DataBase, 0)
-	stores[ValueType] = keyvalue
-	stores[MapType] = mapdb
+	mapVersioned, err := NewMapVersionedDatabase(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	vdbs[MapType] = mapVersioned
 
-	return &Datastore{db, stores}, nil
+	return &Datastore{db, dbs, vdbs}, nil
 }
 
 type Datastore struct {
 	boltdb *bolt.DB
-	stores map[StorageType]DataBase
+	dbs    map[StorageType]DataBase
+	vDbs   map[StorageType]DataBase
 }
 
-func (self *Datastore) GetDatabase(kind StorageType) DataBase {
+func (self *Datastore) GetDatabase(kind StorageType, versioned bool) DataBase {
 
-	store, ok := self.stores[kind]
+	var db DataBase
+	var ok bool
+	if versioned {
+		db, ok = self.vDbs[kind]
+	} else {
+		db, ok = self.dbs[kind]
+	}
 	if !ok {
 		panic("no such storage available")
 	}
 
-	return store
+	return db
 }
 
-func (self *Datastore) GetOrCreateSet(kind StorageType, set [32]byte) Set {
+func (self *Datastore) GetOrCreateSet(kind StorageType, versioned bool, set [32]byte) Set {
 
-	store, ok := self.stores[kind]
-	if !ok {
-		panic("no such storage available")
-	}
-
-	return store.GetOrCreateSet(set)
+	db := self.GetDatabase(kind, versioned)
+	return db.GetOrCreateSet(set)
 }
 
 func (self *Datastore) Close() {
 
-	for _, store := range self.stores {
+	for _, store := range self.dbs {
+		store.Close()
+	}
+	for _, store := range self.vDbs {
 		store.Close()
 	}
 

@@ -138,7 +138,7 @@ func (self *object) AddProperty(name string, dtype DataType, constprop bool) err
 	}
 
 	//we add properties
-	set, ok := self.GetDatabaseSet(datastore.ValueType).(*datastore.ValueSet)
+	set, ok := self.GetDatabaseSet(datastore.ValueType).(*datastore.ValueVersionedSet)
 	if !ok {
 		return fmt.Errorf("Unable to create database set")
 	}

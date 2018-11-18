@@ -20,7 +20,7 @@ type Property interface {
 	GetValue() interface{}
 }
 
-func NewProperty(name string, dtype DataType, set *datastore.ValueSet, vm *goja.Runtime, constprop bool) (Property, error) {
+func NewProperty(name string, dtype DataType, set *datastore.ValueVersionedSet, vm *goja.Runtime, constprop bool) (Property, error) {
 
 	var prop Property
 
@@ -53,7 +53,7 @@ func NewProperty(name string, dtype DataType, set *datastore.ValueSet, vm *goja.
 type dataProperty struct {
 	eventHandler
 	propertyType DataType
-	db           datastore.Value
+	db           datastore.ValueVersioned
 }
 
 func (self dataProperty) Type() DataType {
