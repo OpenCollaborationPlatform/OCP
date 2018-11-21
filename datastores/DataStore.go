@@ -57,10 +57,10 @@ type StorageType uint64
 const (
 	ValueType StorageType = 1
 	MapType   StorageType = 3
-	IndexType StorageType = 4
+	ListType  StorageType = 4
 )
 
-var StorageTypes = []StorageType{ValueType, MapType, IndexType}
+var StorageTypes = []StorageType{ValueType, MapType, ListType}
 
 func NewDatastore(path string) (*Datastore, error) {
 
@@ -110,12 +110,12 @@ func NewDatastore(path string) (*Datastore, error) {
 	}
 	vdbs[MapType] = mapVersioned
 
-	index, err := NewIndexDatabase(db)
+	list, err := NewListDatabase(db)
 	if err != nil {
 		db.Close()
 		return nil, err
 	}
-	dbs[IndexType] = index
+	dbs[ListType] = list
 
 	return &Datastore{db, dbs, vdbs}, nil
 }

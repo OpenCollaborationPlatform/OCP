@@ -1,4 +1,3 @@
-//parser for the datastructure markup language
 package datastore
 
 import (
