@@ -117,6 +117,13 @@ func NewDatastore(path string) (*Datastore, error) {
 	}
 	dbs[ListType] = list
 
+	listVersioned, err := NewListVersionedDatabase(db)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	vdbs[ListType] = listVersioned
+
 	return &Datastore{db, dbs, vdbs}, nil
 }
 

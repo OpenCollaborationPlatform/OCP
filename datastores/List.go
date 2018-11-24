@@ -252,7 +252,7 @@ func (self *List) Add(value interface{}) (uint64, error) {
 	return id, entry.Write(value)
 }
 
-func (self *List) Change(id uint64, value interface{}) error {
+func (self *List) Set(id uint64, value interface{}) error {
 
 	if !self.kvset.HasKey(itob(id)) {
 		return fmt.Errorf("No such item available")
