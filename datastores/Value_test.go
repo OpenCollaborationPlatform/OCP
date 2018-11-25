@@ -321,7 +321,7 @@ func TestValueVersioned(t *testing.T) {
 
 			So(pair1.Write("again"), ShouldBeNil)
 			So(pair2.Write(-5), ShouldBeNil)
-			So(pair3.remove(), ShouldBeTrue)
+			So(pair3.remove(), ShouldBeNil)
 			set.FixStateAsVersion()
 
 			So(set.RemoveVersionsUpTo(version), ShouldBeNil)

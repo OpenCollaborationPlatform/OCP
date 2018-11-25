@@ -52,33 +52,33 @@ func TestListBasic(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(list, ShouldNotBeNil)
 
-			id1, err := list.Add("data1")
+			entry1, err := list.Add("data1")
 			So(err, ShouldBeNil)
-			So(id1, ShouldEqual, 1)
+			So(entry1, ShouldNotBeNil)
 
-			id2, err := list.Add("data2")
+			entry2, err := list.Add("data2")
 			So(err, ShouldBeNil)
-			So(id2, ShouldEqual, 2)
+			So(entry2, ShouldNotBeNil)
 
-			val, err := list.Read(id1)
+			val, err := entry1.Read()
 			So(err, ShouldBeNil)
 			So(val, ShouldNotBeNil)
 			str, ok := val.(string)
 			So(ok, ShouldBeTrue)
 			So(str, ShouldEqual, "data1")
 
-			err = list.Set(id1, 12)
+			err = entry1.Write(12)
 			So(err, ShouldBeNil)
-			val, err = list.Read(id1)
+			val, err = entry1.Read()
 			So(err, ShouldBeNil)
 			So(val, ShouldNotBeNil)
 			inte, ok := val.(int64)
 			So(ok, ShouldBeTrue)
 			So(inte, ShouldEqual, 12)
 
-			err = list.Remove(id2)
+			err = entry2.Remove()
 			So(err, ShouldBeNil)
-			val, err = list.Read(id2)
+			val, err = entry2.Read()
 			So(err, ShouldNotBeNil)
 			So(val, ShouldBeNil)
 		})
@@ -151,28 +151,26 @@ func TestListVersionedData(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(list, ShouldNotBeNil)
 
-			p1, err := list.Add(12)
+			entry1, err := list.Add(12)
 			So(err, ShouldBeNil)
-			So(p1, ShouldEqual, 1)
-			val, err := list.Read(p1)
+			So(entry1, ShouldNotBeNil)
+			val, err := entry1.Read()
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 12)
 
-			_, err = list.Read(2)
-			So(err, ShouldNotBeNil)
-			p2, err := list.Add("hello")
+			entry2, err := list.Add("hello")
 			So(err, ShouldBeNil)
-			So(p2, ShouldEqual, 2)
-			val, err = list.Read(p2)
+			So(entry2, ShouldNotBeNil)
+			val, err = entry2.Read()
 			So(err, ShouldBeNil)
 			strvalue, ok := val.(string)
 			So(ok, ShouldBeTrue)
 			So(strvalue, ShouldEqual, "hello")
 
-			So(list.Remove(p1), ShouldBeTrue)
-			_, err = list.Read(p1)
+			So(entry1.Remove(), ShouldBeNil)
+			_, err = entry1.Read()
 			So(err, ShouldNotBeNil)
 		})
 
@@ -189,10 +187,13 @@ func TestListVersionedData(t *testing.T) {
 			So(oldversion, ShouldEqual, 1)
 			So(list.HasUpdates(), ShouldBeFalse)
 
-			//we rebuild the list pointers. hacky but well...
-			var p2 uint64 = 2
+			//we rebuild the list entries
+			entries, err := list.GetEntries()
+			So(err, ShouldBeNil)
+			So(len(entries), ShouldEqual, 2)
+			entry2 := entries[1]
 
-			So(list.Set(p2, "bye"), ShouldBeNil)
+			So(entry2.Write("bye"), ShouldBeNil)
 
 			_, err = list.Add(1.34)
 			So(err, ShouldBeNil)
@@ -201,26 +202,25 @@ func TestListVersionedData(t *testing.T) {
 
 			err = lset.LoadVersion(oldversion)
 			So(err, ShouldBeNil)
-			val, err := list.Read(p2)
+			val, err := entry2.Read()
 			So(err, ShouldBeNil)
 			So(val.(string), ShouldEqual, "hello")
 
 			err = lset.LoadVersion(newversion)
 			So(err, ShouldBeNil)
-			val, err = list.Read(p2)
+			val, err = entry2.Read()
 			So(err, ShouldBeNil)
 			So(val.(string), ShouldEqual, "bye")
 
-			p4, err := list.Add(1)
-			So(err, ShouldBeNil)
+			_, err = list.Add(1)
+			So(err, ShouldNotBeNil)
 			version, err := lset.FixStateAsVersion()
 			So(err, ShouldNotBeNil)
 			So(version.IsValid(), ShouldBeFalse)
 
 			err = lset.LoadVersion(VersionID(HEAD))
 			So(err, ShouldBeNil)
-			So(list.Set(p4, 1), ShouldBeNil)
-			So(list.Remove(p2), ShouldBeTrue)
+			So(entry2.Remove(), ShouldBeNil)
 
 			version, err = lset.FixStateAsVersion()
 			So(err, ShouldBeNil)
@@ -228,6 +228,7 @@ func TestListVersionedData(t *testing.T) {
 			So(lset.LoadVersion(version), ShouldBeNil)
 			err = lset.LoadVersion(VersionID(HEAD))
 			So(err, ShouldBeNil)
+
 		})
 
 		Convey("Finally versions must be removable", func() {
@@ -248,19 +249,23 @@ func TestListVersionedData(t *testing.T) {
 
 			//check if we can reset heads
 			So(lset.LoadVersion(VersionID(HEAD)), ShouldBeNil)
-			var p3 uint64 = 3
-			So(list.Set(p3, 9.38), ShouldBeNil)
+
+			entries, err := list.GetEntries()
+			So(err, ShouldBeNil)
+			So(len(entries), ShouldEqual, 2)
+			entry3 := entries[1]
+			So(entry3.Write(9.38), ShouldBeNil)
 			lset.ResetHead()
-			data, err := list.Read(p3)
+			data, err := entry3.Read()
 			So(err, ShouldBeNil)
 			val, ok := data.(float64)
 			So(ok, ShouldBeTrue)
 			So(val, ShouldAlmostEqual, 1.34)
 
-			list.Remove(p3)
-			//So(list.HasKey(key3), ShouldBeFalse)
+			entry3.Remove()
+			So(entry3.IsValid(), ShouldBeFalse)
 			lset.ResetHead()
-			//So(list.HasKey(key3), ShouldBeTrue)
+			So(entry3.IsValid(), ShouldBeTrue)
 		})
 	})
 }

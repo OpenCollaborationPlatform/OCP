@@ -225,7 +225,7 @@ func newList(db *bolt.DB, dbkey []byte, listkeys [][]byte) List {
 	return List{kv}
 }
 
-func (self *List) Add(value interface{}) (uint64, error) {
+func (self *List) Add(value interface{}) (ListEntry, error) {
 
 	var id uint64
 	err := self.kvset.db.Update(func(tx *bolt.Tx) error {
@@ -242,54 +242,80 @@ func (self *List) Add(value interface{}) (uint64, error) {
 		return nil
 	})
 	if err != nil {
-		return 0, err
-	}
-
-	entry, err := self.kvset.GetOrCreateKey(itob(id))
-	if err != nil {
-		return 0, err
-	}
-	return id, entry.Write(value)
-}
-
-func (self *List) Set(id uint64, value interface{}) error {
-
-	if !self.kvset.HasKey(itob(id)) {
-		return fmt.Errorf("No such item available")
-	}
-	entry, err := self.kvset.GetOrCreateKey(itob(id))
-	if err != nil {
-		return err
-	}
-	return entry.Write(value)
-}
-
-func (self *List) IsValid() bool {
-
-	return self.kvset.IsValid()
-}
-
-func (self *List) Read(id uint64) (interface{}, error) {
-
-	if !self.kvset.HasKey(itob(id)) {
-		return nil, fmt.Errorf("Item not avilable in List")
+		return nil, err
 	}
 
 	entry, err := self.kvset.GetOrCreateKey(itob(id))
 	if err != nil {
 		return nil, err
 	}
-	return entry.Read()
+	return &listEntry{*entry}, entry.Write(value)
 }
 
-func (self *List) Remove(id uint64) error {
+func (self *List) GetEntries() ([]ListEntry, error) {
 
-	if !self.kvset.HasKey(itob(id)) {
-		return fmt.Errorf("Item not avilable in List")
-	}
-	return self.kvset.removeKey(itob(id))
+	entries := make([]ListEntry, 0)
+
+	//iterate over all entries...
+	err := self.kvset.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.kvset.dbkey)
+		for _, bkey := range self.kvset.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		//collect the entries
+		err := bucket.ForEach(func(k []byte, v []byte) error {
+
+			//don't use VERSIONS and CURRENT
+			if !bytes.Equal(k, itob(VERSIONS)) && v == nil {
+				//copy the key as it is not valid outside for each
+				var key = make([]byte, len(k))
+				copy(key, k)
+
+				//build the value and add to the list
+				value := Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, key}
+				entries = append(entries, &listEntry{value})
+			}
+			return nil
+		})
+		return err
+	})
+
+	return entries, err
 }
 
 func (self *List) getListKey() []byte {
 	return self.kvset.getSetKey()
+}
+
+/*
+ * List entries functions
+ * ********************************************************************************
+ */
+type ListEntry interface {
+	Write(value interface{}) error
+	Read() (interface{}, error)
+	IsValid() bool
+	Remove() error
+}
+
+type listEntry struct {
+	value Value
+}
+
+func (self *listEntry) Write(value interface{}) error {
+	return self.value.Write(value)
+}
+
+func (self *listEntry) Read() (interface{}, error) {
+	return self.value.Read()
+}
+
+func (self *listEntry) IsValid() bool {
+	return self.value.IsValid()
+}
+
+func (self *listEntry) Remove() error {
+	return self.value.remove()
 }

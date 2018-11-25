@@ -203,7 +203,12 @@ func (self *ValueVersionedSet) Print(params ...int) {
 					data, ok := inter.(map[string]interface{})
 					if ok {
 						for mk, mv := range data {
-							str = str + string(stob(mk)) + ": %v,  "
+							byt := stob(mk)
+							if len(byt) == 8 {
+								str = str + fmt.Sprintf("%v", btoi(byt)) + ": %v,  "
+							} else {
+								str = str + string(stob(mk)) + ": %v,  "
+							}
 							mvid := stoi(mv.(string))
 							if mvid == INVALID {
 								str = fmt.Sprintf(str, "INVALID")
@@ -217,7 +222,13 @@ func (self *ValueVersionedSet) Print(params ...int) {
 					return nil
 				})
 			} else {
-				fmt.Printf("%s%s:\n", indent, string(k))
+				//check if it is a number instead of string
+				if len(k) == 8 {
+					num := btoi(k)
+					fmt.Printf("%s%v:\n", indent, num)
+				} else {
+					fmt.Printf("%s%s:\n", indent, string(k))
+				}
 				subbucket := bucket.Bucket(k)
 				subbucket.ForEach(func(sk []byte, sv []byte) error {
 					inter, _ := getInterface(sv)
@@ -809,8 +820,9 @@ func (self *ValueVersionedSet) removeKey(key []byte) error {
 	if err != nil {
 		return err
 	}
-	if !pair.remove() {
-		return fmt.Errorf("Unable to remove key")
+	err = pair.remove()
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -935,7 +947,7 @@ func (self *ValueVersioned) readVersion(ID VersionID) (interface{}, error) {
 	return result, err
 }
 
-func (self *ValueVersioned) remove() bool {
+func (self *ValueVersioned) remove() error {
 
 	//removing does not mean to delete everything. We need the data for loading older
 	//versions. It just means we set it as "not existing".
@@ -947,7 +959,7 @@ func (self *ValueVersioned) remove() bool {
 		}
 		return bucket.Put(itob(HEAD), INVALID_VALUE)
 	})
-	return err == nil
+	return err
 }
 
 func (self *ValueVersioned) CurrentVersion() VersionID {

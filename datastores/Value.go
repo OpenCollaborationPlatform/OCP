@@ -166,6 +166,13 @@ func (self *ValueSet) Print(params ...int) {
 
 		bucket.ForEach(func(k []byte, v []byte) error {
 			inter, _ := getInterface(v)
+
+			//check if it is a number instead of string
+			if len(k) == 8 {
+				num := btoi(k)
+				fmt.Printf("%s\t%v: %v\n", indent, num, inter)
+			}
+			//print as string
 			fmt.Printf("%s\t%v: %v\n", indent, k, inter)
 			return nil
 		})
