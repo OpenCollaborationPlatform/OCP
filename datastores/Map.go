@@ -231,7 +231,7 @@ func (self *Map) Write(key interface{}, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	entry, err := self.kvset.GetOrCreateKey(k)
+	entry, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
 		return err
 	}
@@ -258,7 +258,7 @@ func (self *Map) Read(key interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	entry, err := self.kvset.GetOrCreateKey(k)
+	entry, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
 		return nil, err
 	}

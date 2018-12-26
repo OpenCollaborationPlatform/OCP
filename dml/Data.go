@@ -1,12 +1,6 @@
 // Data descibes a Data object with its respective properties to store things in a database
 package dml
 
-import (
-	"github.com/dop251/goja"
-
-	"CollaborationNode/datastores"
-)
-
 //the most basic implementation of an dml Object. All it does is to allow adding
 //fundamental types, like properties, events and functions, as well as holding Behaviours.
 //It has no other special functionality. It is intended as dml grouping object as well as
@@ -21,10 +15,10 @@ type data struct {
 	behaviourHandler
 }
 
-func NewData(ds *datastore.Datastore, name string, parent Object, vm *goja.Runtime) Object {
+func NewData(name string, parent identifier, rntm *Runtime) Object {
 
 	dat := data{
-		NewObject(parent, name, "Data", vm, ds),
+		NewObject(parent, name, "Data", rntm),
 		NewBehaviourHandler(),
 	}
 

@@ -33,7 +33,7 @@ func TestVersioning(t *testing.T) {
 			So(ok, ShouldBeTrue)
 
 			key1 := []byte("key1")
-			value, err := vset.GetOrCreateKey(key1)
+			value, err := vset.GetOrCreateValue(key1)
 			So(err, ShouldBeNil)
 			So(value.IsValid(), ShouldBeTrue)
 

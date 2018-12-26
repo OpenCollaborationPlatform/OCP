@@ -583,7 +583,7 @@ func (self *MapVersioned) Write(key interface{}, valueVersioned interface{}) err
 	if err != nil {
 		return err
 	}
-	pair, err := self.kvset.GetOrCreateKey(k)
+	pair, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
 		return err
 	}
@@ -610,7 +610,7 @@ func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	pair, err := self.kvset.GetOrCreateKey(k)
+	pair, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
 		return nil, err
 	}

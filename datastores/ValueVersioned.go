@@ -771,7 +771,7 @@ func (self *ValueVersionedSet) HasKey(key []byte) bool {
 	return pair.IsValid()
 }
 
-func (self *ValueVersionedSet) GetOrCreateKey(key []byte) (*ValueVersioned, error) {
+func (self *ValueVersionedSet) GetOrCreateValue(key []byte) (*ValueVersioned, error) {
 
 	if !self.HasKey(key) {
 
@@ -816,7 +816,7 @@ func (self *ValueVersionedSet) removeKey(key []byte) error {
 	if !self.HasKey(key) {
 		return fmt.Errorf("key does not exists, cannot be removed")
 	}
-	pair, err := self.GetOrCreateKey(key)
+	pair, err := self.GetOrCreateValue(key)
 	if err != nil {
 		return err
 	}

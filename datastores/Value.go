@@ -194,7 +194,7 @@ func (self *ValueSet) HasKey(key []byte) bool {
 	return value.IsValid()
 }
 
-func (self *ValueSet) GetOrCreateKey(key []byte) (*Value, error) {
+func (self *ValueSet) GetOrCreateValue(key []byte) (*Value, error) {
 
 	//we create it by writing empty data into it
 	if !self.HasKey(key) {
@@ -219,7 +219,7 @@ func (self *ValueSet) removeKey(key []byte) error {
 	if !self.HasKey(key) {
 		return fmt.Errorf("key does not exists, cannot be removed")
 	}
-	value, err := self.GetOrCreateKey(key)
+	value, err := self.GetOrCreateValue(key)
 	if err != nil {
 		return err
 	}

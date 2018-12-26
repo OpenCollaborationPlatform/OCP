@@ -23,10 +23,14 @@ bucket(SetKey) [
 func NewListDatabase(db *bolt.DB) (*ListDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucketIfNotExists([]byte("List"))
-		return nil
+	err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("List"))
+		return err
 	})
+
+	if err != nil {
+		return nil, stackError(err, "Cannot create bucket \"List\"")
+	}
 
 	return &ListDatabase{db, []byte("List")}, nil
 }
@@ -74,17 +78,13 @@ func (self ListDatabase) RemoveSet(set [32]byte) error {
 
 	if self.HasSet(set) {
 
-		var result error
-		self.db.Update(func(tx *bolt.Tx) error {
+		return self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
-			result = bucket.DeleteBucket(set[:])
-			return nil
+			return bucket.DeleteBucket(set[:])
 		})
-
-		return result
 	}
 
-	return nil
+	return fmt.Errorf("no such set available")
 }
 
 func (self ListDatabase) Close() {
@@ -245,7 +245,7 @@ func (self *List) Add(value interface{}) (ListEntry, error) {
 		return nil, err
 	}
 
-	entry, err := self.kvset.GetOrCreateKey(itob(id))
+	entry, err := self.kvset.GetOrCreateValue(itob(id))
 	if err != nil {
 		return nil, err
 	}

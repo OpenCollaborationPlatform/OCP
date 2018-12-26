@@ -1,12 +1,6 @@
 // Transaction.go
 package dml
 
-import (
-	"CollaborationNode/datastores"
-
-	"github.com/dop251/goja"
-)
-
 /*
  * A Behaviour is a set of methods and events that define a certain way an object reacts on
  * certain circumstances or in certain situations. The language interpreter handles a object
@@ -22,10 +16,10 @@ type Behaviour interface {
 	Copy() Behaviour
 }
 
-func NewBehaviour(parent Object, name string, oType string, vm *goja.Runtime, store *datastore.Datastore) (*behaviour, error) {
+func NewBehaviour(parent identifier, name string, oType string, rntm *Runtime) (*behaviour, error) {
 
 	result := behaviour{
-		NewObject(parent, name, oType, vm, store),
+		NewObject(parent, name, oType, rntm),
 		NewMethodHandler(),
 	}
 

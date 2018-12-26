@@ -49,7 +49,7 @@ func TestValueBasic(t *testing.T) {
 
 			key1 := []byte("key1")
 			So(set.HasKey(key1), ShouldBeFalse)
-			value, err := set.GetOrCreateKey(key1)
+			value, err := set.GetOrCreateValue(key1)
 			So(err, ShouldBeNil)
 			So(value, ShouldNotBeNil)
 
@@ -65,7 +65,7 @@ func TestValueBasic(t *testing.T) {
 			So(num, ShouldEqual, 1)
 
 			key2 := []byte("key2")
-			value2, err := set.GetOrCreateKey(key2)
+			value2, err := set.GetOrCreateValue(key2)
 			So(err, ShouldBeNil)
 			So(value2, ShouldNotBeNil)
 			So(set.HasKey(key2), ShouldBeTrue)
@@ -130,7 +130,7 @@ func TestValueVersionedBasics(t *testing.T) {
 
 			key1 := []byte("key1")
 			So(set.HasKey(key1), ShouldBeFalse)
-			pair, err := set.GetOrCreateKey(key1)
+			pair, err := set.GetOrCreateValue(key1)
 			So(err, ShouldBeNil)
 			So(pair, ShouldNotBeNil)
 			So(set.HasKey(key1), ShouldBeTrue)
@@ -145,7 +145,7 @@ func TestValueVersionedBasics(t *testing.T) {
 			So(num, ShouldEqual, 1)
 
 			key2 := []byte("key2")
-			pair2, err := set.GetOrCreateKey(key2)
+			pair2, err := set.GetOrCreateValue(key2)
 			So(err, ShouldBeNil)
 			So(pair2, ShouldNotBeNil)
 			So(set.HasKey(key2), ShouldBeTrue)
@@ -217,7 +217,7 @@ func TestValueVersioned(t *testing.T) {
 			kvset, _ := set.(*ValueVersionedSet)
 
 			So(kvset.HasUpdates(), ShouldBeFalse)
-			pair1, err := kvset.GetOrCreateKey([]byte("data1"))
+			pair1, err := kvset.GetOrCreateValue([]byte("data1"))
 
 			So(kvset.HasUpdates(), ShouldBeTrue)
 			So(err, ShouldBeNil)
@@ -259,12 +259,12 @@ func TestValueVersioned(t *testing.T) {
 			err = set.LoadVersion(VersionID(1))
 			So(err, ShouldBeNil)
 			kvset, _ := set.(*ValueVersionedSet)
-			pair1, err := kvset.GetOrCreateKey([]byte("data1"))
+			pair1, err := kvset.GetOrCreateValue([]byte("data1"))
 			So(err, ShouldNotBeNil)
 			So(pair1, ShouldBeNil)
 
 			//new data should not be creatable
-			pair2, err := kvset.GetOrCreateKey([]byte("data2"))
+			pair2, err := kvset.GetOrCreateValue([]byte("data2"))
 			So(err, ShouldNotBeNil)
 			So(pair2, ShouldBeNil)
 
@@ -275,7 +275,7 @@ func TestValueVersioned(t *testing.T) {
 			//we should be able to get back the first values
 			err = set.LoadVersion(VersionID(2))
 			So(err, ShouldBeNil)
-			pair1, err = kvset.GetOrCreateKey([]byte("data1"))
+			pair1, err = kvset.GetOrCreateValue([]byte("data1"))
 			So(err, ShouldBeNil)
 			So(pair1.IsValid(), ShouldBeTrue)
 			data, err := pair1.Read()
@@ -285,7 +285,7 @@ func TestValueVersioned(t *testing.T) {
 			So(value, ShouldEqual, "override")
 
 			//new data should not be creatable
-			pair2, err = kvset.GetOrCreateKey([]byte("data2"))
+			pair2, err = kvset.GetOrCreateValue([]byte("data2"))
 			So(err, ShouldNotBeNil)
 
 			//new data should be creatable in HEAD
@@ -298,7 +298,7 @@ func TestValueVersioned(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, "override")
 
-			pair2, err = kvset.GetOrCreateKey([]byte("data2"))
+			pair2, err = kvset.GetOrCreateValue([]byte("data2"))
 			So(err, ShouldBeNil)
 			err = pair2.Write(12)
 			So(err, ShouldBeNil)
@@ -308,9 +308,9 @@ func TestValueVersioned(t *testing.T) {
 		Convey("It must be possible to delete older versions", func() {
 
 			kvset, _ := set.(*ValueVersionedSet)
-			pair1, _ := kvset.GetOrCreateKey([]byte("data1"))
-			pair2, _ := kvset.GetOrCreateKey([]byte("data2"))
-			pair3, _ := kvset.GetOrCreateKey([]byte("data3"))
+			pair1, _ := kvset.GetOrCreateValue([]byte("data1"))
+			pair2, _ := kvset.GetOrCreateValue([]byte("data2"))
+			pair3, _ := kvset.GetOrCreateValue([]byte("data3"))
 
 			So(pair1.Write("next"), ShouldBeNil)
 			So(pair2.Write(29), ShouldBeNil)
@@ -360,9 +360,9 @@ func TestValueVersioned(t *testing.T) {
 		Convey("as well as new versions", func() {
 
 			kvset, _ := set.(*ValueVersionedSet)
-			pair1, _ := kvset.GetOrCreateKey([]byte("data1"))
-			pair2, _ := kvset.GetOrCreateKey([]byte("data2"))
-			pair4, _ := kvset.GetOrCreateKey([]byte("data4"))
+			pair1, _ := kvset.GetOrCreateValue([]byte("data1"))
+			pair2, _ := kvset.GetOrCreateValue([]byte("data2"))
+			pair4, _ := kvset.GetOrCreateValue([]byte("data4"))
 
 			So(pair1.Write("hmm"), ShouldBeNil)
 			So(pair2.Write(1070), ShouldBeNil)

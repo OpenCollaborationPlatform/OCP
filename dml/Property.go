@@ -27,7 +27,7 @@ func NewProperty(name string, dtype DataType, set *datastore.ValueVersionedSet, 
 	if !constprop {
 		switch dtype {
 		case Int, Float, String, Bool:
-			value, _ := set.GetOrCreateKey([]byte(name))
+			value, _ := set.GetOrCreateValue([]byte(name))
 			prop = &dataProperty{NewEventHandler(), dtype, *value}
 		default:
 			return nil, fmt.Errorf("Unknown type")

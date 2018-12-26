@@ -29,13 +29,7 @@ import (
 )
 
 //Function prototype that can create new object types in DML
-type CreatorFunc func(datastore *datastore.Datastore, name string, parent Object, vm *goja.Runtime) Object
-
-//struct that describes the runtime state and is shared between all runtime objects
-type RuntimeState struct {
-	Ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
-	CurrentUser User    //user that currently access the runtime
-}
+type CreatorFunc func(name string, parent identifier, rntm *Runtime) Object
 
 func NewRuntime(ds *datastore.Datastore) Runtime {
 
@@ -46,24 +40,32 @@ func NewRuntime(ds *datastore.Datastore) Runtime {
 
 	cr := make(map[string]CreatorFunc, 0)
 	return Runtime{
-		creators:  cr,
-		jsvm:      js,
-		datastore: ds,
-		mainObj:   nil,
-		mutex:     &sync.Mutex{},
-		state:     &RuntimeState{Ready: false, CurrentUser: "none"},
+		creators:    cr,
+		jsvm:        js,
+		datastore:   ds,
+		mutex:       &sync.Mutex{},
+		ready:       false,
+		currentUser: "none",
+		objects:     make(map[identifier]Object, 0),
+		mainObj:     nil,
 	}
 }
 
 //builds a datastructure from a file
 // - existing types must be registered to be recognized during parsing
 type Runtime struct {
-	creators  map[string]CreatorFunc
+	creators map[string]CreatorFunc
+
+	//components of the runtime
 	jsvm      *goja.Runtime
 	datastore *datastore.Datastore
-	mainObj   Object
 	mutex     *sync.Mutex
-	state     *RuntimeState
+
+	//internal state
+	ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
+	currentUser User    //user that currently access the runtime
+	objects     map[identifier]Object
+	mainObj     Object
 }
 
 // Setup / creation Methods
@@ -85,7 +87,7 @@ func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 func (self *Runtime) ParseFile(path string) error {
 
 	//no double loading
-	if self.state.Ready == true {
+	if self.ready == true {
 		return fmt.Errorf("Runtime is already setup")
 	}
 
@@ -107,13 +109,13 @@ func (self *Runtime) ParseFile(path string) error {
 	}
 
 	//process the AST into usable objects
-	obj, err := self.buildObject(ast.Object, nil, make([]*astObject, 0))
+	obj, err := self.buildObject(ast.Object, identifier{}, make([]*astObject, 0))
 	if err != nil {
 		return err
 		//TODO clear the database entries...
 	}
 	self.mainObj = obj
-	self.state.Ready = true
+	self.ready = true
 
 	return err
 }
@@ -225,8 +227,10 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 	}
 
 	obj := self.mainObj
-	for _, id := range names[1:] {
-		child, err := obj.GetChildById(id)
+	for _, name := range names[1:] {
+
+		//check all childs to find the one with given name
+		child, err := obj.GetChildByName(name)
 		if err != nil {
 			return nil, err
 		}
@@ -239,15 +243,14 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 func (self *Runtime) preprocess() (map[identifier]datastore.VersionID, error) {
 
 	state := make(map[identifier]datastore.VersionID)
-	err := self.mainObj.ForEachSubobject(true, func(obj Object) error {
+	for _, obj := range self.objects {
 		v, err := obj.GetLatestVersion()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		state[obj.Id()] = v
-		return nil
-	})
-	return state, err
+	}
+	return state, nil
 }
 
 //postprocess for all done operations. Entry point for behaviours
@@ -258,29 +261,23 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 	if !rollbackOnly {
 
 		//check all objects if anything has changed
-		err := self.mainObj.ForEachSubobject(true, func(obj Object) error {
+		for _, obj := range self.objects {
 			if obj.HasUpdates() {
 				//handle transaction behaviour
 
 				//fix the data
 				_, err := obj.FixStateAsVersion()
 				if err != nil {
-					return err
+					rollbackOnly = true
+					break
 				}
-
-				//handle the transaction behaviour
 			}
-			return nil
-		})
-
-		if err != nil {
-			rollbackOnly = true
 		}
 	}
 
 	//do rollback if required (caller requested or behaviours failed)
 	if rollbackOnly {
-		self.mainObj.ForEachSubobject(true, func(obj Object) error {
+		for _, obj := range self.objects {
 
 			v, ok := prestate[obj.Id()]
 			if ok {
@@ -318,13 +315,13 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 			//TODO: Handle not ok: howto remove object correctly?
 
 			return nil
-		})
+		}
 	}
 	return nil
 }
 
 //due to recursive nature og objects we need an extra function
-func (self *Runtime) buildObject(astObj *astObject, parent Object, recBehaviours []*astObject) (Object, error) {
+func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehaviours []*astObject) (Object, error) {
 
 	//see if we can build it, and do so if possible
 	creator, ok := self.creators[astObj.Identifier]
@@ -344,11 +341,11 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object, recBehaviours
 	}
 
 	//setup the object including datastore and check for uniqueness
-	obj := creator(self.datastore, objName, parent, self.jsvm)
-	if parent != nil {
+	obj := creator(objName, parent, self)
+	if parent.valid() {
 		objId := obj.Id()
 		//if unique in the parents childrens we are generaly unique, as parent is part of our ID
-		for _, sibling := range parent.GetChildren() {
+		for _, sibling := range self.objects[parent].GetChildren() {
 			if sibling.Id().Type == objId.Type &&
 				sibling.Id().Name == objId.Name {
 
@@ -359,8 +356,9 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object, recBehaviours
 
 	//expose to javascript
 	jsobj := obj.GetJSObject()
-	if parent != nil {
-		parent.GetJSObject().Set(objName, jsobj)
+	if parent.valid() {
+		parentObj := self.objects[parent]
+		parentObj.GetJSObject().Set(objName, jsobj)
 	} else {
 		self.jsvm.Set(objName, jsobj)
 	}
@@ -425,7 +423,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object, recBehaviours
 		for _, astChild := range astObj.Objects {
 
 			//build the child
-			child, err := self.buildObject(astChild, obj, localRecBehaviours)
+			child, err := self.buildObject(astChild, obj.Id(), localRecBehaviours)
 			if err != nil {
 				return nil, err
 			}
@@ -470,8 +468,8 @@ func (self *Runtime) buildObject(astObj *astObject, parent Object, recBehaviours
 	}
 
 	//ant last we add the general object properties: children, parent etc...
-	if parent != nil {
-		jsobj.DefineDataProperty("parent", parent.GetJSObject(), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
+	if parent.valid() {
+		jsobj.DefineDataProperty("parent", self.objects[parent].GetJSObject(), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	} else {
 		jsobj.DefineDataProperty("parent", self.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	}

@@ -15,6 +15,14 @@ type JSObject interface {
 //user type to store data about a user
 type User string
 
+func (self User) Data() []byte {
+	return []byte(self)
+}
+
+func UserFromData(data []byte) (User, error) {
+	return User(data), nil
+}
+
 type DataType int
 
 const (

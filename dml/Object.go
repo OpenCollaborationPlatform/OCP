@@ -25,11 +25,8 @@ type Object interface {
 	//Object hirarchy
 	AddChild(obj Object)
 	GetChildren() []Object
-	GetChildById(id string) (Object, error)
+	GetChildByName(name string) (Object, error)
 	GetParent() Object
-
-	//Subobject handling (child + extras)
-	ForEachSubobject(recursive bool, fnc func(obj Object) error) error //to be overriden
 }
 
 //the most basic implementation of an dml Object. It is intended as dml grouping
@@ -41,39 +38,35 @@ type object struct {
 	methodHandler
 
 	//object
-	children []Object
-	parent   Object
+	rntm     *Runtime
+	children []identifier
+	parent   identifier
 	id       identifier
 	oType    string
 
 	//javascript
 	jsobj *goja.Object
-	jsrtm *goja.Runtime
 }
 
-func NewObject(parent Object, name string, oType string, vm *goja.Runtime, store *datastore.Datastore) *object {
+func NewObject(parent identifier, name string, oType string, rntm *Runtime) *object {
 
-	jsobj := vm.NewObject()
-
-	var hash [32]byte
-	if parent != nil {
-		hash = parent.Id().hash()
-	}
-	id := identifier{hash, oType, name}
+	jsobj := rntm.jsvm.NewObject()
+	id := identifier{parent.hash(), oType, name}
 
 	obj := object{
-		datastore.NewVersionManager(id.hash(), store),
+		datastore.NewVersionManager(id.hash(), rntm.datastore),
 		NewPropertyHandler(),
 		NewEventHandler(),
 		NewMethodHandler(),
-		make([]Object, 0),
+		rntm,
+		make([]identifier, 0),
 		parent,
 		id,
 		oType,
 		jsobj,
-		vm,
 	}
 
+	rntm.objects[id] = &obj
 	return &obj
 }
 
@@ -83,51 +76,90 @@ func (self *object) Id() identifier {
 
 func (self *object) AddChild(obj Object) {
 
-	self.children = append(self.children, obj)
+	self.children = append(self.children, obj.Id())
 }
 
 func (self *object) GetChildren() []Object {
-	return self.children
+
+	result := make([]Object, len(self.children))
+	for i, child := range self.children {
+		result[i] = self.rntm.objects[child]
+	}
+	return result
 }
 
-func (self *object) GetChildById(id string) (Object, error) {
+func (self *object) GetChildByName(name string) (Object, error) {
 
 	for _, child := range self.children {
-
-		if child.Id().Name == id {
-			return child, nil
+		if child.Name == name {
+			return self.rntm.objects[child], nil
 		}
 	}
-
-	return nil, fmt.Errorf("No child available with id %v", id)
+	return nil, fmt.Errorf("No such object available")
 }
 
 func (self *object) GetParent() Object {
-	return self.parent
+
+	return self.rntm.objects[self.parent]
 }
 
-//not only childs, but also other subobjects like vector elements. Must be
-//implemented by subclasses if other subobjects than children exist
-func (self *object) ForEachSubobject(recursive bool, fnc func(obj Object) error) error {
+////not only childs, but also other subobjects like vector elements. Must be
+////implemented by subclasses if other subobjects than children exist
+//func (self *object) ForEachSubobject(recursive bool, fnc func(obj Object) error) error {
 
-	for _, child := range self.children {
-		fnc(child)
-		if recursive {
-			err := child.ForEachSubobject(true, fnc)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
+//	for _, child := range self.children {
+//		fnc(child)
+//		if recursive {
+//			err := child.ForEachSubobject(true, fnc)
+//			if err != nil {
+//				return err
+//			}
+//		}
+//	}
+//	return nil
+//}
+
+//func (self *Object) GetSubobject(id Identifier, recursive bool) (Object, bool) {
+
+//	for _, child := range self.children {
+
+//		if child.Id.equal(id) {
+//			return child, true
+//		}
+//		if recursive {
+//			obj, ok := child.GetSubobject(id, true)
+//			if ok {
+//				return obj, ok
+//			}
+//		}
+//	}
+//	return nil, false
+//}
+
+//func (self *object) GetSubobjectById(id identifier, recursive bool) (Object, error) {
+
+//	for _, child := range self.children {
+
+//		if child.Id.equal(id) {
+//			return child, true
+//		}
+//		if recursive {
+//			obj, ok := child.GetSubobject(id, true)
+//			if ok {
+//				return obj, ok
+//			}
+//		}
+//	}
+
+//	return nil, fmt.Errorf("No child available with id %v", id)
+//}
 
 func (self *object) GetJSObject() *goja.Object {
 	return self.jsobj
 }
 
 func (self *object) GetJSRuntime() *goja.Runtime {
-	return self.jsrtm
+	return self.rntm.jsvm
 }
 
 //missing function from property handler
@@ -138,11 +170,15 @@ func (self *object) AddProperty(name string, dtype DataType, constprop bool) err
 	}
 
 	//we add properties
-	set, ok := self.GetDatabaseSet(datastore.ValueType).(*datastore.ValueVersionedSet)
+	set, err := self.GetDatabaseSet(datastore.ValueType)
+	if err != nil {
+		return err
+	}
+	vSet, ok := set.(*datastore.ValueVersionedSet)
 	if !ok {
 		return fmt.Errorf("Unable to create database set")
 	}
-	prop, err := NewProperty(name, dtype, set, self.GetJSRuntime(), constprop)
+	prop, err := NewProperty(name, dtype, vSet, self.GetJSRuntime(), constprop)
 	if err != nil {
 		return err
 	}
