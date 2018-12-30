@@ -362,12 +362,11 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 
 func (self *TransactionManager) loadTransaction(id datastore.ListEntry) (transaction, error) {
 
-	data, err := id.Read()
-	if err != nil {
-		return transaction{}, err
-	}
 	var key [32]byte
-	copy(key[:], data.([]byte))
+	err := id.ReadType(&key)
+	if err != nil {
+		return transaction{}, utils.StackError(err, "Unable to load transaction id from store")
+	}
 	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, false, key)
 	if err != nil {
 		return transaction{}, err

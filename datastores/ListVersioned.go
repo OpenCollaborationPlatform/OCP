@@ -691,6 +691,10 @@ func (self *listVersionedEntry) Read() (interface{}, error) {
 	return self.value.Read()
 }
 
+func (self *listVersionedEntry) ReadType(value interface{}) error {
+	return self.value.ReadType(value)
+}
+
 func (self *listVersionedEntry) IsValid() bool {
 	return self.value.IsValid()
 }

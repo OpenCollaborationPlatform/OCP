@@ -633,6 +633,19 @@ func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 	return pair.Read()
 }
 
+func (self *MapVersioned) ReadType(key interface{}, value interface{}) error {
+
+	k, err := getBytes(key)
+	if err != nil {
+		return err
+	}
+	pair, err := self.kvset.GetOrCreateValue(k)
+	if err != nil {
+		return err
+	}
+	return pair.ReadType(value)
+}
+
 func (self *MapVersioned) Remove(key interface{}) bool {
 
 	k, err := getBytes(key)

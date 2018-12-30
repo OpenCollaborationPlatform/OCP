@@ -265,6 +265,19 @@ func (self *Map) Read(key interface{}) (interface{}, error) {
 	return entry.Read()
 }
 
+func (self *Map) ReadType(key interface{}, value interface{}) error {
+
+	k, err := getBytes(key)
+	if err != nil {
+		return err
+	}
+	entry, err := self.kvset.GetOrCreateValue(k)
+	if err != nil {
+		return err
+	}
+	return entry.ReadType(value)
+}
+
 func (self *Map) Remove(key interface{}) bool {
 
 	k, err := getBytes(key)

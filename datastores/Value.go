@@ -12,6 +12,7 @@ bucket(SetKey) [
 */
 
 import (
+	"CollaborationNode/utils"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -286,6 +287,29 @@ func (self *Value) Read() (interface{}, error) {
 	return result, nil
 }
 
+//to be used for more complex types: give the type to load the data in
+func (self *Value) ReadType(result interface{}) error {
+
+	err := self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range self.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+		data := bucket.Get(self.key)
+		if data == nil {
+			return fmt.Errorf("Value was not set before read")
+		}
+		return json.Unmarshal(data, result)
+	})
+
+	if err != nil {
+		return utils.StackError(err, "Unable to read value into given type %t", result)
+	}
+
+	return nil
+}
+
 func (self *Value) IsValid() bool {
 
 	if self.db == nil {
@@ -342,12 +366,18 @@ func getInterface(bts []byte) (interface{}, error) {
 
 	var res interface{}
 	err := json.Unmarshal(bts, &res)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to unmarhal interface")
+	}
+	return convertInterface(res), nil
+}
+
+func convertInterface(val interface{}) interface{} {
 
 	//json does not distuinguish between float and int
-	num, ok := res.(float64)
+	num, ok := val.(float64)
 	if ok && num == math.Trunc(num) {
-		return int64(num), nil
+		return int64(num)
 	}
-
-	return res, err
+	return val
 }

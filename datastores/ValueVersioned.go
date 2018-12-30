@@ -33,8 +33,10 @@ Definitions:
 */
 
 import (
+	"CollaborationNode/utils"
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -320,7 +322,8 @@ func (self *ValueVersionedSet) ResetHead() {
 	valueVersioneds := self.collectValueVersioneds()
 	for _, val := range valueVersioneds {
 		latest := val.LatestVersion()
-		data, err := val.readVersion(latest)
+		var data interface{}
+		err := val.readVersion(latest, &data)
 
 		//if the version is invalid we don't do anything
 		if err != nil {
@@ -919,12 +922,21 @@ func (self *ValueVersioned) IsValid() bool {
 
 func (self *ValueVersioned) Read() (interface{}, error) {
 
-	return self.readVersion(self.CurrentVersion())
+	var result interface{}
+	err := self.readVersion(self.CurrentVersion(), &result)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to read stored value")
+	}
+	return convertInterface(result), nil
 }
 
-func (self *ValueVersioned) readVersion(ID VersionID) (interface{}, error) {
+func (self *ValueVersioned) ReadType(result interface{}) error {
 
-	var result interface{}
+	return self.readVersion(self.CurrentVersion(), &result)
+}
+
+func (self *ValueVersioned) readVersion(ID VersionID, result interface{}) error {
+
 	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
@@ -938,16 +950,14 @@ func (self *ValueVersioned) readVersion(ID VersionID) (interface{}, error) {
 		if data == nil {
 			return fmt.Errorf("ValueVersioned was not set before read")
 		}
-		res, err := getInterface(data)
-		result = res
-		return err
+		return json.Unmarshal(data, result)
 	})
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return result, err
+	return nil
 }
 
 func (self *ValueVersioned) remove() error {
