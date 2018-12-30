@@ -259,9 +259,18 @@ func (self *Runtime) preprocess() (map[identifier]datastore.VersionID, error) {
 
 	state := make(map[identifier]datastore.VersionID)
 	for _, obj := range self.objects {
+
+		//check if there are versions. If not we need to make sure the first one is created
+		if !obj.HasVersions() {
+			_, err := obj.FixStateAsVersion()
+			if err != nil {
+				return nil, utils.StackError(err, "Unable to create initial version of object for preprocessing")
+			}
+		}
+
 		v, err := obj.GetLatestVersion()
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to retrieve latest version of object during preprocessing")
 		}
 		state[obj.Id()] = v
 	}

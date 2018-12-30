@@ -283,21 +283,8 @@ func (self *ValueVersionedSet) collectValueVersioneds() []ValueVersioned {
 
 func (self *ValueVersionedSet) HasUpdates() bool {
 
-	updates := false
-	//check if there are versions available already
-	self.db.View(func(tx *bolt.Tx) error {
-
-		bucket := tx.Bucket(self.dbkey)
-		for _, bkey := range append(self.setkey, itob(VERSIONS)) {
-			bucket = bucket.Bucket(bkey)
-		}
-		//if there is no version we always need a update, by definition update
-		//is needed if there is a change to the former version
-		if bucket.Sequence() == 0 {
-			updates = true
-		}
-		return nil
-	})
+	//if no versions available yet we always have updates!
+	updates := !self.HasVersions()
 
 	//check if the individual valueVersioneds have updates
 	if !updates {
@@ -310,6 +297,22 @@ func (self *ValueVersionedSet) HasUpdates() bool {
 	}
 
 	return updates
+}
+
+func (self *ValueVersionedSet) HasVersions() bool {
+
+	var versions bool
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, itob(VERSIONS)) {
+			bucket = bucket.Bucket(bkey)
+		}
+		versions = (bucket.Sequence() != 0)
+		return nil
+	})
+
+	return versions
 }
 
 func (self *ValueVersionedSet) ResetHead() {

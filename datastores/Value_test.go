@@ -188,6 +188,7 @@ func TestValueVersioned(t *testing.T) {
 
 		Convey("initially all versioning commands must be callable.", func() {
 
+			So(set.HasVersions(), ShouldBeFalse)
 			version, err := set.GetLatestVersion()
 			So(err, ShouldNotBeNil)
 			So(version.IsValid(), ShouldBeFalse)
@@ -205,6 +206,7 @@ func TestValueVersioned(t *testing.T) {
 			version, err = set.GetLatestVersion()
 			So(err, ShouldBeNil)
 			So(uint64(version), ShouldEqual, 1)
+			So(set.HasVersions(), ShouldBeTrue)
 
 			version, err = set.GetCurrentVersion()
 			So(err, ShouldBeNil)

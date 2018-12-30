@@ -180,12 +180,18 @@ func TestListVersionedData(t *testing.T) {
 			lset := db.GetOrCreateSet(name).(*ListVersionedSet)
 			list, _ := lset.GetOrCreateList([]byte("mylistVersioned"))
 
+			So(lset.HasUpdates(), ShouldBeTrue)
 			So(list.HasUpdates(), ShouldBeTrue)
+			So(lset.HasVersions(), ShouldBeFalse)
+			So(list.HasVersions(), ShouldBeFalse)
 
 			oldversion, err := lset.FixStateAsVersion()
 			So(err, ShouldBeNil)
 			So(oldversion, ShouldEqual, 1)
+			So(lset.HasUpdates(), ShouldBeFalse)
 			So(list.HasUpdates(), ShouldBeFalse)
+			So(lset.HasVersions(), ShouldBeTrue)
+			So(list.HasVersions(), ShouldBeTrue)
 
 			//we rebuild the list entries
 			entries, err := list.GetEntries()

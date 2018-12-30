@@ -34,6 +34,7 @@ func (self VersionID) IsValid() bool {
  */
 type VersionedData interface {
 	HasUpdates() bool
+	HasVersions() bool
 	ResetHead()
 	FixStateAsVersion() (VersionID, error)
 	LoadVersion(id VersionID) error
@@ -117,14 +118,7 @@ func (self *VersionManagerImp) collectSets() []VersionedSet {
 func (self *VersionManagerImp) HasUpdates() bool {
 
 	//if we have no version yet we have updates to allow to come back to default
-	var updates bool
-	self.store.boltdb.View(func(tx *bolt.Tx) error {
-
-		bucket := tx.Bucket([]byte("VersionManager"))
-		bucket = bucket.Bucket(self.key[:])
-		updates = bucket.Sequence() == 0
-		return nil
-	})
+	updates := !self.HasVersions()
 
 	//if we already have versions check the individual sets
 	if !updates {
@@ -138,6 +132,20 @@ func (self *VersionManagerImp) HasUpdates() bool {
 	}
 
 	return updates
+}
+
+func (self *VersionManagerImp) HasVersions() bool {
+
+	var versions bool
+	self.store.boltdb.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket([]byte("VersionManager"))
+		bucket = bucket.Bucket(self.key[:])
+		versions = (bucket.Sequence() != 0)
+		return nil
+	})
+
+	return versions
 }
 
 func (self *VersionManagerImp) ResetHead() {

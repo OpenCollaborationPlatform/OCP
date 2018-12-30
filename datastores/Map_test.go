@@ -198,12 +198,18 @@ func TestMapVersionedData(t *testing.T) {
 			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
 			mp, _ := mset.GetOrCreateMap([]byte("mymapVersioned"))
 
+			So(mset.HasUpdates(), ShouldBeTrue)
 			So(mp.HasUpdates(), ShouldBeTrue)
+			So(mset.HasVersions(), ShouldBeFalse)
+			So(mp.HasVersions(), ShouldBeFalse)
 
 			oldversion, err := mset.FixStateAsVersion()
 			So(err, ShouldBeNil)
 			So(oldversion, ShouldEqual, 1)
+			So(mset.HasUpdates(), ShouldBeFalse)
 			So(mp.HasUpdates(), ShouldBeFalse)
+			So(mset.HasVersions(), ShouldBeTrue)
+			So(mp.HasVersions(), ShouldBeTrue)
 
 			key1 := []byte("key1")
 			So(mp.HasKey(key1), ShouldBeFalse)

@@ -225,6 +225,22 @@ func (self *MapVersionedSet) HasUpdates() bool {
 	return false
 }
 
+func (self *MapVersionedSet) HasVersions() bool {
+
+	var versions bool
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		versions = (bucket.Sequence() != 0)
+		return nil
+	})
+	return versions
+}
+
 func (self *MapVersionedSet) ResetHead() {
 
 	mapVersioneds := self.collectMapVersioneds()
@@ -641,6 +657,11 @@ func (self *MapVersioned) LatestVersion() VersionID {
 func (self *MapVersioned) HasUpdates() bool {
 
 	return self.kvset.HasUpdates()
+}
+
+func (self *MapVersioned) HasVersions() bool {
+
+	return self.kvset.HasVersions()
 }
 
 func (self *MapVersioned) getMapVersionedKey() []byte {

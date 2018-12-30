@@ -225,6 +225,22 @@ func (self *ListVersionedSet) HasUpdates() bool {
 	return false
 }
 
+func (self *ListVersionedSet) HasVersions() bool {
+
+	var versions bool
+	self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		versions = (bucket.Sequence() != 0)
+		return nil
+	})
+	return versions
+}
+
 func (self *ListVersionedSet) ResetHead() {
 
 	listVersioneds := self.collectLists()
@@ -648,6 +664,11 @@ func (self *ListVersioned) LatestVersion() VersionID {
 func (self *ListVersioned) HasUpdates() bool {
 
 	return self.kvset.HasUpdates()
+}
+
+func (self *ListVersioned) HasVersions() bool {
+
+	return self.kvset.HasVersions()
 }
 
 func (self *ListVersioned) getListKey() []byte {
