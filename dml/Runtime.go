@@ -17,6 +17,7 @@ package dml
 
 import (
 	"CollaborationNode/datastores"
+	"CollaborationNode/utils"
 	"fmt"
 	"os"
 	"strings"
@@ -39,16 +40,27 @@ func NewRuntime(ds *datastore.Datastore) Runtime {
 	console.Enable(js)
 
 	cr := make(map[string]CreatorFunc, 0)
-	return Runtime{
-		creators:    cr,
-		jsvm:        js,
-		datastore:   ds,
-		mutex:       &sync.Mutex{},
-		ready:       false,
-		currentUser: "none",
-		objects:     make(map[identifier]Object, 0),
-		mainObj:     nil,
+	rntm := Runtime{
+		creators:     cr,
+		jsvm:         js,
+		datastore:    ds,
+		mutex:        &sync.Mutex{},
+		ready:        false,
+		currentUser:  "none",
+		objects:      make(map[identifier]Object, 0),
+		mainObj:      nil,
+		transactions: TransactionManager{},
 	}
+
+	//build the managers and expose
+	transMngr, err := NewTransactionManager(&rntm)
+	if err != nil {
+		panic(utils.StackError(err, "Unable to initilize transaction manager"))
+	}
+	rntm.transactions = transMngr
+	rntm.jsvm.Set("Transaction", transMngr.jsobj)
+
+	return rntm
 }
 
 //builds a datastructure from a file
@@ -66,6 +78,9 @@ type Runtime struct {
 	currentUser User    //user that currently access the runtime
 	objects     map[identifier]Object
 	mainObj     Object
+
+	//managers
+	transactions TransactionManager
 }
 
 // Setup / creation Methods
@@ -263,7 +278,16 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 		//check all objects if anything has changed
 		for _, obj := range self.objects {
 			if obj.HasUpdates() {
+
 				//handle transaction behaviour
+				data, isData := obj.(Data)
+				if isData {
+					err := self.transactions.Add(data)
+					if err != nil {
+						rollbackOnly = true
+						break
+					}
+				}
 
 				//fix the data
 				_, err := obj.FixStateAsVersion()
@@ -271,6 +295,8 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 					rollbackOnly = true
 					break
 				}
+
+				//handle the versioning
 			}
 		}
 	}

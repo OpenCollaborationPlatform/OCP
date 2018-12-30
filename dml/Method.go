@@ -9,6 +9,7 @@ import (
 
 type Method interface {
 	Call(args ...interface{}) interface{}
+	CallBoolReturn(args ...interface{}) (bool, error)
 }
 
 func NewMethod(fnc interface{}) (Method, error) {
@@ -49,8 +50,21 @@ func (self *method) Call(args ...interface{}) interface{} {
 	if len(res) == 0 {
 		return nil
 	}
+	if len(res) > 1 {
+		return fmt.Errorf("Only single or no return value is supported")
+	}
 
 	return res[0].Interface()
+}
+
+func (self *method) CallBoolReturn(args ...interface{}) (bool, error) {
+
+	result := self.Call(args...)
+	boolean, ok := result.(bool)
+	if !ok {
+		return true, fmt.Errorf("Return value must be bool")
+	}
+	return boolean, nil
 }
 
 //special method type that handles js functions
@@ -69,6 +83,16 @@ func (self *jsMethod) Call(args ...interface{}) interface{} {
 	}
 	res := self.fnc(goja.FunctionCall{Arguments: jsargs, This: self.jsobj})
 	return res.Export()
+}
+
+func (self *jsMethod) CallBoolReturn(args ...interface{}) (bool, error) {
+
+	result := self.Call(args...)
+	boolean, ok := result.(bool)
+	if !ok {
+		return true, fmt.Errorf("Return value must be bool")
+	}
+	return boolean, nil
 }
 
 type MethodHandler interface {

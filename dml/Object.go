@@ -103,57 +103,6 @@ func (self *object) GetParent() Object {
 	return self.rntm.objects[self.parent]
 }
 
-////not only childs, but also other subobjects like vector elements. Must be
-////implemented by subclasses if other subobjects than children exist
-//func (self *object) ForEachSubobject(recursive bool, fnc func(obj Object) error) error {
-
-//	for _, child := range self.children {
-//		fnc(child)
-//		if recursive {
-//			err := child.ForEachSubobject(true, fnc)
-//			if err != nil {
-//				return err
-//			}
-//		}
-//	}
-//	return nil
-//}
-
-//func (self *Object) GetSubobject(id Identifier, recursive bool) (Object, bool) {
-
-//	for _, child := range self.children {
-
-//		if child.Id.equal(id) {
-//			return child, true
-//		}
-//		if recursive {
-//			obj, ok := child.GetSubobject(id, true)
-//			if ok {
-//				return obj, ok
-//			}
-//		}
-//	}
-//	return nil, false
-//}
-
-//func (self *object) GetSubobjectById(id identifier, recursive bool) (Object, error) {
-
-//	for _, child := range self.children {
-
-//		if child.Id.equal(id) {
-//			return child, true
-//		}
-//		if recursive {
-//			obj, ok := child.GetSubobject(id, true)
-//			if ok {
-//				return obj, ok
-//			}
-//		}
-//	}
-
-//	return nil, fmt.Errorf("No child available with id %v", id)
-//}
-
 func (self *object) GetJSObject() *goja.Object {
 	return self.jsobj
 }

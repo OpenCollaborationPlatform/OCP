@@ -29,6 +29,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"CollaborationNode/utils"
+
 	"github.com/boltdb/bolt"
 )
 
@@ -68,7 +70,7 @@ func NewDatastore(path string) (*Datastore, error) {
 	dir := filepath.Join(path, "Datastore")
 	err := os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
-		return nil, stackError(err, "Cannot open path %s", dir)
+		return nil, utils.StackError(err, "Cannot open path %s", dir)
 	}
 
 	//database storages
@@ -79,48 +81,48 @@ func NewDatastore(path string) (*Datastore, error) {
 	path = filepath.Join(path, "bolt.db")
 	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return nil, stackError(err, "Unable to open bolt db: %s", path)
+		return nil, utils.StackError(err, "Unable to open bolt db: %s", path)
 	}
 
 	value, err := NewValueDatabase(db)
 	if err != nil {
 		db.Close()
-		return nil, stackError(err, "Unable to open value database")
+		return nil, utils.StackError(err, "Unable to open value database")
 	}
 	dbs[ValueType] = value
 
 	valueVersioned, err := NewValueVersionedDatabase(db)
 	if err != nil {
 		db.Close()
-		return nil, stackError(err, "Unable to open versioned value database")
+		return nil, utils.StackError(err, "Unable to open versioned value database")
 	}
 	vdbs[ValueType] = valueVersioned
 
 	map_, err := NewMapDatabase(db)
 	if err != nil {
 		db.Close()
-		return nil, stackError(err, "Unable to open map database")
+		return nil, utils.StackError(err, "Unable to open map database")
 	}
 	dbs[MapType] = map_
 
 	mapVersioned, err := NewMapVersionedDatabase(db)
 	if err != nil {
 		db.Close()
-		return nil, stackError(err, "Unable to open versioned map database")
+		return nil, utils.StackError(err, "Unable to open versioned map database")
 	}
 	vdbs[MapType] = mapVersioned
 
 	list, err := NewListDatabase(db)
 	if err != nil {
 		db.Close()
-		return nil, stackError(err, "Unable to open list database")
+		return nil, utils.StackError(err, "Unable to open list database")
 	}
 	dbs[ListType] = list
 
 	listVersioned, err := NewListVersionedDatabase(db)
 	if err != nil {
 		db.Close()
-		return nil, stackError(err, "Unable to open versioned list database")
+		return nil, utils.StackError(err, "Unable to open versioned list database")
 	}
 	vdbs[ListType] = listVersioned
 
@@ -153,7 +155,7 @@ func (self *Datastore) GetOrCreateSet(kind StorageType, versioned bool, set [32]
 
 	db, err := self.GetDatabase(kind, versioned)
 	if err != nil {
-		return nil, stackError(err, "Unable to get database of type %v (versioned=%v)", kind, versioned)
+		return nil, utils.StackError(err, "Unable to get database of type %v (versioned=%v)", kind, versioned)
 	}
 	return db.GetOrCreateSet(set), nil
 }

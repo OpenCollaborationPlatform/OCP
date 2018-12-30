@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"CollaborationNode/utils"
 	"bytes"
 	"fmt"
 
@@ -29,7 +30,7 @@ func NewListDatabase(db *bolt.DB) (*ListDatabase, error) {
 	})
 
 	if err != nil {
-		return nil, stackError(err, "Cannot create bucket \"List\"")
+		return nil, utils.StackError(err, "Cannot create bucket \"List\"")
 	}
 
 	return &ListDatabase{db, []byte("List")}, nil
