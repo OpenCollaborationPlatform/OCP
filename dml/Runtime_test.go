@@ -23,9 +23,11 @@ func TestDmlFile(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		rntm := NewRuntime(store)
-		rntm.RegisterObjectCreator("Data", NewData)
 
-		err = rntm.ParseFile("/home/stefan/Projects/Go/src/CollaborationNode/dml/test.dml")
+		//read in the file and parse
+		filereader, err := os.Open("/home/stefan/Projects/Go/src/CollaborationNode/dml/test.dml")
+		So(err, ShouldBeNil)
+		err = rntm.Parse(filereader)
 		So(err, ShouldBeNil)
 
 		Convey("the properties shall be accessible via js", func() {

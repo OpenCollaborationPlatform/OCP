@@ -19,7 +19,7 @@ import (
 	"CollaborationNode/datastores"
 	"CollaborationNode/utils"
 	"fmt"
-	"os"
+	"io"
 	"strings"
 	"sync"
 
@@ -32,7 +32,7 @@ import (
 //Function prototype that can create new object types in DML
 type CreatorFunc func(name string, parent identifier, rntm *Runtime) Object
 
-func NewRuntime(ds *datastore.Datastore) Runtime {
+func NewRuntime(ds *datastore.Datastore) *Runtime {
 
 	//js runtime with console support
 	js := goja.New()
@@ -40,7 +40,7 @@ func NewRuntime(ds *datastore.Datastore) Runtime {
 	console.Enable(js)
 
 	cr := make(map[string]CreatorFunc, 0)
-	rntm := Runtime{
+	rntm := &Runtime{
 		creators:     cr,
 		jsvm:         js,
 		datastore:    ds,
@@ -49,16 +49,20 @@ func NewRuntime(ds *datastore.Datastore) Runtime {
 		currentUser:  "none",
 		objects:      make(map[identifier]Object, 0),
 		mainObj:      nil,
-		transactions: TransactionManager{},
+		transactions: &TransactionManager{},
 	}
 
 	//build the managers and expose
-	transMngr, err := NewTransactionManager(&rntm)
+	transMngr, err := NewTransactionManager(rntm)
 	if err != nil {
 		panic(utils.StackError(err, "Unable to initilize transaction manager"))
 	}
 	rntm.transactions = transMngr
 	rntm.jsvm.Set("Transaction", transMngr.jsobj)
+
+	//add the datastructures
+	rntm.registerObjectCreator("Data", NewData)
+	rntm.registerObjectCreator("Transaction", NewTransactionBehaviour)
 
 	return rntm
 }
@@ -80,26 +84,14 @@ type Runtime struct {
 	mainObj     Object
 
 	//managers
-	transactions TransactionManager
+	transactions *TransactionManager
 }
 
 // Setup / creation Methods
 // ************************
 
-//Function to extend the available data and behaviour types for this runtime
-func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
-
-	_, ok := self.creators[name]
-	if ok {
-		return fmt.Errorf("Object name already registered")
-	}
-
-	self.creators[name] = fnc
-	return nil
-}
-
-//Parses the dml file and setups the full structure
-func (self *Runtime) ParseFile(path string) error {
+//Parses the dml code and setups the full structure
+func (self *Runtime) Parse(reader io.Reader) error {
 
 	//no double loading
 	if self.ready == true {
@@ -113,14 +105,9 @@ func (self *Runtime) ParseFile(path string) error {
 		return err
 	}
 
-	//read in the file and parse
-	filereader, err := os.Open(path)
+	err = parser.Parse(reader, ast)
 	if err != nil {
-		return err
-	}
-	err = parser.Parse(filereader, ast)
-	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to parse dml code")
 	}
 
 	//process the AST into usable objects
@@ -228,6 +215,18 @@ func (self *Runtime) getObject() (Object, error) {
 
 // 							Internal Functions
 //*********************************************************************************
+
+//Function to extend the available data and behaviour types for this runtime
+func (self *Runtime) registerObjectCreator(name string, fnc CreatorFunc) error {
+
+	_, ok := self.creators[name]
+	if ok {
+		return fmt.Errorf("Object name already registered")
+	}
+
+	self.creators[name] = fnc
+	return nil
+}
 
 //get the object from the identifier path list (e.g. myobj.childname.yourobject)
 func (self *Runtime) getObjectFromPath(path string) (Object, error) {

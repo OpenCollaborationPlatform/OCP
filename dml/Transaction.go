@@ -27,32 +27,30 @@ type transaction struct {
 
 func (self *transaction) Equal(trans transaction) bool {
 
-	data, err := self.identification.Read()
+	var id [32]byte
+	err := self.identification.ReadType(&id)
 	if err != nil {
 		panic(err)
-	}
-	id, ok := data.([32]byte)
-	if !ok {
-		panic("cannot read transaction key")
 	}
 
-	data, err = trans.identification.Read()
+	var otherid [32]byte
+	err = trans.identification.ReadType(&otherid)
 	if err != nil {
 		panic(err)
 	}
-	otherid, ok := data.([32]byte)
 
 	return bytes.Equal(id[:], otherid[:])
 }
 
 func (self *transaction) User() (User, error) {
 
-	data, err := self.user.Read()
+	var user User
+	err := self.user.ReadType(&user)
 	if err != nil {
-		return User(""), err
+		return User(""), utils.StackError(err, "Unable to read transaction user from database")
 	}
 
-	return User(data.(string)), nil
+	return user, nil
 }
 
 func (self *transaction) SetUser(user User) error {
@@ -139,21 +137,21 @@ type TransactionManager struct {
 	jsobj        *goja.Object
 }
 
-func NewTransactionManager(rntm *Runtime) (TransactionManager, error) {
+func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 
 	var setKey [32]byte
 	copy(setKey[:], []byte("internal"))
 	set, err := rntm.datastore.GetOrCreateSet(datastore.ListType, false, setKey)
 	if err != nil {
-		return TransactionManager{}, utils.StackError(err, "Cannot acccess internal list datastore")
+		return &TransactionManager{}, utils.StackError(err, "Cannot acccess internal list datastore")
 	}
 	listSet := set.(*datastore.ListSet)
 	list, err := listSet.GetOrCreateList([]byte("transactions"))
 	if err != nil {
-		return TransactionManager{}, utils.StackError(err, "Cannot access internal transaction list store")
+		return &TransactionManager{}, utils.StackError(err, "Cannot access internal transaction list store")
 	}
 
-	mngr := TransactionManager{NewMethodHandler(), rntm, list, make(map[User]transaction, 0), nil}
+	mngr := &TransactionManager{NewMethodHandler(), rntm, list, make(map[User]transaction, 0), nil}
 
 	//setup default methods
 	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen))
@@ -164,7 +162,7 @@ func NewTransactionManager(rntm *Runtime) (TransactionManager, error) {
 	mngr.jsobj = rntm.jsvm.NewObject()
 	err = mngr.SetupJSMethods(mngr.rntm.jsvm, mngr.jsobj)
 	if err != nil {
-		return TransactionManager{}, utils.StackError(err, "Unable to expose TransactionMAnager methods to javascript")
+		return &TransactionManager{}, utils.StackError(err, "Unable to expose TransactionMAnager methods to javascript")
 	}
 
 	return mngr, nil
@@ -181,7 +179,10 @@ func (self *TransactionManager) Open() error {
 
 	//close if a transaction is open
 	if self.IsOpen() {
-		self.Close()
+		err := self.Close()
+		if err != nil {
+			return utils.StackError(err, "Unable to close current transaction bevore opening a new one")
+		}
 	}
 
 	_, err := self.newTransaction()
@@ -194,8 +195,28 @@ func (self *TransactionManager) Open() error {
 //Close a transaction
 func (self *TransactionManager) Close() error {
 
-	if !self.IsOpen() {
-		return fmt.Errorf("No transaction open to be closed")
+	trans, err := self.getTransaction()
+	if err != nil {
+		return utils.StackError(err, "No transaction available to be closed")
+	}
+
+	//iterate over all objects and call the close event
+	objs := trans.Objects()
+	for _, obj := range objs {
+
+		bhvr := getTransactionBehaviour(obj)
+		if bhvr != nil {
+			err = bhvr.GetEvent("onClosing").Emit()
+			if err != nil {
+				return utils.StackError(err, "Unable to close transaction due to failed close event emitting")
+			}
+		}
+	}
+
+	//remove from db
+	err = self.removeTransaction(trans.identification)
+	if err != nil {
+		return utils.StackError(err, "Removing transaction from database failed")
 	}
 
 	return nil
@@ -281,7 +302,7 @@ func (self *TransactionManager) Add(obj Data) error {
 }
 
 //run this on runtime initialisation to setup all transactions correctly
-func (self *TransactionManager) loadTransactions() error {
+func (self *TransactionManager) initTransactions() error {
 
 	entries, err := self.list.GetEntries()
 	if err != nil {
@@ -391,6 +412,54 @@ func (self *TransactionManager) loadTransaction(id datastore.ListEntry) (transac
 	}
 
 	return transaction{id, *objects, *user, self.rntm}, nil
+}
+
+func getTransactionBehaviour(obj Object) *transactionBehaviour {
+	//must have the transaction behaviour
+	data, ok := obj.(Data)
+	if !ok {
+		return nil
+	}
+
+	if !data.HasBehaviour("Transaction") {
+		return nil
+	}
+	return data.GetBehaviour("Transaction").(*transactionBehaviour)
+}
+
+//removes the transaction from the datastore. Note: Does not remove it from the list
+func (self *TransactionManager) removeTransaction(id datastore.ListEntry) error {
+
+	var key [32]byte
+	err := id.ReadType(&key)
+	if err != nil {
+		return utils.StackError(err, "Unable to load transaction id from store")
+	}
+
+	//remove participants list
+	ldb, err := self.rntm.datastore.GetDatabase(datastore.ListType, false)
+	if err != nil {
+		return utils.StackError(err, "Unable to access list database")
+	}
+	err = ldb.RemoveSet(key)
+	if err != nil {
+		return utils.StackError(err, "Unable to remove database entry of transaction participants")
+	}
+
+	//remove the user entry
+	vdb, err := self.rntm.datastore.GetDatabase(datastore.ValueType, false)
+	if err != nil {
+		return utils.StackError(err, "Unable to access value database")
+	}
+	err = vdb.RemoveSet(key)
+	if err != nil {
+		return utils.StackError(err, "Unable to remove database entry of transaction user")
+	}
+
+	//remove from internal list
+	delete(self.transactions, self.rntm.currentUser)
+
+	return nil
 }
 
 /*********************************************************************************

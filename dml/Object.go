@@ -66,6 +66,9 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 		jsobj,
 	}
 
+	//default properties
+	obj.AddProperty("id", String, true)
+
 	rntm.objects[id] = &obj
 	return &obj
 }

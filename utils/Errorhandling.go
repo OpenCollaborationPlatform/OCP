@@ -9,7 +9,7 @@ func StackError(err error, args ...interface{}) error {
 
 	//Get the function name in which the error occured
 	pc := make([]uintptr, 1)
-	n := runtime.Callers(1, pc)
+	n := runtime.Callers(2, pc)
 	pc = pc[:n]
 	frames := runtime.CallersFrames(pc)
 	frame, _ := frames.Next()
@@ -19,5 +19,5 @@ func StackError(err error, args ...interface{}) error {
 		msg = fmt.Sprintf(args[0].(string), args[1:])
 	}
 
-	return fmt.Errorf("%s: %s\n%s", frame.Function, msg, err)
+	return fmt.Errorf("%v: %v\n%v", frame.Function, msg, err)
 }

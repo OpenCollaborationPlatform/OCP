@@ -22,8 +22,5 @@ func NewData(name string, parent identifier, rntm *Runtime) Object {
 		NewBehaviourHandler(),
 	}
 
-	//default properties
-	dat.AddProperty("id", String, true)
-
 	return &dat
 }
