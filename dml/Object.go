@@ -67,7 +67,7 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 	}
 
 	//default properties
-	obj.AddProperty("id", String, true)
+	obj.AddProperty("id", String, "", true)
 
 	rntm.objects[id] = &obj
 	return &obj
@@ -115,7 +115,7 @@ func (self *object) GetJSRuntime() *goja.Runtime {
 }
 
 //missing function from property handler
-func (self *object) AddProperty(name string, dtype DataType, constprop bool) error {
+func (self *object) AddProperty(name string, dtype DataType, default_val interface{}, constprop bool) error {
 
 	if self.HasProperty(name) {
 		return fmt.Errorf("Property %s already exists", name)
@@ -130,7 +130,7 @@ func (self *object) AddProperty(name string, dtype DataType, constprop bool) err
 	if !ok {
 		return fmt.Errorf("Unable to create database set")
 	}
-	prop, err := NewProperty(name, dtype, vSet, self.GetJSRuntime(), constprop)
+	prop, err := NewProperty(name, dtype, default_val, vSet, self.GetJSRuntime(), constprop)
 	if err != nil {
 		return err
 	}

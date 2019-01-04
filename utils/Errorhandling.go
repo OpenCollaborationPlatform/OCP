@@ -15,8 +15,10 @@ func StackError(err error, args ...interface{}) error {
 	frame, _ := frames.Next()
 
 	var msg string
-	if len(args) > 0 {
+	if len(args) > 1 {
 		msg = fmt.Sprintf(args[0].(string), args[1:])
+	} else if len(args) == 1 {
+		msg = args[0].(string)
 	}
 
 	return fmt.Errorf("%v: %v\n%v", frame.Function, msg, err)

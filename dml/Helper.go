@@ -87,7 +87,7 @@ func mustBeType(pt DataType, val interface{}) error {
 		if pt != String {
 			return fmt.Errorf(`wrong type, got 'string' and expected '%s'`, typeToString(pt))
 		}
-	case bool:
+	case bool, Boolean:
 		if pt != Bool {
 			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, typeToString(pt))
 		}

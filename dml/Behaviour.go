@@ -24,7 +24,7 @@ func NewBehaviour(parent identifier, name string, oType string, rntm *Runtime) (
 	}
 
 	//add default behaviour properties
-	err := result.AddProperty(`recursive`, Bool, true)
+	err := result.AddProperty(`recursive`, Bool, false, true)
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package dml
 
 import (
 	"CollaborationNode/datastores"
+	"CollaborationNode/utils"
 	"fmt"
 	"log"
 
@@ -20,7 +21,12 @@ type Property interface {
 	GetValue() interface{}
 }
 
-func NewProperty(name string, dtype DataType, set *datastore.ValueVersionedSet, vm *goja.Runtime, constprop bool) (Property, error) {
+func NewProperty(name string, dtype DataType, default_value interface{}, set *datastore.ValueVersionedSet, vm *goja.Runtime, constprop bool) (Property, error) {
+
+	err := mustBeType(dtype, default_value)
+	if err != nil {
+		return nil, utils.StackError(err, "Cannot create property, default value does not match data type")
+	}
 
 	var prop Property
 
@@ -28,6 +34,16 @@ func NewProperty(name string, dtype DataType, set *datastore.ValueVersionedSet, 
 		switch dtype {
 		case Int, Float, String, Bool:
 			value, _ := set.GetOrCreateValue([]byte(name))
+
+			//setup default value if needed
+			res, err := value.HoldsValue()
+			if err != nil {
+				return nil, utils.StackError(err, "Cannot create property, datastore not accessible")
+			}
+			if !res {
+				value.Write(default_value)
+			}
+
 			prop = &dataProperty{NewEventHandler(), dtype, *value}
 		default:
 			return nil, fmt.Errorf("Unknown type")
@@ -35,7 +51,7 @@ func NewProperty(name string, dtype DataType, set *datastore.ValueVersionedSet, 
 	} else {
 		switch dtype {
 		case Int, Float, String, Bool:
-			prop = &constProperty{NewEventHandler(), dtype, nil}
+			prop = &constProperty{NewEventHandler(), dtype, default_value}
 		default:
 			return nil, fmt.Errorf("Unknown type")
 		}
@@ -134,7 +150,7 @@ func (self *constProperty) GetValue() interface{} {
 //Property handler, which defines a interface for holding and using multiple properties
 type PropertyHandler interface {
 	HasProperty(name string) bool
-	AddProperty(name string, dtype DataType, constprop bool) error
+	AddProperty(name string, dtype DataType, defaultVal interface{}, constprop bool) error
 	GetProperty(name string) Property
 
 	SetupJSProperties(vm *goja.Runtime, obj *goja.Object) error

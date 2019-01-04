@@ -342,6 +342,26 @@ func (self *Value) IsValid() bool {
 	return valid
 }
 
+//return true if the value was already written, false otherwise
+func (self *Value) HoldsValue() (bool, error) {
+
+	var hasValue bool
+	err := self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range self.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+		hasValue = (bucket.Get(self.key) != nil)
+		return nil
+	})
+
+	if err != nil {
+		return false, utils.StackError(err, "Cannot check if value holds data or not")
+	}
+	return hasValue, nil
+}
+
 func (self *Value) remove() error {
 
 	err := self.db.Update(func(tx *bolt.Tx) error {

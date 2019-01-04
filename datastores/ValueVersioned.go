@@ -920,6 +920,31 @@ func (self *ValueVersioned) IsValid() bool {
 	return result
 }
 
+//return true if the value was already written, false otherwise
+func (self *ValueVersioned) HoldsValue() (bool, error) {
+
+	var hasValue bool
+	id := self.CurrentVersion()
+	err := self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
+			bucket = bucket.Bucket(bkey)
+		}
+		data := bucket.Get(itob(uint64(id)))
+		if isInvalid(data) {
+			return fmt.Errorf("ValueVersioned does not exist in currently loaded version")
+		}
+		hasValue = (data != nil)
+		return nil
+	})
+
+	if err != nil {
+		return false, utils.StackError(err, "Cannot check if value holds data or not")
+	}
+	return hasValue, nil
+}
+
 func (self *ValueVersioned) Read() (interface{}, error) {
 
 	var result interface{}

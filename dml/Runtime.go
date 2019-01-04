@@ -535,7 +535,7 @@ func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 	} else if asgn.Value.Number != nil {
 		prop.SetValue(*asgn.Value.Number)
 	} else if asgn.Value.Bool != nil {
-		prop.SetValue(*asgn.Value.Bool)
+		prop.SetValue(bool(*asgn.Value.Bool))
 	}
 	return nil
 }
@@ -643,15 +643,20 @@ func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
 func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
 	var dt DataType
+	var defaultVal interface{}
 	switch astProp.Type.Type {
 	case "string":
 		dt = String
+		defaultVal = string("")
 	case "int":
 		dt = Int
+		defaultVal = int64(0)
 	case "float":
 		dt = Float
+		defaultVal = float64(0.0)
 	case "bool":
 		dt = Bool
+		defaultVal = bool(false)
 	}
 
 	var constprop bool = false
@@ -659,33 +664,35 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 		constprop = true
 	}
 
-	err := obj.AddProperty(astProp.Key, dt, constprop)
-	if err != nil {
-		return err
-	}
-
 	if astProp.Default == nil {
 		if constprop {
 			return fmt.Errorf("Constant property needs to have a value assigned")
 		}
+
+		err := obj.AddProperty(astProp.Key, dt, defaultVal, constprop)
+		if err != nil {
+			return utils.StackError(err, "Cannot add property to object")
+		}
+
 		return nil
 	}
 
+	var err error
 	if astProp.Default.String != nil {
-		err = obj.GetProperty(astProp.Key).SetValue(*astProp.Default.String)
+		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.String, constprop)
 
 	} else if astProp.Default.Int != nil {
-		err = obj.GetProperty(astProp.Key).SetValue(*astProp.Default.Int)
+		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.Int, constprop)
 
 	} else if astProp.Default.Number != nil {
-		err = obj.GetProperty(astProp.Key).SetValue(*astProp.Default.Number)
+		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.Number, constprop)
 
 	} else if astProp.Default.Bool != nil {
-		err = obj.GetProperty(astProp.Key).SetValue(bool(*astProp.Default.Bool))
+		err = obj.AddProperty(astProp.Key, dt, bool(*astProp.Default.Bool), constprop)
 	}
 
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to add property to object")
 	}
 
 	return nil
