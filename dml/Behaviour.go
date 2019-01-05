@@ -1,6 +1,8 @@
 // Transaction.go
 package dml
 
+import "fmt"
+
 /*
  * A Behaviour is a set of methods and events that define a certain way an object reacts on
  * certain circumstances or in certain situations. The language interpreter handles a object
@@ -66,10 +68,8 @@ type BehaviourHandler interface {
 	//handle the behaviours
 	HasBehaviour(string) bool
 	GetBehaviour(string) Behaviour
-	SetBehaviour(string, Behaviour) error
+	AddBehaviour(string, Behaviour) error
 	Behaviours() []string
-
-	SetupBehaviours() error
 }
 
 func NewBehaviourHandler() behaviourHandler {
@@ -85,12 +85,13 @@ func (self *behaviourHandler) HasBehaviour(name string) bool {
 	return ok
 }
 
-func (self *behaviourHandler) AddBehaviour(name string, behaviour Behaviour) {
+func (self *behaviourHandler) AddBehaviour(name string, behaviour Behaviour) error {
 
 	if self.HasBehaviour(name) {
-		return
+		return fmt.Errorf("Behaviour already set: %v", name)
 	}
 	self.behaviours[name] = behaviour
+	return nil
 }
 
 func (self *behaviourHandler) GetBehaviour(name string) Behaviour {

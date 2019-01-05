@@ -3,6 +3,7 @@ package dml
 
 import (
 	"CollaborationNode/datastores"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -46,6 +47,13 @@ func TestDmlFile(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
 
+			code = `Document.testI`
+			val, err = rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+			value, ok = val.(int64)
+			So(ok, ShouldBeTrue)
+			So(value, ShouldEqual, 5)
+
 			code = `Document.testI = "hello"`
 			val, err = rntm.RunJavaScript(code)
 			So(err, ShouldNotBeNil)
@@ -67,9 +75,11 @@ func TestDmlFile(t *testing.T) {
 					Document.testE.RegisterCallback(fnc)
 					Document.testE.Emit(2, "hello")
 				`
+			fmt.Println("\nrun code for event")
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 
+			fmt.Println("\nstart code access from js")
 			code = `Document.testI`
 			val, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
@@ -80,6 +90,7 @@ func TestDmlFile(t *testing.T) {
 			//check direct go access
 			obj, err := rntm.getObject()
 			So(err, ShouldBeNil)
+			fmt.Println("\nNormal getter call")
 			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 0)
@@ -94,6 +105,17 @@ func TestDmlFile(t *testing.T) {
 			bvalue, ok := val.(bool)
 			So(ok, ShouldBeTrue)
 			So(bvalue, ShouldBeFalse)
+
+			code = `Document.testE2.Emit()`
+			_, err = rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+
+			code = `Document.testB`
+			val, err = rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+			bvalue, ok = val.(bool)
+			So(ok, ShouldBeTrue)
+			So(bvalue, ShouldBeTrue)
 
 			code = `
 				Document.testF = 1.1

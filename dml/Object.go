@@ -21,11 +21,6 @@ type Object interface {
 
 	//Object functions
 	Id() identifier
-
-	//Object hirarchy
-	AddChild(obj Object)
-	GetChildren() []Object
-	GetChildByName(name string) (Object, error)
 	GetParent() Object
 }
 
@@ -38,11 +33,10 @@ type object struct {
 	methodHandler
 
 	//object
-	rntm     *Runtime
-	children []identifier
-	parent   identifier
-	id       identifier
-	oType    string
+	rntm   *Runtime
+	parent identifier
+	id     identifier
+	oType  string
 
 	//javascript
 	jsobj *goja.Object
@@ -59,7 +53,6 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 		NewEventHandler(),
 		NewMethodHandler(),
 		rntm,
-		make([]identifier, 0),
 		parent,
 		id,
 		oType,
@@ -69,36 +62,11 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 	//default properties
 	obj.AddProperty("id", String, "", true)
 
-	rntm.objects[id] = &obj
 	return &obj
 }
 
 func (self *object) Id() identifier {
 	return self.id
-}
-
-func (self *object) AddChild(obj Object) {
-
-	self.children = append(self.children, obj.Id())
-}
-
-func (self *object) GetChildren() []Object {
-
-	result := make([]Object, len(self.children))
-	for i, child := range self.children {
-		result[i] = self.rntm.objects[child]
-	}
-	return result
-}
-
-func (self *object) GetChildByName(name string) (Object, error) {
-
-	for _, child := range self.children {
-		if child.Name == name {
-			return self.rntm.objects[child], nil
-		}
-	}
-	return nil, fmt.Errorf("No such object available")
 }
 
 func (self *object) GetParent() Object {

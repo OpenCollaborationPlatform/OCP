@@ -17,7 +17,7 @@ type Event interface {
 	RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error
 }
 
-func NewEvent(vm *goja.Runtime, args ...DataType) Event {
+func NewEvent(jsparent *goja.Object, vm *goja.Runtime, args ...DataType) Event {
 
 	evt := &event{methodHandler: NewMethodHandler(),
 		parameterTypes: args,
@@ -33,6 +33,7 @@ func NewEvent(vm *goja.Runtime, args ...DataType) Event {
 
 	evt.jsobj = evtObj
 	evt.jsvm = vm
+	evt.jsparent = jsparent
 	evt.SetupJSMethods(vm, evtObj)
 
 	return evt
@@ -44,8 +45,9 @@ type event struct {
 	parameterTypes []DataType
 	callbacks      []EventCallback
 
-	jsvm  *goja.Runtime
-	jsobj *goja.Object
+	jsvm     *goja.Runtime
+	jsobj    *goja.Object
+	jsparent *goja.Object //needed to be passed as "this" to event functions
 }
 
 func (self *event) Emit(args ...interface{}) error {
@@ -82,7 +84,7 @@ func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) err
 		for i, arg := range args {
 			jsArgs[i] = self.jsvm.ToValue(arg)
 		}
-		cb(goja.FunctionCall{This: self.jsobj, Arguments: jsArgs})
+		cb(goja.FunctionCall{This: self.jsparent, Arguments: jsArgs})
 	})
 }
 

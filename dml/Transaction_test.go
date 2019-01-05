@@ -97,14 +97,12 @@ func TestTransactionBehaviour(t *testing.T) {
 	defer os.RemoveAll(path)
 
 	//create the runtime
-	Convey("Testing transaction behaviours", t, func() {
+	Convey("Testing transaction behaviours by loading dml code", t, func() {
 
 		store, _ := datastore.NewDatastore(path)
 		defer store.Close()
 
-		Convey("Events must be correctly emmited,", func() {
-
-			var code = `
+		var code = `
 				Data {
 					.id: "Document"
 					
@@ -113,19 +111,63 @@ func TestTransactionBehaviour(t *testing.T) {
 					Transaction {
 						
 						.id: "trans"
-						.recursive: false
 						
-						//.onOpen: function() {self.parent.result += "o"}
-						//.onParticipation: function() {self.parent.result += "p"}
-						//.onClosing: function() {self.parent.result += "c"}
-						//.onFailure: function() {self.parent.result += "f"}
+						.onOpen: function() {
+							this.parent.result += "o1"
+						}
+						.onParticipation: function() {this.parent.result += "p1"}
+						.onClosing: function() {this.parent.result += "c1"}
+						.onFailure: function() {this.parent.result += "f1"}
 					}
+					
+					Data {
+						.id: "Child"
+						
+						Data {
+							.id: "ChildChild"
+						}
+						
+						Transaction {
+							.id: "ChildTransaction"
+							.recursive: true
+						
+							.onOpen: function() {Document.result += "o2"}
+							.onParticipation: function() {Document.result += "p2"}
+							.onClosing: function() {Document.result += "c2"}
+							.onFailure: function() {Document.result += "f2"}
+						}
+					}
+					
+					Data {
+						.id: "Child2"
+					}
+							
 				}`
 
-			rntm := NewRuntime(store)
-			err := rntm.Parse(strings.NewReader(code))
-			So(err, ShouldBeNil)
+		rntm := NewRuntime(store)
+		err := rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		mngr := rntm.transactions
 
+		Convey("the object structure must be correct", func() {
+
+			val, err := rntm.RunJavaScript("Document.trans.parent.id")
+			So(err, ShouldBeNil)
+			value, ok := val.(string)
+			So(ok, ShouldBeTrue)
+			So(value, ShouldEqual, "Document")
+		})
+
+		Convey("On opening a transaction", func() {
+
+			mngr.Open()
+
+			Convey("all objects with transaction behaviour must be called", func() {
+				res, err := rntm.ReadProperty("Document", "result")
+				So(err, ShouldBeNil)
+				str := res.(string)
+				So(str, ShouldEqual, "o1o2o2")
+			})
 		})
 	})
 }

@@ -47,7 +47,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 		mutex:        &sync.Mutex{},
 		ready:        false,
 		currentUser:  "none",
-		objects:      make(map[identifier]Object, 0),
+		objects:      make(map[identifier]Data, 0),
 		mainObj:      nil,
 		transactions: &TransactionManager{},
 	}
@@ -80,8 +80,8 @@ type Runtime struct {
 	//internal state
 	ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
 	currentUser User    //user that currently access the runtime
-	objects     map[identifier]Object
-	mainObj     Object
+	objects     map[identifier]Data
+	mainObj     Data
 
 	//managers
 	transactions *TransactionManager
@@ -113,10 +113,10 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	//process the AST into usable objects
 	obj, err := self.buildObject(ast.Object, identifier{}, make([]*astObject, 0))
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to parse dml code")
 		//TODO clear the database entries...
 	}
-	self.mainObj = obj
+	self.mainObj = obj.(Data)
 	self.ready = true
 
 	return err
@@ -288,10 +288,10 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 			if obj.HasUpdates() {
 
 				//handle transaction behaviour
-				data, isData := obj.(Data)
-				if isData {
-					err := self.transactions.Add(data)
+				if obj.HasBehaviour("Transaction") {
+					err := self.transactions.Add(obj)
 					if err != nil {
+						fmt.Printf("Transaction adding failed: %v\n", err.Error())
 						rollbackOnly = true
 						break
 					}
@@ -412,7 +412,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	//now we create all new events
 	for _, astEvent := range astObj.Events {
 
-		event, err := self.buildEvent(astEvent)
+		event, err := self.buildEvent(astEvent, obj)
 		if err != nil {
 			return nil, err
 		}
@@ -438,7 +438,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	_, isBehaviour := obj.(Behaviour)
 	if !isBehaviour {
 
-		//create our version of the recursive behaviour map to allow adding values for children
+		//create our local version of the recursive behaviour map to allow adding values for children
 		localRecBehaviours := make([]*astObject, len(recBehaviours))
 		copy(localRecBehaviours, recBehaviours)
 
@@ -463,13 +463,18 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 			}
 
 			//check if this child is a behaviour, and if so if it is recursive
-			behaviour, ok := child.(Behaviour)
-			if ok && behaviour.GetProperty(`recursive`).GetValue().(bool) {
+			behaviour, isBehaviour := child.(Behaviour)
+			if isBehaviour && behaviour.GetProperty(`recursive`).GetValue().(bool) {
 				localRecBehaviours = append(localRecBehaviours, astChild)
 			}
 
 			//handle hirarchy
-			obj.AddChild(child)
+			if isBehaviour {
+				obj.(Data).AddBehaviour(behaviour.Id().Type, behaviour)
+			} else {
+				obj.(Data).AddChild(child.(Data))
+
+			}
 			jsChildren = append(jsChildren, child.GetJSObject())
 		}
 
@@ -483,15 +488,38 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	//needs to be here
 	for _, assign := range astObj.Assignments {
 
-		parts := assign.Key
-		assign.Key = parts[1:]
-		if obj.HasProperty(parts[0]) {
-			err := self.assignProperty(assign, obj.GetProperty(parts[0]))
+		//get the object we need to assign to
+		assignObj := obj
+		var assignIdx int
+		for i, subkey := range assign.Key {
+			assignIdx = i
+			if assignObj.HasProperty(subkey) || assignObj.HasEvent(subkey) {
+				break
+			}
+			if assignObj.GetParent().Id().Name == subkey {
+				assignObj = assignObj.GetParent()
+				continue
+			}
+			data, ok := assignObj.(Data)
+			if ok {
+				child, err := data.GetChildByName(subkey)
+				if err != nil {
+					return nil, fmt.Errorf("Unable to assign to %v: unknown identifier", assign.Key)
+				}
+				assignObj = child
+			} else {
+				return nil, fmt.Errorf("Unable to assign to %v: unknown identifier", assign.Key)
+			}
+		}
+
+		parts := assign.Key[assignIdx:]
+		if assignObj.HasProperty(parts[0]) {
+			err := self.assignProperty(assign, assignObj.GetProperty(parts[0]))
 			if err != nil {
-				return nil, err
+				return nil, utils.StackError(err, "Unable to assign to property")
 			}
 		} else if obj.HasEvent(parts[0]) {
-			err := self.assignEvent(assign, obj.GetEvent(parts[0]))
+			err := self.assignEvent(assign, assignObj.GetEvent(parts[0]))
 			if err != nil {
 				return nil, err
 			}
@@ -501,7 +529,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 		}
 	}
 
-	//ant last we add the general object properties: children, parent etc...
+	//ant last we add the general object properties: parent etc...
 	if parent.valid() {
 		jsobj.DefineDataProperty("parent", self.objects[parent].GetJSObject(), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	} else {
@@ -514,16 +542,15 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 
 	parts := asgn.Key
-	if len(parts) > 0 && parts[0] != "" {
-		asgn.Key = parts[1:]
-		if prop.HasEvent(parts[0]) {
-			return self.assignEvent(asgn, prop.GetEvent(parts[0]))
-		} else {
-			return fmt.Errorf("Property does not provide event with key %s", parts[0])
-		}
+
+	//possibilities are:
+	//	1.the last key is the property
+	//	2.the second last is the property and the last the event
+	if prop.HasEvent(parts[len(parts)-1]) {
+		return self.assignEvent(asgn, prop.GetEvent(parts[len(parts)-1]))
 	}
 
-	//we found the right property, lets assign
+	//we really assign a property, lets go
 	if asgn.Function != nil {
 		return fmt.Errorf("A function cannot be assigned to a property")
 	}
@@ -542,11 +569,6 @@ func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 
 func (self *Runtime) assignEvent(asgn *astAssignment, evt Event) error {
 
-	//the key must end here
-	parts := asgn.Key
-	if len(parts) != 0 {
-		return fmt.Errorf("Event does not provide given key")
-	}
 	if asgn.Function == nil {
 		return fmt.Errorf("Only function can be asigned to event")
 	}
@@ -602,7 +624,7 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 
 //func (self *Runtime) registerEvtFunction
 
-func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
+func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) {
 
 	//build the arguements slice
 	args := make([]DataType, len(astEvt.Params))
@@ -611,7 +633,7 @@ func (self *Runtime) buildEvent(astEvt *astEvent) (Event, error) {
 	}
 
 	//build the event
-	evt := NewEvent(self.jsvm, args...)
+	evt := NewEvent(parent.GetJSObject(), self.jsvm, args...)
 
 	//and see if we should add a default callback
 	if astEvt.Default != nil {

@@ -1,6 +1,8 @@
 //parser for the datastructure markup language
 package dml
 
+import "fmt"
+
 //the file format
 type DML struct {
 
@@ -22,10 +24,28 @@ type astObject struct {
 	Objects     []*astObject     `| @@ } "}"`
 }
 
+func (self astObject) Print() {
+	fmt.Printf("%v object:\nAssignments:\n", self.Identifier)
+
+	for _, ass := range self.Assignments {
+		fmt.Printf("\t")
+		ass.Print()
+	}
+}
+
 type astAssignment struct {
 	Key      []string     `"." @Ident {"." @Ident} ":"`
 	Value    *astValue    `(@@`
 	Function *astFunction `| @@)`
+}
+
+func (self astAssignment) Print() {
+	fmt.Printf("%v: ", self.Key)
+	if self.Value != nil {
+		fmt.Printf("%v\n", self.Value)
+	} else {
+		fmt.Println("function()")
+	}
 }
 
 type astProperty struct {

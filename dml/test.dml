@@ -15,6 +15,11 @@
 		Document.testB = false
 	}
 	
+	//event which uses this which should be supported (this means the parent object)
+	event testE2(): function() {
+		this.testB = true
+	}
+	
 	function testFnc(a) {
 		this.testI = a
 	}

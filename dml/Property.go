@@ -58,7 +58,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 	}
 
 	//add all required events
-	prop.AddEvent("onChanged", NewEvent(vm, dtype))
+	prop.AddEvent("onChanged", NewEvent(vm.NewObject(), vm, dtype))
 
 	return prop, nil
 }

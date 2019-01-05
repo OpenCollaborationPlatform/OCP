@@ -58,13 +58,13 @@ func (self *transaction) SetUser(user User) error {
 	return self.user.Write(user)
 }
 
-func (self *transaction) Objects() []Object {
+func (self *transaction) Objects() []Data {
 
 	entries, err := self.objects.GetEntries()
 	if err != nil {
-		return make([]Object, 0)
+		return make([]Data, 0)
 	}
-	result := make([]Object, len(entries))
+	result := make([]Data, len(entries))
 
 	for i, entry := range entries {
 
@@ -189,6 +189,18 @@ func (self *TransactionManager) Open() error {
 	if err != nil {
 		err = utils.StackError(err, "Unable to open transaction")
 	}
+
+	//call the relevant events
+	for _, obj := range self.rntm.objects {
+		bhvr := getTransactionBehaviour(obj)
+		if bhvr != nil {
+			err := bhvr.GetEvent("onOpen").Emit()
+			if err != nil {
+				return utils.StackError(err, "Unable to open transaction due to failed event emitting")
+			}
+		}
+	}
+
 	return err
 }
 
@@ -414,17 +426,12 @@ func (self *TransactionManager) loadTransaction(id datastore.ListEntry) (transac
 	return transaction{id, *objects, *user, self.rntm}, nil
 }
 
-func getTransactionBehaviour(obj Object) *transactionBehaviour {
+func getTransactionBehaviour(obj Data) *transactionBehaviour {
 	//must have the transaction behaviour
-	data, ok := obj.(Data)
-	if !ok {
+	if !obj.HasBehaviour("Transaction") {
 		return nil
 	}
-
-	if !data.HasBehaviour("Transaction") {
-		return nil
-	}
-	return data.GetBehaviour("Transaction").(*transactionBehaviour)
+	return obj.GetBehaviour("Transaction").(*transactionBehaviour)
 }
 
 //removes the transaction from the datastore. Note: Does not remove it from the list
@@ -474,12 +481,13 @@ type transactionBehaviour struct {
 
 func NewTransactionBehaviour(name string, parent identifier, rntm *Runtime) Object {
 
-	behaviour, _ := NewBehaviour(parent, name, `TransactionBehaviour`, rntm)
+	behaviour, _ := NewBehaviour(parent, name, `Transaction`, rntm)
 
 	//add default events
-	behaviour.AddEvent(`onParticipation`, NewEvent(rntm.jsvm)) //called when added to a transaction
-	behaviour.AddEvent(`onClosing`, NewEvent(rntm.jsvm))       //called when transaction, to which the parent was added, is closed (means finished)
-	behaviour.AddEvent(`onFailure`, NewEvent(rntm.jsvm))       //called when adding to transaction failed, e.g. because already in annother transaction
+	behaviour.AddEvent(`onOpen`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))          //called when a new transaction was opened
+	behaviour.AddEvent(`onParticipation`, NewEvent(behaviour.GetJSObject(), rntm.jsvm)) //called when added to a transaction
+	behaviour.AddEvent(`onClosing`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))       //called when transaction, to which the parent was added, is closed (means finished)
+	behaviour.AddEvent(`onFailure`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	tbhvr := &transactionBehaviour{behaviour, false, transaction{}}
 
