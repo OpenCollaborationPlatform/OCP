@@ -65,6 +65,9 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	rntm.registerObjectCreator("Vector", NewVector)
 	rntm.registerObjectCreator("Transaction", NewTransactionBehaviour)
 
+	//setup globals
+	SetupGlobals(rntm)
+
 	return rntm
 }
 
@@ -210,11 +213,6 @@ func (self *Runtime) ReadProperty(path string, property string) (interface{}, er
 
 	prop := obj.GetProperty(property)
 	return prop.GetValue(), nil
-}
-
-//for testing only, so unexportet
-func (self *Runtime) getObject() (Object, error) {
-	return self.mainObj, nil
 }
 
 // 							Internal Functions
@@ -453,12 +451,12 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	}
 	obj.SetupJSMethods(self.jsvm, jsobj)
 
-	//create our local version of the recursive behaviour map to allow adding values for children
-	localRecBehaviours := make([]*astObject, len(recBehaviours))
-	copy(localRecBehaviours, recBehaviours)
-
 	//go on with all subobjects (if not behaviour)
 	if !isBehaviour {
+
+		//create our local version of the recursive behaviour map to allow adding values for children
+		localRecBehaviours := make([]*astObject, len(recBehaviours))
+		copy(localRecBehaviours, recBehaviours)
 
 		//sort children to process behaviours first, so that recursive ones are
 		//ready for all children
@@ -532,7 +530,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 
 		parts := assign.Key[assignIdx:]
 		if assignObj.HasProperty(parts[0]) {
-			err := self.assignProperty(assign, assignObj.GetProperty(parts[0]), localRecBehaviours)
+			err := self.assignProperty(assign, assignObj.GetProperty(parts[0]))
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to assign to property")
 			}
@@ -557,7 +555,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	return obj, nil
 }
 
-func (self *Runtime) assignProperty(asgn *astAssignment, prop Property, recBehaviours []*astObject) error {
+func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 
 	parts := asgn.Key
 
@@ -582,14 +580,7 @@ func (self *Runtime) assignProperty(asgn *astAssignment, prop Property, recBehav
 	} else if asgn.Value.Bool != nil {
 		prop.SetValue(bool(*asgn.Value.Bool))
 	} else if asgn.Value.Type != nil {
-		//type property is special. Due to recursive behaviours the type depends on the
-		//parent in which it is defined. Hence to get a full type definition we need
-		//to add the recursive behaviours that are defined for the parent to the type definition
-		astObj := asgn.Value.Type
-		for _, bvr := range recBehaviours {
-			addFrontIfNotAvailable(&astObj.Objects, bvr)
-		}
-		prop.SetValue(astObj)
+		prop.SetValue(asgn.Value.Type)
 	}
 	return nil
 }
@@ -708,7 +699,7 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 		defaultVal = bool(false)
 	case "type":
 		dt = Type
-		defaultVal = "int"
+		defaultVal = &astObject{}
 	}
 
 	var constprop bool = false
@@ -741,6 +732,7 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
 	} else if astProp.Default.Bool != nil {
 		err = obj.AddProperty(astProp.Key, dt, bool(*astProp.Default.Bool), constprop)
+
 	} else if astProp.Default.Type != nil {
 		err = obj.AddProperty(astProp.Key, dt, astProp.Default.Type, constprop)
 	}

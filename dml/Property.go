@@ -57,8 +57,11 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 		}
 	} else {
 		switch dtype {
-		case Int, Float, String, Bool, Type:
+		case Int, Float, String, Bool:
 			prop = &constProperty{NewEventHandler(), dtype, default_value}
+		case Type:
+			prop = &typeProperty{NewEventHandler(), ""}
+			prop.SetValue(default_value)
 		default:
 			return nil, fmt.Errorf("Unknown type")
 		}

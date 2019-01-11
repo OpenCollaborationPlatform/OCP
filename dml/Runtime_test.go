@@ -2,8 +2,7 @@
 package dml
 
 import (
-	"CollaborationNode/datastores"
-	"fmt"
+	datastore "CollaborationNode/datastores"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -11,7 +10,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestDmlFile(t *testing.T) {
+func TestTypeProperty(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
@@ -75,11 +74,9 @@ func TestDmlFile(t *testing.T) {
 					Document.testE.RegisterCallback(fnc)
 					Document.testE.Emit(2, "hello")
 				`
-			fmt.Println("\nrun code for event")
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 
-			fmt.Println("\nstart code access from js")
 			code = `Document.testI`
 			val, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
@@ -88,9 +85,7 @@ func TestDmlFile(t *testing.T) {
 			So(value, ShouldEqual, 0)
 
 			//check direct go access
-			obj, err := rntm.getObject()
-			So(err, ShouldBeNil)
-			fmt.Println("\nNormal getter call")
+			obj := rntm.mainObj
 			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 0)
@@ -128,7 +123,7 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			//testI must be one if the function was called correctly
-			obj, _ = rntm.getObject()
+			obj = rntm.mainObj
 			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)

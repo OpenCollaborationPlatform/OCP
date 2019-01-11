@@ -1,7 +1,7 @@
 package dml
 
 import (
-	"CollaborationNode/datastores"
+	datastore "CollaborationNode/datastores"
 	"fmt"
 
 	"github.com/dop251/goja"

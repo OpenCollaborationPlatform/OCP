@@ -21,12 +21,12 @@ func SetupGlobals(rntm *Runtime) {
 		typeArg := call.Arguments[0].Export()
 		typeStr, ok := typeArg.(string)
 		if !ok {
-			panic("A valid type description must be given as argument")
+			panic(rntm.jsvm.ToValue("A valid type description must be given as argument"))
 		}
 
 		obj, err := ConstructObject(rntm, typeStr, "")
 		if err != nil {
-			panic(utils.StackError(err, "Unable to build object from type desciption").Error())
+			panic(rntm.jsvm.ToValue(utils.StackError(err, "Unable to build object from type desciption").Error()))
 		}
 		return obj.GetJSObject()
 	})
@@ -55,10 +55,17 @@ func ConstructObject(rntm *Runtime, encoded string, name string) (Object, error)
 		}
 		name = id.String()
 	}
+	isAssigned := false
 	for _, astAssign := range astObj.Assignments {
 		if astAssign.Key[0] == "id" {
 			*astAssign.Value.String = name
+			isAssigned = true
 		}
+	}
+	if !isAssigned {
+		val := &astValue{String: &name}
+		asgn := &astAssignment{Key: []string{"id"}, Value: val}
+		astObj.Assignments = append(astObj.Assignments, asgn)
 	}
 
 	//check uniquiness
