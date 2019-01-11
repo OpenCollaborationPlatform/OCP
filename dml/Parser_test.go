@@ -2,6 +2,7 @@
 package dml
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/alecthomas/participle"
@@ -59,7 +60,7 @@ func TestSimpleObject(t *testing.T) {
 			So(newprop.Const, ShouldEqual, "")
 			So(newprop.Normal, ShouldNotEqual, "")
 		})
-		Convey("with const value being read only", func() {
+		Convey("with const value being read only.", func() {
 
 			obj := dml.Object
 			newprop := obj.Properties[2]
@@ -118,6 +119,32 @@ func TestNestedObject(t *testing.T) {
 			So(prop.Key[0], ShouldEqual, "value")
 			So(bool(*prop.Value.Bool), ShouldBeFalse)
 			So(len(obj.Objects), ShouldEqual, 2)
+		})
+
+		Convey("and shall also be serializable", func() {
+
+			obj := dml.Object
+			data, err := json.Marshal(obj)
+			So(err, ShouldBeNil)
+
+			var reObj *astObject
+			err = json.Unmarshal(data, &reObj)
+			So(err, ShouldBeNil)
+
+			//retest everything from above with the new object
+			So(len(reObj.Assignments), ShouldEqual, 2)
+			So(len(reObj.Objects), ShouldEqual, 1)
+
+			reObj = reObj.Objects[0]
+			So(reObj.Identifier, ShouldEqual, "SubObject")
+			So(len(reObj.Assignments), ShouldEqual, 2)
+			prop := reObj.Assignments[0]
+			So(prop.Key[0], ShouldEqual, "id")
+			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
+			prop = reObj.Assignments[1]
+			So(prop.Key[0], ShouldEqual, "value")
+			So(bool(*prop.Value.Bool), ShouldBeFalse)
+			So(len(reObj.Objects), ShouldEqual, 2)
 		})
 	})
 }

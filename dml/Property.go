@@ -1,12 +1,14 @@
 package dml
 
 import (
-	"CollaborationNode/datastores"
+	datastore "CollaborationNode/datastores"
 	"CollaborationNode/utils"
+	"encoding/json"
 	"fmt"
 	"log"
 
 	"github.com/dop251/goja"
+	"github.com/mr-tron/base58/base58"
 )
 
 //Defines the default Property interface under which different data types can be stored.
@@ -45,12 +47,17 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 			}
 
 			prop = &dataProperty{NewEventHandler(), dtype, *value}
+
+		case Type:
+			//type property needs to store parsings ast object which cannot be serialized, hence const only
+			return nil, fmt.Errorf("Type property can only be const")
+
 		default:
 			return nil, fmt.Errorf("Unknown type")
 		}
 	} else {
 		switch dtype {
-		case Int, Float, String, Bool:
+		case Int, Float, String, Bool, Type:
 			prop = &constProperty{NewEventHandler(), dtype, default_value}
 		default:
 			return nil, fmt.Errorf("Unknown type")
@@ -145,6 +152,43 @@ func (self *constProperty) SetValue(val interface{}) error {
 func (self *constProperty) GetValue() interface{} {
 
 	return self.value
+}
+
+type typeProperty struct {
+	eventHandler
+	data string
+}
+
+func (self typeProperty) Type() DataType {
+	return Type
+}
+
+func (self typeProperty) IsConst() bool {
+	return true
+}
+
+//we store the basic information, plain type string or parser result for object
+func (self *typeProperty) SetValue(val interface{}) error {
+
+	//check if the type is correct
+	err := mustBeType(Type, val)
+	if err != nil {
+		return err
+	}
+
+	value := val.(*astObject)
+	data, err := json.Marshal(value)
+	if err != nil {
+		return utils.StackError(err, "Unable to marshal parser result into property")
+	}
+	self.data = base58.Encode(data)
+
+	return nil
+}
+
+//we only return basic information, mailny for JS accessibility
+func (self *typeProperty) GetValue() interface{} {
+	return self.data
 }
 
 //Property handler, which defines a interface for holding and using multiple properties

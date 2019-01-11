@@ -3,8 +3,10 @@ package dml
 
 import (
 	"CollaborationNode/datastores"
+	"index/suffixarray"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -97,7 +99,7 @@ func TestTransactionBehaviour(t *testing.T) {
 	defer os.RemoveAll(path)
 
 	//create the runtime
-	Convey("Testing transaction behaviours by loading dml code", t, func() {
+	Convey("Testing transaction events by loading dml code", t, func() {
 
 		store, _ := datastore.NewDatastore(path)
 		defer store.Close()
@@ -140,11 +142,20 @@ func TestTransactionBehaviour(t *testing.T) {
 					
 					Data {
 						.id: "Child2"
+					} // test object without transaction behaviour
+					
+					Data {
+						.id: "Child3"
+						
+						Transaction{
+							.id: "Transaction3"
+						} //test default transaction behaviour
 					}
 							
 				}`
 
 		rntm := NewRuntime(store)
+		rntm.currentUser = "User1"
 		err := rntm.Parse(strings.NewReader(code))
 		So(err, ShouldBeNil)
 		mngr := rntm.transactions
@@ -166,7 +177,43 @@ func TestTransactionBehaviour(t *testing.T) {
 				res, err := rntm.ReadProperty("Document", "result")
 				So(err, ShouldBeNil)
 				str := res.(string)
-				So(str, ShouldEqual, "o1o2o2")
+				//note: ordering of calls is undefined
+				r1 := regexp.MustCompile("o1")
+				index := suffixarray.New([]byte(str))
+				results := index.FindAllIndex(r1, -1)
+				So(len(results), ShouldEqual, 1)
+				r2 := regexp.MustCompile("o2")
+				results = index.FindAllIndex(r2, -1)
+				So(len(results), ShouldEqual, 2)
+			})
+		})
+
+		Convey("Adding the main object to the transaction", func() {
+
+			err := mngr.Open()
+			So(err, ShouldBeNil)
+			_, err = rntm.RunJavaScript("Document.result = ''")
+			So(err, ShouldBeNil)
+			err = mngr.Add(rntm.mainObj)
+			So(err, ShouldBeNil)
+
+			Convey("only its participation event must have been called", func() {
+				res, err := rntm.ReadProperty("Document", "result")
+				So(err, ShouldBeNil)
+				str := res.(string)
+				So(str, ShouldEqual, "p1")
+			})
+
+			Convey("and adding it to annother transaction must fail", func() {
+
+				rntm.currentUser = "User2"
+				err := mngr.Add(rntm.mainObj)
+				So(err, ShouldNotBeNil)
+
+				err = mngr.Open()
+				So(err, ShouldBeNil)
+				err = mngr.Add(rntm.mainObj)
+				So(err, ShouldNotBeNil)
 			})
 		})
 	})

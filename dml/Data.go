@@ -1,7 +1,9 @@
 // Data descibes a Data object with its respective properties to store things in a database
 package dml
 
-import "fmt"
+import (
+	"fmt"
+)
 
 //the most basic implementation of an dml Object. All it does is to allow adding
 //fundamental types, like properties, events and functions, as well as holding Behaviours.
@@ -25,9 +27,13 @@ type data struct {
 }
 
 func NewData(name string, parent identifier, rntm *Runtime) Object {
+	return NewDataBaseClass(name, "Data", parent, rntm)
+}
+
+func NewDataBaseClass(name string, typename string, parent identifier, rntm *Runtime) *data {
 
 	dat := data{
-		NewObject(parent, name, "Data", rntm),
+		NewObject(parent, name, typename, rntm),
 		NewBehaviourHandler(),
 		make([]identifier, 0),
 	}

@@ -1,10 +1,10 @@
 package dml
 
 import (
+	"CollaborationNode/utils"
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 
 	"github.com/mr-tron/base58/base58"
 )
@@ -17,13 +17,21 @@ type identifier struct {
 
 func IdentifierFromData(data []byte) (identifier, error) {
 
-	var result interface{}
-	json.Unmarshal(data, result)
-	id, ok := result.(identifier)
-	if !ok {
-		return identifier{}, fmt.Errorf("Data is not identifier")
+	var result identifier
+	err := json.Unmarshal(data, &result)
+	if err != nil {
+		return identifier{}, utils.StackError(err, "Unable to recreate identifier from data")
 	}
-	return id, nil
+	return result, nil
+}
+
+func IdentifierFromEncoded(code string) (identifier, error) {
+
+	data, err := base58.Decode(code)
+	if err != nil {
+		return identifier{}, utils.StackError(err, "Unable to decode strig to identifier data")
+	}
+	return IdentifierFromData(data)
 }
 
 func (self identifier) data() []byte {
@@ -35,9 +43,8 @@ func (self identifier) hash() [32]byte {
 	return sha256.Sum256(self.data())
 }
 
-func (self identifier) encodedHash() string {
-	hash := self.hash()
-	return base58.Encode(hash[:])
+func (self identifier) encode() string {
+	return base58.Encode(self.data())
 }
 
 func (self identifier) equal(id identifier) bool {

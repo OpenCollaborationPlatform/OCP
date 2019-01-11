@@ -16,7 +16,7 @@ Note:
 package dml
 
 import (
-	"CollaborationNode/datastores"
+	datastore "CollaborationNode/datastores"
 	"CollaborationNode/utils"
 	"fmt"
 	"io"
@@ -62,6 +62,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 
 	//add the datastructures
 	rntm.registerObjectCreator("Data", NewData)
+	rntm.registerObjectCreator("Vector", NewVector)
 	rntm.registerObjectCreator("Transaction", NewTransactionBehaviour)
 
 	return rntm
@@ -118,6 +119,9 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 	self.mainObj = obj.(Data)
 	self.ready = true
+
+	//set the JS main entry point
+	self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
 
 	return err
 }
@@ -281,6 +285,9 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 
 	//if not a full rollback we check if something has changed and start the relevant
 	//behaviours. We only roll back if something goes wrong
+	var postError error = nil
+	rollback := rollbackOnly
+
 	if !rollbackOnly {
 
 		//check all objects if anything has changed
@@ -291,8 +298,8 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 				if obj.HasBehaviour("Transaction") {
 					err := self.transactions.Add(obj)
 					if err != nil {
-						fmt.Printf("Transaction adding failed: %v\n", err.Error())
-						rollbackOnly = true
+						postError = utils.StackError(err, "Adding to Transaction failed: Rollback")
+						rollback = true
 						break
 					}
 				}
@@ -300,7 +307,8 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 				//fix the data
 				_, err := obj.FixStateAsVersion()
 				if err != nil {
-					rollbackOnly = true
+					postError = utils.StackError(err, "Fixing version failed: Rollback")
+					rollback = true
 					break
 				}
 
@@ -310,7 +318,7 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 	}
 
 	//do rollback if required (caller requested or behaviours failed)
-	if rollbackOnly {
+	if rollback {
 		for _, obj := range self.objects {
 
 			v, ok := prestate[obj.Id()]
@@ -319,7 +327,7 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 
 				latest, err := obj.GetLatestVersion()
 				if err != nil {
-					return err
+					return utils.StackError(err, "Rollback failed")
 				}
 
 				if latest > v {
@@ -327,18 +335,27 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 					//and reset the head accordingly
 					err = obj.LoadVersion(v)
 					if err != nil {
-						return err
+						if postError != nil {
+							err = utils.StackError(postError, err.Error())
+						}
+						return utils.StackError(err, "Rollback failed")
 					}
 
 					err = obj.RemoveVersionsUpFrom(v)
 					if err != nil {
-						return err
+						if postError != nil {
+							err = utils.StackError(postError, err.Error())
+						}
+						return utils.StackError(err, "Rollback failed")
 					}
 
 					obj.ResetHead()
 					err = obj.LoadVersion(datastore.VersionID(datastore.HEAD))
 					if err != nil {
-						return err
+						if postError != nil {
+							err = utils.StackError(postError, err.Error())
+						}
+						return utils.StackError(err, "Rollback failed")
 					}
 
 				} else {
@@ -347,11 +364,9 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 				}
 			}
 			//TODO: Handle not ok: howto remove object correctly?
-
-			return nil
 		}
 	}
-	return nil
+	return postError
 }
 
 //due to recursive nature og objects we need an extra function
@@ -388,13 +403,14 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 		}
 	}
 
+	//check if data or behaviour
+	bhvr, isBehaviour := obj.(Behaviour)
+
 	//expose to javascript
 	jsobj := obj.GetJSObject()
 	if parent.valid() {
 		parentObj := self.objects[parent]
 		parentObj.GetJSObject().Set(objName, jsobj)
-	} else {
-		self.jsvm.Set(objName, jsobj)
 	}
 
 	//Now we create all additional properties and set them up in js
@@ -423,7 +439,10 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 		jsobj.Set(astEvent.Key, obj.GetEvent(astEvent.Key).GetJSObject())
 	}
 
-	//than all methods
+	//than all methods (including defaults if required)
+	if isBehaviour {
+		bhvr.SetupDefaults()
+	}
 	for _, fnc := range astObj.Functions {
 
 		method, err := self.buildMethod(fnc)
@@ -434,13 +453,12 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	}
 	obj.SetupJSMethods(self.jsvm, jsobj)
 
-	//go on with all subobjects (if not behaviour)
-	_, isBehaviour := obj.(Behaviour)
-	if !isBehaviour {
+	//create our local version of the recursive behaviour map to allow adding values for children
+	localRecBehaviours := make([]*astObject, len(recBehaviours))
+	copy(localRecBehaviours, recBehaviours)
 
-		//create our local version of the recursive behaviour map to allow adding values for children
-		localRecBehaviours := make([]*astObject, len(recBehaviours))
-		copy(localRecBehaviours, recBehaviours)
+	//go on with all subobjects (if not behaviour)
+	if !isBehaviour {
 
 		//sort children to process behaviours first, so that recursive ones are
 		//ready for all children
@@ -448,7 +466,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 		objectToFrontIfAvailable(&astObj.Objects, `Version`)
 
 		//add the recursive Behaviours
-		for _, bvr := range recBehaviours {
+		for _, bvr := range localRecBehaviours {
 			addFrontIfNotAvailable(&astObj.Objects, bvr)
 		}
 
@@ -514,7 +532,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 
 		parts := assign.Key[assignIdx:]
 		if assignObj.HasProperty(parts[0]) {
-			err := self.assignProperty(assign, assignObj.GetProperty(parts[0]))
+			err := self.assignProperty(assign, assignObj.GetProperty(parts[0]), localRecBehaviours)
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to assign to property")
 			}
@@ -539,7 +557,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	return obj, nil
 }
 
-func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
+func (self *Runtime) assignProperty(asgn *astAssignment, prop Property, recBehaviours []*astObject) error {
 
 	parts := asgn.Key
 
@@ -563,6 +581,15 @@ func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 		prop.SetValue(*asgn.Value.Number)
 	} else if asgn.Value.Bool != nil {
 		prop.SetValue(bool(*asgn.Value.Bool))
+	} else if asgn.Value.Type != nil {
+		//type property is special. Due to recursive behaviours the type depends on the
+		//parent in which it is defined. Hence to get a full type definition we need
+		//to add the recursive behaviours that are defined for the parent to the type definition
+		astObj := asgn.Value.Type
+		for _, bvr := range recBehaviours {
+			addFrontIfNotAvailable(&astObj.Objects, bvr)
+		}
+		prop.SetValue(astObj)
 	}
 	return nil
 }
@@ -679,6 +706,9 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 	case "bool":
 		dt = Bool
 		defaultVal = bool(false)
+	case "type":
+		dt = Type
+		defaultVal = "int"
 	}
 
 	var constprop bool = false
@@ -711,6 +741,8 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
 	} else if astProp.Default.Bool != nil {
 		err = obj.AddProperty(astProp.Key, dt, bool(*astProp.Default.Bool), constprop)
+	} else if astProp.Default.Type != nil {
+		err = obj.AddProperty(astProp.Key, dt, astProp.Default.Type, constprop)
 	}
 
 	if err != nil {

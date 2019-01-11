@@ -26,12 +26,14 @@ func UserFromData(data []byte) (User, error) {
 type DataType int
 
 const (
-	String DataType = 1
-	Int    DataType = 2
-	Float  DataType = 3
-	Bool   DataType = 4
-	File   DataType = 5
-	Raw    DataType = 6
+	String  DataType = 1
+	Int     DataType = 2
+	Float   DataType = 3
+	Bool    DataType = 4
+	File    DataType = 5
+	Raw     DataType = 6
+	Type    DataType = 7
+	Object_ DataType = 8
 )
 
 func typeToString(t DataType) string {
@@ -49,6 +51,10 @@ func typeToString(t DataType) string {
 		return "file"
 	case Raw:
 		return "raw"
+	case Type:
+		return "type"
+	case Object_:
+		return "object"
 	}
 	return ""
 }
@@ -68,6 +74,10 @@ func stringToType(t string) DataType {
 		return File
 	case "raw":
 		return Raw
+	case "type":
+		return Type
+	case "object":
+		return Object_
 	}
 	return Int
 }
@@ -90,6 +100,10 @@ func mustBeType(pt DataType, val interface{}) error {
 	case bool, Boolean:
 		if pt != Bool {
 			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, typeToString(pt))
+		}
+	case *astObject:
+		if pt != Type {
+			return fmt.Errorf(`wrong type, got 'type' and expected '%s'`, typeToString(pt))
 		}
 	default:
 		return fmt.Errorf("Unknown type: %T", val)
