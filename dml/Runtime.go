@@ -43,6 +43,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	rntm := &Runtime{
 		creators:     cr,
 		jsvm:         js,
+		jsObjMap:     js.NewObject(),
 		datastore:    ds,
 		mutex:        &sync.Mutex{},
 		ready:        false,
@@ -66,6 +67,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	rntm.registerObjectCreator("Transaction", NewTransactionBehaviour)
 
 	//setup globals
+	rntm.jsvm.Set("Objects", rntm.jsObjMap)
 	SetupGlobals(rntm)
 
 	return rntm
@@ -78,6 +80,7 @@ type Runtime struct {
 
 	//components of the runtime
 	jsvm      *goja.Runtime
+	jsObjMap  *goja.Object
 	datastore *datastore.Datastore
 	mutex     *sync.Mutex
 
@@ -217,6 +220,12 @@ func (self *Runtime) ReadProperty(path string, property string) (interface{}, er
 
 // 							Internal Functions
 //*********************************************************************************
+func (self *Runtime) removeObject(obj Object) {
+
+	delete(self.objects, obj.Id())
+	//TODO: unkown how to do it from go
+	self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().encode()))
+}
 
 //Function to extend the available data and behaviour types for this runtime
 func (self *Runtime) registerObjectCreator(name string, fnc CreatorFunc) error {
@@ -403,6 +412,12 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 
 	//check if data or behaviour
 	bhvr, isBehaviour := obj.(Behaviour)
+
+	if !isBehaviour {
+		//add to rntm
+		self.objects[obj.Id()] = obj.(Data)
+		self.jsObjMap.Set(obj.Id().encode(), obj.GetJSObject())
+	}
 
 	//expose to javascript
 	jsobj := obj.GetJSObject()

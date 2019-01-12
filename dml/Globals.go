@@ -12,6 +12,7 @@ import (
 
 func SetupGlobals(rntm *Runtime) {
 
+	//constructor for DML object
 	rntm.jsvm.Set("Object", func(call goja.ConstructorCall) *goja.Object {
 
 		//get the type description, which must be passed as argument
@@ -30,6 +31,7 @@ func SetupGlobals(rntm *Runtime) {
 		}
 		return obj.GetJSObject()
 	})
+
 }
 
 //Construct a data object from encoded description (as provided by type property)

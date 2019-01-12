@@ -6,12 +6,12 @@ import (
 	"bytes"
 	"fmt"
 
-	"CollaborationNode/datastores"
+	datastore "CollaborationNode/datastores"
 	"CollaborationNode/utils"
 	"crypto/sha256"
 
 	"github.com/dop251/goja"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 /*********************************************************************************

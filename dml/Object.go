@@ -62,6 +62,9 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 	//default properties
 	obj.AddProperty("id", String, "", true)
 
+	//add default methods
+	obj.AddMethod("Identifier", MustNewMethod(obj.Id().encode))
+
 	return &obj
 }
 

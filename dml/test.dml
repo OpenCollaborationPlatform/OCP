@@ -26,5 +26,6 @@
 	
 	Data {
 		.id: "DocumentObject"
+		property int test: 10
 	}
 }

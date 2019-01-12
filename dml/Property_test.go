@@ -10,7 +10,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestDmlFile(t *testing.T) {
+func TestTypeProperty(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
@@ -53,7 +53,7 @@ func TestDmlFile(t *testing.T) {
 			So(strJs, ShouldEqual, str)
 		})
 
-		Convey("and the he type must be creatable.", func() {
+		Convey("and the the type must be creatable.", func() {
 
 			code = `
 				obj = new Object(toplevel.test)
@@ -62,6 +62,18 @@ func TestDmlFile(t *testing.T) {
 				}
 				if (obj.test != 10) {
 					throw "object properties not correctly created"
+				}`
+			_, err := rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+		})
+
+		Convey("and afterwards be accessible in the global objects", func() {
+
+			code = `
+				obj = new Object(toplevel.test)
+				id = obj.Identifier()
+				if (!(id in Objects)) {
+					throw "object is not accessible, but should be"
 				}`
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)

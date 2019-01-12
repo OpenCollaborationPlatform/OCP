@@ -10,7 +10,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestTypeProperty(t *testing.T) {
+func TestDmlFile(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
@@ -162,6 +162,25 @@ func TestTypeProperty(t *testing.T) {
 				}
 				`
 
+			_, err := rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+		})
+
+		Convey("And objects mus be accessbile by id", func() {
+
+			code := `
+				id = Document.DocumentObject.Identifier()
+				
+				if (!(id in Objects)) {
+					throw "object is not know, but should be"
+				}
+				
+				obj = Objects[id]
+				
+				if (obj.test != 10) {
+					throw "unable to get correct object from identifier"
+				}
+			`
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
 		})

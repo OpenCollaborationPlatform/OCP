@@ -38,8 +38,6 @@ func NewDataBaseClass(name string, typename string, parent identifier, rntm *Run
 		make([]identifier, 0),
 	}
 
-	rntm.objects[dat.Id()] = &dat
-
 	return &dat
 }
 
