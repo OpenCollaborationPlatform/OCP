@@ -30,10 +30,8 @@ const (
 	Int     DataType = 2
 	Float   DataType = 3
 	Bool    DataType = 4
-	File    DataType = 5
-	Raw     DataType = 6
-	Type    DataType = 7
-	Object_ DataType = 8
+	Type    DataType = 5
+	Object_ DataType = 6
 )
 
 func typeToString(t DataType) string {
@@ -47,10 +45,6 @@ func typeToString(t DataType) string {
 		return "float"
 	case Bool:
 		return "bool"
-	case File:
-		return "file"
-	case Raw:
-		return "raw"
 	case Type:
 		return "type"
 	case Object_:
@@ -70,10 +64,6 @@ func stringToType(t string) DataType {
 		return Float
 	case "bool":
 		return Bool
-	case "file":
-		return File
-	case "raw":
-		return Raw
 	case "type":
 		return Type
 	case "object":
@@ -101,7 +91,7 @@ func mustBeType(pt DataType, val interface{}) error {
 		if pt != Bool {
 			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, typeToString(pt))
 		}
-	case *astObject:
+	case *astDataType:
 		if pt != Type {
 			return fmt.Errorf(`wrong type, got 'type' and expected '%s'`, typeToString(pt))
 		}

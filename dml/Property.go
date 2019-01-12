@@ -179,12 +179,18 @@ func (self *typeProperty) SetValue(val interface{}) error {
 		return err
 	}
 
-	value := val.(*astObject)
-	data, err := json.Marshal(value)
-	if err != nil {
-		return utils.StackError(err, "Unable to marshal parser result into property")
+	value := val.(*astDataType)
+
+	if value.Object != nil {
+		data, err := json.Marshal(value.Object)
+		if err != nil {
+			return utils.StackError(err, "Unable to marshal parser result into property")
+		}
+		self.data = base58.Encode(data)
+
+	} else {
+		self.data = value.Pod
 	}
-	self.data = base58.Encode(data)
 
 	return nil
 }

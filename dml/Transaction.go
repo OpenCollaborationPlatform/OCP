@@ -369,10 +369,7 @@ func (self *TransactionManager) getTransaction() (transaction, error) {
 //opens a new transaction for the current user (without handling the old one if any)
 func (self *TransactionManager) newTransaction() (transaction, error) {
 
-	id, err := uuid.NewV4()
-	if err != nil {
-		return transaction{}, utils.StackError(err, "Cannot create transaction id")
-	}
+	id := uuid.NewV4()
 	key := sha256.Sum256(id.Bytes())
 	entry, err := self.list.Add(key)
 	if err != nil {

@@ -49,17 +49,17 @@ func (self astAssignment) Print() {
 }
 
 type astProperty struct {
-	Const   string    `(@("const" "property") |`
-	Normal  string    `@"property")`
-	Type    *astType  `@@`
-	Key     string    `@Ident`
-	Default *astValue `[":" @@]`
+	Const   string       `(@("const" "property") |`
+	Normal  string       `@"property")`
+	Type    *astDataType `@@`
+	Key     string       `@Ident`
+	Default *astValue    `[":" @@]`
 }
 
 type astEvent struct {
-	Key     string       `"event" @Ident`
-	Params  []*astType   `"(" { @@ [","] } ")"`
-	Default *astFunction `[":" @@]`
+	Key     string         `"event" @Ident`
+	Params  []*astDataType `"(" { @@ [","] } ")"`
+	Default *astFunction   `[":" @@]`
 }
 
 type astFunction struct {
@@ -68,19 +68,23 @@ type astFunction struct {
 	Body       string   `@FunctionBody`
 }
 
+//matching all supported DML datatypes. Note that a astObject is also a datatype.
+//one special datatype is type whichs value is again a DataType
+type astDataType struct {
+	Pod    string     `@("string" | "bool" | "int" | "float" | "type")`
+	Object *astObject `| @@`
+}
+
 //special type to make bool handling easier
 type Boolean bool
 
 func (b *Boolean) Capture(v []string) error { *b = v[0] == "true"; return nil }
 
+//a value for all possible datatypes
 type astValue struct {
-	String *string    `  @String`
-	Number *float64   `| @Float`
-	Int    *int64     `| @Int`
-	Bool   *Boolean   `| @('true'|'false')`
-	Type   *astObject `| @@`
-}
-
-type astType struct {
-	Type string `@("string" | "bool" | "int" | "float" | "type")`
+	String *string      `  @(String|Char)`
+	Number *float64     `| @Float`
+	Int    *int64       `| @Int`
+	Bool   *Boolean     `| @("true"|"false")`
+	Type   *astDataType `| @@`
 }

@@ -29,9 +29,9 @@ func TestSimpleObject(t *testing.T) {
 		}`
 
 		dml := &DML{}
-		parser, perr := participle.Build(&DML{}, &dmlDefinition{})
-		err := parser.ParseString(text, dml)
+		parser, perr := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
 		So(perr, ShouldBeNil)
+		err := parser.ParseString(text, dml)
 		So(err, ShouldBeNil)
 
 		Convey("the result should match the input", func() {
@@ -54,7 +54,7 @@ func TestSimpleObject(t *testing.T) {
 			obj := dml.Object
 			So(len(obj.Properties), ShouldEqual, 3)
 			newprop := obj.Properties[0]
-			So(newprop.Type.Type, ShouldEqual, "int")
+			So(newprop.Type.Pod, ShouldEqual, "int")
 			So(newprop.Key, ShouldEqual, "myprop")
 			So(*newprop.Default.Int, ShouldEqual, 1)
 			So(newprop.Const, ShouldEqual, "")
@@ -64,7 +64,7 @@ func TestSimpleObject(t *testing.T) {
 
 			obj := dml.Object
 			newprop := obj.Properties[2]
-			So(newprop.Type.Type, ShouldEqual, "int")
+			So(newprop.Type.Pod, ShouldEqual, "int")
 			So(newprop.Key, ShouldEqual, "myconst")
 			So(*newprop.Default.Int, ShouldEqual, 2)
 			So(newprop.Const, ShouldNotEqual, "")
@@ -96,10 +96,10 @@ func TestNestedObject(t *testing.T) {
 		}`
 
 		dml := &DML{}
-		parser, perr := participle.Build(&DML{}, &dmlDefinition{})
-		err := parser.ParseString(text, dml)
-
+		parser, perr := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
 		So(perr, ShouldBeNil)
+
+		err := parser.ParseString(text, dml)
 		So(err, ShouldBeNil)
 
 		Convey("the result should match the input", func() {
@@ -173,9 +173,9 @@ func TestJavascriptFunctions(t *testing.T) {
 		}`
 
 		dml := &DML{}
-		parser, perr := participle.Build(&DML{}, &dmlDefinition{})
-		err := parser.ParseString(text, dml)
+		parser, perr := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
 		So(perr, ShouldBeNil)
+		err := parser.ParseString(text, dml)
 		So(err, ShouldBeNil)
 
 		Convey("the result should match the input", func() {

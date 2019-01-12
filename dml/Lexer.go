@@ -39,7 +39,7 @@ func init() {
 
 type dmlDefinition struct{}
 
-func (d *dmlDefinition) Lex(r io.Reader) lexer.Lexer {
+func (d *dmlDefinition) Lex(r io.Reader) (lexer.Lexer, error) {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
 		panic(err)
@@ -53,7 +53,7 @@ func (d *dmlDefinition) Lex(r io.Reader) lexer.Lexer {
 		},
 		buf:          b,
 		patternCache: make(map[string]*regexp.Regexp, 0),
-	}
+	}, nil
 }
 
 func (d *dmlDefinition) Symbols() map[string]rune {
@@ -119,15 +119,14 @@ func (self *dmlLexer) Peek() lexer.Token {
 		}
 	}
 
-	eof := lexer.EOFToken
-	eof.Pos = self.cursor
+	eof := lexer.EOFToken(self.cursor)
 	return eof
 }
 
-func (self *dmlLexer) Next() lexer.Token {
+func (self *dmlLexer) Next() (lexer.Token, error) {
 	token := self.Peek()
 	self.peek = nil
-	return token
+	return token, nil
 }
 
 //*****************************
@@ -191,13 +190,13 @@ func (self *dmlLexer) matchJSFunctionBody() (lexer.Token, bool) {
 
 		//little safety: never go over the end of the buffer!
 		if len(self.buf) <= self.cursor.Offset+add {
-			lexer.Panic(self.cursor, "expected '}' at end of function body")
+			lexer.Errorf(self.cursor, "expected '}' at end of function body")
 		}
 
 		//match opeing or closing
 		idx := exp.FindSubmatchIndex(self.buf[(self.cursor.Offset + add):])
 		if idx == nil || idx[0] < 0 {
-			lexer.Panic(self.cursor, "expected '}' at end of function body")
+			lexer.Errorf(self.cursor, "expected '}' at end of function body")
 		}
 		//and adopt accordingly
 		if idx[3] >= 0 {

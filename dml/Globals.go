@@ -51,10 +51,7 @@ func ConstructObject(rntm *Runtime, encoded string, name string) (Object, error)
 
 	//set a uuid name to ensure unique identifier if none is set. Important if there is no parent!
 	if name == "" {
-		id, err := uuid.NewV4()
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to create unique name")
-		}
+		id := uuid.NewV4()
 		name = id.String()
 	}
 	isAssigned := false

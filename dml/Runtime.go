@@ -107,7 +107,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 
 	//we start with building the AST
 	ast := &DML{}
-	parser, err := participle.Build(&DML{}, &dmlDefinition{})
+	parser, err := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
 	if err != nil {
 		return err
 	}
@@ -662,7 +662,11 @@ func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) 
 	//build the arguements slice
 	args := make([]DataType, len(astEvt.Params))
 	for i, ptype := range astEvt.Params {
-		args[i] = stringToType(ptype.Type)
+		//only pod types allowd
+		if ptype.Object != nil {
+			return nil, fmt.Errorf("event arguments can only be POD types")
+		}
+		args[i] = stringToType(ptype.Pod)
 	}
 
 	//build the event
@@ -697,9 +701,13 @@ func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) 
 
 func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
+	//property can have only plain types
+	if astProp.Type.Object != nil {
+		return fmt.Errorf("object can only be of plain type")
+	}
 	var dt DataType
 	var defaultVal interface{}
-	switch astProp.Type.Type {
+	switch astProp.Type.Pod {
 	case "string":
 		dt = String
 		defaultVal = string("")
