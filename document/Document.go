@@ -8,7 +8,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
-	"github.com/satori/go.uuid"
+	uuid "github.com/satori/go.uuid"
 )
 
 type Document struct {
@@ -28,11 +28,8 @@ func NewDocument(ownerID wamp.ID, docID string) (*Document, error) {
 	}
 
 	if docID == "" {
-		if ID, err := uuid.NewV4(); err != nil {
-			return nil, err
-		} else {
-			docID = ID.String()
-		}
+		ID := uuid.NewV4()
+		docID = ID.String()
 	}
 
 	docClient, err := router.GetLocalClient(docID)
@@ -108,7 +105,7 @@ func (doc *Document) removeSession(session wamp.ID) error {
 			}
 		}
 	}
-	return fmt.Errorf("No session with ID %s registered in document %s", session, doc.ID)
+	return fmt.Errorf("No session with ID %v registered in document %v", session, doc.ID)
 }
 
 func (doc *Document) removeClient(client *connection.Client) {

@@ -9,20 +9,17 @@ import (
 	"path/filepath"
 	"sync"
 
+	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
+	p2phost "github.com/libp2p/go-libp2p-host"
 	peer "github.com/libp2p/go-libp2p-peer"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
-	swarm "github.com/libp2p/go-libp2p-swarm"
-	bhost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/spf13/viper"
-	msmux "github.com/whyrusleeping/go-smux-multistream"
-	spdy "github.com/whyrusleeping/go-smux-spdystream"
-	yamux "github.com/whyrusleeping/go-smux-yamux"
 )
 
 type Host struct {
-	host       *bhost.BasicHost
+	host       p2phost.Host
 	swarmMutex sync.RWMutex
 	swarms     []*Swarm
 
@@ -43,10 +40,6 @@ func (h *Host) Start() error {
 	if err != nil {
 		log.Fatalf("Public key could not be read: %s\n", err)
 	}
-	pub, err := crypto.UnmarshalPublicKey(content)
-	if err != nil {
-		log.Fatalf("Public key is invalid: %s\n", err)
-	}
 	content, err = ioutil.ReadFile(filepath.Join(viper.GetString("directory"), "private"))
 	if err != nil {
 		log.Fatalf("Private key could not be read: %s\n", err)
@@ -56,49 +49,44 @@ func (h *Host) Start() error {
 		log.Fatalf("Private key is invalid: %s\n", err)
 	}
 
-	//our ID
-	pid, _ := peer.IDFromPublicKey(pub)
-
 	// Create the multiaddress we listen on
-	addr, err := ma.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", viper.GetString("p2p.uri"), viper.GetInt("p2p.port")))
+	addr := fmt.Sprintf("/ip4/%s/tcp/%d", viper.GetString("p2p.uri"), viper.GetInt("p2p.port"))
 
-	if err != nil {
-		return err
-	}
+	// // Create a peerstore
+	// ps := pstore.NewPeerstore()
 
-	// Create a peerstore
-	ps := pstore.NewPeerstore()
+	// // we use secure connections
+	// ps.AddPrivKey(pid, priv)
+	// ps.AddPubKey(pid, pub)
 
-	// we use secure connections
-	ps.AddPrivKey(pid, priv)
-	ps.AddPubKey(pid, pub)
+	// // Create swarm (implements libP2P Network)
+	// swrm := swarm.NewSwarm(
+	// 	context.Background(),
+	// 	pid,
+	// 	ps,
+	// 	nil,
+	// )
+	// if err != nil {
+	// 	return err
+	// }
 
-	// Set up stream multiplexer
-	tpt := msmux.NewBlankTransport()
-	tpt.AddTransport("/yamux/1.0.0", yamux.DefaultTransport)
-	tpt.AddTransport("/spdy/3.1.0", spdy.Transport)
+	// netw := (*swarm.Network)(swrm)
 
-	// Create swarm (implements libP2P Network)
-	swrm, err := swarm.NewSwarmWithProtector(
-		context.Background(),
-		[]ma.Multiaddr{addr},
-		pid,
-		ps,
-		nil,
-		tpt,
-		nil,
-	)
-	if err != nil {
-		return err
-	}
-
-	netw := (*swarm.Network)(swrm)
-
+	// ctx := context.Background()
+	// opts := bhost.HostOpts{
+	// 	EnableRelay: false,
+	// 	NATManager:  bhost.NewNATManager(netw)}
+	//h.host, err = bhost.NewHost(ctx, netw, &opts)
 	ctx := context.Background()
-	opts := bhost.HostOpts{
-		EnableRelay: false,
-		NATManager:  bhost.NewNATManager(netw)}
-	h.host, err = bhost.NewHost(ctx, netw, &opts)
+	h.host, err = libp2p.New(ctx,
+		libp2p.Identity(priv),
+		libp2p.ListenAddrStrings(addr),
+		libp2p.DefaultTransports,
+		libp2p.DefaultMuxers,
+		libp2p.DefaultSecurity,
+		libp2p.NATPortMap(),
+	)
+
 	if err != nil {
 		return err
 	}
@@ -119,7 +107,7 @@ func (h *Host) Start() error {
 	//add the protocols
 	h.swarmProto = newSwarmProtocol(h)
 
-	log.Printf("Host successful stated at %s", addr.String())
+	log.Printf("Host successful stated at %s", addr)
 
 	return nil
 }
@@ -184,7 +172,7 @@ func (h *Host) OwnAddresses() []ma.Multiaddr {
 	p2paddr, _ := ma.NewMultiaddr("/" + proto + "/" + h.host.ID().Pretty())
 
 	var addrs []ma.Multiaddr
-	for _, addr := range h.host.AllAddrs() {
+	for _, addr := range h.host.Addrs() {
 		addrs = append(addrs, addr.Encapsulate(p2paddr))
 	}
 	return addrs
