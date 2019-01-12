@@ -666,7 +666,8 @@ func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) 
 		if ptype.Object != nil {
 			return nil, fmt.Errorf("event arguments can only be POD types")
 		}
-		args[i] = stringToType(ptype.Pod)
+		ptype, _ := stringToType(ptype.Pod)
+		args[i] = ptype
 	}
 
 	//build the event

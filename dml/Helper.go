@@ -53,23 +53,23 @@ func typeToString(t DataType) string {
 	return ""
 }
 
-func stringToType(t string) DataType {
+func stringToType(t string) (DataType, error) {
 
 	switch t {
 	case "string":
-		return String
+		return String, nil
 	case "int":
-		return Int
+		return Int, nil
 	case "float":
-		return Float
+		return Float, nil
 	case "bool":
-		return Bool
+		return Bool, nil
 	case "type":
-		return Type
+		return Type, nil
 	case "object":
-		return Object_
+		return Object_, nil
 	}
-	return Int
+	return Int, fmt.Errorf("not a POD type")
 }
 
 func mustBeType(pt DataType, val interface{}) error {
