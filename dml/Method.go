@@ -57,12 +57,14 @@ func (self *method) Call(args ...interface{}) interface{} {
 
 		//the second one must be error. If set it is returned instead of the
 		//the value which is the first res
-		err, ok := res[1].Interface().(error)
-		if !ok {
-			return fmt.Errorf("Function return too many results: not supported")
-		}
-		if err != nil {
-			return err
+		if !res[1].IsNil() {
+			err, ok := res[1].Interface().(error)
+			if !ok {
+				return fmt.Errorf("Second return type of function must be error, not %T", res[1].Interface())
+			}
+			if err != nil {
+				return err
+			}
 		}
 		return res[0].Interface()
 	}
@@ -180,7 +182,7 @@ func (self *methodHandler) SetupJSMethods(vm *goja.Runtime, obj *goja.Object) er
 				//check if we have a error and if it is not nil to panic for goja
 				err, ok := res.(error)
 				if ok && err != nil {
-					panic(vm.ToValue(err))
+					panic(vm.ToValue(err.Error()))
 				}
 
 				//go return values to js return values

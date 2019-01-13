@@ -35,7 +35,7 @@ func NewVector(name string, parent identifier, rntm *Runtime) Object {
 	}
 
 	//add properties
-	vec.AddProperty("type", MustNewDataType("type"), "int", true)
+	vec.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), true)
 
 	//add methods
 	vec.AddMethod("Length", MustNewMethod(vec.Length))
@@ -66,7 +66,7 @@ func (self *vector) Length() (int64, error) {
 func (self *vector) Get(idx int64) (interface{}, error) {
 
 	length, _ := self.Length()
-	if idx >= (length-1) || idx < 0 {
+	if idx >= length || idx < 0 {
 		return nil, fmt.Errorf("Index out of bounds: %v", idx)
 	}
 
@@ -114,7 +114,7 @@ func (self *vector) Get(idx int64) (interface{}, error) {
 func (self *vector) Set(idx int64, value interface{}) error {
 
 	length, _ := self.Length()
-	if idx >= (length-1) || idx < 0 {
+	if idx >= length || idx < 0 {
 		return fmt.Errorf("Index out of bounds: %v", idx)
 	}
 
@@ -318,7 +318,8 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 func (self *vector) entryDataType() DataType {
 
 	prop := self.GetProperty("type").(*typeProperty)
-	return prop.GetDataType()
+	dt := prop.GetDataType()
+	return dt
 }
 
 func (self *vector) buildNew() (interface{}, error) {

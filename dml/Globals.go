@@ -73,7 +73,7 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 		return nil, fmt.Errorf("No unique name given: cannot create object")
 	}
 
-	//build the object
+	//build the object (without parent)
 	obj, err := rntm.buildObject(astObj, identifier{}, make([]*astObject, 0))
 
 	if err != nil {

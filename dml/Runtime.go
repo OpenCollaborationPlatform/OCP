@@ -596,7 +596,7 @@ func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 	} else if asgn.Value.Bool != nil {
 		prop.SetValue(bool(*asgn.Value.Bool))
 	} else if asgn.Value.Type != nil {
-		prop.SetValue(asgn.Value.Type)
+		prop.SetValue(MustNewDataType(asgn.Value.Type))
 	}
 	return nil
 }

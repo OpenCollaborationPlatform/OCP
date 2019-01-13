@@ -31,7 +31,7 @@ func NewDataType(val interface{}) (DataType, error) {
 
 		ast := val.(*astDataType)
 		if ast.Object != nil {
-			data, err := json.Marshal(val)
+			data, err := json.Marshal(ast.Object)
 			if err != nil {
 				return DataType{}, utils.StackError(err, "Unable to marshal AST type representation into DataType")
 			}
@@ -121,6 +121,7 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 }
 
 func (self DataType) ComplexAsAst() (*astObject, error) {
+
 	if !self.IsComplex() {
 		return nil, fmt.Errorf("DataType is not complex, convertion into AST not possible")
 	}
