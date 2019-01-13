@@ -976,6 +976,11 @@ func (self *ValueVersioned) readVersion(ID VersionID, result interface{}) error 
 		if data == nil {
 			return fmt.Errorf("ValueVersioned was not set before read")
 		}
+		_, isByte := result.([]byte)
+		if isByte {
+			result = data
+			return nil
+		}
 		return json.Unmarshal(data, result)
 	})
 

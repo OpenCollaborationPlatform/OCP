@@ -49,12 +49,25 @@ func (self *method) Call(args ...interface{}) interface{} {
 
 	if len(res) == 0 {
 		return nil
-	}
-	if len(res) > 1 {
-		return fmt.Errorf("Only single or no return value is supported")
+
+	} else if len(res) == 1 {
+		return res[0].Interface()
+
+	} else if len(res) == 2 {
+
+		//the second one must be error. If set it is returned instead of the
+		//the value which is the first res
+		err, ok := res[1].Interface().(error)
+		if !ok {
+			return fmt.Errorf("Function return too many results: not supported")
+		}
+		if err != nil {
+			return err
+		}
+		return res[0].Interface()
 	}
 
-	return res[0].Interface()
+	return fmt.Errorf("Function returns too many results: not supported")
 }
 
 func (self *method) CallBoolReturn(args ...interface{}) (bool, error) {

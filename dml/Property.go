@@ -188,6 +188,10 @@ func (self *typeProperty) GetValue() interface{} {
 	return self.data.AsString()
 }
 
+func (self *typeProperty) GetDataType() DataType {
+	return self.data
+}
+
 //Property handler, which defines a interface for holding and using multiple properties
 type PropertyHandler interface {
 	HasProperty(name string) bool
