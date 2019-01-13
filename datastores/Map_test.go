@@ -260,7 +260,7 @@ func TestMapVersionedData(t *testing.T) {
 			So(mp.HasKey(key4), ShouldBeTrue)
 		})
 
-		Convey("Finally versions must be removable", func() {
+		Convey("Finally versions must be removable.", func() {
 
 			name := makeSetFromString("test")
 			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
@@ -291,6 +291,45 @@ func TestMapVersionedData(t *testing.T) {
 			So(mp.HasKey(key3), ShouldBeFalse)
 			mset.ResetHead()
 			So(mp.HasKey(key3), ShouldBeTrue)
+		})
+
+		Convey("Map keys must be reusable after deleting", func() {
+
+			name := makeSetFromString("test")
+			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
+			mp, _ := mset.GetOrCreateMap([]byte("mymapVersioned"))
+
+			//v0 := mp.CurrentVersion()
+
+			So(mp.Write("key9", 1), ShouldBeNil)
+			_, err = mset.FixStateAsVersion()
+			So(err, ShouldBeNil)
+			So(mp.Write("key9", 2), ShouldBeNil)
+			_, err = mset.FixStateAsVersion()
+			So(err, ShouldBeNil)
+			So(mp.Remove("key9"), ShouldBeTrue)
+			vR, err := mset.FixStateAsVersion()
+			So(err, ShouldBeNil)
+
+			//even if deleted it should be writable
+			So(mp.Write("key9", 3), ShouldBeNil)
+			v3, err := mset.FixStateAsVersion()
+			So(err, ShouldBeNil)
+
+			//removing all versions up to vR should not remove key9
+			mset.RemoveVersionsUpTo(vR)
+			mset.LoadVersion(VersionID(HEAD))
+			So(mp.HasKey("key9"), ShouldBeTrue)
+			var res int
+			So(mp.ReadType("key9", &res), ShouldBeNil)
+			So(res, ShouldEqual, 3)
+
+			//removing all versions up to vR should not remove key9
+			mset.RemoveVersionsUpTo(v3)
+			mset.LoadVersion(VersionID(HEAD))
+			So(mp.HasKey("key9"), ShouldBeTrue)
+			So(mp.ReadType("key9", &res), ShouldBeNil)
+			So(res, ShouldEqual, 3)
 		})
 	})
 }

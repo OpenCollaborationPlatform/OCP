@@ -57,7 +57,7 @@ func (self *event) Emit(args ...interface{}) error {
 		return fmt.Errorf("Not enough types provided, expected %v, received %v", len(self.parameterTypes), len(args))
 	}
 	for i, pt := range self.parameterTypes {
-		err := mustBeType(pt, args[i])
+		err := pt.MustBeTypeOf(args[i])
 		if err != nil {
 			return err
 		}

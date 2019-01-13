@@ -398,6 +398,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 
 	//setup the object including datastore and check for uniqueness
 	obj := creator(objName, parent, self)
+	obj.SetDataType(MustNewDataType(astObj))
 	if parent.valid() {
 		objId := obj.Id()
 		//if unique in the parents childrens we are generaly unique, as parent is part of our ID
@@ -666,7 +667,7 @@ func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) 
 		if ptype.Object != nil {
 			return nil, fmt.Errorf("event arguments can only be POD types")
 		}
-		ptype, _ := stringToType(ptype.Pod)
+		ptype := MustNewDataType(ptype.Pod)
 		args[i] = ptype
 	}
 
@@ -710,20 +711,20 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 	var defaultVal interface{}
 	switch astProp.Type.Pod {
 	case "string":
-		dt = String
+		dt = MustNewDataType("string")
 		defaultVal = string("")
 	case "int":
-		dt = Int
+		dt = MustNewDataType("int")
 		defaultVal = int64(0)
 	case "float":
-		dt = Float
+		dt = MustNewDataType("float")
 		defaultVal = float64(0.0)
 	case "bool":
-		dt = Bool
+		dt = MustNewDataType("bool")
 		defaultVal = bool(false)
 	case "type":
-		dt = Type
-		defaultVal = &astObject{}
+		dt = MustNewDataType("type")
+		defaultVal = MustNewDataType("int")
 	}
 
 	var constprop bool = false
@@ -758,7 +759,7 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 		err = obj.AddProperty(astProp.Key, dt, bool(*astProp.Default.Bool), constprop)
 
 	} else if astProp.Default.Type != nil {
-		err = obj.AddProperty(astProp.Key, dt, astProp.Default.Type, constprop)
+		err = obj.AddProperty(astProp.Key, dt, MustNewDataType(astProp.Default.Type), constprop)
 	}
 
 	if err != nil {

@@ -1,7 +1,9 @@
 //parser for the datastructure markup language
 package dml
 
-import "fmt"
+import (
+	"fmt"
+)
 
 //the file format
 type DML struct {

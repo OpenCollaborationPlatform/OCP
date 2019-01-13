@@ -3,12 +3,10 @@ package dml
 import (
 	datastore "CollaborationNode/datastores"
 	"CollaborationNode/utils"
-	"encoding/json"
 	"fmt"
 	"log"
 
 	"github.com/dop251/goja"
-	"github.com/mr-tron/base58/base58"
 )
 
 //Defines the default Property interface under which different data types can be stored.
@@ -25,7 +23,7 @@ type Property interface {
 
 func NewProperty(name string, dtype DataType, default_value interface{}, set *datastore.ValueVersionedSet, vm *goja.Runtime, constprop bool) (Property, error) {
 
-	err := mustBeType(dtype, default_value)
+	err := dtype.MustBeTypeOf(default_value)
 	if err != nil {
 		return nil, utils.StackError(err, "Cannot create property, default value does not match data type")
 	}
@@ -33,8 +31,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 	var prop Property
 
 	if !constprop {
-		switch dtype {
-		case Int, Float, String, Bool:
+		if dtype.IsPOD() {
 			value, _ := set.GetOrCreateValue([]byte(name))
 
 			//setup default value if needed
@@ -48,21 +45,23 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 
 			prop = &dataProperty{NewEventHandler(), dtype, *value}
 
-		case Type:
+		} else if dtype.IsType() {
+
 			//type property needs to store parsings ast object which cannot be serialized, hence const only
 			return nil, fmt.Errorf("Type property can only be const")
 
-		default:
+		} else {
 			return nil, fmt.Errorf("Unknown type")
 		}
 	} else {
-		switch dtype {
-		case Int, Float, String, Bool:
+		if dtype.IsPOD() {
 			prop = &constProperty{NewEventHandler(), dtype, default_value}
-		case Type:
-			prop = &typeProperty{NewEventHandler(), ""}
+
+		} else if dtype.IsType() {
+			prop = &typeProperty{NewEventHandler(), MustNewDataType("int")}
 			prop.SetValue(default_value)
-		default:
+
+		} else {
 			return nil, fmt.Errorf("Unknown type")
 		}
 	}
@@ -93,7 +92,7 @@ func (self dataProperty) IsConst() bool {
 func (self *dataProperty) SetValue(val interface{}) error {
 
 	//check if the type is correct
-	err := mustBeType(self.propertyType, val)
+	err := self.propertyType.MustBeTypeOf(val)
 	if err != nil {
 		return err
 	}
@@ -143,7 +142,7 @@ func (self constProperty) IsConst() bool {
 func (self *constProperty) SetValue(val interface{}) error {
 
 	//check if the type is correct
-	err := mustBeType(self.propertyType, val)
+	err := self.propertyType.MustBeTypeOf(val)
 	if err != nil {
 		return err
 	}
@@ -159,11 +158,11 @@ func (self *constProperty) GetValue() interface{} {
 
 type typeProperty struct {
 	eventHandler
-	data string
+	data DataType
 }
 
 func (self typeProperty) Type() DataType {
-	return Type
+	return MustNewDataType("type")
 }
 
 func (self typeProperty) IsConst() bool {
@@ -174,30 +173,19 @@ func (self typeProperty) IsConst() bool {
 func (self *typeProperty) SetValue(val interface{}) error {
 
 	//check if the type is correct
-	err := mustBeType(Type, val)
+	err := MustNewDataType("type").MustBeTypeOf(val)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Cannot set type property: invalid argument")
 	}
 
-	value := val.(*astDataType)
-
-	if value.Object != nil {
-		data, err := json.Marshal(value.Object)
-		if err != nil {
-			return utils.StackError(err, "Unable to marshal parser result into property")
-		}
-		self.data = base58.Encode(data)
-
-	} else {
-		self.data = value.Pod
-	}
+	self.data = val.(DataType)
 
 	return nil
 }
 
 //we only return basic information, mailny for JS accessibility
 func (self *typeProperty) GetValue() interface{} {
-	return self.data
+	return self.data.AsString()
 }
 
 //Property handler, which defines a interface for holding and using multiple properties

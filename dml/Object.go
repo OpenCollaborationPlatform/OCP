@@ -22,6 +22,10 @@ type Object interface {
 	//Object functions
 	Id() identifier
 	GetParent() Object
+
+	//type handling (full type desciption)
+	DataType() DataType
+	SetDataType(DataType)
 }
 
 //the most basic implementation of an dml Object. It is intended as dml grouping
@@ -33,10 +37,10 @@ type object struct {
 	methodHandler
 
 	//object
-	rntm   *Runtime
-	parent identifier
-	id     identifier
-	oType  string
+	rntm     *Runtime
+	parent   identifier
+	id       identifier
+	dataType DataType
 
 	//javascript
 	jsobj *goja.Object
@@ -55,12 +59,12 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 		rntm,
 		parent,
 		id,
-		oType,
+		DataType{},
 		jsobj,
 	}
 
 	//default properties
-	obj.AddProperty("id", String, "", true)
+	obj.AddProperty("id", MustNewDataType("string"), "", true)
 
 	//add default methods
 	obj.AddMethod("Identifier", MustNewMethod(obj.Id().encode))
@@ -75,6 +79,14 @@ func (self *object) Id() identifier {
 func (self *object) GetParent() Object {
 
 	return self.rntm.objects[self.parent]
+}
+
+func (self *object) DataType() DataType {
+	return self.dataType
+}
+
+func (self *object) SetDataType(t DataType) {
+	self.dataType = t
 }
 
 func (self *object) GetJSObject() *goja.Object {

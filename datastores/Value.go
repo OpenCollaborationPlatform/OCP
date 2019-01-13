@@ -192,7 +192,8 @@ func (self ValueSet) GetType() StorageType {
 func (self *ValueSet) HasKey(key []byte) bool {
 
 	value := Value{self.db, self.dbkey, self.setkey, key}
-	return value.IsValid()
+	res, _ := value.HoldsValue()
+	return res
 }
 
 func (self *ValueSet) GetOrCreateValue(key []byte) (*Value, error) {
@@ -310,6 +311,10 @@ func (self *Value) ReadType(result interface{}) error {
 	return nil
 }
 
+//returns true if:
+//- setup correctly and able to write
+//- value is not INVALID
+//note that it does not mean that anything was written yet.
 func (self *Value) IsValid() bool {
 
 	if self.db == nil {
@@ -331,10 +336,10 @@ func (self *Value) IsValid() bool {
 				return nil
 			}
 		}
+
 		data := bucket.Get(self.key)
-		if data == nil {
+		if isInvalid(data) {
 			valid = false
-			return nil
 		}
 		return nil
 	})
@@ -343,6 +348,7 @@ func (self *Value) IsValid() bool {
 }
 
 //return true if the value was already written, false otherwise
+//Note that it also returns true if the value is INVALID
 func (self *Value) HoldsValue() (bool, error) {
 
 	var hasValue bool

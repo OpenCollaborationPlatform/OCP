@@ -604,6 +604,10 @@ func (self *ValueVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 		valueVersioneddata := stoi(valueVersionedstr)
 		keydata := stob(key)
 
+		//check what is the values latest version
+		value := ValueVersioned{self.db, self.dbkey, self.setkey, keydata}
+		latest := value.LatestVersion()
+
 		//delete what is not needed anymore: the whole bucket or subentries
 		self.db.Update(func(tx *bolt.Tx) error {
 			setBucket := tx.Bucket(self.dbkey)
@@ -613,9 +617,10 @@ func (self *ValueVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 			keyBucket := setBucket.Bucket(keydata)
 
 			versionData := keyBucket.Get(itob(valueVersioneddata))
-			if isInvalid(versionData) {
-				//if the verrsion for this bucket points to INVALID_DATA we know it
-				//was removed, hence can be fully deleted.
+			if isInvalid(versionData) && (latest == VersionID(valueVersioneddata)) {
+				//if the latest version for this bucket points to INVALID_DATA we know it
+				//was removed, hence can be fully deleted. (it could be that is was written
+				//again after setting it invalid and make it hence valid again in later versions)
 				setBucket.DeleteBucket(keydata)
 
 			} else {
@@ -861,10 +866,6 @@ func (self *ValueVersioned) Write(valueVersioned interface{}) error {
 		if btoi(val) != HEAD {
 			return fmt.Errorf("Can only write data when in HEAD")
 		}
-		val = bucket.Get(itob(HEAD))
-		if isInvalid(val) {
-			return fmt.Errorf("Key was invalidadet, writing not possbile anymore")
-		}
 		return nil
 	})
 	if err != nil {
@@ -987,9 +988,26 @@ func (self *ValueVersioned) readVersion(ID VersionID, result interface{}) error 
 
 func (self *ValueVersioned) remove() error {
 
+	//check if we are allowed to remove: are we in HEAD?
+	err := self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range append(self.setkey, self.key) {
+			bucket = bucket.Bucket(bkey)
+		}
+		val := bucket.Get(itob(CURRENT))
+		if btoi(val) != HEAD {
+			return fmt.Errorf("Can only remove data when in HEAD")
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
 	//removing does not mean to delete everything. We need the data for loading older
 	//versions. It just means we set it as "not existing".
-	err := self.db.Update(func(tx *bolt.Tx) error {
+	err = self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range append(self.setkey, self.key) {
