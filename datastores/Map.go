@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"CollaborationNode/utils"
 	"bytes"
 	"fmt"
 
@@ -278,13 +279,13 @@ func (self *Map) ReadType(key interface{}, value interface{}) error {
 	return entry.ReadType(value)
 }
 
-func (self *Map) Remove(key interface{}) bool {
+func (self *Map) Remove(key interface{}) error {
 
 	k, err := getBytes(key)
 	if err != nil {
-		return false
+		return utils.StackError(err, "Cannot remove Map key")
 	}
-	return self.kvset.removeKey(k) == nil
+	return self.kvset.removeKey(k)
 }
 
 func (self *Map) getMapKey() []byte {

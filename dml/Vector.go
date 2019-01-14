@@ -228,7 +228,33 @@ func (self *vector) InsertNew(idx int64) (interface{}, error) {
 //remove a entry from the vector
 func (self *vector) Delete(idx int64) error {
 
-	return nil
+	length, _ := self.Length()
+	if idx >= length || idx < 0 {
+		return fmt.Errorf("Index out of bounds: %v", idx)
+	}
+
+	//deleting means moving each entry after idx one down and shortening the length by 1
+	l, _ := self.Length()
+	for i := idx; i < (l - 1); i++ {
+		var data []byte
+		err := self.entries.ReadType(i+1, &data)
+		if err != nil {
+			return utils.StackError(err, "Unable to move vector entries after deleting entry")
+		}
+		err = self.entries.Write(i, data)
+		if err != nil {
+			return utils.StackError(err, "Unable to move vector entries after deleting entry")
+		}
+	}
+
+	//now shorten the length
+	err := self.length.Write(l - 1)
+	if err != nil {
+		return utils.StackError(err, "Unable to Delete entry: vector cnnot be shortent")
+	}
+
+	//and delete the old key
+	return self.entries.Remove(l - 1)
 }
 
 func (self *vector) Swap(idx1 int64, idx2 int64) error {
@@ -271,7 +297,7 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 
 	//get the data to move
 	var data []byte
-	err := self.entries.ReadType(oldIdx, data)
+	err := self.entries.ReadType(oldIdx, &data)
 	if err != nil {
 		return utils.StackError(err, "Unable to move vector entries")
 	}
@@ -279,9 +305,8 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 	//move the in-between idx 1 down
 	if oldIdx < newIdx {
 		for i := oldIdx + 1; i <= newIdx; i++ {
-
 			var res []byte
-			err := self.entries.ReadType(i, res)
+			err := self.entries.ReadType(i, &res)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
 			}
@@ -294,7 +319,7 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 		for i := newIdx; i < oldIdx; i++ {
 
 			var res []byte
-			err := self.entries.ReadType(i, res)
+			err := self.entries.ReadType(i, &res)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
 			}
@@ -307,8 +332,6 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 
 	//write the data into the correct location
 	return self.entries.Write(newIdx, data)
-
-	return nil
 }
 
 //*****************************************************************************

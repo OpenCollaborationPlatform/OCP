@@ -301,9 +301,10 @@ func (self *Value) ReadType(result interface{}) error {
 		if data == nil {
 			return fmt.Errorf("Value was not set before read")
 		}
-		_, isByte := result.([]byte)
+		byteResult, isByte := result.(*[]byte)
 		if isByte {
-			result = data
+			*byteResult = make([]byte, len(data))
+			copy(*byteResult, data)
 			return nil
 		}
 		return json.Unmarshal(data, result)
@@ -390,6 +391,7 @@ func (self *Value) remove() error {
 //helper functions
 func getBytes(data interface{}) ([]byte, error) {
 
+	//if it is []byte already there is no need for marshaling
 	byt, isByte := data.([]byte)
 	if isByte {
 		return byt, nil

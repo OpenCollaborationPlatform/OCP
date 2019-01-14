@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"CollaborationNode/utils"
 	"bytes"
 	"fmt"
 
@@ -646,13 +647,13 @@ func (self *MapVersioned) ReadType(key interface{}, value interface{}) error {
 	return pair.ReadType(value)
 }
 
-func (self *MapVersioned) Remove(key interface{}) bool {
+func (self *MapVersioned) Remove(key interface{}) error {
 
 	k, err := getBytes(key)
 	if err != nil {
-		return false
+		return utils.StackError(err, "Cannot remove MapVersioned key")
 	}
-	return self.kvset.removeKey(k) == nil
+	return self.kvset.removeKey(k)
 }
 
 func (self *MapVersioned) CurrentVersion() VersionID {

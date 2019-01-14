@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -87,6 +88,26 @@ func TestValueBasic(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(str, ShouldEqual, "annother test")
 		})
+
+		Convey("Getting the raw data should be supported", func() {
+
+			name := makeSetFromString("test")
+			set := db.GetOrCreateSet(name).(*ValueSet)
+			value1, _ := set.GetOrCreateValue([]byte("rawtest1"))
+
+			data := string("This is raw data test")
+			value1.Write(data)
+
+			var binary []byte
+			value1.ReadType(&binary)
+			So(bytes.Equal(binary, []byte(data)), ShouldBeFalse)
+
+			value2, _ := set.GetOrCreateValue([]byte("rawtest2"))
+			value2.Write(binary)
+			result, _ := value2.Read()
+
+			So(result, ShouldEqual, data)
+		})
 	})
 }
 
@@ -166,6 +187,26 @@ func TestValueVersionedBasics(t *testing.T) {
 			str, ok = res3.(string)
 			So(ok, ShouldBeTrue)
 			So(str, ShouldEqual, "annother test")
+		})
+
+		Convey("Getting the raw data should be supported", func() {
+
+			name := makeSetFromString("test")
+			set := db.GetOrCreateSet(name).(*ValueVersionedSet)
+			value1, _ := set.GetOrCreateValue([]byte("rawtest1"))
+
+			data := string("This is raw data test")
+			value1.Write(data)
+
+			var binary []byte
+			value1.ReadType(&binary)
+			So(bytes.Equal(binary, []byte(data)), ShouldBeFalse)
+
+			value2, _ := set.GetOrCreateValue([]byte("rawtest2"))
+			value2.Write(binary)
+			result, _ := value2.Read()
+
+			So(result, ShouldEqual, data)
 		})
 	})
 }

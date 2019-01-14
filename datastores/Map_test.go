@@ -91,7 +91,7 @@ func TestMap(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(strvalue, ShouldEqual, "hello")
 
-			So(mp.Remove(key1), ShouldBeTrue)
+			So(mp.Remove(key1), ShouldBeNil)
 			So(mp.HasKey(key1), ShouldBeFalse)
 			_, err = mp.Read(key1)
 			So(err, ShouldNotBeNil)
@@ -186,7 +186,7 @@ func TestMapVersionedData(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(strvalue, ShouldEqual, "hello")
 
-			So(mp.Remove(key1), ShouldBeTrue)
+			So(mp.Remove(key1), ShouldBeNil)
 			So(mp.HasKey(key1), ShouldBeFalse)
 			_, err = mp.Read(key1)
 			So(err, ShouldNotBeNil)
@@ -246,7 +246,7 @@ func TestMapVersionedData(t *testing.T) {
 			err = mset.LoadVersion(VersionID(HEAD))
 			So(err, ShouldBeNil)
 			So(mp.Write(key4, 1), ShouldBeNil)
-			So(mp.Remove(key2), ShouldBeTrue)
+			So(mp.Remove(key2), ShouldBeNil)
 
 			version, err = mset.FixStateAsVersion()
 			So(err, ShouldBeNil)
@@ -307,7 +307,7 @@ func TestMapVersionedData(t *testing.T) {
 			So(mp.Write("key9", 2), ShouldBeNil)
 			_, err = mset.FixStateAsVersion()
 			So(err, ShouldBeNil)
-			So(mp.Remove("key9"), ShouldBeTrue)
+			So(mp.Remove("key9"), ShouldBeNil)
 			vR, err := mset.FixStateAsVersion()
 			So(err, ShouldBeNil)
 

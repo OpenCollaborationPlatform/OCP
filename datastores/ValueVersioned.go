@@ -958,7 +958,7 @@ func (self *ValueVersioned) Read() (interface{}, error) {
 
 func (self *ValueVersioned) ReadType(result interface{}) error {
 
-	return self.readVersion(self.CurrentVersion(), &result)
+	return self.readVersion(self.CurrentVersion(), result)
 }
 
 func (self *ValueVersioned) readVersion(ID VersionID, result interface{}) error {
@@ -976,11 +976,13 @@ func (self *ValueVersioned) readVersion(ID VersionID, result interface{}) error 
 		if data == nil {
 			return fmt.Errorf("ValueVersioned was not set before read")
 		}
-		_, isByte := result.([]byte)
+		byteResult, isByte := result.(*[]byte)
 		if isByte {
-			result = data
+			*byteResult = make([]byte, len(data))
+			copy(*byteResult, data)
 			return nil
 		}
+
 		return json.Unmarshal(data, result)
 	})
 
