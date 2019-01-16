@@ -128,7 +128,7 @@ func TestPODVector(t *testing.T) {
 
 			child, _ := rntm.mainObj.GetChildByName("IntVec")
 			vec := child.(*vector)
-			So(vec.Delete(1), ShouldBeNil)
+			So(vec.Remove(1), ShouldBeNil)
 
 			length, _ := vec.Length()
 			So(length, ShouldEqual, 6)
@@ -141,15 +141,104 @@ func TestPODVector(t *testing.T) {
 
 			So(vec.Delete(6), ShouldNotBeNil)
 			So(vec.Delete(5), ShouldBeNil)
+			So(vec.Remove(0), ShouldBeNil)
 			So(vec.Delete(0), ShouldBeNil)
+			So(vec.Remove(0), ShouldBeNil)
 			So(vec.Delete(0), ShouldBeNil)
-			So(vec.Delete(0), ShouldBeNil)
-			So(vec.Delete(0), ShouldBeNil)
-			So(vec.Delete(0), ShouldBeNil)
+			So(vec.Remove(0), ShouldBeNil)
 
 			length, _ = vec.Length()
 			So(length, ShouldEqual, 0)
 		})
 
+		Convey("Inserting works on each position (start, end , inbetween)", func() {
+
+			child, _ := rntm.mainObj.GetChildByName("FloatVec")
+			vec := child.(*vector)
+
+			//insert should work only at existing indices
+			So(vec.Insert(0, 9.5), ShouldNotBeNil)
+			vec.AppendNew()                     //[0]
+			So(vec.Insert(0, 0.5), ShouldBeNil) //[0.5 0]
+			val, err := vec.InsertNew(0)        //[0 0.5 0]
+			So(err, ShouldBeNil)
+			So(val, ShouldAlmostEqual, 0.0)
+
+			So(vec.Insert(1, 7.1), ShouldBeNil) //[0 7.1 0.5 0]
+
+			length, _ := vec.Length()
+			So(length, ShouldEqual, 4)
+			val, _ = vec.Get(0)
+			So(val, ShouldEqual, 0)
+			val, _ = vec.Get(1)
+			So(val, ShouldAlmostEqual, 7.1)
+			val, _ = vec.Get(2)
+			So(val, ShouldAlmostEqual, 0.5)
+			val, _ = vec.Get(3)
+			So(val, ShouldAlmostEqual, 0.0)
+		})
+
+		Convey("And swapping entries is a thing", func() {
+
+			child, _ := rntm.mainObj.GetChildByName("FloatVec")
+			vec := child.(*vector)
+			vec.Swap(0, 2)
+
+			length, _ := vec.Length()
+			So(length, ShouldEqual, 4)
+			val, _ := vec.Get(0)
+			So(val, ShouldAlmostEqual, 0.5)
+			val, _ = vec.Get(1)
+			So(val, ShouldAlmostEqual, 7.1)
+			val, _ = vec.Get(2)
+			So(val, ShouldAlmostEqual, 0)
+			val, _ = vec.Get(3)
+			So(val, ShouldAlmostEqual, 0.0)
+		})
+
+	})
+}
+
+func TestTypeVector(t *testing.T) {
+
+	//make temporary folder for the data
+	path, _ := ioutil.TempDir("", "dml")
+	defer os.RemoveAll(path)
+
+	Convey("Loading dml code into runtime including pod vector types,", t, func() {
+
+		store, err := datastore.NewDatastore(path)
+		defer store.Close()
+		So(err, ShouldBeNil)
+
+		code := `Data {
+					.id:"toplevel"
+					
+					Vector {
+						.id: "TypeVec"
+						.type: Data {
+							property int test: 0
+						}
+					}	
+				}`
+
+		rntm := NewRuntime(store)
+		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+
+		Convey("Adding to type vector should work", func() {
+
+			child, _ := rntm.mainObj.GetChildByName("TypeVec")
+			intvec := child.(*vector)
+
+			length, _ := intvec.Length()
+			So(length, ShouldEqual, 0)
+			code = `toplevel.TypeVec.AppendNew()`
+			val, err := rntm.RunJavaScript(code)
+			So(err, ShouldBeNil)
+			data, ok := val.(Data)
+			So(ok, ShouldBeTrue)
+			So(data.HasProperty("test"), ShouldBeTrue)
+		})
 	})
 }

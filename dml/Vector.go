@@ -226,7 +226,7 @@ func (self *vector) InsertNew(idx int64) (interface{}, error) {
 }
 
 //remove a entry from the vector
-func (self *vector) Delete(idx int64) error {
+func (self *vector) Remove(idx int64) error {
 
 	length, _ := self.Length()
 	if idx >= length || idx < 0 {
@@ -257,17 +257,36 @@ func (self *vector) Delete(idx int64) error {
 	return self.entries.Remove(l - 1)
 }
 
+func (self *vector) Delete(idx int64) error {
+
+	dt := self.entryDataType()
+
+	if dt.IsComplex() || dt.IsObject() {
+		//we have a object stored, hence delete must remove it completely!
+		val, err := self.Get(idx)
+		if err != nil {
+			return utils.StackError(err, "Unable to delete entry")
+		}
+		data, ok := val.(Data)
+		if ok {
+			id := data.Id()
+			delete(self.rntm.objects, id)
+		}
+	}
+	return self.Remove(idx)
+}
+
 func (self *vector) Swap(idx1 int64, idx2 int64) error {
 
 	//get the data to move
 	var data1 []byte
-	err := self.entries.ReadType(idx1, data1)
+	err := self.entries.ReadType(idx1, &data1)
 	if err != nil {
 		return utils.StackError(err, "Unable to swap vector entries")
 	}
 
 	var data2 []byte
-	err = self.entries.ReadType(idx2, data2)
+	err = self.entries.ReadType(idx2, &data2)
 	if err != nil {
 		return utils.StackError(err, "Unable to swap vector entries")
 	}
@@ -316,14 +335,14 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 			}
 		}
 	} else {
-		for i := newIdx; i < oldIdx; i++ {
 
+		for i := oldIdx; i > newIdx; i-- {
 			var res []byte
-			err := self.entries.ReadType(i, &res)
+			err := self.entries.ReadType(i-1, &res)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
 			}
-			err = self.entries.Write(i+1, res)
+			err = self.entries.Write(i, res)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
 			}
@@ -370,4 +389,15 @@ func (self *vector) buildNew() (interface{}, error) {
 	}
 
 	return result, err
+}
+
+func (self *vector) print() {
+
+	fmt.Printf("[")
+	l, _ := self.Length()
+	for i := int64(0); i < l; i++ {
+		val, _ := self.Get(i)
+		fmt.Printf("%v ", val)
+	}
+	fmt.Println("]")
 }
