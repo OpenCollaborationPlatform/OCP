@@ -64,3 +64,29 @@ func (self *data) GetChildByName(name string) (Data, error) {
 	}
 	return nil, fmt.Errorf("No such object available")
 }
+
+//override to handle children refcount additional to our own
+func (self *data) IncreaseRefcount() {
+	//increase child refcount
+	for _, child := range self.children {
+		res, ok := self.rntm.objects[child]
+		if ok {
+			res.IncreaseRefcount()
+		}
+	}
+	//now increase our own
+	self.object.IncreaseRefcount()
+}
+
+//override to handle children refcount additional to our own
+func (self *data) DecreaseRefcount() {
+	//decrease child refcount
+	for _, child := range self.children {
+		res, ok := self.rntm.objects[child]
+		if ok {
+			res.DecreaseRefcount()
+		}
+	}
+	//now decrease our own
+	self.object.DecreaseRefcount()
+}

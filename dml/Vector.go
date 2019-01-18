@@ -126,8 +126,22 @@ func (self *vector) Set(idx int64, value interface{}) error {
 	}
 
 	if dt.IsObject() || dt.IsComplex() {
+
+		old, _ := self.Get(idx)
 		obj, _ := value.(Object)
 		err = self.entries.Write(idx, obj.Id().encode())
+
+		//handle ref counts
+		if err != nil {
+			data, ok := value.(Data)
+			if ok {
+				data.IncreaseRefcount()
+			}
+			data, ok = old.(Data)
+			if ok {
+				data.DecreaseRefcount()
+			}
+		}
 
 	} else if dt.IsType() {
 
@@ -155,6 +169,14 @@ func (self *vector) Append(value interface{}) (int64, error) {
 		return -1, utils.StackError(err, "Unable to append vector entry")
 	}
 
+	if dt.IsComplex() || dt.IsObject() {
+		//we have a object here, hence handle refcount!
+		data, ok := value.(Data)
+		if ok {
+			data.IncreaseRefcount()
+		}
+	}
+
 	//now increase length
 	newIdx, _ := self.Length()
 	self.length.Write(newIdx + 1)
@@ -167,7 +189,7 @@ func (self *vector) Append(value interface{}) (int64, error) {
 //creates a new entry with a all new type, returns the index of the new one
 func (self *vector) AppendNew() (interface{}, error) {
 
-	//create a new entry
+	//create a new entry (with correct refcount if needed)
 	length, _ := self.Length()
 	result, err := self.buildNew()
 	if err != nil {
@@ -233,6 +255,19 @@ func (self *vector) Remove(idx int64) error {
 		return fmt.Errorf("Index out of bounds: %v", idx)
 	}
 
+	dt := self.entryDataType()
+	if dt.IsComplex() || dt.IsObject() {
+		//we have a object stored, hence delete must remove it completely!
+		val, err := self.Get(idx)
+		if err != nil {
+			return utils.StackError(err, "Unable to delete entry")
+		}
+		data, ok := val.(Data)
+		if ok {
+			data.DecreaseRefcount()
+		}
+	}
+
 	//deleting means moving each entry after idx one down and shortening the length by 1
 	l, _ := self.Length()
 	for i := idx; i < (l - 1); i++ {
@@ -255,25 +290,6 @@ func (self *vector) Remove(idx int64) error {
 
 	//and delete the old key
 	return self.entries.Remove(l - 1)
-}
-
-func (self *vector) Delete(idx int64) error {
-
-	dt := self.entryDataType()
-
-	if dt.IsComplex() || dt.IsObject() {
-		//we have a object stored, hence delete must remove it completely!
-		val, err := self.Get(idx)
-		if err != nil {
-			return utils.StackError(err, "Unable to delete entry")
-		}
-		data, ok := val.(Data)
-		if ok {
-			id := data.Id()
-			delete(self.rntm.objects, id)
-		}
-	}
-	return self.Remove(idx)
 }
 
 func (self *vector) Swap(idx1 int64, idx2 int64) error {
@@ -357,6 +373,56 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 //			Internal functions
 //*****************************************************************************
 
+//override to handle children refcount additional to our own
+func (self *vector) IncreaseRefcount() {
+	//increase entrie refcount
+	dt := self.entryDataType()
+	if dt.IsObject() || dt.IsComplex() {
+
+		length, _ := self.Length()
+		for i := int64(0); i < length; i++ {
+			var res string
+			err := self.entries.ReadType(i, &res)
+			if err == nil {
+				id, e := IdentifierFromEncoded(res)
+				if e == nil {
+					res, ok := self.rntm.objects[id]
+					if ok {
+						res.IncreaseRefcount()
+					}
+				}
+			}
+		}
+	}
+	//now increase our own and children refcount
+	self.object.IncreaseRefcount()
+}
+
+//override to handle children refcount additional to our own
+func (self *vector) DecreaseRefcount() {
+	//decrease child refcount
+	dt := self.entryDataType()
+	if dt.IsObject() || dt.IsComplex() {
+
+		length, _ := self.Length()
+		for i := int64(0); i < length; i++ {
+			var res string
+			err := self.entries.ReadType(i, &res)
+			if err == nil {
+				id, e := IdentifierFromEncoded(res)
+				if e == nil {
+					res, ok := self.rntm.objects[id]
+					if ok {
+						res.DecreaseRefcount()
+					}
+				}
+			}
+		}
+	}
+	//now decrease our own
+	self.object.DecreaseRefcount()
+}
+
 func (self *vector) entryDataType() DataType {
 
 	prop := self.GetProperty("type").(*typeProperty)
@@ -375,6 +441,7 @@ func (self *vector) buildNew() (interface{}, error) {
 		if err != nil {
 			return -1, utils.StackError(err, "Unable to append new object to vector: construction failed")
 		}
+		obj.IncreaseRefcount()
 		result = obj
 
 	} else if dt.IsType() || dt.IsObject() || dt.IsString() {

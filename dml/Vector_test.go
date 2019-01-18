@@ -139,12 +139,12 @@ func TestPODVector(t *testing.T) {
 			val, _ = vec.Get(5)
 			So(val, ShouldEqual, 6)
 
-			So(vec.Delete(6), ShouldNotBeNil)
-			So(vec.Delete(5), ShouldBeNil)
+			So(vec.Remove(6), ShouldNotBeNil)
+			So(vec.Remove(5), ShouldBeNil)
 			So(vec.Remove(0), ShouldBeNil)
-			So(vec.Delete(0), ShouldBeNil)
 			So(vec.Remove(0), ShouldBeNil)
-			So(vec.Delete(0), ShouldBeNil)
+			So(vec.Remove(0), ShouldBeNil)
+			So(vec.Remove(0), ShouldBeNil)
 			So(vec.Remove(0), ShouldBeNil)
 
 			length, _ = vec.Length()

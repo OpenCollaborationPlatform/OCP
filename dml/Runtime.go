@@ -20,6 +20,7 @@ import (
 	"CollaborationNode/utils"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 	"sync"
 
@@ -41,16 +42,17 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 
 	cr := make(map[string]CreatorFunc, 0)
 	rntm := &Runtime{
-		creators:     cr,
-		jsvm:         js,
-		jsObjMap:     js.NewObject(),
-		datastore:    ds,
-		mutex:        &sync.Mutex{},
-		ready:        false,
-		currentUser:  "none",
-		objects:      make(map[identifier]Data, 0),
-		mainObj:      nil,
-		transactions: &TransactionManager{},
+		creators:           cr,
+		jsvm:               js,
+		jsObjMap:           js.NewObject(),
+		datastore:          ds,
+		mutex:              &sync.Mutex{},
+		ready:              false,
+		currentUser:        "none",
+		objects:            make(map[identifier]Data, 0),
+		mainObj:            nil,
+		initialObjRefcount: 0,
+		transactions:       &TransactionManager{},
 	}
 
 	//build the managers and expose
@@ -85,10 +87,11 @@ type Runtime struct {
 	mutex     *sync.Mutex
 
 	//internal state
-	ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
-	currentUser User    //user that currently access the runtime
-	objects     map[identifier]Data
-	mainObj     Data
+	ready              Boolean //True if a datastructure was read and setup, false if no dml file was parsed
+	currentUser        User    //user that currently access the runtime
+	objects            map[identifier]Data
+	mainObj            Data
+	initialObjRefcount uint64
 
 	//managers
 	transactions *TransactionManager
@@ -117,6 +120,9 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		return utils.StackError(err, "Unable to parse dml code")
 	}
 
+	//we now build up the unchangeable object structure, hence set refcount super high
+	self.initialObjRefcount = uint64(math.MaxUint64 / 2)
+
 	//process the AST into usable objects
 	obj, err := self.buildObject(ast.Object, identifier{}, make([]*astObject, 0))
 	if err != nil {
@@ -125,6 +131,9 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 	self.mainObj = obj.(Data)
 	self.ready = true
+
+	//all objects created from here on are deletable
+	self.initialObjRefcount = 0
 
 	//set the JS main entry point
 	self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
@@ -399,6 +408,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	//setup the object including datastore and check for uniqueness
 	obj := creator(objName, parent, self)
 	obj.SetDataType(MustNewDataType(astObj))
+	obj.SetRefcount(self.initialObjRefcount)
 	if parent.valid() {
 		objId := obj.Id()
 		//if unique in the parents childrens we are generaly unique, as parent is part of our ID

@@ -19,6 +19,12 @@ type Object interface {
 	MethodHandler
 	JSObject
 
+	//garbage collection
+	IncreaseRefcount()
+	DecreaseRefcount()
+	GetRefcount() uint64
+	SetRefcount(uint64)
+
 	//Object functions
 	Id() identifier
 	GetParent() Object
@@ -41,6 +47,7 @@ type object struct {
 	parent   identifier
 	id       identifier
 	dataType DataType
+	refCount datastore.ValueVersioned
 
 	//javascript
 	jsobj *goja.Object
@@ -51,8 +58,23 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 	jsobj := rntm.jsvm.NewObject()
 	id := identifier{parent.hash(), oType, name}
 
+	//the versionmanager to access the datastores correctly
+	versManager := datastore.NewVersionManager(id.hash(), rntm.datastore)
+
+	//the store for the refcount
+	set, err := versManager.GetDatabaseSet(datastore.ValueType)
+	if err != nil {
+		return nil
+	}
+	vvset := set.(*datastore.ValueVersionedSet)
+	vvRecCnt, err := vvset.GetOrCreateValue([]byte("__refcount"))
+	if err != nil {
+		return nil
+	}
+
+	//build the object
 	obj := object{
-		datastore.NewVersionManager(id.hash(), rntm.datastore),
+		versManager,
 		NewPropertyHandler(),
 		NewEventHandler(),
 		NewMethodHandler(),
@@ -60,6 +82,7 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 		parent,
 		id,
 		DataType{},
+		*vvRecCnt,
 		jsobj,
 	}
 
@@ -87,6 +110,26 @@ func (self *object) DataType() DataType {
 
 func (self *object) SetDataType(t DataType) {
 	self.dataType = t
+}
+
+func (self *object) IncreaseRefcount() {
+	current := self.GetRefcount()
+	self.refCount.Write(current + 1)
+}
+
+func (self *object) DecreaseRefcount() {
+	current := self.GetRefcount()
+	self.refCount.Write(current - 1)
+}
+
+func (self *object) GetRefcount() uint64 {
+	var current uint64
+	self.refCount.ReadType(&current)
+	return current
+}
+
+func (self *object) SetRefcount(val uint64) {
+	self.refCount.Write(val)
 }
 
 func (self *object) GetJSObject() *goja.Object {
