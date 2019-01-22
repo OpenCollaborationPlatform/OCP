@@ -2,7 +2,7 @@
 package dml
 
 import (
-	"CollaborationNode/datastores"
+	datastore "CollaborationNode/datastores"
 	"index/suffixarray"
 	"io/ioutil"
 	"os"
@@ -57,12 +57,12 @@ func TestBasics(t *testing.T) {
 			Convey("as well as deleting them", func() {
 
 				rntm.currentUser = "User1"
-				trans1, err := mngr.getOrCreateTransaction()
+				_, err := mngr.getOrCreateTransaction()
 				So(err, ShouldBeNil)
-				err = mngr.removeTransaction(trans1.identification)
+				err = mngr.Close()
 				So(err, ShouldBeNil)
 				So(mngr.IsOpen(), ShouldBeFalse)
-				trans1, err = mngr.getTransaction()
+				_, err = mngr.getTransaction()
 				So(err, ShouldNotBeNil)
 			})
 
@@ -190,6 +190,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 		Convey("Adding the main object to the transaction", func() {
 
+			rntm.currentUser = "User1"
 			err := mngr.Open()
 			So(err, ShouldBeNil)
 			_, err = rntm.RunJavaScript("Document.result = ''")
@@ -198,6 +199,7 @@ func TestTransactionBehaviour(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			Convey("only its participation event must have been called", func() {
+
 				res, err := rntm.ReadProperty("Document", "result")
 				So(err, ShouldBeNil)
 				str := res.(string)
@@ -209,6 +211,7 @@ func TestTransactionBehaviour(t *testing.T) {
 				rntm.currentUser = "User2"
 				err := mngr.Add(rntm.mainObj)
 				So(err, ShouldNotBeNil)
+				So(mngr.IsOpen(), ShouldBeFalse)
 
 				err = mngr.Open()
 				So(err, ShouldBeNil)

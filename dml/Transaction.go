@@ -19,30 +19,74 @@ import (
 *********************************************************************************/
 //convinience object to abstracct transaction database io. Not accassible by user
 type transaction struct {
-	identification datastore.ListEntry
-	objects        datastore.List
-	user           datastore.Value
+
+	//static data
+	identification [32]byte
 	rntm           *Runtime
+
+	//dynamic state
+	objects datastore.List
+	user    datastore.Value
 }
 
-func (self *transaction) Equal(trans transaction) bool {
+func loadTransaction(key [32]byte, rntm *Runtime) (transaction, error) {
 
-	var id [32]byte
-	err := self.identification.ReadType(&id)
+	set, err := rntm.datastore.GetOrCreateSet(datastore.ListType, false, key)
 	if err != nil {
-		panic(err)
+		return transaction{}, err
+	}
+	listSet := set.(*datastore.ListSet)
+
+	//load the participants
+	objects, err := listSet.GetOrCreateList([]byte("participants"))
+	if err != nil {
+		return transaction{}, err
 	}
 
-	var otherid [32]byte
-	err = trans.identification.ReadType(&otherid)
+	//and the user
+	set, err = rntm.datastore.GetOrCreateSet(datastore.ValueType, false, key)
 	if err != nil {
-		panic(err)
+		return transaction{}, err
+	}
+	valueSet := set.(*datastore.ValueSet)
+	user, err := valueSet.GetOrCreateValue([]byte("user"))
+	if err != nil {
+		return transaction{}, err
 	}
 
-	return bytes.Equal(id[:], otherid[:])
+	return transaction{key, rntm, *objects, *user}, nil
 }
 
-func (self *transaction) User() (User, error) {
+func (self transaction) Remove() error {
+
+	//remove participants list
+	ldb, err := self.rntm.datastore.GetDatabase(datastore.ListType, false)
+	if err != nil {
+		return utils.StackError(err, "Unable to access list database")
+	}
+	err = ldb.RemoveSet(self.identification)
+	if err != nil {
+		return utils.StackError(err, "Unable to remove database entry of transaction participants")
+	}
+
+	//remove the user and transaction entries
+	vdb, err := self.rntm.datastore.GetDatabase(datastore.ValueType, false)
+	if err != nil {
+		return utils.StackError(err, "Unable to access value database")
+	}
+	err = vdb.RemoveSet(self.identification)
+	if err != nil {
+		return utils.StackError(err, "Unable to remove database entry of transaction user")
+	}
+	return nil
+}
+
+func (self transaction) Equal(trans transaction) bool {
+
+	return bytes.Equal(self.identification[:], trans.identification[:])
+}
+
+func (self transaction) User() (User, error) {
 
 	var user User
 	err := self.user.ReadType(&user)
@@ -53,12 +97,12 @@ func (self *transaction) User() (User, error) {
 	return user, nil
 }
 
-func (self *transaction) SetUser(user User) error {
+func (self transaction) SetUser(user User) error {
 
 	return self.user.Write(user)
 }
 
-func (self *transaction) Objects() []Data {
+func (self transaction) Objects() []Data {
 
 	entries, err := self.objects.GetEntries()
 	if err != nil {
@@ -66,23 +110,25 @@ func (self *transaction) Objects() []Data {
 	}
 	result := make([]Data, len(entries))
 
+	//note: must panic on error as otherwise slice has more nil objects in it
 	for i, entry := range entries {
 
-		data, err := entry.Read()
+		var id identifier
+		err := entry.ReadType(&id)
 		if err != nil {
-			continue
-		}
-		id, ok := data.(identifier)
-		if !ok {
-			panic("unable to load id")
+			panic("Cannot read identifier\n")
 		}
 
-		result[i] = self.rntm.objects[id]
+		obj, ok := self.rntm.objects[id]
+		if !ok {
+			panic("Id not available")
+		}
+		result[i] = obj
 	}
 	return result
 }
 
-func (self *transaction) HasObject(id identifier) bool {
+func (self transaction) HasObject(id identifier) bool {
 
 	entries, err := self.objects.GetEntries()
 	if err != nil {
@@ -91,13 +137,10 @@ func (self *transaction) HasObject(id identifier) bool {
 
 	for _, entry := range entries {
 
-		data, err := entry.Read()
+		var obj_id identifier
+		err := entry.ReadType(obj_id)
 		if err != nil {
 			continue
-		}
-		obj_id, ok := data.(identifier)
-		if !ok {
-			panic("unable to load id")
 		}
 
 		if obj_id.equal(id) {
@@ -110,7 +153,7 @@ func (self *transaction) HasObject(id identifier) bool {
 
 //Adds object to the transaction. Note: Already having it is not a error to avoid
 //the need of excessive checking
-func (self *transaction) AddObject(id identifier) error {
+func (self transaction) AddObject(id identifier) error {
 
 	if self.HasObject(id) {
 		return nil
@@ -132,8 +175,7 @@ type TransactionManager struct {
 	methodHandler
 
 	rntm         *Runtime
-	list         *datastore.List
-	transactions map[User]transaction
+	transactions *datastore.Map
 	jsobj        *goja.Object
 }
 
@@ -141,17 +183,17 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 
 	var setKey [32]byte
 	copy(setKey[:], []byte("internal"))
-	set, err := rntm.datastore.GetOrCreateSet(datastore.ListType, false, setKey)
+	set, err := rntm.datastore.GetOrCreateSet(datastore.MapType, false, setKey)
 	if err != nil {
 		return &TransactionManager{}, utils.StackError(err, "Cannot acccess internal list datastore")
 	}
-	listSet := set.(*datastore.ListSet)
-	list, err := listSet.GetOrCreateList([]byte("transactions"))
+	mapSet := set.(*datastore.MapSet)
+	map_, err := mapSet.GetOrCreateMap([]byte("transactions"))
 	if err != nil {
 		return &TransactionManager{}, utils.StackError(err, "Cannot access internal transaction list store")
 	}
 
-	mngr := &TransactionManager{NewMethodHandler(), rntm, list, make(map[User]transaction, 0), nil}
+	mngr := &TransactionManager{NewMethodHandler(), rntm, map_, nil}
 
 	//setup default methods
 	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen))
@@ -170,8 +212,7 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 
 //returns if currently a transaction is open
 func (self *TransactionManager) IsOpen() bool {
-	_, ok := self.transactions[self.rntm.currentUser]
-	return ok
+	return self.transactions.HasKey([]byte(self.rntm.currentUser))
 }
 
 //Opens a transaction, and if one is already open it will be closed first
@@ -216,20 +257,36 @@ func (self *TransactionManager) Close() error {
 	objs := trans.Objects()
 	for _, obj := range objs {
 
+		//the object is not part of a transaction anymode
 		bhvr := getTransactionBehaviour(obj)
+
 		if bhvr != nil {
 			err = bhvr.GetEvent("onClosing").Emit()
 			if err != nil {
 				return utils.StackError(err, "Unable to close transaction due to failed close event emitting")
 			}
+			//the object is not part of a transaction anymode
+			bhvr.inTransaction.Write(false)
 		}
 	}
 
 	//remove from db
-	err = self.removeTransaction(trans.identification)
+	err = trans.Remove()
 	if err != nil {
 		return utils.StackError(err, "Removing transaction from database failed")
 	}
+	keys, _ := self.transactions.GetKeys()
+	for _, key := range keys {
+		var transkey [32]byte
+		self.transactions.ReadType(key, &transkey)
+		if bytes.Equal(transkey[:], trans.identification[:]) {
+			self.transactions.Remove(key)
+			break
+		}
+	}
+
+	//remove from map
+	self.transactions.Remove([]byte(self.rntm.currentUser))
 
 	return nil
 }
@@ -255,7 +312,7 @@ func (self *TransactionManager) Add(obj Data) error {
 	}
 
 	//check if object is not already in annother transaction
-	if bhvr.inTransaction && !bhvr.current.Equal(trans) {
+	if bhvr.InTransaction() && !bhvr.GetTransaction().Equal(trans) {
 		err = fmt.Errorf("Object already part of different transaction")
 		bhvr.GetEvent("onFailure").Emit(err.Error())
 		return err
@@ -281,8 +338,9 @@ func (self *TransactionManager) Add(obj Data) error {
 		return err
 	}
 
-	bhvr.current = trans
-	bhvr.inTransaction = true
+	//store in the behaviour
+	bhvr.current.Write(trans.identification)
+	bhvr.inTransaction.Write(true)
 
 	//throw relevant event
 	err = bhvr.GetEvent("onParticipation").Emit()
@@ -313,30 +371,6 @@ func (self *TransactionManager) Add(obj Data) error {
 	return nil
 }
 
-//run this on runtime initialisation to setup all transactions correctly
-func (self *TransactionManager) initTransactions() error {
-
-	entries, err := self.list.GetEntries()
-	if err != nil {
-		return utils.StackError(err, "Cannot load transactions")
-	}
-	for _, entry := range entries {
-
-		//get the transaction
-		transaction, err := self.loadTransaction(entry)
-		if err != nil {
-			return utils.StackError(err, "Failed to load transactions from datastore")
-		}
-		usr, err := transaction.User()
-		if err != nil {
-			return utils.StackError(err, "Cannot access transactions user")
-		}
-		self.transactions[usr] = transaction
-	}
-
-	return nil
-}
-
 func (self *TransactionManager) getOrCreateTransaction() (transaction, error) {
 
 	//check if we have one already.
@@ -358,12 +392,17 @@ func (self *TransactionManager) getOrCreateTransaction() (transaction, error) {
 //gets the transaction for the currently active user
 func (self *TransactionManager) getTransaction() (transaction, error) {
 
-	trans, ok := self.transactions[self.rntm.currentUser]
-	if !ok {
+	if !self.transactions.HasKey([]byte(self.rntm.currentUser)) {
 		return transaction{}, fmt.Errorf("No transaction available for user")
 	}
 
-	return trans, nil
+	var key [32]byte
+	err := self.transactions.ReadType([]byte(self.rntm.currentUser), &key)
+	if err != nil {
+		return transaction{}, utils.StackError(err, "Faied to access user transaction")
+	}
+
+	return loadTransaction(key, self.rntm)
 }
 
 //opens a new transaction for the current user (without handling the old one if any)
@@ -371,12 +410,12 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 
 	id := uuid.NewV4()
 	key := sha256.Sum256(id.Bytes())
-	entry, err := self.list.Add(key)
+	err := self.transactions.Write([]byte(self.rntm.currentUser), key)
 	if err != nil {
 		return transaction{}, utils.StackError(err, "Cannot add transaction to datastore list")
 	}
 
-	trans, err := self.loadTransaction(entry)
+	trans, err := loadTransaction(key, self.rntm)
 	if err != nil {
 		return transaction{}, utils.StackError(err, "Loading new transaction failed")
 	}
@@ -385,42 +424,7 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 		return transaction{}, utils.StackError(err, "Setting user for new transaction failed")
 	}
 
-	self.transactions[self.rntm.currentUser] = trans
-
 	return trans, nil
-}
-
-func (self *TransactionManager) loadTransaction(id datastore.ListEntry) (transaction, error) {
-
-	var key [32]byte
-	err := id.ReadType(&key)
-	if err != nil {
-		return transaction{}, utils.StackError(err, "Unable to load transaction id from store")
-	}
-	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, false, key)
-	if err != nil {
-		return transaction{}, err
-	}
-	listSet := set.(*datastore.ListSet)
-
-	//load the participants
-	objects, err := listSet.GetOrCreateList([]byte("participants"))
-	if err != nil {
-		return transaction{}, err
-	}
-
-	//and the user
-	set, err = self.rntm.datastore.GetOrCreateSet(datastore.ValueType, false, key)
-	if err != nil {
-		return transaction{}, err
-	}
-	valueSet := set.(*datastore.ValueSet)
-	user, err := valueSet.GetOrCreateValue([]byte("user"))
-	if err != nil {
-		return transaction{}, err
-	}
-
-	return transaction{id, *objects, *user, self.rntm}, nil
 }
 
 func getTransactionBehaviour(obj Data) *transactionBehaviour {
@@ -431,67 +435,42 @@ func getTransactionBehaviour(obj Data) *transactionBehaviour {
 	return obj.GetBehaviour("Transaction").(*transactionBehaviour)
 }
 
-//removes the transaction from the datastore. Note: Does not remove it from the list
-func (self *TransactionManager) removeTransaction(id datastore.ListEntry) error {
-
-	var key [32]byte
-	err := id.ReadType(&key)
-	if err != nil {
-		return utils.StackError(err, "Unable to load transaction id from store")
-	}
-
-	//remove participants list
-	ldb, err := self.rntm.datastore.GetDatabase(datastore.ListType, false)
-	if err != nil {
-		return utils.StackError(err, "Unable to access list database")
-	}
-	err = ldb.RemoveSet(key)
-	if err != nil {
-		return utils.StackError(err, "Unable to remove database entry of transaction participants")
-	}
-
-	//remove the user entry
-	vdb, err := self.rntm.datastore.GetDatabase(datastore.ValueType, false)
-	if err != nil {
-		return utils.StackError(err, "Unable to access value database")
-	}
-	err = vdb.RemoveSet(key)
-	if err != nil {
-		return utils.StackError(err, "Unable to remove database entry of transaction user")
-	}
-
-	//remove from internal list
-	delete(self.transactions, self.rntm.currentUser)
-
-	return nil
-}
-
 /*********************************************************************************
 								Behaviour
 *********************************************************************************/
 type transactionBehaviour struct {
 	*behaviour
 
-	inTransaction bool
-	current       transaction
+	//transient state (hence db storage)
+	inTransaction datastore.ValueVersioned
+	current       datastore.ValueVersioned
 }
 
 func NewTransactionBehaviour(name string, parent identifier, rntm *Runtime) Object {
 
 	behaviour, _ := NewBehaviour(parent, name, `Transaction`, rntm)
 
-	//add default events
-	behaviour.AddEvent(`onOpen`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))          //called when a new transaction was opened
-	behaviour.AddEvent(`onParticipation`, NewEvent(behaviour.GetJSObject(), rntm.jsvm)) //called when added to a transaction
-	behaviour.AddEvent(`onClosing`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))       //called when transaction, to which the parent was added, is closed (means finished)
-	behaviour.AddEvent(`onFailure`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))       //called when adding to transaction failed, e.g. because already in annother transaction
+	//get the datastores
+	set, err := behaviour.GetDatabaseSet(datastore.ValueType)
+	if err != nil {
+		return nil
+	}
+	vset := set.(*datastore.ValueVersionedSet)
+	inTrans, _ := vset.GetOrCreateValue([]byte("__inTransaction"))
+	curTrans, _ := vset.GetOrCreateValue([]byte("__currentTransaction"))
 
-	tbhvr := &transactionBehaviour{behaviour, false, transaction{}}
+	tbhvr := &transactionBehaviour{behaviour, *inTrans, *curTrans}
 
 	//add default methods for overriding by the user
 	tbhvr.defaults.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable))                //return true/false if object can be used in current transaction
 	tbhvr.defaults.AddMethod("CanBeClosed", MustNewMethod(tbhvr.defaultCloseable))             //return true/false if transaction containing the object can be closed
 	tbhvr.defaults.AddMethod("DependendObjects", MustNewMethod(tbhvr.defaultDependendObjects)) //return array of objects that need also to be added to transaction
+
+	//add default events
+	tbhvr.AddEvent(`onOpen`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))          //called when a new transaction was opened
+	tbhvr.AddEvent(`onParticipation`, NewEvent(behaviour.GetJSObject(), rntm.jsvm)) //called when added to a transaction
+	tbhvr.AddEvent(`onClosing`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))       //called when transaction, to which the parent was added, is closed (means finished)
+	tbhvr.AddEvent(`onFailure`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
 	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction))
@@ -500,7 +479,21 @@ func NewTransactionBehaviour(name string, parent identifier, rntm *Runtime) Obje
 }
 
 func (self *transactionBehaviour) InTransaction() bool {
-	return self.inTransaction
+
+	var result bool
+	self.inTransaction.ReadType(&result)
+	return result
+}
+
+func (self *transactionBehaviour) GetTransaction() transaction {
+
+	var key [32]byte
+	self.current.ReadType(&key)
+	trans, err := loadTransaction(key, self.rntm)
+	if err != nil {
+		panic(err.Error())
+	}
+	return trans
 }
 
 func (self *transactionBehaviour) Copy() Behaviour {

@@ -192,7 +192,10 @@ func (self ValueSet) GetType() StorageType {
 func (self *ValueSet) HasKey(key []byte) bool {
 
 	value := Value{self.db, self.dbkey, self.setkey, key}
-	res, _ := value.HoldsValue()
+	res, err := value.HoldsValue()
+	if err != nil {
+		return false
+	}
 	return res
 }
 

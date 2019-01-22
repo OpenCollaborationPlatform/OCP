@@ -329,6 +329,7 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 				}
 
 				//handle the versioning
+
 			}
 		}
 	}
@@ -382,6 +383,19 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 			//TODO: Handle not ok: howto remove object correctly?
 		}
 	}
+
+	//garbace collection: which objects can be removed?
+	removers := make([]identifier, 0)
+	for id, obj := range self.objects {
+		if obj.GetRefcount() == 0 {
+			removers = append(removers, id)
+		}
+	}
+	for _, id := range removers {
+		delete(self.objects, id)
+		self.jsObjMap.Set(id.encode(), nil)
+	}
+
 	return postError
 }
 

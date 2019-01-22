@@ -83,6 +83,17 @@ func TestListBasic(t *testing.T) {
 			So(val, ShouldBeNil)
 		})
 
+		Convey("Entries shall be retrievable", func() {
+
+			name := makeSetFromString("test")
+			set, _ := db.GetOrCreateSet(name).(*ListSet)
+			list, err := set.GetOrCreateList([]byte("list"))
+
+			entries, err := list.GetEntries()
+			So(err, ShouldBeNil)
+			So(len(entries), ShouldEqual, 1)
+		})
+
 	})
 }
 

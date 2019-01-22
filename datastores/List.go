@@ -268,16 +268,13 @@ func (self *List) GetEntries() ([]ListEntry, error) {
 		//collect the entries
 		err := bucket.ForEach(func(k []byte, v []byte) error {
 
-			//don't use VERSIONS and CURRENT
-			if !bytes.Equal(k, itob(VERSIONS)) && v == nil {
-				//copy the key as it is not valid outside for each
-				var key = make([]byte, len(k))
-				copy(key, k)
+			//copy the key as it is not valid outside for each
+			var key = make([]byte, len(k))
+			copy(key, k)
 
-				//build the value and add to the list
-				value := Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, key}
-				entries = append(entries, &listEntry{value})
-			}
+			//build the value and add to the list
+			value := Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, key}
+			entries = append(entries, &listEntry{value})
 			return nil
 		})
 		return err

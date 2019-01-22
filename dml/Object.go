@@ -42,11 +42,13 @@ type object struct {
 	eventHandler
 	methodHandler
 
-	//object
+	//object static state
 	rntm     *Runtime
 	parent   identifier
 	id       identifier
 	dataType DataType
+
+	//object dynamic state (hence in db)
 	refCount datastore.ValueVersioned
 
 	//javascript

@@ -129,7 +129,7 @@ func (self *MapSet) Print(params ...int) {
 		bucket.ForEach(func(k []byte, v []byte) error {
 
 			fmt.Println(string(k))
-			kvset := ValueVersionedSet{self.db, self.dbkey, [][]byte{self.setkey, k}}
+			kvset := ValueSet{self.db, self.dbkey, [][]byte{self.setkey, k}}
 			if len(params) > 0 {
 				kvset.Print(1 + params[0])
 			} else {
@@ -259,6 +259,11 @@ func (self *Map) Read(key interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if !self.kvset.HasKey(k) {
+		return nil, fmt.Errorf("Key not available in map")
+	}
+
 	entry, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
 		return nil, err
@@ -272,6 +277,11 @@ func (self *Map) ReadType(key interface{}, value interface{}) error {
 	if err != nil {
 		return err
 	}
+
+	if !self.kvset.HasKey(k) {
+		return fmt.Errorf("Key not available in map")
+	}
+
 	entry, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
 		return err
@@ -286,6 +296,38 @@ func (self *Map) Remove(key interface{}) error {
 		return utils.StackError(err, "Cannot remove Map key")
 	}
 	return self.kvset.removeKey(k)
+}
+
+func (self *Map) GetKeys() ([]interface{}, error) {
+
+	entries := make([]interface{}, 0)
+
+	//iterate over all entries...
+	err := self.kvset.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.kvset.dbkey)
+		for _, bkey := range self.kvset.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		//collect the entries
+		err := bucket.ForEach(func(k []byte, v []byte) error {
+
+			//don't use VERSIONS and CURRENT
+			if !bytes.Equal(k, itob(VERSIONS)) && v == nil {
+				//copy the key as it is not valid outside for each
+				val, err := getInterface(k)
+				if err != nil {
+					return err
+				}
+				entries = append(entries, val)
+			}
+			return nil
+		})
+		return err
+	})
+
+	return entries, err
 }
 
 func (self *Map) getMapKey() []byte {
