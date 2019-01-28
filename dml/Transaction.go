@@ -212,7 +212,7 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 
 //returns if currently a transaction is open
 func (self *TransactionManager) IsOpen() bool {
-	return self.transactions.HasKey([]byte(self.rntm.currentUser))
+	return self.transactions.HasKey(self.rntm.currentUser)
 }
 
 //Opens a transaction, and if one is already open it will be closed first
@@ -286,7 +286,7 @@ func (self *TransactionManager) Close() error {
 	}
 
 	//remove from map
-	self.transactions.Remove([]byte(self.rntm.currentUser))
+	self.transactions.Remove(self.rntm.currentUser)
 
 	return nil
 }
@@ -316,6 +316,11 @@ func (self *TransactionManager) Add(obj Data) error {
 		err = fmt.Errorf("Object already part of different transaction")
 		bhvr.GetEvent("onFailure").Emit(err.Error())
 		return err
+	}
+
+	//check if we are already in this transaction
+	if trans.HasObject(obj.Id()) {
+		return nil
 	}
 
 	//check if it is allowed by gthe object
@@ -392,12 +397,12 @@ func (self *TransactionManager) getOrCreateTransaction() (transaction, error) {
 //gets the transaction for the currently active user
 func (self *TransactionManager) getTransaction() (transaction, error) {
 
-	if !self.transactions.HasKey([]byte(self.rntm.currentUser)) {
+	if !self.transactions.HasKey(self.rntm.currentUser) {
 		return transaction{}, fmt.Errorf("No transaction available for user")
 	}
 
 	var key [32]byte
-	err := self.transactions.ReadType([]byte(self.rntm.currentUser), &key)
+	err := self.transactions.ReadType(self.rntm.currentUser, &key)
 	if err != nil {
 		return transaction{}, utils.StackError(err, "Faied to access user transaction")
 	}
@@ -410,7 +415,7 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 
 	id := uuid.NewV4()
 	key := sha256.Sum256(id.Bytes())
-	err := self.transactions.Write([]byte(self.rntm.currentUser), key)
+	err := self.transactions.Write(self.rntm.currentUser, key)
 	if err != nil {
 		return transaction{}, utils.StackError(err, "Cannot add transaction to datastore list")
 	}
@@ -462,9 +467,9 @@ func NewTransactionBehaviour(name string, parent identifier, rntm *Runtime) Obje
 	tbhvr := &transactionBehaviour{behaviour, *inTrans, *curTrans}
 
 	//add default methods for overriding by the user
-	tbhvr.defaults.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable))                //return true/false if object can be used in current transaction
-	tbhvr.defaults.AddMethod("CanBeClosed", MustNewMethod(tbhvr.defaultCloseable))             //return true/false if transaction containing the object can be closed
-	tbhvr.defaults.AddMethod("DependendObjects", MustNewMethod(tbhvr.defaultDependendObjects)) //return array of objects that need also to be added to transaction
+	tbhvr.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable))                //return true/false if object can be used in current transaction
+	tbhvr.AddMethod("CanBeClosed", MustNewMethod(tbhvr.defaultCloseable))             //return true/false if transaction containing the object can be closed
+	tbhvr.AddMethod("DependendObjects", MustNewMethod(tbhvr.defaultDependendObjects)) //return array of objects that need also to be added to transaction
 
 	//add default events
 	tbhvr.AddEvent(`onOpen`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))          //called when a new transaction was opened

@@ -1,12 +1,13 @@
 package dml
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/dop251/goja"
 )
 
-type EventCallback func(...interface{})
+type EventCallback func(...interface{}) error
 
 type Event interface {
 	JSObject
@@ -64,11 +65,15 @@ func (self *event) Emit(args ...interface{}) error {
 	}
 
 	//now call all registered functions
+	var err error
 	for _, fnc := range self.callbacks {
-		fnc(args...)
+		err = fnc(args...)
+		if err != nil {
+			break
+		}
 	}
 
-	return nil
+	return err
 }
 
 func (self *event) RegisterCallback(cb EventCallback) error {
@@ -79,12 +84,34 @@ func (self *event) RegisterCallback(cb EventCallback) error {
 
 func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error {
 
-	return self.RegisterCallback(func(args ...interface{}) {
+	return self.RegisterCallback(func(args ...interface{}) (err error) {
+
+		defer func() {
+			// recover from panic if one occured. Set err to nil otherwise.
+			errval := recover()
+			if errval != nil {
+				str := "Error during event processing"
+				if jserr, ok := errval.(*goja.Exception); ok {
+					str = jserr.Value().Export().(string)
+
+				} else if jsval, ok := errval.(goja.Value); ok {
+					str = jsval.ToString().String()
+
+				} else if strval, ok := errval.(string); ok {
+					str = strval
+				}
+
+				err = errors.New(str)
+			}
+		}()
+
 		jsArgs := make([]goja.Value, len(args))
 		for i, arg := range args {
 			jsArgs[i] = self.jsvm.ToValue(arg)
 		}
 		cb(goja.FunctionCall{This: self.jsparent, Arguments: jsArgs})
+
+		return err
 	})
 }
 

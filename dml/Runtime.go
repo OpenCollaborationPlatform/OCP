@@ -138,6 +138,13 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	//set the JS main entry point
 	self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
 
+	//commit objects which are totally new (so they have no updates initially)
+	for _, obj := range self.objects {
+		if obj.HasUpdates() {
+			obj.FixStateAsVersion()
+		}
+	}
+
 	return err
 }
 
@@ -436,7 +443,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	}
 
 	//check if data or behaviour
-	bhvr, isBehaviour := obj.(Behaviour)
+	_, isBehaviour := obj.(Behaviour)
 
 	if !isBehaviour {
 		//add to rntm
@@ -478,9 +485,6 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	}
 
 	//than all methods (including defaults if required)
-	if isBehaviour {
-		bhvr.SetupDefaults()
-	}
 	for _, fnc := range astObj.Functions {
 
 		method, err := self.buildMethod(fnc)

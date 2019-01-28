@@ -134,9 +134,6 @@ func (self *methodHandler) HasMethod(name string) bool {
 
 func (self *methodHandler) AddMethod(name string, method Method) {
 
-	if self.HasMethod(name) {
-		return
-	}
 	self.methods[name] = method
 }
 

@@ -14,7 +14,7 @@ import "fmt"
 type Behaviour interface {
 	Object
 
-	SetupDefaults()
+	//SetupDefaults()
 	Copy() Behaviour
 }
 
@@ -22,7 +22,6 @@ func NewBehaviour(parent identifier, name string, oType string, rntm *Runtime) (
 
 	result := behaviour{
 		NewObject(parent, name, oType, rntm),
-		NewMethodHandler(),
 	}
 
 	//add default behaviour properties
@@ -38,9 +37,10 @@ func NewBehaviour(parent identifier, name string, oType string, rntm *Runtime) (
 type behaviour struct {
 	*object
 
-	defaults methodHandler
+	//defaults methodHandler
 }
 
+/*
 //all methods that are not provided by the user are setup from the behaviour, so that
 //to it appears that the user can override the behaviour
 //TODO: check for correct arguments types
@@ -53,7 +53,7 @@ func (self *behaviour) SetupDefaults() {
 			self.AddMethod(defmeth, self.defaults.GetMethod(defmeth))
 		}
 	}
-}
+}*/
 
 //creates identical copy of this behaviour witch is functional independend
 func (self *behaviour) Copy() {

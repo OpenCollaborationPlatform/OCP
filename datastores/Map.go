@@ -313,15 +313,12 @@ func (self *Map) GetKeys() ([]interface{}, error) {
 		//collect the entries
 		err := bucket.ForEach(func(k []byte, v []byte) error {
 
-			//don't use VERSIONS and CURRENT
-			if !bytes.Equal(k, itob(VERSIONS)) && v == nil {
-				//copy the key as it is not valid outside for each
-				val, err := getInterface(k)
-				if err != nil {
-					return err
-				}
-				entries = append(entries, val)
+			//copy the key as it is not valid outside for each
+			val, err := getInterface(k)
+			if err != nil {
+				return err
 			}
+			entries = append(entries, val)
 			return nil
 		})
 		return err
@@ -332,4 +329,13 @@ func (self *Map) GetKeys() ([]interface{}, error) {
 
 func (self *Map) getMapKey() []byte {
 	return self.kvset.getSetKey()
+}
+
+func (self *Map) Print(params ...int) {
+
+	if len(params) > 0 {
+		self.kvset.Print(params[0])
+	} else {
+		self.kvset.Print()
+	}
 }
