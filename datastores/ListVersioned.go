@@ -245,7 +245,20 @@ func (self *ListVersionedSet) ResetHead() {
 
 	listVersioneds := self.collectLists()
 	for _, list := range listVersioneds {
-		list.kvset.ResetHead()
+		//if the list has a version we can reset, otherwise we need a full delete
+		//(to reset to not-available-state
+		if list.LatestVersion().IsValid() {
+			list.kvset.ResetHead()
+		} else {
+			//make sure the set exists in the db with null valueVersioned
+			self.db.Update(func(tx *bolt.Tx) error {
+
+				bucket := tx.Bucket(self.dbkey)
+				bucket = bucket.Bucket(self.setkey)
+				return bucket.DeleteBucket(list.getListKey())
+			})
+		}
+
 	}
 }
 

@@ -322,6 +322,22 @@ func (self *ValueVersionedSet) ResetHead() {
 	valueVersioneds := self.collectValueVersioneds()
 	for _, val := range valueVersioneds {
 		latest := val.LatestVersion()
+
+		//if no version available we delete the key as it was never written
+		if !latest.IsValid() {
+			//normal write checks for invalid, but we want to override invalid too
+			self.db.Update(func(tx *bolt.Tx) error {
+
+				bucket := tx.Bucket(self.dbkey)
+				for _, bkey := range self.setkey {
+					bucket = bucket.Bucket(bkey)
+				}
+				return bucket.DeleteBucket(val.key)
+			})
+			continue
+		}
+
+		//if we have a real version we need the data to return to!
 		var data interface{}
 		err := val.readVersion(latest, &data)
 

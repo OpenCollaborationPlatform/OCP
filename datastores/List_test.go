@@ -284,5 +284,36 @@ func TestListVersionedData(t *testing.T) {
 			lset.ResetHead()
 			So(entry3.IsValid(), ShouldBeTrue)
 		})
+
+		Convey("A new ListSet with lists, but no versions yet", func() {
+
+			name := makeSetFromString("testreset")
+			lset := db.GetOrCreateSet(name).(*ListVersionedSet)
+
+			Convey("should be resettable to not have list", func() {
+				list, _ := lset.GetOrCreateList([]byte("myresetlist"))
+				list.Add("entry1")
+				list.Add("entry2")
+
+				lset.ResetHead()
+				So(lset.HasList([]byte("myresetlist")), ShouldBeFalse)
+			})
+
+			Convey("Creating a initial list version and adding data", func() {
+				list, _ := lset.GetOrCreateList([]byte("myresetlist"))
+				lset.FixStateAsVersion()
+				list.Add("entry1")
+				list.Add("entry2")
+
+				Convey("should reset to list available, but empty", func() {
+
+					lset.ResetHead()
+					So(lset.HasList([]byte("myresetlist")), ShouldBeTrue)
+					entries, err := list.GetEntries()
+					So(err, ShouldBeNil)
+					So(len(entries), ShouldEqual, 0)
+				})
+			})
+		})
 	})
 }

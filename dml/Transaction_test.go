@@ -379,6 +379,12 @@ func TestTransactionAbort(t *testing.T) {
 
 			Convey("Failing data change after successful transaction subobject", func() {
 
+				//initially 0 objects required
+				mngr := rntm.transactions
+				trans, _ := mngr.getTransaction()
+				obj := trans.Objects()
+				So(len(obj), ShouldEqual, 0)
+
 				code = `Document.TransDocumentObject.p=5; Document.FailTransDocumentObject.p =5`
 				_, err := rntm.RunJavaScript(code)
 				So(err, ShouldNotBeNil)
@@ -392,8 +398,6 @@ func TestTransactionAbort(t *testing.T) {
 				})
 
 				Convey("and transaction should have no object", func() {
-					mngr := rntm.transactions
-					trans, _ := mngr.getTransaction()
 					obj := trans.Objects()
 					So(len(obj), ShouldEqual, 0)
 				})

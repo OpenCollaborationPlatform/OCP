@@ -389,7 +389,13 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 			}
 			//TODO: Handle not ok: howto remove object correctly?
 		}
+
+		//rollback tansactions
+		self.transactions.Rollback()
 	}
+
+	//commit transactions
+	self.transactions.Commit()
 
 	//garbace collection: which objects can be removed?
 	removers := make([]identifier, 0)

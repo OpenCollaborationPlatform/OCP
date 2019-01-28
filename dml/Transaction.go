@@ -25,17 +25,17 @@ type transaction struct {
 	rntm           *Runtime
 
 	//dynamic state
-	objects datastore.List
-	user    datastore.Value
+	objects datastore.ListVersioned
+	user    datastore.ValueVersioned
 }
 
 func loadTransaction(key [32]byte, rntm *Runtime) (transaction, error) {
 
-	set, err := rntm.datastore.GetOrCreateSet(datastore.ListType, false, key)
+	set, err := rntm.datastore.GetOrCreateSet(datastore.ListType, true, key)
 	if err != nil {
 		return transaction{}, err
 	}
-	listSet := set.(*datastore.ListSet)
+	listSet := set.(*datastore.ListVersionedSet)
 
 	//load the participants
 	objects, err := listSet.GetOrCreateList([]byte("participants"))
@@ -44,11 +44,11 @@ func loadTransaction(key [32]byte, rntm *Runtime) (transaction, error) {
 	}
 
 	//and the user
-	set, err = rntm.datastore.GetOrCreateSet(datastore.ValueType, false, key)
+	set, err = rntm.datastore.GetOrCreateSet(datastore.ValueType, true, key)
 	if err != nil {
 		return transaction{}, err
 	}
-	valueSet := set.(*datastore.ValueSet)
+	valueSet := set.(*datastore.ValueVersionedSet)
 	user, err := valueSet.GetOrCreateValue([]byte("user"))
 	if err != nil {
 		return transaction{}, err
@@ -60,7 +60,7 @@ func loadTransaction(key [32]byte, rntm *Runtime) (transaction, error) {
 func (self transaction) Remove() error {
 
 	//remove participants list
-	ldb, err := self.rntm.datastore.GetDatabase(datastore.ListType, false)
+	ldb, err := self.rntm.datastore.GetDatabase(datastore.ListType, true)
 	if err != nil {
 		return utils.StackError(err, "Unable to access list database")
 	}
@@ -70,7 +70,7 @@ func (self transaction) Remove() error {
 	}
 
 	//remove the user and transaction entries
-	vdb, err := self.rntm.datastore.GetDatabase(datastore.ValueType, false)
+	vdb, err := self.rntm.datastore.GetDatabase(datastore.ValueType, true)
 	if err != nil {
 		return utils.StackError(err, "Unable to access value database")
 	}
@@ -164,6 +164,65 @@ func (self transaction) AddObject(id identifier) error {
 		return utils.StackError(err, "Cannot store object identifier in datastore list")
 	}
 
+	return nil
+}
+
+//save state of transaction as new fixed version
+func (self transaction) Commit() error {
+
+	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, true, self.identification)
+	if err != nil {
+		return utils.StackError(err, "Unable to commit transaction: cannot access list")
+	}
+	listSet := set.(*datastore.ListVersionedSet)
+
+	if listSet.HasUpdates() {
+		_, err := listSet.FixStateAsVersion()
+		if err != nil {
+			return utils.StackError(err, "Unable to commit transaction: cannot versionize list")
+		}
+	}
+
+	//and the user
+	set, err = self.rntm.datastore.GetOrCreateSet(datastore.ValueType, true, self.identification)
+	if err != nil {
+		return utils.StackError(err, "Unable to commit transaction: cannot access value")
+	}
+	valueSet := set.(*datastore.ValueVersionedSet)
+
+	if valueSet.HasUpdates() {
+		_, err := valueSet.FixStateAsVersion()
+		if err != nil {
+			return utils.StackError(err, "Unable to commit transaction cannot versionize value")
+		}
+	}
+
+	return nil
+}
+
+//rollback all changes to last saved version
+func (self transaction) Rollback() error {
+
+	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, true, self.identification)
+	if err != nil {
+		return utils.StackError(err, "Unable to rollback transaction: cannot access list")
+	}
+	listSet := set.(*datastore.ListVersionedSet)
+
+	if listSet.HasUpdates() {
+		listSet.ResetHead()
+	}
+
+	//and the user
+	set, err = self.rntm.datastore.GetOrCreateSet(datastore.ValueType, true, self.identification)
+	if err != nil {
+		return utils.StackError(err, "Unable to rollback transaction: cannot access value")
+	}
+	valueSet := set.(*datastore.ValueVersionedSet)
+
+	if valueSet.HasUpdates() {
+		valueSet.ResetHead()
+	}
 	return nil
 }
 
@@ -429,7 +488,59 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 		return transaction{}, utils.StackError(err, "Setting user for new transaction failed")
 	}
 
-	return trans, nil
+	//initial commit to have a empty version we can always return to
+	err = trans.Commit()
+
+	return trans, err
+}
+
+//commits all changes done to transactions
+func (self *TransactionManager) Commit() error {
+
+	//iterate over all transactions and commit them
+	keys, err := self.transactions.GetKeys()
+	if err != nil {
+		return utils.StackError(err, "Unable to commit transactions: cannot access keys")
+	}
+
+	for _, key := range keys {
+		var id [32]byte
+		self.transactions.ReadType(key, &id)
+		trans, err := loadTransaction(id, self.rntm)
+		if err != nil {
+			return utils.StackError(err, "Unable to commit transactions: cannot access transaction")
+		}
+		err = trans.Commit()
+		if err != nil {
+			return utils.StackError(err, "Unable to commit transactions: cannot commit transaction")
+		}
+	}
+
+	return nil
+}
+
+//rolls back all changes done to transactions
+func (self *TransactionManager) Rollback() error {
+
+	//iterate over all transactions and commit them
+	keys, err := self.transactions.GetKeys()
+	if err != nil {
+		return utils.StackError(err, "Unable to rollback transactions: cannot access keys")
+	}
+
+	for _, key := range keys {
+		var id [32]byte
+		self.transactions.ReadType(key, &id)
+		trans, err := loadTransaction(id, self.rntm)
+		if err != nil {
+			return utils.StackError(err, "Unable to rollback transactions: cannot access transaction")
+		}
+		err = trans.Rollback()
+		if err != nil {
+			return utils.StackError(err, "Unable to rollback transactions: cannot rollback transaction")
+		}
+	}
+	return nil
 }
 
 func getTransactionBehaviour(obj Data) *transactionBehaviour {

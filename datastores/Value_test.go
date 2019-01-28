@@ -418,5 +418,27 @@ func TestValueVersioned(t *testing.T) {
 			So(set.RemoveVersionsUpFrom(VersionID(4)), ShouldBeNil)
 		})
 
+		Convey("Creating a new list for reset testing", func() {
+
+			set := db.GetOrCreateSet(makeSetFromString("testreset")).(VersionedSet)
+			kvset, _ := set.(*ValueVersionedSet)
+
+			Convey("Must be resettable directly even if there is no version", func() {
+
+				value, _ := kvset.GetOrCreateValue([]byte("key1"))
+				value.Write("test")
+				So(value.HasUpdates(), ShouldBeTrue)
+
+				holds, err := value.HoldsValue()
+				So(err, ShouldBeNil)
+				So(holds, ShouldBeTrue)
+				So(value.LatestVersion().IsValid(), ShouldBeFalse)
+
+				So(kvset.HasUpdates(), ShouldBeTrue)
+				kvset.ResetHead()
+
+				So(kvset.HasKey([]byte("key1")), ShouldBeFalse)
+			})
+		})
 	})
 }
