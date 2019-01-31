@@ -407,7 +407,7 @@ func (self *ValueVersionedSet) FixStateAsVersion() (VersionID, error) {
 					subbucket.Put(itob(vid), data)
 				}
 
-				//save the old version as the correct entry
+				//save the old version as the correct entry if it is not invalid.
 				version[btos(key)] = itos(vid)
 			}
 		}
@@ -611,6 +611,7 @@ func (self *ValueVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 	}
 
 	//remove everything that is not needed anymore
+	deleted_keys := make([]string, 0)
 	for key, valueVersioned := range version {
 
 		valueVersionedstr, ok := valueVersioned.(string)
@@ -638,6 +639,7 @@ func (self *ValueVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 				//was removed, hence can be fully deleted. (it could be that is was written
 				//again after setting it invalid and make it hence valid again in later versions)
 				setBucket.DeleteBucket(keydata)
+				deleted_keys = append(deleted_keys, key)
 
 			} else {
 				//delete each entry that belongs to older versions. We use the fact
@@ -685,6 +687,38 @@ func (self *ValueVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 		}
 		return nil
 	})
+
+	//rewrite all existing versions to not include deleted keys
+	latest, _ := self.GetLatestVersion()
+	for i := uint64(ID); i <= uint64(latest); i++ {
+		version, err := self.getVersionInfo(VersionID(i))
+		if err != nil {
+			return utils.StackError(err, "Unable to change newer versions")
+		}
+
+		//remove all deleted keys from version map
+		for _, key := range deleted_keys {
+			delete(version, key)
+		}
+
+		//write version map back
+		err = self.db.Update(func(tx *bolt.Tx) error {
+
+			bucket := tx.Bucket(self.dbkey)
+			for _, bkey := range append(self.setkey, itob(VERSIONS)) {
+				bucket = bucket.Bucket(bkey)
+			}
+			data, err := getBytes(version)
+			if err != nil {
+				return err
+			}
+			bucket.Put(itob(i), data)
+			return nil
+		})
+		if err != nil {
+			return utils.StackError(err, "unable to write updated version informtion")
+		}
+	}
 
 	return err
 }
@@ -782,6 +816,19 @@ func (self *ValueVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 	})
 
 	return err
+}
+
+func (self *ValueVersionedSet) getKeys() ([][]byte, error) {
+
+	keys := make([][]byte, 0)
+	values := self.collectValueVersioneds()
+	for _, value := range values {
+		if value.IsValid() {
+			keys = append(keys, value.key)
+		}
+	}
+
+	return keys, nil
 }
 
 /*

@@ -24,7 +24,10 @@ type transaction struct {
 	identification [32]byte
 	rntm           *Runtime
 
-	//dynamic state
+	//dynamic state. We need to be able to commit and reset, hence versiond db entries.
+	//actually it is no state that needs to be stored over multiple versions, but as
+	//transaction gets deleted after closing the storage overhead is minimal and the
+	//easy solution accaptable
 	objects datastore.ListVersioned
 	user    datastore.ValueVersioned
 }
@@ -233,26 +236,35 @@ func (self transaction) Rollback() error {
 type TransactionManager struct {
 	methodHandler
 
-	rntm         *Runtime
-	transactions *datastore.Map
-	jsobj        *goja.Object
+	rntm *Runtime
+
+	//we do not need the versioning, but the commit/rollback possibility
+	mapset       *datastore.MapVersionedSet
+	transactions *datastore.MapVersioned
+
+	jsobj *goja.Object
 }
 
 func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 
 	var setKey [32]byte
 	copy(setKey[:], []byte("internal"))
-	set, err := rntm.datastore.GetOrCreateSet(datastore.MapType, false, setKey)
+	set, err := rntm.datastore.GetOrCreateSet(datastore.MapType, true, setKey)
 	if err != nil {
 		return &TransactionManager{}, utils.StackError(err, "Cannot acccess internal list datastore")
 	}
-	mapSet := set.(*datastore.MapSet)
+	mapSet := set.(*datastore.MapVersionedSet)
 	map_, err := mapSet.GetOrCreateMap([]byte("transactions"))
 	if err != nil {
 		return &TransactionManager{}, utils.StackError(err, "Cannot access internal transaction list store")
 	}
 
-	mngr := &TransactionManager{NewMethodHandler(), rntm, map_, nil}
+	//check in initial version if required
+	if mapSet.HasUpdates() {
+		mapSet.FixStateAsVersion()
+	}
+
+	mngr := &TransactionManager{NewMethodHandler(), rntm, mapSet, map_, nil}
 
 	//setup default methods
 	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen))
@@ -516,6 +528,16 @@ func (self *TransactionManager) Commit() error {
 		}
 	}
 
+	//commit ourself
+	if self.transactions.HasUpdates() {
+		version, err := self.mapset.FixStateAsVersion()
+		if err != nil {
+			return utils.StackError(err, "Unable to commit transaction manager")
+		}
+		//remove the old version, not need to store it
+		self.mapset.RemoveVersionsUpTo(version)
+	}
+
 	return nil
 }
 
@@ -540,6 +562,12 @@ func (self *TransactionManager) Rollback() error {
 			return utils.StackError(err, "Unable to rollback transactions: cannot rollback transaction")
 		}
 	}
+
+	//rollback ourself
+	if self.transactions.HasUpdates() {
+		self.mapset.ResetHead()
+	}
+
 	return nil
 }
 

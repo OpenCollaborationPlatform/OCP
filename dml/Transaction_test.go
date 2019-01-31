@@ -385,7 +385,7 @@ func TestTransactionAbort(t *testing.T) {
 				obj := trans.Objects()
 				So(len(obj), ShouldEqual, 0)
 
-				code = `Document.TransDocumentObject.p=5; Document.FailTransDocumentObject.p =5`
+				code = `Document.TransDocumentObject.p=5; Document.FailTransDocumentObject.p = 5`
 				_, err := rntm.RunJavaScript(code)
 				So(err, ShouldNotBeNil)
 
@@ -400,6 +400,34 @@ func TestTransactionAbort(t *testing.T) {
 				Convey("and transaction should have no object", func() {
 					obj := trans.Objects()
 					So(len(obj), ShouldEqual, 0)
+				})
+			})
+
+			Convey("Opening a transaction directly bevore failing data change", func() {
+
+				mngr := rntm.transactions
+
+				mngr.Close()
+				mngr.Commit()
+
+				_, err := mngr.getTransaction()
+				So(err, ShouldNotBeNil)
+				keys, _ := mngr.transactions.GetKeys()
+				So(len(keys), ShouldEqual, 0)
+
+				code = `Transaction.Open(); Document.FailTransDocument.p = 5`
+				_, err = rntm.RunJavaScript(code)
+
+				Convey("Should be an error", func() {
+					So(err, ShouldNotBeNil)
+				})
+
+				Convey("and should not lead to an open transaction", func() {
+
+					_, err := mngr.getTransaction()
+					So(err, ShouldNotBeNil)
+					keys, _ := mngr.transactions.GetKeys()
+					So(len(keys), ShouldEqual, 0)
 				})
 			})
 		})

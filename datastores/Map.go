@@ -300,31 +300,22 @@ func (self *Map) Remove(key interface{}) error {
 
 func (self *Map) GetKeys() ([]interface{}, error) {
 
-	entries := make([]interface{}, 0)
+	bytekeys, err := self.kvset.getKeys()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to read map keys")
+	}
 
-	//iterate over all entries...
-	err := self.kvset.db.View(func(tx *bolt.Tx) error {
-
-		bucket := tx.Bucket(self.kvset.dbkey)
-		for _, bkey := range self.kvset.setkey {
-			bucket = bucket.Bucket(bkey)
+	//convert from byte keys to user type keys
+	keys := make([]interface{}, len(bytekeys))
+	for i, bytekey := range bytekeys {
+		key, err := getInterface(bytekey)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to convert a key into user type")
 		}
+		keys[i] = key
+	}
 
-		//collect the entries
-		err := bucket.ForEach(func(k []byte, v []byte) error {
-
-			//copy the key as it is not valid outside for each
-			val, err := getInterface(k)
-			if err != nil {
-				return err
-			}
-			entries = append(entries, val)
-			return nil
-		})
-		return err
-	})
-
-	return entries, err
+	return keys, nil
 }
 
 func (self *Map) getMapKey() []byte {

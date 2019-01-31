@@ -238,6 +238,31 @@ func (self *ValueSet) getSetKey() []byte {
 	return self.setkey[len(self.setkey)-1]
 }
 
+func (self *ValueSet) getKeys() ([][]byte, error) {
+
+	entries := make([][]byte, 0)
+
+	//iterate over all entries...
+	err := self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range self.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		//collect the entries
+		err := bucket.ForEach(func(k []byte, v []byte) error {
+
+			//copy the key as it is not valid outside for each
+			entries = append(entries, k)
+			return nil
+		})
+		return err
+	})
+
+	return entries, err
+}
+
 /*
  * Value functions
  * ********************************************************************************

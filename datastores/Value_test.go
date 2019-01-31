@@ -440,5 +440,37 @@ func TestValueVersioned(t *testing.T) {
 				So(kvset.HasKey([]byte("key1")), ShouldBeFalse)
 			})
 		})
+
+		Convey("Creating a new set for version remove testing", func() {
+
+			set := db.GetOrCreateSet(makeSetFromString("test2"))
+			vset := set.(*ValueVersionedSet)
+			if vset.HasUpdates() {
+				vset.FixStateAsVersion()
+			}
+
+			Convey("Simple adding, fixing and remove should work", func() {
+
+				value, err := vset.GetOrCreateValue([]byte("val1"))
+				So(err, ShouldBeNil)
+				value.Write("test")
+				v, _ := vset.FixStateAsVersion()
+				vset.RemoveVersionsUpTo(v)
+				keys, _ := vset.getKeys()
+				So(len(keys), ShouldEqual, 1)
+			})
+
+			Convey("Deleting an entry should work", func() {
+
+				value, err := vset.GetOrCreateValue([]byte("val1"))
+				So(err, ShouldBeNil)
+				value.remove()
+				v, _ := vset.FixStateAsVersion()
+				vset.RemoveVersionsUpTo(v)
+				keys, _ := vset.getKeys()
+				So(len(keys), ShouldEqual, 0)
+			})
+
+		})
 	})
 }

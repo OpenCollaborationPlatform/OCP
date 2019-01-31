@@ -678,6 +678,26 @@ func (self *MapVersioned) HasVersions() bool {
 	return self.kvset.HasVersions()
 }
 
+func (self *MapVersioned) GetKeys() ([]interface{}, error) {
+
+	bytekeys, err := self.kvset.getKeys()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to read map keys")
+	}
+
+	//convert from byte keys to user type keys
+	keys := make([]interface{}, len(bytekeys))
+	for i, bytekey := range bytekeys {
+		key, err := getInterface(bytekey)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to convert a key into user type")
+		}
+		keys[i] = key
+	}
+
+	return keys, nil
+}
+
 func (self *MapVersioned) getMapVersionedKey() []byte {
 	return self.kvset.getSetKey()
 }
