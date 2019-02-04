@@ -1,0 +1,11 @@
+ //comment
+ Data {
+    .id: "Imported"
+	
+	property int test: 1
+
+	Data {
+		.id: "ImportedChild"
+		property int test: 10
+	}
+}

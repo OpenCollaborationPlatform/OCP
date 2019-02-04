@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -122,6 +124,14 @@ func (self *Runtime) Parse(reader io.Reader) error {
 
 	//we now build up the unchangeable object structure, hence set refcount super high
 	self.initialObjRefcount = uint64(math.MaxUint64 / 2)
+
+	//first import everything needed
+	for _, imp := range ast.Imports {
+		err := self.importDML(imp)
+		if err != nil {
+			return utils.StackError(err, "Import failed: %v", imp.File)
+		}
+	}
 
 	//process the AST into usable objects
 	obj, err := self.buildObject(ast.Object, identifier{}, make([]*astObject, 0))
@@ -412,6 +422,68 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 	return postError
 }
 
+func (self *Runtime) importDML(astImp *astImport) error {
+
+	//load the file and create a reader
+	reader, err := os.Open(astImp.File)
+	if err != nil {
+		return utils.StackError(err, "Unable to read %v", astImp.File)
+	}
+
+	//we start with building the AST
+	ast := &DML{}
+	parser, err := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
+	if err != nil {
+		return utils.StackError(err, "Unable to setup parser")
+	}
+
+	err = parser.Parse(reader, ast)
+	if err != nil {
+		return utils.StackError(err, "Unable to parse %v", astImp.File)
+	}
+
+	//first import everything needed
+	for _, imp := range ast.Imports {
+		err := self.importDML(imp)
+		if err != nil {
+			return utils.StackError(err, "Import failed: %v", imp.File)
+		}
+	}
+
+	//we now register the imported ast as a creator
+	creator := func(name string, parent identifier, rntm *Runtime) Object {
+		//to assgn the correct object name we need to override the ID pasignment. This must be available
+		//on object build time as the identifier is created with it
+		idSet := false
+		for _, astAssign := range ast.Object.Assignments {
+			if astAssign.Key[0] == "id" {
+				*astAssign.Value.String = name
+				idSet = true
+				break
+			}
+		}
+		if !idSet {
+			return nil
+		}
+
+		obj, _ := rntm.buildObject(ast.Object, parent, make([]*astObject, 0))
+		return obj
+	}
+
+	//build the name, file or alias
+	var name string
+	if astImp.Alias != "" {
+		name = astImp.Alias
+
+	} else {
+		file := filepath.Base(astImp.File)
+		var extension = filepath.Ext(file)
+		name = file[0 : len(file)-len(extension)]
+	}
+
+	return self.registerObjectCreator(name, creator)
+}
+
 //due to recursive nature og objects we need an extra function
 func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehaviours []*astObject) (Object, error) {
 
@@ -468,12 +540,12 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	for _, astProp := range astObj.Properties {
 		err := self.addProperty(obj, astProp)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to create property %v in object %v", astProp.Key, objName)
 		}
 	}
 	err := obj.SetupJSProperties(self.jsvm, jsobj)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to create javascript property interface for %v", objName)
 	}
 
 	//now we create all new events
@@ -481,11 +553,11 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 
 		event, err := self.buildEvent(astEvent, obj)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to create event %v in object %v", astEvent.Key, objName)
 		}
 		err = obj.AddEvent(astEvent.Key, event)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to add event %v to object %v", astEvent.Key, objName)
 		}
 		jsobj.Set(astEvent.Key, obj.GetEvent(astEvent.Key).GetJSObject())
 	}
@@ -495,7 +567,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 
 		method, err := self.buildMethod(fnc)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to create method %v in object %v", fnc.Name, objName)
 		}
 		obj.AddMethod(*fnc.Name, method)
 	}

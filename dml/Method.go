@@ -153,7 +153,20 @@ func (self *methodHandler) Methods() []string {
 
 func (self *methodHandler) SetupJSMethods(vm *goja.Runtime, obj *goja.Object) error {
 
+	keys := obj.Keys()
 	for name, method := range self.methods {
+
+		//check if method is already set up
+		cont := false
+		for _, key := range keys {
+			if key == name {
+				cont = true
+				break
+			}
+		}
+		if cont {
+			continue
+		}
 
 		thisMethod := method
 

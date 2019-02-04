@@ -8,8 +8,9 @@ import (
 //the file format
 type DML struct {
 
-	//single object is allowed: root must be unambigious
-	Object *astObject `{ @@ }`
+	//next to imports only a single object is allowed: root must be unambigious
+	Imports []*astImport `{ @@ }`
+	Object  *astObject   `{ @@ }`
 }
 
 /* object
@@ -33,6 +34,11 @@ func (self astObject) Print() {
 		fmt.Printf("\t")
 		ass.Print()
 	}
+}
+
+type astImport struct {
+	File  string `"import" @String`
+	Alias string `[ "as" @String ]`
 }
 
 type astAssignment struct {

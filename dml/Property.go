@@ -225,7 +225,21 @@ func (self *propertyHandler) GetProperty(name string) Property {
 
 func (self *propertyHandler) SetupJSProperties(vm *goja.Runtime, obj *goja.Object) error {
 
+	keys := obj.Keys()
+
 	for name, _ := range self.properties {
+
+		//check if proeprty is already set up
+		cont := false
+		for _, key := range keys {
+			if key == name {
+				cont = true
+				break
+			}
+		}
+		if cont {
+			continue
+		}
 
 		var propname string = name
 		getter := vm.ToValue(func(call goja.FunctionCall) goja.Value {

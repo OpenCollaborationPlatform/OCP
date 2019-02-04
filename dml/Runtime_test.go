@@ -145,11 +145,15 @@ func TestDmlFile(t *testing.T) {
 		Convey("Object hirarchy must be established", func() {
 
 			code := `
-				if (Document.children.length != 1) {
+				if (Document.children.length != 2) {
 					throw "It must have exactly 1 child"
 				}
 				if (Document.children[0].id != "DocumentObject") {
 					throw "child access seems not to work"
+				}
+				
+				if (Document.children[1].id != "ImportTest") {
+					throw "Import seems not to work"
 				}
 				if (Document.parent != null) {
 					throw "parent is not null, but should be"
@@ -183,6 +187,34 @@ func TestDmlFile(t *testing.T) {
 			`
 			_, err := rntm.RunJavaScript(code)
 			So(err, ShouldBeNil)
+		})
+
+		Convey("Imported object must be loaded", func() {
+
+			imp, err := rntm.mainObj.GetChildByName("ImportTest")
+			So(err, ShouldBeNil)
+			So(imp, ShouldNotBeNil)
+
+			Convey("and has its own childs correctly setup", func() {
+				impchild, err := imp.GetChildByName("ImportedChild")
+				So(err, ShouldBeNil)
+				So(impchild, ShouldNotBeNil)
+
+				prop := impchild.GetProperty("test")
+				So(prop, ShouldNotBeNil)
+				So(prop.GetValue(), ShouldEqual, 10)
+			})
+
+			Convey("and is extended wiith custom property and child", func() {
+
+				prop := imp.GetProperty("annothertest")
+				So(prop, ShouldNotBeNil)
+				So(prop.GetValue(), ShouldEqual, 4)
+
+				newchild, err := imp.GetChildByName("DefaultChild")
+				So(err, ShouldBeNil)
+				So(newchild, ShouldNotBeNil)
+			})
 		})
 	})
 }

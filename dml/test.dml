@@ -1,4 +1,6 @@
- //comment
+ import "Imported.dml"
+
+//comment
  Data {
     .id: "Document"
 
@@ -27,5 +29,15 @@
 	Data {
 		.id: "DocumentObject"
 		property int test: 10
+	}
+	
+	Imported {
+		.id: "ImportTest"
+		
+		property int annothertest: 4
+		
+		Data {
+			.id: "DefaultChild"
+		}
 	}
 }
