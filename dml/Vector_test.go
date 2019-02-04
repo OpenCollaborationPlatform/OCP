@@ -56,7 +56,7 @@ func TestPODVector(t *testing.T) {
 			length, _ := intvec.Length()
 			So(length, ShouldEqual, 0)
 			code = `toplevel.IntVec.Append(0)`
-			val, err := rntm.RunJavaScript(code)
+			val, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			idx := val.(int64)
 			So(idx, ShouldEqual, 0)
@@ -234,7 +234,7 @@ func TestTypeVector(t *testing.T) {
 			length, _ := intvec.Length()
 			So(length, ShouldEqual, 0)
 			code = `toplevel.TypeVec.AppendNew()`
-			val, err := rntm.RunJavaScript(code)
+			val, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			data, ok := val.(Data)
 			So(ok, ShouldBeTrue)

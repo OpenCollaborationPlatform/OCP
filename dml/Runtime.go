@@ -162,7 +162,10 @@ func (self *Runtime) Parse(reader io.Reader) error {
 //*********************************************************************************
 
 //run arbitrary javascript code on the loaded structure
-func (self *Runtime) RunJavaScript(code string) (interface{}, error) {
+func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) {
+
+	//save the user for processing
+	self.currentUser = user
 
 	state, err := self.preprocess()
 	if err != nil {
@@ -181,7 +184,10 @@ func (self *Runtime) RunJavaScript(code string) (interface{}, error) {
 	return val.Export(), err
 }
 
-func (self *Runtime) CallMethod(path string, method string, args ...interface{}) (interface{}, error) {
+func (self *Runtime) CallMethod(user User, path string, method string, args ...interface{}) (interface{}, error) {
+
+	//save the user for processing
+	self.currentUser = user
 
 	//first check if path is correct and method available
 	obj, err := self.getObjectFromPath(path)
@@ -214,7 +220,10 @@ func (self *Runtime) CallMethod(path string, method string, args ...interface{})
 	return result, err
 }
 
-func (self *Runtime) RegisterEvent(path string, event string, cb EventCallback) error {
+func (self *Runtime) RegisterEvent(user User, path string, event string, cb EventCallback) error {
+
+	//save the user for processing
+	self.currentUser = user
 
 	//first check if path is correct and method available
 	obj, err := self.getObjectFromPath(path)
@@ -229,7 +238,10 @@ func (self *Runtime) RegisterEvent(path string, event string, cb EventCallback) 
 	return evt.RegisterCallback(cb)
 }
 
-func (self *Runtime) ReadProperty(path string, property string) (interface{}, error) {
+func (self *Runtime) ReadProperty(user User, path string, property string) (interface{}, error) {
+
+	//save the user for processing
+	self.currentUser = user
 
 	//first check if path is correct and method available
 	obj, err := self.getObjectFromPath(path)

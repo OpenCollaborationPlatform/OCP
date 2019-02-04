@@ -33,32 +33,32 @@ func TestDmlFile(t *testing.T) {
 		Convey("the properties shall be accessible via js", func() {
 
 			code := `Document.testI`
-			val, err := rntm.RunJavaScript(code)
+			val, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)
 
 			code = `Document.testI = 5`
-			val, err = rntm.RunJavaScript(code)
+			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			value, ok = val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
 
 			code = `Document.testI`
-			val, err = rntm.RunJavaScript(code)
+			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			value, ok = val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
 
 			code = `Document.testI = "hello"`
-			val, err = rntm.RunJavaScript(code)
+			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldNotBeNil)
 
 			code = `Document.testConst = 1`
-			val, err = rntm.RunJavaScript(code)
+			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldNotBeNil)
 		})
 
@@ -74,11 +74,11 @@ func TestDmlFile(t *testing.T) {
 					Document.testE.RegisterCallback(fnc)
 					Document.testE.Emit(2, "hello")
 				`
-			_, err := rntm.RunJavaScript(code)
+			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 
 			code = `Document.testI`
-			val, err := rntm.RunJavaScript(code)
+			val, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
@@ -91,22 +91,22 @@ func TestDmlFile(t *testing.T) {
 			So(value, ShouldEqual, 0)
 
 			code = `Document.testE.Emit("hello", "2")`
-			_, err = rntm.RunJavaScript(code)
+			_, err = rntm.RunJavaScript("", code)
 			So(err, ShouldNotBeNil)
 
 			code = `Document.testB`
-			val, err = rntm.RunJavaScript(code)
+			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			bvalue, ok := val.(bool)
 			So(ok, ShouldBeTrue)
 			So(bvalue, ShouldBeFalse)
 
 			code = `Document.testE2.Emit()`
-			_, err = rntm.RunJavaScript(code)
+			_, err = rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 
 			code = `Document.testB`
-			val, err = rntm.RunJavaScript(code)
+			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			bvalue, ok = val.(bool)
 			So(ok, ShouldBeTrue)
@@ -119,7 +119,7 @@ func TestDmlFile(t *testing.T) {
 					throw "floating point number dosn't work"
 				}
 			`
-			_, err = rntm.RunJavaScript(code)
+			_, err = rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 
 			//testI must be one if the function was called correctly
@@ -135,7 +135,7 @@ func TestDmlFile(t *testing.T) {
 			Document.testFnc(42)
 			Document.testI`
 
-			val, err := rntm.RunJavaScript(code)
+			val, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
@@ -166,7 +166,7 @@ func TestDmlFile(t *testing.T) {
 				}
 				`
 
-			_, err := rntm.RunJavaScript(code)
+			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 		})
 
@@ -185,7 +185,7 @@ func TestDmlFile(t *testing.T) {
 					throw "unable to get correct object from identifier"
 				}
 			`
-			_, err := rntm.RunJavaScript(code)
+			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 		})
 

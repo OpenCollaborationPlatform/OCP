@@ -68,23 +68,22 @@ func TestBasics(t *testing.T) {
 
 			Convey("and is accessible from Javascript.", func() {
 
-				rntm.currentUser = "User3"
 				So(mngr.IsOpen(), ShouldBeFalse)
-				res, err := rntm.RunJavaScript("Transaction.IsOpen()")
+				res, err := rntm.RunJavaScript("User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeFalse)
 
-				_, err = rntm.RunJavaScript("Transaction.Open()")
+				_, err = rntm.RunJavaScript("User3", "Transaction.Open()")
 				So(err, ShouldBeNil)
 				So(mngr.IsOpen(), ShouldBeTrue)
-				res, err = rntm.RunJavaScript("Transaction.IsOpen()")
+				res, err = rntm.RunJavaScript("User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeTrue)
 
-				_, err = rntm.RunJavaScript("Transaction.Close()")
+				_, err = rntm.RunJavaScript("User3", "Transaction.Close()")
 				So(err, ShouldBeNil)
 				So(mngr.IsOpen(), ShouldBeFalse)
-				res, err = rntm.RunJavaScript("Transaction.IsOpen()")
+				res, err = rntm.RunJavaScript("User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeFalse)
 			})
@@ -165,7 +164,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 		Convey("the object structure must be correct", func() {
 
-			val, err := rntm.RunJavaScript("Document.trans.parent.id")
+			val, err := rntm.RunJavaScript("User1", "Document.trans.parent.id")
 			So(err, ShouldBeNil)
 			value, ok := val.(string)
 			So(ok, ShouldBeTrue)
@@ -177,7 +176,7 @@ func TestTransactionBehaviour(t *testing.T) {
 			mngr.Open()
 
 			Convey("all objects with transaction behaviour must be called", func() {
-				res, err := rntm.ReadProperty("Document.result", "value")
+				res, err := rntm.ReadProperty("User1", "Document.result", "value")
 				So(err, ShouldBeNil)
 				str := res.(string)
 				//note: ordering of calls is undefined
@@ -196,14 +195,14 @@ func TestTransactionBehaviour(t *testing.T) {
 			rntm.currentUser = "User1"
 			err := mngr.Open()
 			So(err, ShouldBeNil)
-			_, err = rntm.RunJavaScript("Document.result.value = ''")
+			_, err = rntm.RunJavaScript("User1", "Document.result.value = ''")
 			So(err, ShouldBeNil)
 			err = mngr.Add(rntm.mainObj)
 			So(err, ShouldBeNil)
 
 			Convey("only its participation event must have been called", func() {
 
-				res, err := rntm.ReadProperty("Document.result", "value")
+				res, err := rntm.ReadProperty("User1", "Document.result", "value")
 				So(err, ShouldBeNil)
 				str := res.(string)
 				So(str, ShouldEqual, "p1")
@@ -321,7 +320,7 @@ func TestTransactionAbort(t *testing.T) {
 
 			code = `Document.p = 2; Document.DocumentObject.p=2;`
 			rntm.transactions.Open()
-			_, err := rntm.RunJavaScript(code)
+			_, err := rntm.RunJavaScript("User1", code)
 			So(err, ShouldBeNil)
 			So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 2)
 			do, _ := rntm.mainObj.GetChildByName("DocumentObject")
@@ -352,7 +351,7 @@ func TestTransactionAbort(t *testing.T) {
 			Convey("Changing data of non-transactino subobject should work", func() {
 
 				code = `Document.DocumentObject.p=3;`
-				_, err := rntm.RunJavaScript(code)
+				_, err := rntm.RunJavaScript("User1", code)
 
 				So(err, ShouldBeNil)
 				So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 2)
@@ -363,7 +362,7 @@ func TestTransactionAbort(t *testing.T) {
 			Convey("but changing data of toplevel should fail", func() {
 
 				code = `Document.p=4;`
-				_, err := rntm.RunJavaScript(code)
+				_, err := rntm.RunJavaScript("User1", code)
 				So(err, ShouldNotBeNil)
 				So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 2)
 				do, _ := rntm.mainObj.GetChildByName("DocumentObject")
@@ -386,7 +385,7 @@ func TestTransactionAbort(t *testing.T) {
 				So(len(obj), ShouldEqual, 0)
 
 				code = `Document.TransDocumentObject.p=5; Document.FailTransDocumentObject.p = 5`
-				_, err := rntm.RunJavaScript(code)
+				_, err := rntm.RunJavaScript("User1", code)
 				So(err, ShouldNotBeNil)
 
 				Convey("Should not have changed the data", func() {
@@ -416,7 +415,7 @@ func TestTransactionAbort(t *testing.T) {
 				So(len(keys), ShouldEqual, 0)
 
 				code = `Transaction.Open(); Document.FailTransDocument.p = 5`
-				_, err = rntm.RunJavaScript(code)
+				_, err = rntm.RunJavaScript("User1", code)
 
 				Convey("Should be an error", func() {
 					So(err, ShouldNotBeNil)
