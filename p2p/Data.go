@@ -78,6 +78,44 @@ func (f *file) toDict() Dict {
 	return dict
 }
 
+type directory struct {
+	Files       []file
+	Directories []directory
+	Hash        [32]byte
+}
+
+func (self *directory) name() string {
+	return base58.Encode(self.Hash[:])
+}
+
+func (self *directory) calculateHash() [32]byte {
+
+	//data, err := json.Marshal(self.Blocks)
+	//if err != nil {
+	var data [32]byte
+	return data
+	//}
+	//return sha256.Sum256(data)
+}
+
+func (self *directory) toDict() Dict {
+	var dict = make(Dict)
+	dict["Hash"] = self.name()
+	dirs := make([]Dict, len(self.Directories))
+	for i, dir := range self.Directories {
+		dirs[i] = dir.toDict()
+	}
+	dict["Directories"] = dirs
+
+	files := make([]Dict, len(self.Files))
+	for i, file := range self.Files {
+		files[i] = file.toDict()
+	}
+	dict["Files"] = files
+
+	return dict
+}
+
 func blockFromDict(val map[string]interface{}) (block, error) {
 
 	hashSlice, ok := val["Hash"]

@@ -172,3 +172,21 @@ func (self *Datastore) Close() {
 	//close the boltdb
 	self.boltdb.Close()
 }
+
+//creates a backup of the datastore in the given folder. If it does not exist it
+//will be created
+func (self *Datastore) Backup(path string) error {
+
+	//ensure folder exists
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.Mkdir(path, mode)
+	}
+
+	//copy over boltdb
+	boltdbpath := filepath.Join(path, "bolt.db")
+	err := self.boltdb.View(func(tx *bolt.Tx) error {
+		return tx.CopyFile(boltdbpath, 0600)
+	})
+
+	return err
+}
