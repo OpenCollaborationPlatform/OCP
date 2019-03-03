@@ -49,7 +49,7 @@ const (
 	VERSIONS uint64 = math.MaxUint64 - 11
 )
 
-func NewValueVersionedDatabase(db *bolt.DB) (*ValueVersionedDatabase, error) {
+func NewValueVersionedDatabase(db *boltWrapper) (*ValueVersionedDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
 	db.Update(func(tx *bolt.Tx) error {
@@ -62,7 +62,7 @@ func NewValueVersionedDatabase(db *bolt.DB) (*ValueVersionedDatabase, error) {
 
 //implements the database interface
 type ValueVersionedDatabase struct {
-	db    *bolt.DB
+	db    *boltWrapper
 	dbkey []byte
 }
 
@@ -128,7 +128,7 @@ func (self ValueVersionedDatabase) Close() {
 //The store itself is very simple, as all the access logic will be in the set type
 //this is only to manage the existing entries
 type ValueVersionedSet struct {
-	db     *bolt.DB
+	db     *boltWrapper
 	dbkey  []byte
 	setkey [][]byte
 }
@@ -910,7 +910,7 @@ func (self *ValueVersionedSet) getSetKey() []byte {
  * ********************************************************************************
  */
 type ValueVersioned struct {
-	db     *bolt.DB
+	db     *boltWrapper
 	dbkey  []byte
 	setkey [][]byte
 	key    []byte

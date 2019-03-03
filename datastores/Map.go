@@ -21,7 +21,7 @@ bucket(SetKey) [
 ]
 */
 
-func NewMapDatabase(db *bolt.DB) (*MapDatabase, error) {
+func NewMapDatabase(db *boltWrapper) (*MapDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
 	db.Update(func(tx *bolt.Tx) error {
@@ -34,7 +34,7 @@ func NewMapDatabase(db *bolt.DB) (*MapDatabase, error) {
 
 //implements the database interface
 type MapDatabase struct {
-	db    *bolt.DB
+	db    *boltWrapper
 	dbkey []byte
 }
 
@@ -93,7 +93,7 @@ func (self MapDatabase) Close() {
 }
 
 type MapSet struct {
-	db     *bolt.DB
+	db     *boltWrapper
 	dbkey  []byte
 	setkey []byte
 }
@@ -220,7 +220,7 @@ type Map struct {
 	kvset ValueSet
 }
 
-func newMap(db *bolt.DB, dbkey []byte, mapkeys [][]byte) Map {
+func newMap(db *boltWrapper, dbkey []byte, mapkeys [][]byte) Map {
 
 	kv := ValueSet{db, dbkey, mapkeys}
 	return Map{kv}

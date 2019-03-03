@@ -25,7 +25,7 @@ bucket(SetKey) [
 ]
 */
 
-func NewListVersionedDatabase(db *bolt.DB) (*ListVersionedDatabase, error) {
+func NewListVersionedDatabase(db *boltWrapper) (*ListVersionedDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
 	db.Update(func(tx *bolt.Tx) error {
@@ -38,7 +38,7 @@ func NewListVersionedDatabase(db *bolt.DB) (*ListVersionedDatabase, error) {
 
 //ilistlements the database interface
 type ListVersionedDatabase struct {
-	db    *bolt.DB
+	db    *boltWrapper
 	dbkey []byte
 }
 
@@ -107,7 +107,7 @@ func (self ListVersionedDatabase) Close() {
 //The store itself is very silistle, as all the access logic will be in the set type
 //this is only to manage the existing entries
 type ListVersionedSet struct {
-	db     *bolt.DB
+	db     *boltWrapper
 	dbkey  []byte
 	setkey []byte
 }
@@ -600,7 +600,7 @@ type ListVersioned struct {
 	kvset ValueVersionedSet
 }
 
-func newListVersioned(db *bolt.DB, dbkey []byte, listVersionedkeys [][]byte) ListVersioned {
+func newListVersioned(db *boltWrapper, dbkey []byte, listVersionedkeys [][]byte) ListVersioned {
 
 	kv := ValueVersionedSet{db, dbkey, listVersionedkeys}
 	return ListVersioned{kv}

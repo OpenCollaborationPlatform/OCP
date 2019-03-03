@@ -33,7 +33,7 @@ func isInvalid(val []byte) bool {
 	return bytes.Equal(val, INVALID_VALUE)
 }
 
-func NewValueDatabase(db *bolt.DB) (*ValueDatabase, error) {
+func NewValueDatabase(db *boltWrapper) (*ValueDatabase, error) {
 
 	//make sure key value store exists in bolts db:
 	db.Update(func(tx *bolt.Tx) error {
@@ -46,7 +46,7 @@ func NewValueDatabase(db *bolt.DB) (*ValueDatabase, error) {
 
 //implements the database interface
 type ValueDatabase struct {
-	db    *bolt.DB
+	db    *boltWrapper
 	dbkey []byte
 }
 
@@ -108,7 +108,7 @@ func (self ValueDatabase) Close() {
 //The store itself is very simple, as all the access logic will be in the set type
 //this is only to manage the existing entries
 type ValueSet struct {
-	db     *bolt.DB
+	db     *boltWrapper
 	dbkey  []byte
 	setkey [][]byte
 }
@@ -268,7 +268,7 @@ func (self *ValueSet) getKeys() ([][]byte, error) {
  * ********************************************************************************
  */
 type Value struct {
-	db     *bolt.DB
+	db     *boltWrapper
 	dbkey  []byte
 	setkey [][]byte
 	key    []byte

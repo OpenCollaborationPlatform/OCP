@@ -21,7 +21,7 @@ bucket(SetKey) [
 ]
 */
 
-func NewListDatabase(db *bolt.DB) (*ListDatabase, error) {
+func NewListDatabase(db *boltWrapper) (*ListDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
 	err := db.Update(func(tx *bolt.Tx) error {
@@ -38,7 +38,7 @@ func NewListDatabase(db *bolt.DB) (*ListDatabase, error) {
 
 //implements the database interface
 type ListDatabase struct {
-	db    *bolt.DB
+	db    *boltWrapper
 	dbkey []byte
 }
 
@@ -93,7 +93,7 @@ func (self ListDatabase) Close() {
 }
 
 type ListSet struct {
-	db     *bolt.DB
+	db     *boltWrapper
 	dbkey  []byte
 	setkey []byte
 }
@@ -220,7 +220,7 @@ type List struct {
 	kvset ValueSet
 }
 
-func newList(db *bolt.DB, dbkey []byte, listkeys [][]byte) List {
+func newList(db *boltWrapper, dbkey []byte, listkeys [][]byte) List {
 
 	kv := ValueSet{db, dbkey, listkeys}
 	return List{kv}

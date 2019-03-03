@@ -79,58 +79,59 @@ func NewDatastore(path string) (*Datastore, error) {
 
 	//build the default blt db
 	path = filepath.Join(path, "bolt.db")
-	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
+	db_, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to open bolt db: %s", path)
 	}
+	bolt := boltWrapper{db_, nil}
 
-	value, err := NewValueDatabase(db)
+	value, err := NewValueDatabase(&bolt)
 	if err != nil {
-		db.Close()
+		db_.Close()
 		return nil, utils.StackError(err, "Unable to open value database")
 	}
 	dbs[ValueType] = value
 
-	valueVersioned, err := NewValueVersionedDatabase(db)
+	valueVersioned, err := NewValueVersionedDatabase(&bolt)
 	if err != nil {
-		db.Close()
+		db_.Close()
 		return nil, utils.StackError(err, "Unable to open versioned value database")
 	}
 	vdbs[ValueType] = valueVersioned
 
-	map_, err := NewMapDatabase(db)
+	map_, err := NewMapDatabase(&bolt)
 	if err != nil {
-		db.Close()
+		db_.Close()
 		return nil, utils.StackError(err, "Unable to open map database")
 	}
 	dbs[MapType] = map_
 
-	mapVersioned, err := NewMapVersionedDatabase(db)
+	mapVersioned, err := NewMapVersionedDatabase(&bolt)
 	if err != nil {
-		db.Close()
+		db_.Close()
 		return nil, utils.StackError(err, "Unable to open versioned map database")
 	}
 	vdbs[MapType] = mapVersioned
 
-	list, err := NewListDatabase(db)
+	list, err := NewListDatabase(&bolt)
 	if err != nil {
-		db.Close()
+		db_.Close()
 		return nil, utils.StackError(err, "Unable to open list database")
 	}
 	dbs[ListType] = list
 
-	listVersioned, err := NewListVersionedDatabase(db)
+	listVersioned, err := NewListVersionedDatabase(&bolt)
 	if err != nil {
-		db.Close()
+		db_.Close()
 		return nil, utils.StackError(err, "Unable to open versioned list database")
 	}
 	vdbs[ListType] = listVersioned
 
-	return &Datastore{db, dbs, vdbs}, nil
+	return &Datastore{&bolt, dbs, vdbs}, nil
 }
 
 type Datastore struct {
-	boltdb *bolt.DB
+	boltdb *boltWrapper
 	dbs    map[StorageType]DataBase
 	vDbs   map[StorageType]DataBase
 }
@@ -160,6 +161,18 @@ func (self *Datastore) GetOrCreateSet(kind StorageType, versioned bool, set [32]
 	return db.GetOrCreateSet(set), nil
 }
 
+func (self *Datastore) Begin() error {
+	return self.boltdb.Begin()
+}
+
+func (self *Datastore) Commit() error {
+	return self.boltdb.Commit()
+}
+
+func (self *Datastore) Rollback() error {
+	return self.boltdb.Rollback()
+}
+
 func (self *Datastore) Close() {
 
 	for _, store := range self.dbs {
@@ -170,7 +183,7 @@ func (self *Datastore) Close() {
 	}
 
 	//close the boltdb
-	self.boltdb.Close()
+	self.boltdb.db.Close()
 }
 
 //creates a backup of the datastore in the given folder. If it does not exist it
@@ -179,12 +192,12 @@ func (self *Datastore) Backup(path string) error {
 
 	//ensure folder exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		os.Mkdir(path, mode)
+		os.Mkdir(path, 0600)
 	}
 
 	//copy over boltdb
 	boltdbpath := filepath.Join(path, "bolt.db")
-	err := self.boltdb.View(func(tx *bolt.Tx) error {
+	err := self.boltdb.db.View(func(tx *bolt.Tx) error {
 		return tx.CopyFile(boltdbpath, 0600)
 	})
 

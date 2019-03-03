@@ -26,7 +26,7 @@ bucket(SetKey) [
 ]
 */
 
-func NewMapVersionedDatabase(db *bolt.DB) (*MapVersionedDatabase, error) {
+func NewMapVersionedDatabase(db *boltWrapper) (*MapVersionedDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
 	db.Update(func(tx *bolt.Tx) error {
@@ -39,7 +39,7 @@ func NewMapVersionedDatabase(db *bolt.DB) (*MapVersionedDatabase, error) {
 
 //implements the database interface
 type MapVersionedDatabase struct {
-	db    *bolt.DB
+	db    *boltWrapper
 	dbkey []byte
 }
 
@@ -108,7 +108,7 @@ func (self MapVersionedDatabase) Close() {
 //The store itself is very simple, as all the access logic will be in the set type
 //this is only to manage the existing entries
 type MapVersionedSet struct {
-	db     *bolt.DB
+	db     *boltWrapper
 	dbkey  []byte
 	setkey []byte
 }
@@ -588,7 +588,7 @@ type MapVersioned struct {
 	kvset ValueVersionedSet
 }
 
-func newMapVersioned(db *bolt.DB, dbkey []byte, mapVersionedkeys [][]byte) MapVersioned {
+func newMapVersioned(db *boltWrapper, dbkey []byte, mapVersionedkeys [][]byte) MapVersioned {
 
 	kv := ValueVersionedSet{db, dbkey, mapVersionedkeys}
 	return MapVersioned{kv}
