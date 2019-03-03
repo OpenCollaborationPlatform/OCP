@@ -13,7 +13,7 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestBasics(t *testing.T) {
+func TestTransactionBasics(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
@@ -32,6 +32,9 @@ func TestBasics(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			Convey("which allows creating transactions", func() {
+
+				store.Begin()
+				defer store.Commit()
 
 				rntm.currentUser = "User1"
 				So(mngr.IsOpen(), ShouldBeFalse)
@@ -56,6 +59,9 @@ func TestBasics(t *testing.T) {
 
 			Convey("as well as deleting them", func() {
 
+				store.Begin()
+				defer store.Commit()
+
 				rntm.currentUser = "User1"
 				_, err := mngr.getOrCreateTransaction()
 				So(err, ShouldBeNil)
@@ -68,21 +74,27 @@ func TestBasics(t *testing.T) {
 
 			Convey("and is accessible from Javascript.", func() {
 
+				store.Begin()
 				So(mngr.IsOpen(), ShouldBeFalse)
+				store.Rollback()
 				res, err := rntm.RunJavaScript("User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeFalse)
 
 				_, err = rntm.RunJavaScript("User3", "Transaction.Open()")
 				So(err, ShouldBeNil)
+				store.Begin()
 				So(mngr.IsOpen(), ShouldBeTrue)
+				store.Rollback()
 				res, err = rntm.RunJavaScript("User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeTrue)
 
 				_, err = rntm.RunJavaScript("User3", "Transaction.Close()")
 				So(err, ShouldBeNil)
+				store.Begin()
 				So(mngr.IsOpen(), ShouldBeFalse)
+				store.Rollback()
 				res, err = rntm.RunJavaScript("User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeFalse)
@@ -173,7 +185,9 @@ func TestTransactionBehaviour(t *testing.T) {
 
 		Convey("On opening a transaction", func() {
 
+			store.Begin()
 			mngr.Open()
+			store.Commit()
 
 			Convey("all objects with transaction behaviour must be called", func() {
 				res, err := rntm.ReadProperty("User1", "Document.result", "value")
@@ -193,11 +207,15 @@ func TestTransactionBehaviour(t *testing.T) {
 		Convey("Adding the main object to the transaction", func() {
 
 			rntm.currentUser = "User1"
+			store.Begin()
 			err := mngr.Open()
+			store.Commit()
 			So(err, ShouldBeNil)
 			_, err = rntm.RunJavaScript("User1", "Document.result.value = ''")
 			So(err, ShouldBeNil)
+			store.Begin()
 			err = mngr.Add(rntm.mainObj)
+			store.Commit()
 			So(err, ShouldBeNil)
 
 			Convey("only its participation event must have been called", func() {
@@ -209,6 +227,9 @@ func TestTransactionBehaviour(t *testing.T) {
 			})
 
 			Convey("and adding it to annother transaction must fail", func() {
+
+				store.Begin()
+				defer store.Commit()
 
 				rntm.currentUser = "User2"
 				err := mngr.Add(rntm.mainObj)
@@ -292,9 +313,15 @@ func TestTransactionAbort(t *testing.T) {
 		rntm.currentUser = "User1"
 		err := rntm.Parse(strings.NewReader(code))
 		So(err, ShouldBeNil)
+		store.Begin()
 		So(rntm.transactions.Open(), ShouldBeNil)
+		store.Commit()
 
 		Convey("leads to a single transaction in the manager.", func() {
+
+			store.Begin()
+			defer store.Rollback()
+
 			mngr := rntm.transactions
 			keys, err := mngr.transactions.GetKeys()
 
@@ -303,6 +330,9 @@ func TestTransactionAbort(t *testing.T) {
 		})
 
 		Convey("Closing the transaction", func() {
+
+			store.Begin()
+			defer store.Commit()
 
 			mngr := rntm.transactions
 			mngr.Close()
@@ -319,15 +349,23 @@ func TestTransactionAbort(t *testing.T) {
 		Convey("Changing the objects properties must work initially", func() {
 
 			code = `Document.p = 2; Document.DocumentObject.p=2;`
+			store.Begin()
 			rntm.transactions.Open()
+			store.Commit()
+
 			_, err := rntm.RunJavaScript("User1", code)
 			So(err, ShouldBeNil)
+
+			store.Begin()
 			So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 2)
 			do, _ := rntm.mainObj.GetChildByName("DocumentObject")
 			So(do.GetProperty("p").GetValue(), ShouldEqual, 2)
+			store.Rollback()
 
 			Convey("and lead to an open transaction with the relevant object included", func() {
 
+				store.Begin()
+				defer store.Rollback()
 				mngr := rntm.transactions
 				keys, _ := mngr.transactions.GetKeys()
 				So(len(keys), ShouldEqual, 1)
@@ -345,18 +383,22 @@ func TestTransactionAbort(t *testing.T) {
 
 		Convey("Setting abort to true", func() {
 
+			store.Begin()
 			rntm.mainObj.GetProperty("abort").SetValue(true)
 			rntm.mainObj.FixStateAsVersion()
+			store.Commit()
 
 			Convey("Changing data of non-transactino subobject should work", func() {
 
 				code = `Document.DocumentObject.p=3;`
 				_, err := rntm.RunJavaScript("User1", code)
-
 				So(err, ShouldBeNil)
+
+				store.Begin()
 				So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 2)
 				do, _ := rntm.mainObj.GetChildByName("DocumentObject")
 				So(do.GetProperty("p").GetValue(), ShouldEqual, 3)
+				store.Commit()
 			})
 
 			Convey("but changing data of toplevel should fail", func() {
@@ -364,46 +406,57 @@ func TestTransactionAbort(t *testing.T) {
 				code = `Document.p=4;`
 				_, err := rntm.RunJavaScript("User1", code)
 				So(err, ShouldNotBeNil)
+
+				store.Begin()
 				So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 2)
 				do, _ := rntm.mainObj.GetChildByName("DocumentObject")
 				So(do.GetProperty("p").GetValue(), ShouldEqual, 3)
+				store.Rollback()
 
 				Convey("And transaction should have no object", func() {
+					store.Begin()
 					mngr := rntm.transactions
 					trans, _ := mngr.getTransaction()
 					obj := trans.Objects()
 					So(len(obj), ShouldEqual, 0)
+					store.Rollback()
 				})
 			})
 
 			Convey("Failing data change after successful transaction subobject", func() {
 
 				//initially 0 objects required
+				store.Begin()
 				mngr := rntm.transactions
 				trans, _ := mngr.getTransaction()
 				obj := trans.Objects()
 				So(len(obj), ShouldEqual, 0)
+				store.Commit()
 
 				code = `Document.TransDocumentObject.p=5; Document.FailTransDocumentObject.p = 5`
 				_, err := rntm.RunJavaScript("User1", code)
 				So(err, ShouldNotBeNil)
 
 				Convey("Should not have changed the data", func() {
+					store.Begin()
 					So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 2)
 					tdo, _ := rntm.mainObj.GetChildByName("TransDocumentObject")
 					So(tdo.GetProperty("p").GetValue(), ShouldEqual, 1)
 					tdo, _ = rntm.mainObj.GetChildByName("FailTransDocumentObject")
 					So(tdo.GetProperty("p").GetValue(), ShouldEqual, 1)
+					store.Rollback()
 				})
 
 				Convey("and transaction should have no object", func() {
+					store.Begin()
 					obj := trans.Objects()
 					So(len(obj), ShouldEqual, 0)
+					store.Rollback()
 				})
 			})
 
 			Convey("Opening a transaction directly bevore failing data change", func() {
-
+				store.Begin()
 				mngr := rntm.transactions
 
 				mngr.Close()
@@ -413,6 +466,7 @@ func TestTransactionAbort(t *testing.T) {
 				So(err, ShouldNotBeNil)
 				keys, _ := mngr.transactions.GetKeys()
 				So(len(keys), ShouldEqual, 0)
+				store.Commit()
 
 				code = `Transaction.Open(); Document.FailTransDocument.p = 5`
 				_, err = rntm.RunJavaScript("User1", code)
@@ -422,11 +476,12 @@ func TestTransactionAbort(t *testing.T) {
 				})
 
 				Convey("and should not lead to an open transaction", func() {
-
+					store.Begin()
 					_, err := mngr.getTransaction()
 					So(err, ShouldNotBeNil)
 					keys, _ := mngr.transactions.GetKeys()
 					So(len(keys), ShouldEqual, 0)
+					store.Rollback()
 				})
 			})
 		})

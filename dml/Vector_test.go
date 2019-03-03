@@ -51,20 +51,26 @@ func TestPODVector(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		Convey("Adding to int vector should work", func() {
+			store.Begin()
 			child, _ := rntm.mainObj.GetChildByName("IntVec")
 			intvec := child.(*vector)
 			length, _ := intvec.Length()
 			So(length, ShouldEqual, 0)
+			store.Rollback()
 			code = `toplevel.IntVec.Append(0)`
 			val, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 			idx := val.(int64)
 			So(idx, ShouldEqual, 0)
+			store.Begin()
 			length, _ = intvec.Length()
+			store.Rollback()
 			So(length, ShouldEqual, 1)
 		})
 
 		Convey("Setting and reading entries of vector shall work", func() {
+			store.Begin()
+			defer store.Commit()
 
 			child, _ := rntm.mainObj.GetChildByName("StringVec")
 			strvec := child.(*vector)
@@ -91,6 +97,9 @@ func TestPODVector(t *testing.T) {
 		})
 
 		Convey("Moving Values within the vector shall work", func() {
+
+			store.Begin()
+			defer store.Commit()
 
 			child, _ := rntm.mainObj.GetChildByName("IntVec")
 			vec := child.(*vector)
@@ -126,6 +135,9 @@ func TestPODVector(t *testing.T) {
 
 		Convey("Deleting values must be supported", func() {
 
+			store.Begin()
+			defer store.Commit()
+
 			child, _ := rntm.mainObj.GetChildByName("IntVec")
 			vec := child.(*vector)
 			So(vec.Remove(1), ShouldBeNil)
@@ -153,6 +165,9 @@ func TestPODVector(t *testing.T) {
 
 		Convey("Inserting works on each position (start, end , inbetween)", func() {
 
+			store.Begin()
+			defer store.Commit()
+
 			child, _ := rntm.mainObj.GetChildByName("FloatVec")
 			vec := child.(*vector)
 
@@ -179,6 +194,9 @@ func TestPODVector(t *testing.T) {
 		})
 
 		Convey("And swapping entries is a thing", func() {
+
+			store.Begin()
+			defer store.Commit()
 
 			child, _ := rntm.mainObj.GetChildByName("FloatVec")
 			vec := child.(*vector)
@@ -228,17 +246,22 @@ func TestTypeVector(t *testing.T) {
 
 		Convey("Adding to type vector should work", func() {
 
+			store.Begin()
 			child, _ := rntm.mainObj.GetChildByName("TypeVec")
 			intvec := child.(*vector)
 
 			length, _ := intvec.Length()
 			So(length, ShouldEqual, 0)
+			store.Commit()
 			code = `toplevel.TypeVec.AppendNew()`
 			val, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
+
+			store.Begin()
 			data, ok := val.(Data)
 			So(ok, ShouldBeTrue)
 			So(data.HasProperty("test"), ShouldBeTrue)
+			store.Commit()
 		})
 	})
 }

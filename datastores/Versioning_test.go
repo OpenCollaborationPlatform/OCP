@@ -56,13 +56,15 @@ func TestVersioning(t *testing.T) {
 				So(mp.Write(1, "test"), ShouldBeNil)
 				So(mp.HasKey(1), ShouldBeTrue)
 
-				So(mngr.HasUpdates(), ShouldBeTrue)
+				has, _ := mngr.HasUpdates()
+				So(has, ShouldBeTrue)
 				version, err := mngr.FixStateAsVersion()
 				So(err, ShouldBeNil)
 				So(uint64(version), ShouldEqual, 1)
-				So(mngr.HasUpdates(), ShouldBeFalse)
+				has, _ = mngr.HasUpdates()
+				So(has, ShouldBeFalse)
 
-				has, _ := vset.HasUpdates()
+				has, _ = vset.HasUpdates()
 				So(has, ShouldBeFalse)
 				has, _ = mset.HasUpdates()
 				So(has, ShouldBeFalse)
@@ -84,8 +86,9 @@ func TestVersioning(t *testing.T) {
 
 				So(value.Write(12), ShouldBeNil)
 
-				So(mngr.HasUpdates(), ShouldBeTrue)
-				has, _ := vset.HasUpdates()
+				has, _ := mngr.HasUpdates()
+				So(has, ShouldBeTrue)
+				has, _ = vset.HasUpdates()
 				So(has, ShouldBeTrue)
 				has, err = mset.HasUpdates()
 				So(err, ShouldBeNil)
@@ -93,7 +96,8 @@ func TestVersioning(t *testing.T) {
 				version, err := mngr.FixStateAsVersion()
 				So(err, ShouldBeNil)
 				So(uint64(version), ShouldEqual, 2)
-				So(mngr.HasUpdates(), ShouldBeFalse)
+				has, _ = mngr.HasUpdates()
+				So(has, ShouldBeFalse)
 
 				v, err := vset.GetCurrentVersion()
 				So(err, ShouldBeNil)

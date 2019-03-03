@@ -179,7 +179,11 @@ func (self transaction) Commit() error {
 	}
 	listSet := set.(*datastore.ListVersionedSet)
 
-	if listSet.HasUpdates() {
+	has, err := listSet.HasUpdates()
+	if err != nil {
+		return utils.StackError(err, "Unable to check list for new updates")
+	}
+	if has {
 		_, err := listSet.FixStateAsVersion()
 		if err != nil {
 			return utils.StackError(err, "Unable to commit transaction: cannot versionize list")
@@ -193,7 +197,11 @@ func (self transaction) Commit() error {
 	}
 	valueSet := set.(*datastore.ValueVersionedSet)
 
-	if valueSet.HasUpdates() {
+	has, err = valueSet.HasUpdates()
+	if err != nil {
+		return utils.StackError(err, "Unable to check value for new updates")
+	}
+	if has {
 		_, err := valueSet.FixStateAsVersion()
 		if err != nil {
 			return utils.StackError(err, "Unable to commit transaction cannot versionize value")
@@ -212,7 +220,11 @@ func (self transaction) Rollback() error {
 	}
 	listSet := set.(*datastore.ListVersionedSet)
 
-	if listSet.HasUpdates() {
+	has, err := listSet.HasUpdates()
+	if err != nil {
+		return utils.StackError(err, "Unable to check list for new updates")
+	}
+	if has {
 		listSet.ResetHead()
 	}
 
@@ -223,7 +235,11 @@ func (self transaction) Rollback() error {
 	}
 	valueSet := set.(*datastore.ValueVersionedSet)
 
-	if valueSet.HasUpdates() {
+	has, err = valueSet.HasUpdates()
+	if err != nil {
+		return utils.StackError(err, "Unable to check value for new updates")
+	}
+	if has {
 		valueSet.ResetHead()
 	}
 	return nil
@@ -260,7 +276,11 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 	}
 
 	//check in initial version if required
-	if mapSet.HasUpdates() {
+	has, err := mapSet.HasUpdates()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to check map for new updates")
+	}
+	if has {
 		mapSet.FixStateAsVersion()
 	}
 
@@ -529,7 +549,11 @@ func (self *TransactionManager) Commit() error {
 	}
 
 	//commit ourself
-	if self.transactions.HasUpdates() {
+	has, err := self.transactions.HasUpdates()
+	if err != nil {
+		return utils.StackError(err, "Unable to check transactions for new updates")
+	}
+	if has {
 		version, err := self.mapset.FixStateAsVersion()
 		if err != nil {
 			return utils.StackError(err, "Unable to commit transaction manager")
@@ -564,7 +588,11 @@ func (self *TransactionManager) Rollback() error {
 	}
 
 	//rollback ourself
-	if self.transactions.HasUpdates() {
+	has, err := self.transactions.HasUpdates()
+	if err != nil {
+		return utils.StackError(err, "Unable to check transaction list for new updates")
+	}
+	if has {
 		self.mapset.ResetHead()
 	}
 

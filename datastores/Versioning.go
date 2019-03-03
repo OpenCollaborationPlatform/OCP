@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"CollaborationNode/utils"
 	"fmt"
 	"math"
 
@@ -118,29 +119,38 @@ func (self *VersionManagerImp) collectSets() []VersionedSet {
 	return sets
 }
 
-func (self *VersionManagerImp) HasUpdates() bool {
+func (self *VersionManagerImp) HasUpdates() (bool, error) {
 
 	//if we have no version yet we have updates to allow to come back to default
-	updates := !self.HasVersions()
+	ups, err := self.HasVersions()
+	if err != nil {
+		return false, utils.StackError(err, "Unable to check for versions and")
+	}
 
+	updates := !ups
 	//if we already have versions check the individual sets
 	if !updates {
 
 		sets := self.collectSets()
 		for _, set := range sets {
-			if has, _ := set.HasUpdates(); has {
-				return true
+			has, err := set.HasUpdates()
+			if err != nil {
+				return false, utils.StackError(err, "Unable to check for updates")
+			}
+
+			if has {
+				return true, nil
 			}
 		}
 	}
 
-	return updates
+	return updates, nil
 }
 
-func (self *VersionManagerImp) HasVersions() bool {
+func (self *VersionManagerImp) HasVersions() (bool, error) {
 
-	var versions bool
-	self.store.boltdb.View(func(tx *bolt.Tx) error {
+	var versions bool = false
+	err := self.store.boltdb.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("VersionManager"))
 		bucket = bucket.Bucket(self.key[:])
@@ -148,15 +158,19 @@ func (self *VersionManagerImp) HasVersions() bool {
 		return nil
 	})
 
-	return versions
+	return versions, err
 }
 
-func (self *VersionManagerImp) ResetHead() {
+func (self *VersionManagerImp) ResetHead() error {
 
 	sets := self.collectSets()
 	for _, set := range sets {
-		set.ResetHead()
+		err := set.ResetHead()
+		if err != nil {
+			return utils.StackError(err, "Unable to reset head")
+		}
 	}
+	return nil
 }
 
 func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {

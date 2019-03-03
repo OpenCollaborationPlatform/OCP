@@ -37,6 +37,9 @@ type CreatorFunc func(name string, parent identifier, rntm *Runtime) Object
 
 func NewRuntime(ds *datastore.Datastore) *Runtime {
 
+	ds.Begin()
+	defer ds.Commit()
+
 	//js runtime with console support
 	js := goja.New()
 	new(require.Registry).Enable(js)
@@ -105,6 +108,9 @@ type Runtime struct {
 //Parses the dml code and setups the full structure
 func (self *Runtime) Parse(reader io.Reader) error {
 
+	self.datastore.Begin()
+	defer self.datastore.Commit()
+
 	//no double loading
 	if self.ready == true {
 		return fmt.Errorf("Runtime is already setup")
@@ -150,7 +156,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 
 	//commit objects which are totally new (so they have no updates initially)
 	for _, obj := range self.objects {
-		if obj.HasUpdates() {
+		if has, _ := obj.HasUpdates(); has {
 			obj.FixStateAsVersion()
 		}
 	}
@@ -163,6 +169,9 @@ func (self *Runtime) Parse(reader io.Reader) error {
 
 //run arbitrary javascript code on the loaded structure
 func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) {
+
+	self.datastore.Begin()
+	defer self.datastore.Commit()
 
 	//save the user for processing
 	self.currentUser = user
@@ -185,6 +194,9 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 }
 
 func (self *Runtime) CallMethod(user User, path string, method string, args ...interface{}) (interface{}, error) {
+
+	self.datastore.Begin()
+	defer self.datastore.Commit()
 
 	//save the user for processing
 	self.currentUser = user
@@ -239,6 +251,9 @@ func (self *Runtime) RegisterEvent(user User, path string, event string, cb Even
 }
 
 func (self *Runtime) ReadProperty(user User, path string, property string) (interface{}, error) {
+
+	self.datastore.Begin()
+	defer self.datastore.Commit()
 
 	//save the user for processing
 	self.currentUser = user
@@ -309,7 +324,11 @@ func (self *Runtime) preprocess() (map[identifier]datastore.VersionID, error) {
 	for _, obj := range self.objects {
 
 		//check if there are versions. If not we need to make sure the first one is created
-		if !obj.HasVersions() {
+		has, err := obj.HasVersions()
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to check object for existing versions")
+		}
+		if has {
 			_, err := obj.FixStateAsVersion()
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to create initial version of object for preprocessing")
@@ -337,7 +356,11 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 
 		//check all objects if anything has changed
 		for _, obj := range self.objects {
-			if obj.HasUpdates() {
+			has, err := obj.HasUpdates()
+			if err != nil {
+				return utils.StackError(err, "Unable to check object for new updates")
+			}
+			if has {
 
 				//handle transaction behaviour
 				if obj.HasBehaviour("Transaction") {

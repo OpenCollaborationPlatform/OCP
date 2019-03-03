@@ -85,8 +85,10 @@ func TestDmlFile(t *testing.T) {
 			So(value, ShouldEqual, 0)
 
 			//check direct go access
+			store.Begin()
 			obj := rntm.mainObj
 			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
+			store.Rollback()
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 0)
 
@@ -123,8 +125,10 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			//testI must be one if the function was called correctly
+			store.Begin()
 			obj = rntm.mainObj
 			value, ok = obj.GetProperty(`testI`).GetValue().(int64)
+			store.Rollback()
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)
 		})
@@ -202,6 +206,8 @@ func TestDmlFile(t *testing.T) {
 
 				prop := impchild.GetProperty("test")
 				So(prop, ShouldNotBeNil)
+				store.Begin()
+				defer store.Rollback()
 				So(prop.GetValue(), ShouldEqual, 10)
 			})
 
@@ -209,6 +215,8 @@ func TestDmlFile(t *testing.T) {
 
 				prop := imp.GetProperty("annothertest")
 				So(prop, ShouldNotBeNil)
+				store.Begin()
+				defer store.Rollback()
 				So(prop.GetValue(), ShouldEqual, 4)
 
 				newchild, err := imp.GetChildByName("DefaultChild")
