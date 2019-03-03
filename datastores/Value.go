@@ -50,27 +50,27 @@ type ValueDatabase struct {
 	dbkey []byte
 }
 
-func (self ValueDatabase) HasSet(set [32]byte) bool {
+func (self ValueDatabase) HasSet(set [32]byte) (bool, error) {
 
-	if self.db == nil {
-		return false
-	}
-
-	var result bool
-	self.db.View(func(tx *bolt.Tx) error {
+	var result bool = false
+	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
-	return result
+	return result, err
 }
 
-func (self ValueDatabase) GetOrCreateSet(set [32]byte) Set {
+func (self ValueDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
-	if !self.HasSet(set) {
+	if !self.db.CanAccess() {
+		return nil, fmt.Errorf("No transaction open")
+	}
+
+	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
-		self.db.Update(func(tx *bolt.Tx) error {
+		err := self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
 			_, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
@@ -79,14 +79,18 @@ func (self ValueDatabase) GetOrCreateSet(set [32]byte) Set {
 
 			return nil
 		})
+
+		if err != nil {
+			return nil, utils.StackError(err, "Cannot create set")
+		}
 	}
 
-	return &ValueSet{self.db, self.dbkey, [][]byte{set[:]}}
+	return &ValueSet{self.db, self.dbkey, [][]byte{set[:]}}, nil
 }
 
 func (self ValueDatabase) RemoveSet(set [32]byte) error {
 
-	if self.HasSet(set) {
+	if has, _ := self.HasSet(set); has {
 
 		var result error
 		self.db.Update(func(tx *bolt.Tx) error {
@@ -117,14 +121,10 @@ type ValueSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *ValueSet) IsValid() bool {
-
-	if self.db == nil {
-		return false
-	}
+func (self *ValueSet) IsValid() (bool, error) {
 
 	var result bool = true
-	self.db.View(func(tx *bolt.Tx) error {
+	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		if bucket == nil {
@@ -141,12 +141,12 @@ func (self *ValueSet) IsValid() bool {
 		return nil
 	})
 
-	return result
+	return result, err
 }
 
 func (self *ValueSet) Print(params ...int) {
 
-	if !self.IsValid() {
+	if valid, _ := self.IsValid(); !valid {
 		fmt.Println("Invalid set")
 		return
 	}

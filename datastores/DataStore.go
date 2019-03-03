@@ -37,15 +37,15 @@ import (
 //Describes a
 type DataBase interface {
 	Close()
-	HasSet(set [32]byte) bool
-	GetOrCreateSet(set [32]byte) Set
+	HasSet(set [32]byte) (bool, error)
+	GetOrCreateSet(set [32]byte) (Set, error)
 	RemoveSet(set [32]byte) error
 }
 
 //Describes a single set in a store and allows to access it
 type Set interface {
 	GetType() StorageType
-	IsValid() bool
+	IsValid() (bool, error)
 	Print(params ...int)
 }
 
@@ -162,7 +162,7 @@ func (self *Datastore) GetOrCreateSet(kind StorageType, versioned bool, set [32]
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to get database of type %v (versioned=%v)", kind, versioned)
 	}
-	return db.GetOrCreateSet(set), nil
+	return db.GetOrCreateSet(set)
 }
 
 func (self *Datastore) Begin() error {

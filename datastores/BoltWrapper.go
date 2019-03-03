@@ -47,13 +47,9 @@ func (self *boltWrapper) Rollback() error {
 	return err
 }
 
-func (self *boltWrapper) Transaction() *bolt.Tx {
+func (self *boltWrapper) CanAccess() bool {
 
-	if self.tx == nil {
-		panic("No transaction open")
-	}
-
-	return self.tx
+	return self.tx != nil
 }
 
 func (self *boltWrapper) Update(fn func(*bolt.Tx) error) error {

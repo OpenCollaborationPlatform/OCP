@@ -66,27 +66,27 @@ type ValueVersionedDatabase struct {
 	dbkey []byte
 }
 
-func (self ValueVersionedDatabase) HasSet(set [32]byte) bool {
+func (self ValueVersionedDatabase) HasSet(set [32]byte) (bool, error) {
 
-	if self.db == nil {
-		return false
-	}
-
-	var result bool
-	self.db.View(func(tx *bolt.Tx) error {
+	var result bool = false
+	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
-	return result
+	return result, err
 }
 
-func (self ValueVersionedDatabase) GetOrCreateSet(set [32]byte) Set {
+func (self ValueVersionedDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
-	if !self.HasSet(set) {
+	if !self.db.CanAccess() {
+		return nil, fmt.Errorf("No transaction open")
+	}
+
+	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
-		self.db.Update(func(tx *bolt.Tx) error {
+		err := self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
 			newbucket, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
@@ -99,14 +99,21 @@ func (self ValueVersionedDatabase) GetOrCreateSet(set [32]byte) Set {
 
 			return nil
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return &ValueVersionedSet{self.db, self.dbkey, [][]byte{set[:]}}
+	return &ValueVersionedSet{self.db, self.dbkey, [][]byte{set[:]}}, nil
 }
 
 func (self ValueVersionedDatabase) RemoveSet(set [32]byte) error {
 
-	if self.HasSet(set) {
+	if !self.db.CanAccess() {
+		return fmt.Errorf("No transaction open")
+	}
+
+	if has, _ := self.HasSet(set); has {
 
 		var result error
 		self.db.Update(func(tx *bolt.Tx) error {
@@ -137,14 +144,10 @@ type ValueVersionedSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *ValueVersionedSet) IsValid() bool {
-
-	if self.db == nil {
-		return false
-	}
+func (self *ValueVersionedSet) IsValid() (bool, error) {
 
 	var result bool = true
-	self.db.View(func(tx *bolt.Tx) error {
+	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		if bucket == nil {
@@ -161,12 +164,12 @@ func (self *ValueVersionedSet) IsValid() bool {
 		return nil
 	})
 
-	return result
+	return result, err
 }
 
 func (self *ValueVersionedSet) Print(params ...int) {
 
-	if !self.IsValid() {
+	if valid, _ := self.IsValid(); !valid {
 		fmt.Println("Invalid set")
 		return
 	}
@@ -283,28 +286,32 @@ func (self *ValueVersionedSet) collectValueVersioneds() []ValueVersioned {
 	return valueVersioneds
 }
 
-func (self *ValueVersionedSet) HasUpdates() bool {
+func (self *ValueVersionedSet) HasUpdates() (bool, error) {
 
 	//if no versions available yet we always have updates!
-	updates := !self.HasVersions()
+	ups, err := self.HasVersions()
+	if err != nil {
+		return false, utils.StackError(err, "Unable to check for updates")
+	}
 
+	updates := !ups
 	//check if the individual valueVersioneds have updates
 	if !updates {
 		valueVersioneds := self.collectValueVersioneds()
 		for _, val := range valueVersioneds {
 			if val.HasUpdates() {
-				return true
+				return true, nil
 			}
 		}
 	}
 
-	return updates
+	return updates, nil
 }
 
-func (self *ValueVersionedSet) HasVersions() bool {
+func (self *ValueVersionedSet) HasVersions() (bool, error) {
 
 	var versions bool
-	self.db.View(func(tx *bolt.Tx) error {
+	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range append(self.setkey, itob(VERSIONS)) {
@@ -314,10 +321,14 @@ func (self *ValueVersionedSet) HasVersions() bool {
 		return nil
 	})
 
-	return versions
+	return versions, err
 }
 
-func (self *ValueVersionedSet) ResetHead() {
+func (self *ValueVersionedSet) ResetHead() error {
+
+	if !self.db.CanAccess() {
+		return fmt.Errorf("No transaction open")
+	}
 
 	valueVersioneds := self.collectValueVersioneds()
 	for _, val := range valueVersioneds {
@@ -343,7 +354,7 @@ func (self *ValueVersionedSet) ResetHead() {
 
 		//if the version is invalid we don't do anything
 		if err != nil {
-			return
+			return utils.StackError(err, "Unable to reset head")
 		}
 
 		//normal write checks for invalid, but we want to override invalid too
@@ -357,6 +368,8 @@ func (self *ValueVersionedSet) ResetHead() {
 			return bucket.Put(itob(HEAD), input)
 		})
 	}
+
+	return nil
 }
 
 func (self *ValueVersionedSet) FixStateAsVersion() (VersionID, error) {

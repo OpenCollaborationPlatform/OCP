@@ -31,22 +31,31 @@ func TestListBasic(t *testing.T) {
 		Convey("sets can be creaded and deleted,", func() {
 
 			name := makeSetFromString("test")
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err := db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 
 			//test creation of set
-			set := db.GetOrCreateSet(name)
-			So(set, ShouldNotBeNil)
-			So(db.HasSet(name), ShouldBeTrue)
-
-			err := db.RemoveSet(name)
+			set, err := db.GetOrCreateSet(name)
 			So(err, ShouldBeNil)
-			So(db.HasSet(name), ShouldBeFalse)
+			So(set, ShouldNotBeNil)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeTrue)
+
+			err = db.RemoveSet(name)
+			So(err, ShouldBeNil)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 		})
 
 		Convey("and data can be written and retreived.", func() {
 
 			name := makeSetFromString("test")
-			set, ok := db.GetOrCreateSet(name).(*ListSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set, ok := genset.(*ListSet)
 			So(ok, ShouldBeTrue)
 			So(set, ShouldNotBeNil)
 
@@ -88,7 +97,9 @@ func TestListBasic(t *testing.T) {
 		Convey("Entries shall be retrievable", func() {
 
 			name := makeSetFromString("test")
-			set, _ := db.GetOrCreateSet(name).(*ListSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set, _ := genset.(*ListSet)
 			list, err := set.GetOrCreateList([]byte("list"))
 
 			entries, err := list.GetEntries()
@@ -122,30 +133,40 @@ func TestListVersionedData(t *testing.T) {
 		Convey("sets can be creaded and deleted,", func() {
 
 			name := makeSetFromString("test")
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err := db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 
 			//test creation of set
-			set := db.GetOrCreateSet(name)
+			set, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
 			So(set, ShouldNotBeNil)
-			So(db.HasSet(name), ShouldBeTrue)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeTrue)
 
 			lset, ok := set.(*ListVersionedSet)
 			So(ok, ShouldBeTrue)
 			So(lset, ShouldNotBeNil)
 
-			err := db.RemoveSet(name)
+			err = db.RemoveSet(name)
 			So(err, ShouldBeNil)
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 		})
 
 		Convey("and listVersioneds can be created from the set.", func() {
 
 			name := makeSetFromString("test")
-			lset := db.GetOrCreateSet(name).(*ListVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			lset, _ := genset.(*ListVersionedSet)
 
 			listVersionedkey := []byte("listVersionedkey")
 			So(lset.HasList(listVersionedkey), ShouldBeFalse)
-			So(lset.HasUpdates(), ShouldBeFalse)
+			has, _ := lset.HasUpdates()
+			So(has, ShouldBeFalse)
 
 			mp, err := lset.GetOrCreateList(listVersionedkey)
 			So(err, ShouldBeNil)
@@ -153,14 +174,18 @@ func TestListVersionedData(t *testing.T) {
 			So(lset.HasList(listVersionedkey), ShouldBeTrue)
 
 			//new listVersioned means no version yet means there are updates
-			So(mp.HasUpdates(), ShouldBeTrue)
-			So(lset.HasUpdates(), ShouldBeTrue)
+			has, _ = mp.HasUpdates()
+			So(has, ShouldBeTrue)
+			has, _ = lset.HasUpdates()
+			So(has, ShouldBeTrue)
 		})
 
 		Convey("ListVersioneds can be created and data stored", func() {
 
 			name := makeSetFromString("test")
-			lset := db.GetOrCreateSet(name).(*ListVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			lset, ok := genset.(*ListVersionedSet)
 
 			list, err := lset.GetOrCreateList([]byte("mylistVersioned"))
 			So(err, ShouldBeNil)
@@ -192,21 +217,29 @@ func TestListVersionedData(t *testing.T) {
 		Convey("and versioning of that listVersioned data works well", func() {
 
 			name := makeSetFromString("test")
-			lset := db.GetOrCreateSet(name).(*ListVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			lset, _ := genset.(*ListVersionedSet)
 			list, _ := lset.GetOrCreateList([]byte("mylistVersioned"))
 
-			So(lset.HasUpdates(), ShouldBeTrue)
-			So(list.HasUpdates(), ShouldBeTrue)
+			has, _ := lset.HasUpdates()
+			So(has, ShouldBeTrue)
+			has, _ = list.HasUpdates()
+			So(has, ShouldBeTrue)
 			So(lset.HasVersions(), ShouldBeFalse)
-			So(list.HasVersions(), ShouldBeFalse)
+			has, _ = list.HasVersions()
+			So(has, ShouldBeFalse)
 
 			oldversion, err := lset.FixStateAsVersion()
 			So(err, ShouldBeNil)
 			So(oldversion, ShouldEqual, 1)
-			So(lset.HasUpdates(), ShouldBeFalse)
-			So(list.HasUpdates(), ShouldBeFalse)
+			has, _ = lset.HasUpdates()
+			So(has, ShouldBeFalse)
+			has, _ = list.HasUpdates()
+			So(has, ShouldBeFalse)
 			So(lset.HasVersions(), ShouldBeTrue)
-			So(list.HasVersions(), ShouldBeTrue)
+			has, _ = list.HasVersions()
+			So(has, ShouldBeTrue)
 
 			//we rebuild the list entries
 			entries, err := list.GetEntries()
@@ -255,11 +288,13 @@ func TestListVersionedData(t *testing.T) {
 		Convey("Finally versions must be removable", func() {
 
 			name := makeSetFromString("test")
-			lset := db.GetOrCreateSet(name).(*ListVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			lset, ok := genset.(*ListVersionedSet)
 			list, _ := lset.GetOrCreateList([]byte("mylistVersioned"))
 
 			So(lset.RemoveVersionsUpTo(VersionID(2)), ShouldBeNil)
-			err := lset.LoadVersion(VersionID(1))
+			err = lset.LoadVersion(VersionID(1))
 			So(err, ShouldNotBeNil)
 
 			So(lset.RemoveVersionsUpFrom(VersionID(2)), ShouldNotBeNil)
@@ -292,7 +327,9 @@ func TestListVersionedData(t *testing.T) {
 		Convey("A new ListSet with lists, but no versions yet", func() {
 
 			name := makeSetFromString("testreset")
-			lset := db.GetOrCreateSet(name).(*ListVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			lset, _ := genset.(*ListVersionedSet)
 
 			Convey("should be resettable to not have list", func() {
 				list, _ := lset.GetOrCreateList([]byte("myresetlist"))

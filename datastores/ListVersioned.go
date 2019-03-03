@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"CollaborationNode/utils"
 	"bytes"
 	"fmt"
 
@@ -42,25 +43,25 @@ type ListVersionedDatabase struct {
 	dbkey []byte
 }
 
-func (self ListVersionedDatabase) HasSet(set [32]byte) bool {
+func (self ListVersionedDatabase) HasSet(set [32]byte) (bool, error) {
 
-	if self.db == nil {
-		return false
-	}
-
-	var result bool
-	self.db.View(func(tx *bolt.Tx) error {
+	var result bool = false
+	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
-	return result
+	return result, err
 }
 
-func (self ListVersionedDatabase) GetOrCreateSet(set [32]byte) Set {
+func (self ListVersionedDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
-	if !self.HasSet(set) {
+	if !self.db.CanAccess() {
+		return nil, fmt.Errorf("No transaction open")
+	}
+
+	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
 		self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
@@ -80,12 +81,12 @@ func (self ListVersionedDatabase) GetOrCreateSet(set [32]byte) Set {
 		})
 	}
 
-	return &ListVersionedSet{self.db, self.dbkey, set[:]}
+	return &ListVersionedSet{self.db, self.dbkey, set[:]}, nil
 }
 
 func (self ListVersionedDatabase) RemoveSet(set [32]byte) error {
 
-	if self.HasSet(set) {
+	if has, _ := self.HasSet(set); has {
 
 		var result error
 		self.db.Update(func(tx *bolt.Tx) error {
@@ -116,14 +117,14 @@ type ListVersionedSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *ListVersionedSet) IsValid() bool {
+func (self *ListVersionedSet) IsValid() (bool, error) {
 
-	return true
+	return true, nil
 }
 
 func (self *ListVersionedSet) Print(params ...int) {
 
-	if !self.IsValid() {
+	if valid, _ := self.IsValid(); !valid {
 		fmt.Println("Invalid set")
 		return
 	}
@@ -213,16 +214,20 @@ func (self *ListVersionedSet) collectLists() []ListVersioned {
 	return listVersioneds
 }
 
-func (self *ListVersionedSet) HasUpdates() bool {
+func (self *ListVersionedSet) HasUpdates() (bool, error) {
 
 	//we cycle through all listVersioneds and check if they have updates
 	listVersioneds := self.collectLists()
 	for _, list := range listVersioneds {
-		if list.HasUpdates() {
-			return true
+		has, err := list.HasUpdates()
+		if err != nil {
+			return false, utils.StackError(err, "Unable to check for Updates")
+		}
+		if has {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 func (self *ListVersionedSet) HasVersions() bool {
@@ -277,7 +282,7 @@ func (self *ListVersionedSet) FixStateAsVersion() (VersionID, error) {
 	version := make(map[string]string, 0)
 	lists := self.collectLists()
 	for _, list := range lists {
-		if list.HasUpdates() {
+		if has, _ := list.HasUpdates(); has {
 			v, err := list.kvset.FixStateAsVersion()
 			if err != nil {
 				return VersionID(INVALID), err
@@ -674,12 +679,12 @@ func (self *ListVersioned) LatestVersion() VersionID {
 	return v
 }
 
-func (self *ListVersioned) HasUpdates() bool {
+func (self *ListVersioned) HasUpdates() (bool, error) {
 
 	return self.kvset.HasUpdates()
 }
 
-func (self *ListVersioned) HasVersions() bool {
+func (self *ListVersioned) HasVersions() (bool, error) {
 
 	return self.kvset.HasVersions()
 }

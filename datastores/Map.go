@@ -38,27 +38,27 @@ type MapDatabase struct {
 	dbkey []byte
 }
 
-func (self MapDatabase) HasSet(set [32]byte) bool {
+func (self MapDatabase) HasSet(set [32]byte) (bool, error) {
 
-	if self.db == nil {
-		return false
-	}
-
-	var result bool
-	self.db.View(func(tx *bolt.Tx) error {
+	var result bool = false
+	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
-	return result
+	return result, err
 }
 
-func (self MapDatabase) GetOrCreateSet(set [32]byte) Set {
+func (self MapDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
-	if !self.HasSet(set) {
+	if !self.db.CanAccess() {
+		return nil, fmt.Errorf("No transaction open")
+	}
+
+	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
-		self.db.Update(func(tx *bolt.Tx) error {
+		err := self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
 			bucket, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
@@ -66,14 +66,18 @@ func (self MapDatabase) GetOrCreateSet(set [32]byte) Set {
 			}
 			return nil
 		})
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return &MapSet{self.db, self.dbkey, set[:]}
+	return &MapSet{self.db, self.dbkey, set[:]}, nil
 }
 
 func (self MapDatabase) RemoveSet(set [32]byte) error {
 
-	if self.HasSet(set) {
+	if has, _ := self.HasSet(set); has {
 
 		var result error
 		self.db.Update(func(tx *bolt.Tx) error {
@@ -102,14 +106,14 @@ type MapSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *MapSet) IsValid() bool {
+func (self *MapSet) IsValid() (bool, error) {
 
-	return true
+	return true, nil
 }
 
 func (self *MapSet) Print(params ...int) {
 
-	if !self.IsValid() {
+	if valid, _ := self.IsValid(); !valid {
 		fmt.Println("Invalid set")
 		return
 	}
@@ -239,7 +243,7 @@ func (self *Map) Write(key interface{}, value interface{}) error {
 	return entry.Write(value)
 }
 
-func (self *Map) IsValid() bool {
+func (self *Map) IsValid() (bool, error) {
 
 	return self.kvset.IsValid()
 }

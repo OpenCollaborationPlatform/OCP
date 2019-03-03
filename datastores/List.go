@@ -42,25 +42,25 @@ type ListDatabase struct {
 	dbkey []byte
 }
 
-func (self ListDatabase) HasSet(set [32]byte) bool {
+func (self ListDatabase) HasSet(set [32]byte) (bool, error) {
 
-	if self.db == nil {
-		return false
-	}
-
-	var result bool
-	self.db.View(func(tx *bolt.Tx) error {
+	var result bool = false
+	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
-	return result
+	return result, err
 }
 
-func (self ListDatabase) GetOrCreateSet(set [32]byte) Set {
+func (self ListDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
-	if !self.HasSet(set) {
+	if !self.db.CanAccess() {
+		return nil, fmt.Errorf("No transaction open")
+	}
+
+	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
 		self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
@@ -72,12 +72,12 @@ func (self ListDatabase) GetOrCreateSet(set [32]byte) Set {
 		})
 	}
 
-	return &ListSet{self.db, self.dbkey, set[:]}
+	return &ListSet{self.db, self.dbkey, set[:]}, nil
 }
 
 func (self ListDatabase) RemoveSet(set [32]byte) error {
 
-	if self.HasSet(set) {
+	if has, _ := self.HasSet(set); has {
 
 		return self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
@@ -102,14 +102,14 @@ type ListSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *ListSet) IsValid() bool {
+func (self *ListSet) IsValid() (bool, error) {
 
-	return true
+	return true, nil
 }
 
 func (self *ListSet) Print(params ...int) {
 
-	if !self.IsValid() {
+	if valid, _ := self.IsValid(); !valid {
 		fmt.Println("Invalid set")
 		return
 	}

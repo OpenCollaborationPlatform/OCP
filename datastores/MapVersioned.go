@@ -43,25 +43,25 @@ type MapVersionedDatabase struct {
 	dbkey []byte
 }
 
-func (self MapVersionedDatabase) HasSet(set [32]byte) bool {
+func (self MapVersionedDatabase) HasSet(set [32]byte) (bool, error) {
 
-	if self.db == nil {
-		return false
-	}
-
-	var result bool
-	self.db.View(func(tx *bolt.Tx) error {
+	var result bool = false
+	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
-	return result
+	return result, err
 }
 
-func (self MapVersionedDatabase) GetOrCreateSet(set [32]byte) Set {
+func (self MapVersionedDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
-	if !self.HasSet(set) {
+	if !self.db.CanAccess() {
+		return nil, fmt.Errorf("No transaction open")
+	}
+
+	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
 		self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
@@ -81,12 +81,12 @@ func (self MapVersionedDatabase) GetOrCreateSet(set [32]byte) Set {
 		})
 	}
 
-	return &MapVersionedSet{self.db, self.dbkey, set[:]}
+	return &MapVersionedSet{self.db, self.dbkey, set[:]}, nil
 }
 
 func (self MapVersionedDatabase) RemoveSet(set [32]byte) error {
 
-	if self.HasSet(set) {
+	if has, _ := self.HasSet(set); has {
 
 		var result error
 		self.db.Update(func(tx *bolt.Tx) error {
@@ -117,14 +117,14 @@ type MapVersionedSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *MapVersionedSet) IsValid() bool {
+func (self *MapVersionedSet) IsValid() (bool, error) {
 
-	return true
+	return true, nil
 }
 
 func (self *MapVersionedSet) Print(params ...int) {
 
-	if !self.IsValid() {
+	if valid, _ := self.IsValid(); !valid {
 		fmt.Println("Invalid set")
 		return
 	}
@@ -214,22 +214,26 @@ func (self *MapVersionedSet) collectMapVersioneds() []MapVersioned {
 	return mapVersioneds
 }
 
-func (self *MapVersionedSet) HasUpdates() bool {
+func (self *MapVersionedSet) HasUpdates() (bool, error) {
 
 	//we cycle through all mapVersioneds and check if they have updates
 	mapVersioneds := self.collectMapVersioneds()
 	for _, mp := range mapVersioneds {
-		if mp.HasUpdates() {
-			return true
+		has, err := mp.HasUpdates()
+		if err != nil {
+			return false, utils.StackError(err, "Unable to check for updates")
+		}
+		if has {
+			return true, nil
 		}
 	}
-	return false
+	return false, nil
 }
 
-func (self *MapVersionedSet) HasVersions() bool {
+func (self *MapVersionedSet) HasVersions() (bool, error) {
 
-	var versions bool
-	self.db.View(func(tx *bolt.Tx) error {
+	var versions bool = false
+	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
@@ -239,15 +243,19 @@ func (self *MapVersionedSet) HasVersions() bool {
 		versions = (bucket.Sequence() != 0)
 		return nil
 	})
-	return versions
+	return versions, err
 }
 
-func (self *MapVersionedSet) ResetHead() {
+func (self *MapVersionedSet) ResetHead() error {
 
 	mapVersioneds := self.collectMapVersioneds()
 	for _, mp := range mapVersioneds {
-		mp.kvset.ResetHead()
+		err := mp.kvset.ResetHead()
+		if err != nil {
+			return utils.StackError(err, "Unableto reset head of Map")
+		}
 	}
+	return nil
 }
 
 func (self *MapVersionedSet) FixStateAsVersion() (VersionID, error) {
@@ -265,7 +273,7 @@ func (self *MapVersionedSet) FixStateAsVersion() (VersionID, error) {
 	version := make(map[string]string, 0)
 	mapVersioneds := self.collectMapVersioneds()
 	for _, mp := range mapVersioneds {
-		if mp.HasUpdates() {
+		if has, _ := mp.HasUpdates(); has {
 			v, err := mp.kvset.FixStateAsVersion()
 			if err != nil {
 				return VersionID(INVALID), err
@@ -607,7 +615,7 @@ func (self *MapVersioned) Write(key interface{}, valueVersioned interface{}) err
 	return pair.Write(valueVersioned)
 }
 
-func (self *MapVersioned) IsValid() bool {
+func (self *MapVersioned) IsValid() (bool, error) {
 
 	return self.kvset.IsValid()
 }
@@ -668,12 +676,12 @@ func (self *MapVersioned) LatestVersion() VersionID {
 	return v
 }
 
-func (self *MapVersioned) HasUpdates() bool {
+func (self *MapVersioned) HasUpdates() (bool, error) {
 
 	return self.kvset.HasUpdates()
 }
 
-func (self *MapVersioned) HasVersions() bool {
+func (self *MapVersioned) HasVersions() (bool, error) {
 
 	return self.kvset.HasVersions()
 }

@@ -46,7 +46,8 @@ func TestVersioning(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			mp, err := mset.GetOrCreateMap(key1)
 			So(err, ShouldBeNil)
-			So(mp.IsValid(), ShouldBeTrue)
+			valid, _ := mp.IsValid()
+			So(valid, ShouldBeTrue)
 
 			Convey("and versioning shall be aligned.", func() {
 
@@ -61,8 +62,10 @@ func TestVersioning(t *testing.T) {
 				So(uint64(version), ShouldEqual, 1)
 				So(mngr.HasUpdates(), ShouldBeFalse)
 
-				So(vset.HasUpdates(), ShouldBeFalse)
-				So(mset.HasUpdates(), ShouldBeFalse)
+				has, _ := vset.HasUpdates()
+				So(has, ShouldBeFalse)
+				has, _ = mset.HasUpdates()
+				So(has, ShouldBeFalse)
 				v, err := vset.GetCurrentVersion()
 				So(err, ShouldBeNil)
 				So(v.IsHead(), ShouldBeTrue)
@@ -82,8 +85,11 @@ func TestVersioning(t *testing.T) {
 				So(value.Write(12), ShouldBeNil)
 
 				So(mngr.HasUpdates(), ShouldBeTrue)
-				So(vset.HasUpdates(), ShouldBeTrue)
-				So(mset.HasUpdates(), ShouldBeFalse)
+				has, _ := vset.HasUpdates()
+				So(has, ShouldBeTrue)
+				has, err = mset.HasUpdates()
+				So(err, ShouldBeNil)
+				So(has, ShouldBeFalse)
 				version, err := mngr.FixStateAsVersion()
 				So(err, ShouldBeNil)
 				So(uint64(version), ShouldEqual, 2)

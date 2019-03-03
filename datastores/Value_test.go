@@ -33,22 +33,31 @@ func TestValueBasic(t *testing.T) {
 		Convey("sets can be creaded and deleted,", func() {
 
 			name := makeSetFromString("test")
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err := db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 
 			//test creation of set
-			set := db.GetOrCreateSet(name)
-			So(set, ShouldNotBeNil)
-			So(db.HasSet(name), ShouldBeTrue)
-
-			err := db.RemoveSet(name)
+			set, err := db.GetOrCreateSet(name)
 			So(err, ShouldBeNil)
-			So(db.HasSet(name), ShouldBeFalse)
+			So(set, ShouldNotBeNil)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeTrue)
+
+			err = db.RemoveSet(name)
+			So(err, ShouldBeNil)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 		})
 
 		Convey("to which data can be written and read.", func() {
 
 			name := makeSetFromString("test")
-			set := db.GetOrCreateSet(name).(*ValueSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set := genset.(*ValueSet)
 
 			key1 := []byte("key1")
 			So(set.HasKey(key1), ShouldBeFalse)
@@ -94,7 +103,9 @@ func TestValueBasic(t *testing.T) {
 		Convey("Getting the raw data should be supported", func() {
 
 			name := makeSetFromString("test")
-			set := db.GetOrCreateSet(name).(*ValueSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set := genset.(*ValueSet)
 			value1, _ := set.GetOrCreateValue([]byte("rawtest1"))
 
 			data := string("This is raw data test")
@@ -136,22 +147,30 @@ func TestValueVersionedBasics(t *testing.T) {
 		Convey("sets can be creaded and deleted,", func() {
 
 			name := makeSetFromString("test")
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err := db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 
 			//test creation of set
-			set := db.GetOrCreateSet(name)
+			set, _ := db.GetOrCreateSet(name)
 			So(set, ShouldNotBeNil)
-			So(db.HasSet(name), ShouldBeTrue)
-
-			err := db.RemoveSet(name)
+			has, err = db.HasSet(name)
 			So(err, ShouldBeNil)
-			So(db.HasSet(name), ShouldBeFalse)
+			So(has, ShouldBeTrue)
+
+			err = db.RemoveSet(name)
+			So(err, ShouldBeNil)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 		})
 
 		Convey("to which data can be written and restored.", func() {
 
 			name := makeSetFromString("test")
-			set := db.GetOrCreateSet(name).(*ValueVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set := genset.(*ValueVersionedSet)
 
 			key1 := []byte("key1")
 			So(set.HasKey(key1), ShouldBeFalse)
@@ -196,7 +215,9 @@ func TestValueVersionedBasics(t *testing.T) {
 		Convey("Getting the raw data should be supported", func() {
 
 			name := makeSetFromString("test")
-			set := db.GetOrCreateSet(name).(*ValueVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set := genset.(*ValueVersionedSet)
 			value1, _ := set.GetOrCreateValue([]byte("rawtest1"))
 
 			data := string("This is raw data test")
@@ -231,11 +252,14 @@ func TestValueVersioned(t *testing.T) {
 
 		db, err := store.GetDatabase(ValueType, true)
 		So(err, ShouldBeNil)
-		set := db.GetOrCreateSet(makeSetFromString("test")).(VersionedSet)
+		genset, err := db.GetOrCreateSet(makeSetFromString("test"))
+		So(err, ShouldBeNil)
+		set := genset.(VersionedSet)
 
 		Convey("initially all versioning commands must be callable.", func() {
 
-			So(set.HasVersions(), ShouldBeFalse)
+			hasv, _ := set.HasVersions()
+			So(hasv, ShouldBeFalse)
 			version, err := set.GetLatestVersion()
 			So(err, ShouldNotBeNil)
 			So(version.IsValid(), ShouldBeFalse)
@@ -253,7 +277,8 @@ func TestValueVersioned(t *testing.T) {
 			version, err = set.GetLatestVersion()
 			So(err, ShouldBeNil)
 			So(uint64(version), ShouldEqual, 1)
-			So(set.HasVersions(), ShouldBeTrue)
+			hasv, _ = set.HasVersions()
+			So(hasv, ShouldBeTrue)
 
 			version, err = set.GetCurrentVersion()
 			So(err, ShouldBeNil)
@@ -265,10 +290,12 @@ func TestValueVersioned(t *testing.T) {
 
 			kvset, _ := set.(*ValueVersionedSet)
 
-			So(kvset.HasUpdates(), ShouldBeFalse)
+			has, _ := kvset.HasUpdates()
+			So(has, ShouldBeFalse)
 			pair1, err := kvset.GetOrCreateValue([]byte("data1"))
 
-			So(kvset.HasUpdates(), ShouldBeTrue)
+			has, _ = kvset.HasUpdates()
+			So(has, ShouldBeTrue)
 			So(err, ShouldBeNil)
 
 			So(pair1.IsValid(), ShouldBeTrue)
@@ -426,7 +453,8 @@ func TestValueVersioned(t *testing.T) {
 
 		Convey("Creating a new list for reset testing", func() {
 
-			set := db.GetOrCreateSet(makeSetFromString("testreset")).(VersionedSet)
+			genset, _ := db.GetOrCreateSet(makeSetFromString("testreset"))
+			set := genset.(VersionedSet)
 			kvset, _ := set.(*ValueVersionedSet)
 
 			Convey("Must be resettable directly even if there is no version", func() {
@@ -440,7 +468,8 @@ func TestValueVersioned(t *testing.T) {
 				So(holds, ShouldBeTrue)
 				So(value.LatestVersion().IsValid(), ShouldBeFalse)
 
-				So(kvset.HasUpdates(), ShouldBeTrue)
+				has, _ := kvset.HasUpdates()
+				So(has, ShouldBeTrue)
 				kvset.ResetHead()
 
 				So(kvset.HasKey([]byte("key1")), ShouldBeFalse)
@@ -449,9 +478,9 @@ func TestValueVersioned(t *testing.T) {
 
 		Convey("Creating a new set for version remove testing", func() {
 
-			set := db.GetOrCreateSet(makeSetFromString("test2"))
+			set, _ := db.GetOrCreateSet(makeSetFromString("test2"))
 			vset := set.(*ValueVersionedSet)
-			if vset.HasUpdates() {
+			if has, _ := vset.HasUpdates(); has {
 				vset.FixStateAsVersion()
 			}
 

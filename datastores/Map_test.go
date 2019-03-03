@@ -31,26 +31,35 @@ func TestMap(t *testing.T) {
 		Convey("sets can be creaded and deleted,", func() {
 
 			name := makeSetFromString("test")
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err := db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 
 			//test creation of set
-			set := db.GetOrCreateSet(name)
+			set, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
 			So(set, ShouldNotBeNil)
-			So(db.HasSet(name), ShouldBeTrue)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeTrue)
 
 			mset, ok := set.(*MapSet)
 			So(ok, ShouldBeTrue)
 			So(mset, ShouldNotBeNil)
 
-			err := db.RemoveSet(name)
+			err = db.RemoveSet(name)
 			So(err, ShouldBeNil)
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 		})
 
 		Convey("and maps can be created from the set.", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			mset := genset.(*MapSet)
 
 			mapkey := []byte("mapkey")
 			So(mset.HasMap(mapkey), ShouldBeFalse)
@@ -65,7 +74,9 @@ func TestMap(t *testing.T) {
 		Convey("MapVersioneds can be created and data stored", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			mset := genset.(*MapSet)
 
 			mp, err := mset.GetOrCreateMap([]byte("mymap"))
 			So(err, ShouldBeNil)
@@ -124,30 +135,40 @@ func TestMapVersionedData(t *testing.T) {
 		Convey("sets can be creaded and deleted,", func() {
 
 			name := makeSetFromString("test")
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err := db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 
 			//test creation of set
-			set := db.GetOrCreateSet(name)
+			set, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
 			So(set, ShouldNotBeNil)
-			So(db.HasSet(name), ShouldBeTrue)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeTrue)
 
 			mset, ok := set.(*MapVersionedSet)
 			So(ok, ShouldBeTrue)
 			So(mset, ShouldNotBeNil)
 
-			err := db.RemoveSet(name)
+			err = db.RemoveSet(name)
 			So(err, ShouldBeNil)
-			So(db.HasSet(name), ShouldBeFalse)
+			has, err = db.HasSet(name)
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
 		})
 
 		Convey("and mapVersioneds can be created from the set.", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			mset := genset.(*MapVersionedSet)
 
 			mapVersionedkey := []byte("mapVersionedkey")
 			So(mset.HasMap(mapVersionedkey), ShouldBeFalse)
-			So(mset.HasUpdates(), ShouldBeFalse)
+			has, _ := mset.HasUpdates()
+			So(has, ShouldBeFalse)
 
 			mp, err := mset.GetOrCreateMap(mapVersionedkey)
 			So(err, ShouldBeNil)
@@ -155,14 +176,18 @@ func TestMapVersionedData(t *testing.T) {
 			So(mset.HasMap(mapVersionedkey), ShouldBeTrue)
 
 			//new mapVersioned means no version yet means there are updates
-			So(mp.HasUpdates(), ShouldBeTrue)
-			So(mset.HasUpdates(), ShouldBeTrue)
+			has, _ = mp.HasUpdates()
+			So(has, ShouldBeTrue)
+			has, _ = mset.HasUpdates()
+			So(has, ShouldBeTrue)
 		})
 
 		Convey("MapVersioneds can be created and data stored", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			mset := genset.(*MapVersionedSet)
 
 			mp, err := mset.GetOrCreateMap([]byte("mymapVersioned"))
 			So(err, ShouldBeNil)
@@ -199,21 +224,31 @@ func TestMapVersionedData(t *testing.T) {
 		Convey("and versioning of that mapVersioned data works well", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			mset := genset.(*MapVersionedSet)
 			mp, _ := mset.GetOrCreateMap([]byte("mymapVersioned"))
 
-			So(mset.HasUpdates(), ShouldBeTrue)
-			So(mp.HasUpdates(), ShouldBeTrue)
-			So(mset.HasVersions(), ShouldBeFalse)
-			So(mp.HasVersions(), ShouldBeFalse)
+			has, _ := mset.HasUpdates()
+			So(has, ShouldBeTrue)
+			has, _ = mp.HasUpdates()
+			So(has, ShouldBeTrue)
+			has, _ = mset.HasVersions()
+			So(has, ShouldBeFalse)
+			has, _ = mp.HasVersions()
+			So(has, ShouldBeFalse)
 
 			oldversion, err := mset.FixStateAsVersion()
 			So(err, ShouldBeNil)
 			So(oldversion, ShouldEqual, 1)
-			So(mset.HasUpdates(), ShouldBeFalse)
-			So(mp.HasUpdates(), ShouldBeFalse)
-			So(mset.HasVersions(), ShouldBeTrue)
-			So(mp.HasVersions(), ShouldBeTrue)
+			has, _ = mset.HasUpdates()
+			So(has, ShouldBeFalse)
+			has, _ = mp.HasUpdates()
+			So(has, ShouldBeFalse)
+			has, _ = mset.HasVersions()
+			So(has, ShouldBeTrue)
+			has, _ = mp.HasVersions()
+			So(has, ShouldBeTrue)
 
 			key1 := []byte("key1")
 			So(mp.HasKey(key1), ShouldBeFalse)
@@ -267,11 +302,13 @@ func TestMapVersionedData(t *testing.T) {
 		Convey("Finally versions must be removable.", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			mset := genset.(*MapVersionedSet)
 			mp, _ := mset.GetOrCreateMap([]byte("mymapVersioned"))
 
 			So(mset.RemoveVersionsUpTo(VersionID(2)), ShouldBeNil)
-			err := mset.LoadVersion(VersionID(1))
+			err = mset.LoadVersion(VersionID(1))
 			So(err, ShouldNotBeNil)
 
 			So(mset.RemoveVersionsUpFrom(VersionID(2)), ShouldNotBeNil)
@@ -300,7 +337,9 @@ func TestMapVersionedData(t *testing.T) {
 		Convey("Map keys must be reusable after deleting", func() {
 
 			name := makeSetFromString("test")
-			mset := db.GetOrCreateSet(name).(*MapVersionedSet)
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			mset := genset.(*MapVersionedSet)
 			mp, _ := mset.GetOrCreateMap([]byte("mymapVersioned"))
 
 			//v0 := mp.CurrentVersion()

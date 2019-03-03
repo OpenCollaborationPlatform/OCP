@@ -33,9 +33,9 @@ func (self VersionID) IsValid() bool {
  *   (in general this means forking or removal of version data)
  */
 type VersionedData interface {
-	HasUpdates() bool
-	HasVersions() bool
-	ResetHead()
+	HasUpdates() (bool, error)
+	HasVersions() (bool, error)
+	ResetHead() error
 	FixStateAsVersion() (VersionID, error)
 	LoadVersion(id VersionID) error
 	GetLatestVersion() (VersionID, error)
@@ -107,8 +107,11 @@ func (self *VersionManagerImp) collectSets() []VersionedSet {
 		if err != nil {
 			continue
 		}
-		if db.HasSet(self.key) {
-			sets = append(sets, db.GetOrCreateSet(self.key).(VersionedSet))
+		if has, _ := db.HasSet(self.key); has {
+			set, err := db.GetOrCreateSet(self.key)
+			if err == nil {
+				sets = append(sets, set.(VersionedSet))
+			}
 		}
 	}
 
@@ -125,7 +128,7 @@ func (self *VersionManagerImp) HasUpdates() bool {
 
 		sets := self.collectSets()
 		for _, set := range sets {
-			if set.HasUpdates() {
+			if has, _ := set.HasUpdates(); has {
 				return true
 			}
 		}
@@ -163,7 +166,7 @@ func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 	sets := self.collectSets()
 	for _, set := range sets {
 
-		if set.HasUpdates() {
+		if has, _ := set.HasUpdates(); has {
 
 			//we need to create and store a new version
 			v, err := set.FixStateAsVersion()
