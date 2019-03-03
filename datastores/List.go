@@ -102,14 +102,14 @@ type ListSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *ListSet) IsValid() (bool, error) {
+func (self *ListSet) IsValid() bool {
 
-	return true, nil
+	return true
 }
 
 func (self *ListSet) Print(params ...int) {
 
-	if valid, _ := self.IsValid(); !valid {
+	if !self.IsValid() {
 		fmt.Println("Invalid set")
 		return
 	}

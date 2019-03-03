@@ -171,24 +171,18 @@ func (self *Runtime) Parse(reader io.Reader) error {
 func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) {
 
 	self.datastore.Begin()
-	defer self.datastore.Commit()
 
 	//save the user for processing
 	self.currentUser = user
 
-	state, err := self.preprocess()
-	if err != nil {
-		return nil, err
-	}
-
 	val, err := self.jsvm.RunString(code)
 
 	if err != nil {
-		self.postprocess(state, true)
+		self.postprocess(true)
 		return nil, err
 	}
 
-	err = self.postprocess(state, false)
+	err = self.postprocess(false)
 
 	return val.Export(), err
 }
@@ -196,7 +190,6 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 func (self *Runtime) CallMethod(user User, path string, method string, args ...interface{}) (interface{}, error) {
 
 	self.datastore.Begin()
-	defer self.datastore.Commit()
 
 	//save the user for processing
 	self.currentUser = user
@@ -210,24 +203,18 @@ func (self *Runtime) CallMethod(user User, path string, method string, args ...i
 		return nil, fmt.Errorf("No method %v available in object %v", method, path)
 	}
 
-	//start preprocessing
-	state, err := self.preprocess()
-	if err != nil {
-		return nil, err
-	}
-
 	fnc := obj.GetMethod(method)
 	result := fnc.Call(args...)
 
 	//did somethign go wrong?
 	err, ok := result.(error)
 	if ok && err != nil {
-		self.postprocess(state, true)
+		self.postprocess(true)
 		return nil, err
 	}
 
 	//postprocess correctly
-	err = self.postprocess(state, false)
+	err = self.postprocess(false)
 
 	return result, err
 }
@@ -253,7 +240,7 @@ func (self *Runtime) RegisterEvent(user User, path string, event string, cb Even
 func (self *Runtime) ReadProperty(user User, path string, property string) (interface{}, error) {
 
 	self.datastore.Begin()
-	defer self.datastore.Commit()
+	defer self.datastore.Rollback()
 
 	//save the user for processing
 	self.currentUser = user
@@ -317,35 +304,8 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 	return obj, nil
 }
 
-//collect current state of objects for potential reset
-func (self *Runtime) preprocess() (map[identifier]datastore.VersionID, error) {
-
-	state := make(map[identifier]datastore.VersionID)
-	for _, obj := range self.objects {
-
-		//check if there are versions. If not we need to make sure the first one is created
-		has, err := obj.HasVersions()
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to check object for existing versions")
-		}
-		if has {
-			_, err := obj.FixStateAsVersion()
-			if err != nil {
-				return nil, utils.StackError(err, "Unable to create initial version of object for preprocessing")
-			}
-		}
-
-		v, err := obj.GetLatestVersion()
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to retrieve latest version of object during preprocessing")
-		}
-		state[obj.Id()] = v
-	}
-	return state, nil
-}
-
 //postprocess for all done operations. Entry point for behaviours
-func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, rollbackOnly bool) error {
+func (self *Runtime) postprocess(rollbackOnly bool) error {
 
 	//if not a full rollback we check if something has changed and start the relevant
 	//behaviours. We only roll back if something goes wrong
@@ -386,66 +346,20 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 		}
 	}
 
-	//do rollback if required (caller requested or behaviours failed)
+	//rollback if required (caller requested or behaviours failed)
 	if rollback {
-		for _, obj := range self.objects {
-
-			v, ok := prestate[obj.Id()]
-			if ok {
-				//ok means obj was there bevore and only need to be reset
-
-				latest, err := obj.GetLatestVersion()
-				if err != nil {
-					return utils.StackError(err, "Rollback failed")
-				}
-
-				if latest > v {
-					//a new version was already created, we need to delete the old one
-					//and reset the head accordingly
-					err = obj.LoadVersion(v)
-					if err != nil {
-						if postError != nil {
-							err = utils.StackError(postError, err.Error())
-						}
-						return utils.StackError(err, "Rollback failed")
-					}
-
-					err = obj.RemoveVersionsUpFrom(v)
-					if err != nil {
-						if postError != nil {
-							err = utils.StackError(postError, err.Error())
-						}
-						return utils.StackError(err, "Rollback failed")
-					}
-
-					obj.ResetHead()
-					err = obj.LoadVersion(datastore.VersionID(datastore.HEAD))
-					if err != nil {
-						if postError != nil {
-							err = utils.StackError(postError, err.Error())
-						}
-						return utils.StackError(err, "Rollback failed")
-					}
-
-				} else {
-					//no new version was created yet, a simple reset is enough
-					obj.ResetHead()
-				}
-			}
-			//TODO: Handle not ok: howto remove object correctly?
-		}
-
-		//rollback tansactions
-		self.transactions.Rollback()
+		self.datastore.Rollback()
+		self.datastore.Begin() //reopen to allow GetRefCount()
 	}
-
-	//commit transactions
-	self.transactions.Commit()
 
 	//garbace collection: which objects can be removed?
 	removers := make([]identifier, 0)
 	for id, obj := range self.objects {
-		if obj.GetRefcount() == 0 {
+		rc, err := obj.GetRefcount()
+		if err != nil {
+			return err
+		}
+		if rc == 0 {
 			removers = append(removers, id)
 		}
 	}
@@ -453,6 +367,7 @@ func (self *Runtime) postprocess(prestate map[identifier]datastore.VersionID, ro
 		delete(self.objects, id)
 		self.jsObjMap.Set(id.encode(), nil)
 	}
+	self.datastore.Commit()
 
 	return postError
 }

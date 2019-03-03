@@ -20,10 +20,10 @@ type Object interface {
 	JSObject
 
 	//garbage collection
-	IncreaseRefcount()
-	DecreaseRefcount()
-	GetRefcount() uint64
-	SetRefcount(uint64)
+	IncreaseRefcount() error
+	DecreaseRefcount() error
+	GetRefcount() (uint64, error)
+	SetRefcount(uint64) error
 
 	//Object functions
 	Id() identifier
@@ -114,24 +114,37 @@ func (self *object) SetDataType(t DataType) {
 	self.dataType = t
 }
 
-func (self *object) IncreaseRefcount() {
-	current := self.GetRefcount()
+func (self *object) IncreaseRefcount() error {
+	current, err := self.GetRefcount()
+	if err != nil {
+		return err
+	}
 	self.refCount.Write(current + 1)
+	return nil
 }
 
-func (self *object) DecreaseRefcount() {
-	current := self.GetRefcount()
+func (self *object) DecreaseRefcount() error {
+	current, err := self.GetRefcount()
+	if err != nil {
+		return err
+	}
 	self.refCount.Write(current - 1)
+	return nil
 }
 
-func (self *object) GetRefcount() uint64 {
+func (self *object) GetRefcount() (uint64, error) {
+
+	if !self.refCount.IsValid() {
+		return 0, fmt.Errorf("Unable to access refcount")
+	}
+
 	var current uint64
 	self.refCount.ReadType(&current)
-	return current
+	return current, nil
 }
 
-func (self *object) SetRefcount(val uint64) {
-	self.refCount.Write(val)
+func (self *object) SetRefcount(val uint64) error {
+	return self.refCount.Write(val)
 }
 
 func (self *object) GetJSObject() *goja.Object {

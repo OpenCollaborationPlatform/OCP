@@ -117,14 +117,14 @@ type MapVersionedSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *MapVersionedSet) IsValid() (bool, error) {
+func (self *MapVersionedSet) IsValid() bool {
 
-	return true, nil
+	return true
 }
 
 func (self *MapVersionedSet) Print(params ...int) {
 
-	if valid, _ := self.IsValid(); !valid {
+	if !self.IsValid() {
 		fmt.Println("Invalid set")
 		return
 	}
@@ -615,18 +615,23 @@ func (self *MapVersioned) Write(key interface{}, valueVersioned interface{}) err
 	return pair.Write(valueVersioned)
 }
 
-func (self *MapVersioned) IsValid() (bool, error) {
+func (self *MapVersioned) IsValid() bool {
 
 	return self.kvset.IsValid()
 }
 
 func (self *MapVersioned) HasKey(key interface{}) bool {
 
+	if !self.kvset.IsValid() {
+		panic("cannot access")
+	}
+
 	k, err := getBytes(key)
 	if err != nil {
-		return false
+		panic("Unable to encode key")
 	}
 	return self.kvset.HasKey(k)
+
 }
 
 func (self *MapVersioned) Read(key interface{}) (interface{}, error) {

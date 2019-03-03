@@ -117,14 +117,14 @@ type ListVersionedSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *ListVersionedSet) IsValid() (bool, error) {
+func (self *ListVersionedSet) IsValid() bool {
 
-	return true, nil
+	return true
 }
 
 func (self *ListVersionedSet) Print(params ...int) {
 
-	if valid, _ := self.IsValid(); !valid {
+	if !self.IsValid() {
 		fmt.Println("Invalid set")
 		return
 	}

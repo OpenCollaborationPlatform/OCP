@@ -46,8 +46,7 @@ func TestVersioning(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			mp, err := mset.GetOrCreateMap(key1)
 			So(err, ShouldBeNil)
-			valid, _ := mp.IsValid()
-			So(valid, ShouldBeTrue)
+			So(mp.IsValid(), ShouldBeTrue)
 
 			Convey("and versioning shall be aligned.", func() {
 

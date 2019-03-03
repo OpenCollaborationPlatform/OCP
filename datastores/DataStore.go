@@ -45,7 +45,7 @@ type DataBase interface {
 //Describes a single set in a store and allows to access it
 type Set interface {
 	GetType() StorageType
-	IsValid() (bool, error)
+	IsValid() bool
 	Print(params ...int)
 }
 

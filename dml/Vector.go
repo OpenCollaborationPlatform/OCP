@@ -374,7 +374,8 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 //*****************************************************************************
 
 //override to handle children refcount additional to our own
-func (self *vector) IncreaseRefcount() {
+func (self *vector) IncreaseRefcount() error {
+
 	//increase entrie refcount
 	dt := self.entryDataType()
 	if dt.IsObject() || dt.IsComplex() {
@@ -388,18 +389,21 @@ func (self *vector) IncreaseRefcount() {
 				if e == nil {
 					res, ok := self.rntm.objects[id]
 					if ok {
-						res.IncreaseRefcount()
+						err := res.IncreaseRefcount()
+						if err != nil {
+							return err
+						}
 					}
 				}
 			}
 		}
 	}
 	//now increase our own and children refcount
-	self.object.IncreaseRefcount()
+	return self.object.IncreaseRefcount()
 }
 
 //override to handle children refcount additional to our own
-func (self *vector) DecreaseRefcount() {
+func (self *vector) DecreaseRefcount() error {
 	//decrease child refcount
 	dt := self.entryDataType()
 	if dt.IsObject() || dt.IsComplex() {
@@ -413,14 +417,17 @@ func (self *vector) DecreaseRefcount() {
 				if e == nil {
 					res, ok := self.rntm.objects[id]
 					if ok {
-						res.DecreaseRefcount()
+						err := res.DecreaseRefcount()
+						if err != nil {
+							return err
+						}
 					}
 				}
 			}
 		}
 	}
 	//now decrease our own
-	self.object.DecreaseRefcount()
+	return self.object.DecreaseRefcount()
 }
 
 func (self *vector) entryDataType() DataType {

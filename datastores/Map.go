@@ -106,14 +106,14 @@ type MapSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *MapSet) IsValid() (bool, error) {
+func (self *MapSet) IsValid() bool {
 
-	return true, nil
+	return true
 }
 
 func (self *MapSet) Print(params ...int) {
 
-	if valid, _ := self.IsValid(); !valid {
+	if !self.IsValid() {
 		fmt.Println("Invalid set")
 		return
 	}
@@ -243,7 +243,7 @@ func (self *Map) Write(key interface{}, value interface{}) error {
 	return entry.Write(value)
 }
 
-func (self *Map) IsValid() (bool, error) {
+func (self *Map) IsValid() bool {
 
 	return self.kvset.IsValid()
 }

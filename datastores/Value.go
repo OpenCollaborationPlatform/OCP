@@ -121,7 +121,7 @@ type ValueSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *ValueSet) IsValid() (bool, error) {
+func (self *ValueSet) IsValid() bool {
 
 	var result bool = true
 	err := self.db.View(func(tx *bolt.Tx) error {
@@ -141,12 +141,16 @@ func (self *ValueSet) IsValid() (bool, error) {
 		return nil
 	})
 
-	return result, err
+	if err != nil {
+		return false
+	}
+
+	return result
 }
 
 func (self *ValueSet) Print(params ...int) {
 
-	if valid, _ := self.IsValid(); !valid {
+	if !self.IsValid() {
 		fmt.Println("Invalid set")
 		return
 	}
@@ -351,12 +355,8 @@ func (self *Value) ReadType(result interface{}) error {
 //note that it does not mean that anything was written yet.
 func (self *Value) IsValid() bool {
 
-	if self.db == nil {
-		return false
-	}
-
 	valid := true
-	self.db.View(func(tx *bolt.Tx) error {
+	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		if bucket == nil {
@@ -377,7 +377,9 @@ func (self *Value) IsValid() bool {
 		}
 		return nil
 	})
-
+	if err != nil {
+		return false
+	}
 	return valid
 }
 

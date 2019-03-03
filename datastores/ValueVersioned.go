@@ -144,7 +144,7 @@ type ValueVersionedSet struct {
  * Interface functions
  * ********************************************************************************
  */
-func (self *ValueVersionedSet) IsValid() (bool, error) {
+func (self *ValueVersionedSet) IsValid() bool {
 
 	var result bool = true
 	err := self.db.View(func(tx *bolt.Tx) error {
@@ -164,12 +164,15 @@ func (self *ValueVersionedSet) IsValid() (bool, error) {
 		return nil
 	})
 
-	return result, err
+	if err != nil {
+		return false
+	}
+	return result
 }
 
 func (self *ValueVersionedSet) Print(params ...int) {
 
-	if valid, _ := self.IsValid(); !valid {
+	if !self.IsValid() {
 		fmt.Println("Invalid set")
 		return
 	}
@@ -969,12 +972,8 @@ func (self *ValueVersioned) Write(valueVersioned interface{}) error {
 //Note: True does not mean that data was written and reading makes sense
 func (self *ValueVersioned) IsValid() bool {
 
-	if self.db == nil {
-		return false
-	}
-
 	var result bool = true
-	self.db.View(func(tx *bolt.Tx) error {
+	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range append(self.setkey, self.key) {
@@ -994,6 +993,9 @@ func (self *ValueVersioned) IsValid() bool {
 		return nil
 	})
 
+	if err != nil {
+		return false
+	}
 	return result
 }
 

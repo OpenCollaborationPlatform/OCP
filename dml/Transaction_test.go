@@ -209,14 +209,16 @@ func TestTransactionBehaviour(t *testing.T) {
 			rntm.currentUser = "User1"
 			store.Begin()
 			err := mngr.Open()
-			store.Commit()
 			So(err, ShouldBeNil)
+			store.Commit()
+
 			_, err = rntm.RunJavaScript("User1", "Document.result.value = ''")
 			So(err, ShouldBeNil)
+
 			store.Begin()
 			err = mngr.Add(rntm.mainObj)
-			store.Commit()
 			So(err, ShouldBeNil)
+			store.Commit()
 
 			Convey("only its participation event must have been called", func() {
 
@@ -460,7 +462,6 @@ func TestTransactionAbort(t *testing.T) {
 				mngr := rntm.transactions
 
 				mngr.Close()
-				mngr.Commit()
 
 				_, err := mngr.getTransaction()
 				So(err, ShouldNotBeNil)

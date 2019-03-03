@@ -66,27 +66,33 @@ func (self *data) GetChildByName(name string) (Data, error) {
 }
 
 //override to handle children refcount additional to our own
-func (self *data) IncreaseRefcount() {
+func (self *data) IncreaseRefcount() error {
 	//increase child refcount
 	for _, child := range self.children {
 		res, ok := self.rntm.objects[child]
 		if ok {
-			res.IncreaseRefcount()
+			err := res.IncreaseRefcount()
+			if err != nil {
+				return err
+			}
 		}
 	}
 	//now increase our own
-	self.object.IncreaseRefcount()
+	return self.object.IncreaseRefcount()
 }
 
 //override to handle children refcount additional to our own
-func (self *data) DecreaseRefcount() {
+func (self *data) DecreaseRefcount() error {
 	//decrease child refcount
 	for _, child := range self.children {
 		res, ok := self.rntm.objects[child]
 		if ok {
-			res.DecreaseRefcount()
+			err := res.DecreaseRefcount()
+			if err != nil {
+				return err
+			}
 		}
 	}
 	//now decrease our own
-	self.object.DecreaseRefcount()
+	return self.object.DecreaseRefcount()
 }

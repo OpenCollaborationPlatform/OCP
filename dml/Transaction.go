@@ -28,17 +28,17 @@ type transaction struct {
 	//actually it is no state that needs to be stored over multiple versions, but as
 	//transaction gets deleted after closing the storage overhead is minimal and the
 	//easy solution accaptable
-	objects datastore.ListVersioned
-	user    datastore.ValueVersioned
+	objects datastore.List
+	user    datastore.Value
 }
 
 func loadTransaction(key [32]byte, rntm *Runtime) (transaction, error) {
 
-	set, err := rntm.datastore.GetOrCreateSet(datastore.ListType, true, key)
+	set, err := rntm.datastore.GetOrCreateSet(datastore.ListType, false, key)
 	if err != nil {
 		return transaction{}, err
 	}
-	listSet := set.(*datastore.ListVersionedSet)
+	listSet := set.(*datastore.ListSet)
 
 	//load the participants
 	objects, err := listSet.GetOrCreateList([]byte("participants"))
@@ -47,11 +47,11 @@ func loadTransaction(key [32]byte, rntm *Runtime) (transaction, error) {
 	}
 
 	//and the user
-	set, err = rntm.datastore.GetOrCreateSet(datastore.ValueType, true, key)
+	set, err = rntm.datastore.GetOrCreateSet(datastore.ValueType, false, key)
 	if err != nil {
 		return transaction{}, err
 	}
-	valueSet := set.(*datastore.ValueVersionedSet)
+	valueSet := set.(*datastore.ValueSet)
 	user, err := valueSet.GetOrCreateValue([]byte("user"))
 	if err != nil {
 		return transaction{}, err
@@ -170,81 +170,6 @@ func (self transaction) AddObject(id identifier) error {
 	return nil
 }
 
-//save state of transaction as new fixed version
-func (self transaction) Commit() error {
-
-	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, true, self.identification)
-	if err != nil {
-		return utils.StackError(err, "Unable to commit transaction: cannot access list")
-	}
-	listSet := set.(*datastore.ListVersionedSet)
-
-	has, err := listSet.HasUpdates()
-	if err != nil {
-		return utils.StackError(err, "Unable to check list for new updates")
-	}
-	if has {
-		_, err := listSet.FixStateAsVersion()
-		if err != nil {
-			return utils.StackError(err, "Unable to commit transaction: cannot versionize list")
-		}
-	}
-
-	//and the user
-	set, err = self.rntm.datastore.GetOrCreateSet(datastore.ValueType, true, self.identification)
-	if err != nil {
-		return utils.StackError(err, "Unable to commit transaction: cannot access value")
-	}
-	valueSet := set.(*datastore.ValueVersionedSet)
-
-	has, err = valueSet.HasUpdates()
-	if err != nil {
-		return utils.StackError(err, "Unable to check value for new updates")
-	}
-	if has {
-		_, err := valueSet.FixStateAsVersion()
-		if err != nil {
-			return utils.StackError(err, "Unable to commit transaction cannot versionize value")
-		}
-	}
-
-	return nil
-}
-
-//rollback all changes to last saved version
-func (self transaction) Rollback() error {
-
-	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, true, self.identification)
-	if err != nil {
-		return utils.StackError(err, "Unable to rollback transaction: cannot access list")
-	}
-	listSet := set.(*datastore.ListVersionedSet)
-
-	has, err := listSet.HasUpdates()
-	if err != nil {
-		return utils.StackError(err, "Unable to check list for new updates")
-	}
-	if has {
-		listSet.ResetHead()
-	}
-
-	//and the user
-	set, err = self.rntm.datastore.GetOrCreateSet(datastore.ValueType, true, self.identification)
-	if err != nil {
-		return utils.StackError(err, "Unable to rollback transaction: cannot access value")
-	}
-	valueSet := set.(*datastore.ValueVersionedSet)
-
-	has, err = valueSet.HasUpdates()
-	if err != nil {
-		return utils.StackError(err, "Unable to check value for new updates")
-	}
-	if has {
-		valueSet.ResetHead()
-	}
-	return nil
-}
-
 /*********************************************************************************
 								Manager
 *********************************************************************************/
@@ -255,8 +180,8 @@ type TransactionManager struct {
 	rntm *Runtime
 
 	//we do not need the versioning, but the commit/rollback possibility
-	mapset       *datastore.MapVersionedSet
-	transactions *datastore.MapVersioned
+	mapset       *datastore.MapSet
+	transactions *datastore.Map
 
 	jsobj *goja.Object
 }
@@ -265,23 +190,14 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 
 	var setKey [32]byte
 	copy(setKey[:], []byte("internal"))
-	set, err := rntm.datastore.GetOrCreateSet(datastore.MapType, true, setKey)
+	set, err := rntm.datastore.GetOrCreateSet(datastore.MapType, false, setKey)
 	if err != nil {
 		return &TransactionManager{}, utils.StackError(err, "Cannot acccess internal list datastore")
 	}
-	mapSet := set.(*datastore.MapVersionedSet)
+	mapSet := set.(*datastore.MapSet)
 	map_, err := mapSet.GetOrCreateMap([]byte("transactions"))
 	if err != nil {
 		return &TransactionManager{}, utils.StackError(err, "Cannot access internal transaction list store")
-	}
-
-	//check in initial version if required
-	has, err := mapSet.HasUpdates()
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to check map for new updates")
-	}
-	if has {
-		mapSet.FixStateAsVersion()
 	}
 
 	mngr := &TransactionManager{NewMethodHandler(), rntm, mapSet, map_, nil}
@@ -520,83 +436,7 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 		return transaction{}, utils.StackError(err, "Setting user for new transaction failed")
 	}
 
-	//initial commit to have a empty version we can always return to
-	err = trans.Commit()
-
 	return trans, err
-}
-
-//commits all changes done to transactions
-func (self *TransactionManager) Commit() error {
-
-	//iterate over all transactions and commit them
-	keys, err := self.transactions.GetKeys()
-	if err != nil {
-		return utils.StackError(err, "Unable to commit transactions: cannot access keys")
-	}
-
-	for _, key := range keys {
-		var id [32]byte
-		self.transactions.ReadType(key, &id)
-		trans, err := loadTransaction(id, self.rntm)
-		if err != nil {
-			return utils.StackError(err, "Unable to commit transactions: cannot access transaction")
-		}
-		err = trans.Commit()
-		if err != nil {
-			return utils.StackError(err, "Unable to commit transactions: cannot commit transaction")
-		}
-	}
-
-	//commit ourself
-	has, err := self.transactions.HasUpdates()
-	if err != nil {
-		return utils.StackError(err, "Unable to check transactions for new updates")
-	}
-	if has {
-		version, err := self.mapset.FixStateAsVersion()
-		if err != nil {
-			return utils.StackError(err, "Unable to commit transaction manager")
-		}
-		//remove the old version, not need to store it
-		self.mapset.RemoveVersionsUpTo(version)
-	}
-
-	return nil
-}
-
-//rolls back all changes done to transactions
-func (self *TransactionManager) Rollback() error {
-
-	//iterate over all transactions and commit them
-	keys, err := self.transactions.GetKeys()
-	if err != nil {
-		return utils.StackError(err, "Unable to rollback transactions: cannot access keys")
-	}
-
-	for _, key := range keys {
-		var id [32]byte
-		self.transactions.ReadType(key, &id)
-		trans, err := loadTransaction(id, self.rntm)
-		if err != nil {
-			return utils.StackError(err, "Unable to rollback transactions: cannot access transaction")
-		}
-		err = trans.Rollback()
-		if err != nil {
-			return utils.StackError(err, "Unable to rollback transactions: cannot rollback transaction")
-		}
-	}
-
-	//rollback ourself
-	has, err := self.transactions.HasUpdates()
-	if err != nil {
-		return utils.StackError(err, "Unable to check transaction list for new updates")
-	}
-	if has {
-		self.mapset.ResetHead()
-	}
-
-	return nil
 }
 
 func getTransactionBehaviour(obj Data) *transactionBehaviour {
@@ -614,8 +454,8 @@ type transactionBehaviour struct {
 	*behaviour
 
 	//transient state (hence db storage)
-	inTransaction datastore.ValueVersioned
-	current       datastore.ValueVersioned
+	inTransaction datastore.Value
+	current       datastore.Value
 }
 
 func NewTransactionBehaviour(name string, parent identifier, rntm *Runtime) Object {
@@ -623,11 +463,11 @@ func NewTransactionBehaviour(name string, parent identifier, rntm *Runtime) Obje
 	behaviour, _ := NewBehaviour(parent, name, `Transaction`, rntm)
 
 	//get the datastores
-	set, err := behaviour.GetDatabaseSet(datastore.ValueType)
+	set, err := rntm.datastore.GetOrCreateSet(datastore.ValueType, false, behaviour.Id().hash())
 	if err != nil {
 		return nil
 	}
-	vset := set.(*datastore.ValueVersionedSet)
+	vset := set.(*datastore.ValueSet)
 	inTrans, _ := vset.GetOrCreateValue([]byte("__inTransaction"))
 	curTrans, _ := vset.GetOrCreateValue([]byte("__currentTransaction"))
 
