@@ -19,6 +19,8 @@ func TestVersioning(t *testing.T) {
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
+		So(store.Begin(), ShouldBeNil)
+		defer store.Commit()
 
 		name := makeSetFromString("testset")
 		mngr := NewVersionManager(name, store)

@@ -32,6 +32,8 @@ func TestDataStore(t *testing.T) {
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
+		So(store.Begin(), ShouldBeNil)
+		defer store.Commit()
 
 		db, err := store.GetDatabase(ValueType, true)
 		So(err, ShouldBeNil)

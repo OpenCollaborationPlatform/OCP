@@ -19,6 +19,8 @@ func TestMap(t *testing.T) {
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
+		So(store.Begin(), ShouldBeNil)
+		defer store.Commit()
 
 		db, err := store.GetDatabase(MapType, false)
 		So(err, ShouldBeNil)
@@ -110,6 +112,8 @@ func TestMapVersionedData(t *testing.T) {
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
+		So(store.Begin(), ShouldBeNil)
+		defer store.Commit()
 
 		db, err := store.GetDatabase(MapType, true)
 		So(err, ShouldBeNil)

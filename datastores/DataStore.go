@@ -85,6 +85,10 @@ func NewDatastore(path string) (*Datastore, error) {
 	}
 	bolt := boltWrapper{db_, nil}
 
+	//open to allow creation of default setups
+	bolt.Begin()
+	defer bolt.Commit()
+
 	value, err := NewValueDatabase(&bolt)
 	if err != nil {
 		db_.Close()
@@ -174,6 +178,9 @@ func (self *Datastore) Rollback() error {
 }
 
 func (self *Datastore) Close() {
+
+	//just in case something is still open!
+	self.boltdb.Rollback()
 
 	for _, store := range self.dbs {
 		store.Close()

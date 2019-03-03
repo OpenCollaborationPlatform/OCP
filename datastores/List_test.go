@@ -19,6 +19,8 @@ func TestListBasic(t *testing.T) {
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
+		So(store.Begin(), ShouldBeNil)
+		defer store.Commit()
 
 		db, err := store.GetDatabase(ListType, false)
 		So(err, ShouldBeNil)
@@ -108,6 +110,8 @@ func TestListVersionedData(t *testing.T) {
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
+		So(store.Begin(), ShouldBeNil)
+		defer store.Commit()
 
 		db, err := store.GetDatabase(ListType, true)
 		So(err, ShouldBeNil)
