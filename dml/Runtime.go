@@ -200,6 +200,7 @@ func (self *Runtime) CallMethod(user User, path string, method string, args ...i
 		return nil, err
 	}
 	if !obj.HasMethod(method) {
+		self.datastore.Rollback()
 		return nil, fmt.Errorf("No method %v available in object %v", method, path)
 	}
 
