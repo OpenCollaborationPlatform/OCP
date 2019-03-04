@@ -307,6 +307,9 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 //postprocess for all done operations. Entry point for behaviours
 func (self *Runtime) postprocess(rollbackOnly bool) error {
 
+	//ensure we always commit at the end
+	defer self.datastore.Commit()
+
 	//if not a full rollback we check if something has changed and start the relevant
 	//behaviours. We only roll back if something goes wrong
 	var postError error = nil
@@ -367,7 +370,6 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 		delete(self.objects, id)
 		self.jsObjMap.Set(id.encode(), nil)
 	}
-	self.datastore.Commit()
 
 	return postError
 }
