@@ -214,6 +214,33 @@ func TestPODVector(t *testing.T) {
 			So(val, ShouldAlmostEqual, 0.0)
 		})
 
+		Convey("Creating a new Runtime with the existing datastore", func() {
+
+			rntm2 := NewRuntime(store)
+			err = rntm2.Parse(strings.NewReader(code))
+			So(err, ShouldBeNil)
+
+			Convey("The vector should be setup correctly", func() {
+
+				store.Begin()
+				defer store.Rollback()
+
+				child, _ := rntm2.mainObj.GetChildByName("FloatVec")
+				vec := child.(*vector)
+
+				length, _ := vec.Length()
+				So(length, ShouldEqual, 4)
+				val, _ := vec.Get(0)
+				So(val, ShouldAlmostEqual, 0.5)
+				val, _ = vec.Get(1)
+				So(val, ShouldAlmostEqual, 7.1)
+				val, _ = vec.Get(2)
+				So(val, ShouldAlmostEqual, 0)
+				val, _ = vec.Get(3)
+				So(val, ShouldAlmostEqual, 0.0)
+			})
+		})
+
 	})
 }
 
@@ -231,13 +258,13 @@ func TestTypeVector(t *testing.T) {
 
 		code := `Data {
 					.id:"toplevel"
-					
+
 					Vector {
 						.id: "TypeVec"
 						.type: Data {
 							property int test: 0
 						}
-					}	
+					}
 				}`
 
 		rntm := NewRuntime(store)
@@ -248,20 +275,46 @@ func TestTypeVector(t *testing.T) {
 
 			store.Begin()
 			child, _ := rntm.mainObj.GetChildByName("TypeVec")
-			intvec := child.(*vector)
-
-			length, _ := intvec.Length()
+			vec := child.(*vector)
+			length, _ := vec.Length()
 			So(length, ShouldEqual, 0)
 			store.Commit()
+
 			code = `toplevel.TypeVec.AppendNew()`
-			val, err := rntm.RunJavaScript("", code)
+			_, err := rntm.RunJavaScript("user3", code)
+			So(err, ShouldBeNil)
+			/*
+				store.Begin()
+				data, ok := val.(Data)
+				So(ok, ShouldBeTrue)
+				So(data.HasProperty("test"), ShouldBeTrue)
+				store.Commit()
+
+				_, ok = rntm.objects[data.Id()]
+				So(ok, ShouldBeTrue)*/
+
+		})
+
+		Convey("Setting data to the new type is supported", func() {
+
+			code = `
+				obj = toplevel.TypeVec.Get(0)
+				obj.test = 1
+			`
+			_, err := rntm.RunJavaScript("user3", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
-			data, ok := val.(Data)
-			So(ok, ShouldBeTrue)
-			So(data.HasProperty("test"), ShouldBeTrue)
-			store.Commit()
+			defer store.Rollback()
+
+			child, _ := rntm.mainObj.GetChildByName("TypeVec")
+			vec := child.(*vector)
+
+			entry, err := vec.Get(0)
+			So(err, ShouldBeNil)
+			obj := entry.(Object)
+
+			So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
 		})
 	})
 }

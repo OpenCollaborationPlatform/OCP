@@ -63,6 +63,47 @@ func (self *vector) Length() (int64, error) {
 	return result, err
 }
 
+//implement DynamicData interface
+func (self *vector) Load() error {
+
+	//we only need to load when we store objects
+	dt := self.entryDataType()
+	if dt.IsObject() || dt.IsComplex() {
+
+		keys, err := self.entries.GetKeys()
+		if err != nil {
+			return utils.StackError(err, "Unable to load vector entries: Keys cannot be accessed")
+		}
+		for _, key := range keys {
+
+			var res string
+			err = self.entries.ReadType(key, &res)
+			if err == nil {
+				id, err := IdentifierFromEncoded(res)
+				if err != nil {
+					return utils.StackError(err, "Unable to load vector: Stored identifier is invalid")
+				}
+				existing, ok := self.rntm.objects[id]
+				if !ok {
+
+					//we made sure the object does not exist. We need to load it
+					obj, err := ConstructObject(self.rntm, dt, id.Name)
+					if err != nil {
+						return utils.StackError(err, "Unable to load object for vector: construction failed")
+					}
+					obj.IncreaseRefcount()
+					self.rntm.objects[id] = obj.(Data)
+				} else {
+					existing.IncreaseRefcount()
+				}
+			} else {
+				return utils.StackError(err, "Unable to load vector entries: entry cannot be read")
+			}
+		}
+	}
+	return nil
+}
+
 func (self *vector) Get(idx int64) (interface{}, error) {
 
 	length, _ := self.Length()
@@ -105,7 +146,7 @@ func (self *vector) Get(idx int64) (interface{}, error) {
 	}
 
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to write vector at idx %v", idx)
+		return nil, utils.StackError(err, "Unable to read vector at idx %v", idx)
 	}
 
 	return result, nil
@@ -197,9 +238,13 @@ func (self *vector) AppendNew() (interface{}, error) {
 	}
 
 	//write new entry
-	err = self.entries.Write(length, result)
+	if obj, ok := result.(Object); ok {
+		err = self.entries.Write(length, obj.Id().encode())
+	} else {
+		err = self.entries.Write(length, result)
+	}
 	if err != nil {
-		return -1, err
+		return nil, utils.StackError(err, "Unable to write new object to vector")
 	}
 	//and increase length
 	self.length.Write(length + 1)

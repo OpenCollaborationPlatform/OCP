@@ -184,6 +184,29 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 
 	err = self.postprocess(false)
 
+	//check if it is a object and convert to dml object
+	obj, ok := val.(*goja.Object)
+	if ok {
+		fnc := obj.Get("Identifier").Export()
+		wrapper, ok := fnc.(func(goja.FunctionCall) goja.Value)
+		if ok {
+			encoded := wrapper(goja.FunctionCall{})
+			id, err := IdentifierFromEncoded(encoded.Export().(string))
+			if err != nil {
+				return nil, utils.StackError(err, "Unable to convert returned object from javascript")
+			}
+			obj, ok := self.objects[id]
+			if !ok {
+				return nil, utils.StackError(err, "Cannot find object returned from javascript")
+			}
+			return obj, nil
+
+		} else {
+			return nil, fmt.Errorf("Javascript returned object, but it has errous Identifier method")
+		}
+	}
+
+	//return default values
 	return val.Export(), err
 }
 
@@ -617,6 +640,15 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 
 		} else {
 			return nil, fmt.Errorf("Key of assignment is not a property or event")
+		}
+	}
+
+	//load the dynamic objects
+	dynamic, ok := obj.(DynamicData)
+	if ok {
+		err := dynamic.Load()
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to create object, dynamic data cannot be loaded")
 		}
 	}
 

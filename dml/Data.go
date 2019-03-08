@@ -96,3 +96,12 @@ func (self *data) DecreaseRefcount() error {
 	//now decrease our own
 	return self.object.DecreaseRefcount()
 }
+
+/*******************************************************************************/
+
+//A data object that is able to create or remove new data objects
+type DynamicData interface {
+	Data
+
+	Load() error //when loading on startup the object must recreat all data objects belonging to it
+}

@@ -195,6 +195,12 @@ func (self *methodHandler) SetupJSMethods(vm *goja.Runtime, obj *goja.Object) er
 					panic(vm.ToValue(err.Error()))
 				}
 
+				//object has special return value
+				retobj, ok := res.(Object)
+				if ok {
+					return retobj.GetJSObject()
+				}
+
 				//go return values to js return values
 				return vm.ToValue(res)
 			}

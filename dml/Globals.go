@@ -34,7 +34,7 @@ func SetupGlobals(rntm *Runtime) {
 
 //Construct a data object from encoded description (as provided by type property)
 //Note that if no name is given a random name is generated to ensure uniqueness. If
-//the object shall be restored instead of brandnew provide the type
+//the object shall be restored instead provide the name to restore
 func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 
 	if !dt.IsComplex() {
