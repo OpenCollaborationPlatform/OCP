@@ -52,31 +52,7 @@ func (h *Host) Start() error {
 	// Create the multiaddress we listen on
 	addr := fmt.Sprintf("/ip4/%s/tcp/%d", viper.GetString("p2p.uri"), viper.GetInt("p2p.port"))
 
-	// // Create a peerstore
-	// ps := pstore.NewPeerstore()
-
-	// // we use secure connections
-	// ps.AddPrivKey(pid, priv)
-	// ps.AddPubKey(pid, pub)
-
-	// // Create swarm (implements libP2P Network)
-	// swrm := swarm.NewSwarm(
-	// 	context.Background(),
-	// 	pid,
-	// 	ps,
-	// 	nil,
-	// )
-	// if err != nil {
-	// 	return err
-	// }
-
-	// netw := (*swarm.Network)(swrm)
-
-	// ctx := context.Background()
-	// opts := bhost.HostOpts{
-	// 	EnableRelay: false,
-	// 	NATManager:  bhost.NewNATManager(netw)}
-	//h.host, err = bhost.NewHost(ctx, netw, &opts)
+	//setup default p2p host
 	ctx := context.Background()
 	h.host, err = libp2p.New(ctx,
 		libp2p.Identity(priv),

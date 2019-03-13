@@ -116,3 +116,11 @@
 [prune]
   go-tests = true
   unused-packages = true
+
+[[constraint]]
+  name = "github.com/libp2p/go-libp2p-gorpc"
+  version = "0.0.2"
+
+[[constraint]]
+  name = "github.com/ipfs/go-bitswap"
+  version = "0.0.1"

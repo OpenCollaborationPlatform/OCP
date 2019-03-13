@@ -242,7 +242,15 @@ func (s *Swarm) DropDataOrFile(path string) string {
 //
 func (s *Swarm) GetFile(path string, name string) chan bool {
 
-	return make(chan bool)
+	ret := make(chan bool)
+	/*go func() {
+		hash := fileHashFromName(name)
+		//check if we have the file
+		if s.hasFile(hash) {
+
+		}
+	}*/
+	return ret
 }
 
 /********************************************************************************
