@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
-	"github.com/libp2p/go-libp2p-crypto"
-	"github.com/libp2p/go-libp2p-net"
+	crypto "github.com/libp2p/go-libp2p-crypto"
+	net "github.com/libp2p/go-libp2p-net"
 	"github.com/spf13/viper"
 )
 
@@ -104,6 +104,7 @@ type Swarm struct {
 	eventLock      sync.RWMutex
 	eventCallbacks map[string][]func(Dict)
 	eventChannels  map[string][]chan Dict
+
 	//data
 	fileStore  *bolt.DB          //store which blocks are available where
 	newFiles   chan Dict         //internal distribution of new files
@@ -120,9 +121,9 @@ func (id SwarmID) Pretty() string {
 func newSwarm(host *Host, id SwarmID, public bool, privKey crypto.PrivKey, pubKey crypto.PubKey) *Swarm {
 
 	dir := viper.GetString("directory")
-	dir = filepath.Join(dir, "files")
+	dir = filepath.Join(dir, id.Pretty())
 	os.MkdirAll(dir, os.ModePerm)
-	path := filepath.Join(dir, id.Pretty())
+	path := filepath.Join(dir, "filestore.db")
 
 	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
@@ -151,6 +152,11 @@ func newSwarm(host *Host, id SwarmID, public bool, privKey crypto.PrivKey, pubKe
 	swarm.setupDataHandling()
 
 	return swarm
+}
+
+func (self *Swarm) Path() string {
+	dir := viper.GetString("directory")
+	return filepath.Join(dir, self.ID.Pretty())
 }
 
 /* Peer handling

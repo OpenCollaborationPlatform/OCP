@@ -17,21 +17,25 @@ type List []interface{}
 
 // Message Codes and Direction
 const (
-	ERROR        MessageType = 1
-	PARTICIPATE  MessageType = 2
-	SUCCESS      MessageType = 3
-	EVENT        MessageType = 4
-	REQUESTBLOCK MessageType = 6
-	BLOCKDATA    MessageType = 7
+	ERROR           MessageType = 1
+	PARTICIPATE     MessageType = 2
+	SUCCESS         MessageType = 3
+	EVENT           MessageType = 4
+	REQUESTBLOCK    MessageType = 6
+	REQUESTDATA     MessageType = 7
+	BLOCKDATA       MessageType = 8
+	DATADESCRIPTION MessageType = 9
 )
 
 var mtStrings = map[MessageType]string{
-	ERROR:        "ERROR",
-	PARTICIPATE:  "PARTICIPATE",
-	SUCCESS:      "SUCCESS",
-	EVENT:        "EVENT",
-	REQUESTBLOCK: "REQUESTBLOCK",
-	BLOCKDATA:    "BLOCKDATA",
+	ERROR:           "ERROR",
+	PARTICIPATE:     "PARTICIPATE",
+	SUCCESS:         "SUCCESS",
+	EVENT:           "EVENT",
+	REQUESTBLOCK:    "REQUESTBLOCK",
+	REQUESTDATA:     "REQUESTDATA",
+	BLOCKDATA:       "BLOCKDATA",
+	DATADESCRIPTION: "BLOCKDESCRIPTION",
 }
 
 // String returns the message type string.
@@ -50,8 +54,12 @@ func NewMessage(t MessageType) Message {
 		return &Event{}
 	case REQUESTBLOCK:
 		return &RequestBlock{}
+	case REQUESTDATA:
+		return &RequestData{}
 	case BLOCKDATA:
 		return &BlockData{}
+	case DATADESCRIPTION:
+		return &DataDescription{}
 	}
 	return nil
 }
@@ -92,6 +100,20 @@ type RequestBlock struct {
 }
 
 func (msg RequestBlock) MessageType() MessageType { return REQUESTBLOCK }
+
+//msg that requests a file description
+type RequestData struct {
+	Name string
+}
+
+func (msg RequestData) MessageType() MessageType { return REQUESTDATA }
+
+//msg that sends a data descriptor as dictionary
+type DataDescription struct {
+	Description Dict
+}
+
+func (msg DataDescription) MessageType() MessageType { return DATADESCRIPTION }
 
 //msg that requests a file block
 type BlockData struct {

@@ -197,6 +197,11 @@ func (self *Datastore) Close() {
 //will be created
 func (self *Datastore) Backup(path string) error {
 
+	//check if we can make a backup
+	if self.boltdb.CanAccess() {
+		return fmt.Errorf("Transaction open: cannot backup")
+	}
+
 	//ensure folder exists
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		os.Mkdir(path, 0600)

@@ -200,8 +200,9 @@ func fileHashFromName(name string) [32]byte {
 	return hash
 }
 
-/* Data handling
- *************  */
+/******************************************************************************
+				 Data handling
+ ******************************************************************************/
 
 func (s *Swarm) DistributeData(data []byte) string {
 
@@ -237,6 +238,16 @@ func (s *Swarm) DistributeFile(path string) (string, error) {
 func (s *Swarm) DropDataOrFile(path string) string {
 	return ""
 }
+
+//
+func (s *Swarm) GetFile(path string, name string) chan bool {
+
+	return make(chan bool)
+}
+
+/********************************************************************************
+			internal
+********************************************************************************/
 
 //datahandling uses events, hence we need to setup a few callbacks first
 func (s *Swarm) setupDataHandling() {
@@ -384,8 +395,7 @@ func (s *Swarm) setupDataHandling() {
 
 }
 
-//this function handles events. Note that this stream not only has Event messages,
-//but is also used for some other internal messages, e.g. for data distribution
+//this function handles data requests.
 func (s *Swarm) handleDataStream(pid PeerID, messenger streamMessenger) {
 
 	go func() {
@@ -451,6 +461,24 @@ func (s *Swarm) handleDataStream(pid PeerID, messenger streamMessenger) {
 
 				uploadSlots <- 1
 
+			case REQUESTDATA:
+
+				rqst := msg.(*RequestData)
+				hash := fileHashFromName(rqst.Name)
+
+				//check if we have the block
+				if s.hasFile(hash) {
+					file, err := s.getFile(hash)
+					if err != nil {
+						messenger.WriteMsg(Error{"File not available"}, false)
+					}
+					messenger.writeMsg(DataDescription{file.toDict()})
+					continue
+
+				} else {
+					messenger.WriteMsg(Error{"File not available"}, false)
+				}
+
 			default:
 				messenger.WriteMsg(Error{"Message type not supportet"}, false)
 				messenger.Close()
@@ -514,7 +542,7 @@ func (s *Swarm) setupFile(f file) error {
 
 	dir := viper.GetString("directory")
 	name := f.name()
-	path := filepath.Join(dir, "files", name)
+	path := filepath.Join(dir, s.ID.Pretty(), "Files", name)
 	_, err := os.Create(path)
 	if err != nil {
 		return err
@@ -556,6 +584,52 @@ func (s *Swarm) hasFile(fileHash [32]byte) bool {
 	})
 
 	return err == nil
+}
+
+func (s *Swarm) getFile(hash [32]byte) (file, error) {
+
+	//we iterate over the database and build all file objects
+	result := file{make([]block, 0), hash}
+	err := s.fileStore.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(hash[:])
+		if bucket == nil {
+			return fmt.Errorf("Hash does not exist")
+		}
+
+		rec := bucket.Bucket([]byte("received"))
+		fet := bucket.Bucket([]byte("fetching"))
+
+		if rec == nil || fet == nil {
+			return fmt.Errorf("File is not correctly setup in datastore")
+		}
+
+		//get all blocks
+		for _, bucket := range []*bolt.Bucket{rec, fet} {
+
+			err := bucket.ForEach(func(key []byte, value []byte) error {
+
+				var blk block
+				err := json.Unmarshal(value, &blk)
+				if err != nil {
+					return err
+				}
+				result.Blocks = append(result.Blocks, blk)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return result, err
+	}
+
+	return result, nil
 }
 
 func (s *Swarm) hasBlock(fileHash [32]byte, b block) bool {
@@ -632,7 +706,7 @@ func (s *Swarm) getBlock(fileHash [32]byte, b block) ([]byte, error) {
 
 	//we use our own block and only copy the hash, to make sure that the data is correct
 	dir := viper.GetString("directory")
-	path = filepath.Join(dir, "files", path)
+	path = filepath.Join(dir, s.ID.Pretty(), "Files", path)
 	if b.Offset != storedBlock.Offset || b.Size != storedBlock.Size {
 		return nil, fmt.Errorf("Block does not match stored one")
 	}
@@ -692,7 +766,7 @@ func (s *Swarm) writeBlock(fileHash [32]byte, b block, data []byte) error {
 
 	//store block
 	dir := viper.GetString("directory")
-	path = filepath.Join(dir, "files", path)
+	path = filepath.Join(dir, s.ID.Pretty(), "Files", path)
 	err = putBlock(path, b, data)
 	if err != nil {
 		return err
