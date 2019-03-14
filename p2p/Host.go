@@ -2,7 +2,6 @@
 package p2p
 
 import (
-	"CollaborationNode/utils"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -24,8 +23,7 @@ type Host struct {
 	swarms     []*Swarm
 
 	//serivces the host provides
-	Rpc  RPC
-	Data Bitswap
+	Rpc RPC
 }
 
 //Host creates p2p host which manages all peer connections
@@ -74,8 +72,16 @@ func (h *Host) Start() error {
 		if err != nil {
 			log.Printf("Not a valid bootstrap node: %s", err)
 		}
-		if err := h.Connect(addr); err != nil {
-			log.Printf("Bootstrap error: %s", err)
+		info, err := peerstore.InfoFromP2pAddr(addr)
+		if err != nil {
+			log.Printf("Invalid multiadress: %v", value)
+			continue
+		}
+		//connect
+		err = h.host.Connect(context.Background(), *info)
+		if err != nil {
+			log.Printf("Cannot connect to  %v", value)
+			continue
 		}
 	}
 
@@ -92,22 +98,16 @@ func (h *Host) Stop() error {
 	return h.host.Close()
 }
 
-func (h *Host) Connect(addr ma.Multiaddr) error {
+func (h *Host) SetAdress(peer PeerID, addr ma.Multiaddr) error {
 
-	peerInfo, err := peerstore.InfoFromP2pAddr(addr)
-	if err != nil {
-		return utils.StackError(err, "Unable to decode address into peerinfo")
-	}
-	return h.host.Connect(context.Background(), *peerInfo)
+	h.host.Peerstore().AddAddr(peer.ID, addr, peerstore.PermanentAddrTTL)
+	return nil
 }
 
-func (self *Host) MultiConnect(addrs []ma.Multiaddr) []error {
+func (self *Host) SetMultipleAdress(peer PeerID, addrs []ma.Multiaddr) error {
 
-	errs := make([]error, len(addrs))
-	for _, addr := range addrs {
-		errs = append(errs, self.Connect(addr))
-	}
-	return errs
+	self.host.Peerstore().AddAddrs(peer.ID, addrs, peerstore.PermanentAddrTTL)
+	return nil
 }
 
 func (h *Host) CloseConnection(peer PeerID) error {
@@ -136,18 +136,9 @@ func (h *Host) Peers() []PeerID {
 	return result
 }
 
-func (h *Host) OwnAddresses() ([]ma.Multiaddr, error) {
+func (h *Host) OwnAddresses() []ma.Multiaddr {
 
-	p2paddr, err := ma.NewMultiaddr("/ipfs/" + h.host.ID().Pretty())
-	if err != nil {
-		return nil, utils.StackError(err, "unable to create own multiadress")
-	}
-
-	var addrs []ma.Multiaddr
-	for _, addr := range h.host.Addrs() {
-		addrs = append(addrs, addr.Encapsulate(p2paddr))
-	}
-	return addrs, nil
+	return h.host.Addrs()
 }
 
 func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {

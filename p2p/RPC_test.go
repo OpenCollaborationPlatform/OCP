@@ -34,20 +34,13 @@ func TestBasicRPC(t *testing.T) {
 
 		h1, err := temporaryHost(path)
 		So(err, ShouldBeNil)
+		defer h1.Stop()
 		h2, err := temporaryHost(path)
 		So(err, ShouldBeNil)
+		defer h2.Stop()
 
-		addrs, err := h1.OwnAddresses()
-		So(err, ShouldBeNil)
-		err = h2.Connect(addrs[1])
-		So(err, ShouldBeNil)
-		addrs, err = h2.OwnAddresses()
-		So(err, ShouldBeNil)
-		err = h1.Connect(addrs[1])
-		So(err, ShouldBeNil)
-
-		So(h1.IsConnected(h2.ID()), ShouldBeTrue)
-		So(h2.IsConnected(h1.ID()), ShouldBeTrue)
+		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
+		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
 
 		Convey("Registering services shall be possible", func() {
 

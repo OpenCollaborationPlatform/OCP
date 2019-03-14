@@ -174,7 +174,7 @@ func (self BitswapStore) Batch() (ds.Batch, error) {
 }
 
 func (self BitswapStore) NewTransaction(readOnly bool) (ds.Txn, error) {
-	tx, err := self.db.Begin(readOnly)
+	tx, err := self.db.Begin(!readOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -247,22 +247,12 @@ func (self BitswapStoreTransaction) Discard() {
 /******************************************************************************
 						Bitswap
 ******************************************************************************/
-type Bitswap struct {
-	bitswap *bs.Bitswap
-}
-
-func NewBitswap(path string, host *Host) (Bitswap, error) {
+func NewBitswap(bstore blockstore.Blockstore, host *Host) (*bs.Bitswap, error) {
 
 	routing := NewBitswapRouting(host)
 	network := bsnetwork.NewFromIpfsHost(host.host, routing)
 
-	dstore, err := NewBitswapStore(path)
-	if err != nil {
-		return Bitswap{}, nil
-	}
-	store := blockstore.NewBlockstore(dstore)
-
 	ctx := context.Background()
-	exchange := bs.New(ctx, network, store)
-	return Bitswap{exchange.(*bs.Bitswap)}, nil
+	exchange := bs.New(ctx, network, bstore)
+	return exchange.(*bs.Bitswap), nil
 }
