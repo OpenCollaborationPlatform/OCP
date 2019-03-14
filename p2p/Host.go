@@ -24,7 +24,8 @@ type Host struct {
 	swarms     []*Swarm
 
 	//serivces the host provides
-	Rpc RPC
+	Rpc  RPC
+	Data Bitswap
 }
 
 //Host creates p2p host which manages all peer connections

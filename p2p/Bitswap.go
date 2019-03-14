@@ -16,6 +16,7 @@ import (
 	"github.com/boltdb/bolt"
 
 	bs "github.com/ipfs/go-bitswap"
+	bsnetwork "github.com/ipfs/go-bitswap/network"
 	cid "github.com/ipfs/go-cid"
 	ds "github.com/ipfs/go-datastore"
 	query "github.com/ipfs/go-datastore/query"
@@ -27,6 +28,10 @@ import (
 						Routing
 ******************************************************************************/
 
+func NewBitswapRouting(host *Host) BitswapRouting {
+	return BitswapRouting{host}
+}
+
 //the routing type used by bitswap network
 type BitswapRouting struct {
 	host *Host
@@ -35,13 +40,13 @@ type BitswapRouting struct {
 // Provide adds the given cid to the content routing system. If 'true' is
 // passed, it also announces it, otherwise it is just kept in the local
 // accounting of which objects are being provided.
-func (self *BitswapRouting) Provide(context.Context, cid.Cid, bool) error {
+func (self BitswapRouting) Provide(context.Context, cid.Cid, bool) error {
 	//we do not need to advertise
 	return nil
 }
 
 // Search for peers who are able to provide a given key
-func (self *BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, num int) <-chan pstore.PeerInfo {
+func (self BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, num int) <-chan pstore.PeerInfo {
 
 	result := make(chan pstore.PeerInfo)
 
@@ -176,6 +181,10 @@ func (self BitswapStore) NewTransaction(readOnly bool) (ds.Txn, error) {
 	return &BitswapStoreTransaction{tx}, nil
 }
 
+func (self BitswapStore) Close() error {
+	return self.db.Close()
+}
+
 //A transaction for BitswapStore that implements the ipfs Txn and Batch interface
 type BitswapStoreTransaction struct {
 	tx *bolt.Tx
@@ -239,5 +248,21 @@ func (self BitswapStoreTransaction) Discard() {
 						Bitswap
 ******************************************************************************/
 type Bitswap struct {
-	bitswap bs.Bitswap
+	bitswap *bs.Bitswap
+}
+
+func NewBitswap(path string, host *Host) (Bitswap, error) {
+
+	routing := NewBitswapRouting(host)
+	network := bsnetwork.NewFromIpfsHost(host.host, routing)
+
+	dstore, err := NewBitswapStore(path)
+	if err != nil {
+		return Bitswap{}, nil
+	}
+	store := blockstore.NewBlockstore(dstore)
+
+	ctx := context.Background()
+	exchange := bs.New(ctx, network, store)
+	return Bitswap{exchange.(*bs.Bitswap)}, nil
 }
