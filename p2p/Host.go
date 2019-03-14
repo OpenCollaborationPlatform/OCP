@@ -2,6 +2,7 @@
 package p2p
 
 import (
+	"CollaborationNode/utils"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -12,8 +13,7 @@ import (
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	p2phost "github.com/libp2p/go-libp2p-host"
-	peer "github.com/libp2p/go-libp2p-peer"
-	pstore "github.com/libp2p/go-libp2p-peerstore"
+	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/spf13/viper"
 )
@@ -58,9 +58,6 @@ func (h *Host) Start() error {
 	h.host, err = libp2p.New(ctx,
 		libp2p.Identity(priv),
 		libp2p.ListenAddrStrings(addr),
-		libp2p.DefaultTransports,
-		libp2p.DefaultMuxers,
-		libp2p.DefaultSecurity,
 		libp2p.NATPortMap(),
 	)
 
@@ -72,11 +69,11 @@ func (h *Host) Start() error {
 	nodes := viper.GetStringSlice("p2p.bootstrap")
 	for _, value := range nodes {
 
-		ipfsaddr, err := ma.NewMultiaddr(value)
+		addr, err := ma.NewMultiaddr(value)
 		if err != nil {
 			log.Printf("Not a valid bootstrap node: %s", err)
 		}
-		if err := h.Connect([]ma.Multiaddr{ipfsaddr}); err != nil {
+		if err := h.Connect(addr); err != nil {
 			log.Printf("Bootstrap error: %s", err)
 		}
 	}
@@ -94,29 +91,22 @@ func (h *Host) Stop() error {
 	return h.host.Close()
 }
 
-func (h *Host) Connect(ipfsaddrs []ma.Multiaddr) error {
+func (h *Host) Connect(addr ma.Multiaddr) error {
 
-	for _, ipfsaddr := range ipfsaddrs {
-		pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS)
-		if err != nil {
-			return err
-		}
-
-		peerid, err := peer.IDB58Decode(pid)
-		if err != nil {
-			return err
-		}
-
-		// Decapsulate the /ipfs/<peerID> part from the target
-		// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
-		targetPeerAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)))
-		targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
-
-		h.host.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
-		h.host.Connect(context.Background(), h.host.Peerstore().PeerInfo(peerid))
+	peerInfo, err := peerstore.InfoFromP2pAddr(addr)
+	if err != nil {
+		return utils.StackError(err, "Unable to decode address into peerinfo")
 	}
+	return h.host.Connect(context.Background(), *peerInfo)
+}
 
-	return nil
+func (self *Host) MultiConnect(addrs []ma.Multiaddr) []error {
+
+	errs := make([]error, len(addrs))
+	for _, addr := range addrs {
+		errs = append(errs, self.Connect(addr))
+	}
+	return errs
 }
 
 func (h *Host) CloseConnection(peer PeerID) error {
@@ -145,16 +135,18 @@ func (h *Host) Peers() []PeerID {
 	return result
 }
 
-func (h *Host) OwnAddresses() []ma.Multiaddr {
+func (h *Host) OwnAddresses() ([]ma.Multiaddr, error) {
 
-	proto := ma.ProtocolWithCode(ma.P_IPFS).Name
-	p2paddr, _ := ma.NewMultiaddr("/" + proto + "/" + h.host.ID().Pretty())
+	p2paddr, err := ma.NewMultiaddr("/ipfs/" + h.host.ID().Pretty())
+	if err != nil {
+		return nil, utils.StackError(err, "unable to create own multiadress")
+	}
 
 	var addrs []ma.Multiaddr
 	for _, addr := range h.host.Addrs() {
 		addrs = append(addrs, addr.Encapsulate(p2paddr))
 	}
-	return addrs
+	return addrs, nil
 }
 
 func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {
