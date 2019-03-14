@@ -32,25 +32,26 @@ func (self *BitswapRouting) Provide(context.Context, cid.Cid, bool) error {
 	return nil
 }
 
+/*
 // Search for peers who are able to provide a given key
-func (self *BitswapRouting) FindProvidersAsync(context.Context, val cid.Cid, int) <-chan pstore.PeerInfo {
+func (self *BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, num int) <-chan pstore.PeerInfo {
 
 	result := make(<-chan pstore.PeerInfo)
 
-go func() {
-	var hasCID bool
-	err := self.host.Rpc.Call(peer, "RoutingService", "HasCID", val, &hasCID)
-	if err != nil && hasCID {
-		result<-peer
-	}
-	}
-	
+	go func() {
+		var hasCID bool
+		err := self.host.Rpc.Call(peer, "RoutingService", "HasCID", val, &hasCID)
+		if err != nil && hasCID {
+			result <- peer
+		}
+	}()
+
 	return result
-}
+}*/
 
 //the rpc service used to check if we can provide a CID
 type RoutingService struct {
-	store *blockstore.Blockstore
+	store blockstore.Blockstore
 }
 
 func (self *RoutingService) HasCID(ctx context.Context, request cid.Cid, result *bool) error {
