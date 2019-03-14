@@ -23,7 +23,8 @@ type Host struct {
 	swarmMutex sync.RWMutex
 	swarms     []*Swarm
 
-	swarmProto *swarmProtocol
+	//serivces the host provides
+	Rpc RPC
 }
 
 //Host creates p2p host which manages all peer connections
@@ -75,13 +76,13 @@ func (h *Host) Start() error {
 		if err != nil {
 			log.Printf("Not a valid bootstrap node: %s", err)
 		}
-		if err := h.Connect(ipfsaddr); err != nil {
+		if err := h.Connect([]ma.Multiaddr{ipfsaddr}); err != nil {
 			log.Printf("Bootstrap error: %s", err)
 		}
 	}
 
-	//add the protocols
-	h.swarmProto = newSwarmProtocol(h)
+	//add the services
+	h.Rpc = newRPC(h)
 
 	log.Printf("Host successful stated at %s", addr)
 
@@ -93,25 +94,27 @@ func (h *Host) Stop() error {
 	return h.host.Close()
 }
 
-func (h *Host) Connect(ipfsaddr ma.Multiaddr) error {
+func (h *Host) Connect(ipfsaddrs []ma.Multiaddr) error {
 
-	pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS)
-	if err != nil {
-		return err
+	for _, ipfsaddr := range ipfsaddrs {
+		pid, err := ipfsaddr.ValueForProtocol(ma.P_IPFS)
+		if err != nil {
+			return err
+		}
+
+		peerid, err := peer.IDB58Decode(pid)
+		if err != nil {
+			return err
+		}
+
+		// Decapsulate the /ipfs/<peerID> part from the target
+		// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
+		targetPeerAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)))
+		targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
+
+		h.host.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
+		h.host.Connect(context.Background(), h.host.Peerstore().PeerInfo(peerid))
 	}
-
-	peerid, err := peer.IDB58Decode(pid)
-	if err != nil {
-		return err
-	}
-
-	// Decapsulate the /ipfs/<peerID> part from the target
-	// /ip4/<a.b.c.d>/ipfs/<peer> becomes /ip4/<a.b.c.d>
-	targetPeerAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/ipfs/%s", peer.IDB58Encode(peerid)))
-	targetAddr := ipfsaddr.Decapsulate(targetPeerAddr)
-
-	h.host.Peerstore().AddAddr(peerid, targetAddr, pstore.PermanentAddrTTL)
-	h.host.Connect(context.Background(), h.host.Peerstore().PeerInfo(peerid))
 
 	return nil
 }
