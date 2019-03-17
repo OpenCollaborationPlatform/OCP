@@ -4,10 +4,12 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 
 	blocks "github.com/ipfs/go-block-format"
+	ipfslog "github.com/ipfs/go-log/writer"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	uuid "github.com/satori/go.uuid"
 	"github.com/spf13/viper"
@@ -17,7 +19,8 @@ var testport int = 9000
 
 func init() {
 	//disable logging for this tests
-	//log.SetOutput(ioutil.Discard)
+	log.SetOutput(ioutil.Discard)
+	ipfslog.Configure(ipfslog.Output(ioutil.Discard))
 }
 
 //creates a random host. The used directory will be a sibling of the provided one.
@@ -73,5 +76,15 @@ func randomBlock(size int) blocks.Block {
 
 	data := make([]byte, size)
 	rand.Read(data)
+	return blocks.NewBlock(data)
+}
+
+func repeatableBlock(size int) blocks.Block {
+
+	data := make([]byte, size)
+	for i := 0; i < size; i++ {
+		data[i] = byte(i)
+	}
+
 	return blocks.NewBlock(data)
 }

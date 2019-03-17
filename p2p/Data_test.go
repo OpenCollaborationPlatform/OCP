@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"bytes"
 	"context"
 	"io/ioutil"
 	"os"
@@ -11,6 +12,49 @@ import (
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	. "github.com/smartystreets/goconvey/convey"
 )
+
+func TestBlockStore(t *testing.T) {
+
+	//make temporary folder for the data
+	path, _ := ioutil.TempDir("", "p2p")
+	defer os.RemoveAll(path)
+
+	Convey("Setting up a blockstore,", t, func() {
+
+		batchingstore, err := NewBitswapStore(path)
+		So(err, ShouldBeNil)
+		bstore := blockstore.NewBlockstore(batchingstore)
+		defer batchingstore.Close()
+
+		Convey("Adding data should work", func() {
+
+			data := repeatableBlock(512)
+			has, err := bstore.Has(data.Cid())
+			So(err, ShouldBeNil)
+			So(has, ShouldBeFalse)
+
+			err = bstore.Put(data)
+			So(err, ShouldBeNil)
+
+			has, err = bstore.Has(data.Cid())
+			So(err, ShouldBeNil)
+			So(has, ShouldBeTrue)
+		})
+
+		Convey("Data should be correctly read", func() {
+
+			data := repeatableBlock(512)
+			size, err := bstore.GetSize(data.Cid())
+			So(err, ShouldBeNil)
+			So(size, ShouldEqual, 512)
+
+			stored, err := bstore.Get(data.Cid())
+			So(err, ShouldBeNil)
+			So(bytes.Equal(data.RawData(), stored.RawData()), ShouldBeTrue)
+		})
+	})
+
+}
 
 func TestBitswap(t *testing.T) {
 
