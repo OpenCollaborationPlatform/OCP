@@ -8,6 +8,7 @@ import (
 	"log"
 	"path/filepath"
 	"sync"
+	"time"
 
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
@@ -78,7 +79,8 @@ func (h *Host) Start() error {
 			continue
 		}
 		//connect
-		err = h.host.Connect(context.Background(), *info)
+		tctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		err = h.host.Connect(tctx, *info)
 		if err != nil {
 			log.Printf("Cannot connect to  %v", value)
 			continue
@@ -110,6 +112,12 @@ func (self *Host) SetMultipleAdress(peer PeerID, addrs []ma.Multiaddr) error {
 	return nil
 }
 
+func (h *Host) Connect(ctx context.Context, peer PeerID) error {
+
+	info := h.host.Peerstore().PeerInfo(peer.ID)
+	return h.host.Connect(ctx, info)
+}
+
 func (h *Host) CloseConnection(peer PeerID) error {
 	return h.host.Network().ClosePeer(peer.ID)
 }
@@ -127,12 +135,24 @@ func (h *Host) IsConnected(peer PeerID) bool {
 	return false
 }
 
-func (h *Host) Peers() []PeerID {
+//returns all known peers
+func (h *Host) Peers(connectedOnly bool) []PeerID {
 
-	result := make([]PeerID, len(h.host.Network().Peers()))
-	for i, peer := range h.host.Network().Peers() {
-		result[i] = PeerID{peer}
+	if connectedOnly {
+		result := make([]PeerID, len(h.host.Network().Peers()))
+		for i, peer := range h.host.Network().Peers() {
+			result[i] = PeerID{peer}
+		}
+		return result
 	}
+
+	//this gives all known peers
+	peers := h.host.Peerstore().Peers()
+	result := make([]PeerID, len(peers))
+	for i, p := range peers {
+		result[i] = PeerID{p}
+	}
+
 	return result
 }
 

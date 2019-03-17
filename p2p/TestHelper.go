@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var testport int = 9000
+var testport int = 9005
 
 func init() {
 	//disable logging for this tests

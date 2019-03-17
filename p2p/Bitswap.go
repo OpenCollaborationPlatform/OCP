@@ -9,6 +9,7 @@ import (
 	"CollaborationNode/utils"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -28,8 +29,13 @@ import (
 						Routing
 ******************************************************************************/
 
-func NewBitswapRouting(host *Host) BitswapRouting {
-	return BitswapRouting{host}
+func NewBitswapRouting(host *Host, store blockstore.Blockstore) (BitswapRouting, error) {
+
+	//setup the routing service
+	err := host.Rpc.Register(&RoutingService{store})
+
+	//return the routing
+	return BitswapRouting{host}, err
 }
 
 //the routing type used by bitswap network
@@ -50,15 +56,18 @@ func (self BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, 
 
 	result := make(chan pstore.PeerInfo)
 
-	for _, peer := range self.host.Peers() {
-		go func() {
+	for _, peerid := range self.host.Peers(false) {
+		go func(id PeerID) {
 			var hasCID bool
 			subctx, _ := context.WithCancel(ctx)
-			err := self.host.Rpc.CallContext(subctx, peer.ID, "RoutingService", "HasCID", val, &hasCID)
-			if err != nil && hasCID {
-				result <- self.host.host.Peerstore().PeerInfo(peer.ID)
+			err := self.host.Rpc.CallContext(subctx, id.ID, "RoutingService", "HasCID", val, &hasCID)
+			if err != nil {
+				log.Printf("Error in Routing service: %v", err)
+
+			} else if hasCID {
+				result <- self.host.host.Peerstore().PeerInfo(id.ID)
 			}
-		}()
+		}(peerid)
 	}
 
 	return result
@@ -79,6 +88,7 @@ func (self *RoutingService) HasCID(ctx context.Context, request cid.Cid, result 
 		return utils.StackError(err, "Unable to query blockstore: Can't answer request")
 	}
 	*result = has
+
 	return nil
 }
 
@@ -249,7 +259,11 @@ func (self BitswapStoreTransaction) Discard() {
 ******************************************************************************/
 func NewBitswap(bstore blockstore.Blockstore, host *Host) (*bs.Bitswap, error) {
 
-	routing := NewBitswapRouting(host)
+	routing, err := NewBitswapRouting(host, bstore)
+	if err != nil {
+		return nil, err
+	}
+
 	network := bsnetwork.NewFromIpfsHost(host.host, routing)
 
 	ctx := context.Background()

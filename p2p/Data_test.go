@@ -53,7 +53,6 @@ func TestBlockStore(t *testing.T) {
 			So(bytes.Equal(data.RawData(), stored.RawData()), ShouldBeTrue)
 		})
 	})
-
 }
 
 func TestBitswap(t *testing.T) {
@@ -86,26 +85,27 @@ func TestBitswap(t *testing.T) {
 
 		h2, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		bs2, err := NewBitswap(store2, h1)
+		bs2, err := NewBitswap(store2, h2)
 		So(err, ShouldBeNil)
 		defer bs2.Close()
 		defer h2.Stop()
 
-		time.Sleep(1 * time.Second)
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
 
-		Convey("Adding blocks shall be possible", func() {
+		Convey("Adding/retreiving blocks shall be possible", func() {
 
-			block := randomBlock(987)
-			store1.Put(block)
+			block := randomBlock(187)
 
-			err := bs1.HasBlock(block)
+			err = bs1.HasBlock(block)
 			So(err, ShouldBeNil)
 			ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+
+			//get block from other host
 			retblock, err := bs2.GetBlock(ctx, block.Cid())
 			So(err, ShouldBeNil)
-			So(block, ShouldEqual, retblock)
+			So(block.Cid().Equals(retblock.Cid()), ShouldBeTrue)
+			So(bytes.Equal(block.RawData(), retblock.RawData()), ShouldBeTrue)
 		})
 	})
 }
