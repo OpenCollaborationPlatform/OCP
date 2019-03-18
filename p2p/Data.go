@@ -61,12 +61,6 @@ func (self *DataService) AddFile(ctx context.Context, path string) (cid.Cid, err
 
 func (self *DataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, error) {
 
-	//make sure we have the data available
-	err := merkle.FetchGraph(ctx, id, self.service)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to fetch graph")
-	}
-
 	//get the root node
 	node, err := self.service.Get(ctx, id)
 	if err != nil {
