@@ -216,7 +216,7 @@ func (self BitswapStoreTransaction) Get(key ds.Key) (value []byte, err error) {
 	bucket := self.tx.Bucket([]byte("data"))
 	res := bucket.Get(key.Bytes())
 	if res == nil {
-		return nil, fmt.Errorf("Key not available in datastore")
+		return nil, ds.ErrNotFound
 	}
 	//res is only valid as long as the transaction is open
 	ret := make([]byte, len(res))

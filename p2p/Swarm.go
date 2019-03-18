@@ -149,7 +149,7 @@ func newSwarm(host *Host, id SwarmID, public bool, privKey crypto.PrivKey, pubKe
 		ctx:            ctx,
 		cancel:         cancel}
 
-	swarm.setupDataHandling()
+	//	swarm.setupDataHandling()
 
 	return swarm
 }
@@ -221,7 +221,7 @@ func (s *Swarm) participate(pid PeerID, msg Participate, messenger streamMesseng
 
 	case "Data":
 		messenger.WriteMsg(Success{}, false)
-		s.handleDataStream(pid, messenger)
+		//		s.handleDataStream(pid, messenger)
 
 	default:
 		messenger.WriteMsg(Error{fmt.Sprintf("Unknown role: %s", msg.Role)}, false)

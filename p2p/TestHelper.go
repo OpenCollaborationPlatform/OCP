@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io/ioutil"
@@ -9,7 +10,8 @@ import (
 	"path/filepath"
 
 	blocks "github.com/ipfs/go-block-format"
-	ipfslog "github.com/ipfs/go-log/writer"
+	ipfslog "github.com/ipfs/go-log"
+	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	uuid "github.com/satori/go.uuid"
 	"github.com/spf13/viper"
@@ -20,7 +22,8 @@ var testport int = 9005
 func init() {
 	//disable logging for this tests
 	log.SetOutput(ioutil.Discard)
-	ipfslog.Configure(ipfslog.Output(ioutil.Discard))
+	//ipfslog.Configure(ipfslog.Output(ioutil.Discard))//ipfslog "github.com/ipfs/go-log/writer"
+	ipfslog.SetDebugLogging()
 }
 
 //creates a random host. The used directory will be a sibling of the provided one.
@@ -70,6 +73,23 @@ func temporaryHost(dir string) (*Host, error) {
 	//start the host
 	h := NewHost()
 	return h, h.Start()
+}
+
+func randomHostWithoutDataSerivce() (*Host, error) {
+
+	addr := fmt.Sprintf("/ip4/%s/tcp/%d", "127.0.0.1", testport)
+	testport = testport + 1
+
+	ctx := context.Background()
+	p2phost, err := libp2p.New(ctx, libp2p.ListenAddrStrings(addr))
+	if err != nil {
+		return nil, err
+	}
+
+	host := &Host{host: p2phost, swarms: make([]*Swarm, 0)}
+	host.Rpc = newRPC(host)
+
+	return host, nil
 }
 
 func randomBlock(size int) blocks.Block {

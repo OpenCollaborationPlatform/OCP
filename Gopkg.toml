@@ -140,3 +140,15 @@
 [prune]
   go-tests = true
   unused-packages = true
+
+[[constraint]]
+  name = "github.com/ipfs/go-blockservice"
+  version = "0.0.2"
+
+[[constraint]]
+  name = "github.com/ipfs/go-merkledag"
+  version = "0.0.2"
+
+[[constraint]]
+  name = "github.com/ipfs/go-unixfs"
+  version = "0.0.2"

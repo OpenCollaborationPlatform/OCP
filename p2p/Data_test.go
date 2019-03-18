@@ -52,9 +52,18 @@ func TestBlockStore(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(bytes.Equal(data.RawData(), stored.RawData()), ShouldBeTrue)
 		})
+
+		Convey("and correct errors shall be returned", func() {
+
+			data := randomBlock(10)
+			_, err := bstore.Get(data.Cid())
+			So(err, ShouldNotBeNil)
+			So(err, ShouldEqual, blockstore.ErrNotFound)
+		})
 	})
 }
 
+/*
 func TestBitswap(t *testing.T) {
 
 	//make temporary folder for the data
@@ -76,14 +85,14 @@ func TestBitswap(t *testing.T) {
 
 	Convey("Setting up Bitswaps for two random hosts,", t, func() {
 
-		h1, err := temporaryHost(path)
+		h1, err := randomHostWithoutDataSerivce()
 		So(err, ShouldBeNil)
 		bs1, err := NewBitswap(store1, h1)
 		So(err, ShouldBeNil)
 		defer bs1.Close()
 		defer h1.Stop()
 
-		h2, err := temporaryHost(path)
+		h2, err := randomHostWithoutDataSerivce()
 		So(err, ShouldBeNil)
 		bs2, err := NewBitswap(store2, h2)
 		So(err, ShouldBeNil)
@@ -106,6 +115,58 @@ func TestBitswap(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(block.Cid().Equals(retblock.Cid()), ShouldBeTrue)
 			So(bytes.Equal(block.RawData(), retblock.RawData()), ShouldBeTrue)
+		})
+	})
+}
+*/
+func TestDataService(t *testing.T) {
+
+	//make temporary folder for the data
+	path, _ := ioutil.TempDir("", "p2p")
+	defer os.RemoveAll(path)
+
+	//generate a testfile
+	block := repeatableBlock(5555)
+	testfilepath := filepath.Join(path, "testfile")
+	ioutil.WriteFile(testfilepath, block.RawData(), 0644)
+
+	Convey("Setting up two random hosts,", t, func() {
+
+		h1, err := temporaryHost(path)
+		So(err, ShouldBeNil)
+		defer h1.Stop()
+
+		h2, err := temporaryHost(path)
+		So(err, ShouldBeNil)
+		defer h1.Stop()
+
+		Convey("Adding data to one host should be possible", func() {
+
+			ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+			res, err := h1.Data.AddFile(ctx, testfilepath)
+			So(err, ShouldBeNil)
+
+			reader, err := h1.Data.GetFile(ctx, res)
+			So(err, ShouldBeNil)
+
+			data := make([]byte, len(block.RawData()))
+			n, err := reader.Read(data)
+			So(err, ShouldBeNil)
+			So(n, ShouldEqual, 5555)
+			So(bytes.Equal(data, block.RawData()), ShouldBeTrue)
+
+			Convey("and retreiving from the other shall be possible too", func() {
+
+				ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+				reader, err := h2.Data.GetFile(ctx, res)
+				So(err, ShouldBeNil)
+
+				data := make([]byte, len(block.RawData()))
+				n, err := reader.Read(data)
+				So(err, ShouldBeNil)
+				So(n, ShouldEqual, 5555)
+				So(bytes.Equal(data, block.RawData()), ShouldBeTrue)
+			})
 		})
 	})
 }

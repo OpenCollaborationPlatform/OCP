@@ -2,6 +2,7 @@
 package p2p
 
 import (
+	"CollaborationNode/utils"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -24,7 +25,8 @@ type Host struct {
 	swarms     []*Swarm
 
 	//serivces the host provides
-	Rpc RPC
+	Rpc  RPC
+	Data DataService
 }
 
 //Host creates p2p host which manages all peer connections
@@ -89,6 +91,10 @@ func (h *Host) Start() error {
 
 	//add the services
 	h.Rpc = newRPC(h)
+	h.Data, err = NewDataService(h)
+	if err != nil {
+		return utils.StackError(err, "Unable to startup data service")
+	}
 
 	log.Printf("Host successful stated at %s", addr)
 
