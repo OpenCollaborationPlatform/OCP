@@ -10,7 +10,8 @@ import (
 	"path/filepath"
 
 	blocks "github.com/ipfs/go-block-format"
-	ipfslog "github.com/ipfs/go-log"
+
+	ipfslog "github.com/ipfs/go-log/writer"
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	uuid "github.com/satori/go.uuid"
@@ -22,8 +23,8 @@ var testport int = 9005
 func init() {
 	//disable logging for this tests
 	log.SetOutput(ioutil.Discard)
-	//ipfslog.Configure(ipfslog.Output(ioutil.Discard))//ipfslog "github.com/ipfs/go-log/writer"
-	ipfslog.SetDebugLogging()
+	ipfslog.Configure(ipfslog.Output(ioutil.Discard))
+	//ipfslog.SetDebugLogging() // ipfslog "github.com/ipfs/go-log"
 }
 
 //creates a random host. The used directory will be a sibling of the provided one.

@@ -140,6 +140,9 @@ func TestDataService(t *testing.T) {
 		So(err, ShouldBeNil)
 		defer h1.Stop()
 
+		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
+		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
+
 		Convey("Adding data to one host should be possible", func() {
 
 			ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
