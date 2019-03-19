@@ -147,6 +147,7 @@ func (self BitswapStore) Delete(key ds.Key) error {
 }
 
 func (self BitswapStore) Get(key ds.Key) (value []byte, err error) {
+
 	txn, err := self.NewTransaction(true)
 	if err != nil {
 		return nil, err
@@ -156,6 +157,7 @@ func (self BitswapStore) Get(key ds.Key) (value []byte, err error) {
 }
 
 func (self BitswapStore) Has(key ds.Key) (exists bool, err error) {
+
 	txn, err := self.NewTransaction(true)
 	if err != nil {
 		return false, err
@@ -165,6 +167,7 @@ func (self BitswapStore) Has(key ds.Key) (exists bool, err error) {
 }
 
 func (self BitswapStore) GetSize(key ds.Key) (size int, err error) {
+
 	txn, err := self.NewTransaction(true)
 	if err != nil {
 		return 0, err
@@ -184,6 +187,7 @@ func (self BitswapStore) Batch() (ds.Batch, error) {
 }
 
 func (self BitswapStore) NewTransaction(readOnly bool) (ds.Txn, error) {
+
 	tx, err := self.db.Begin(!readOnly)
 	if err != nil {
 		return nil, err
@@ -213,6 +217,7 @@ func (self BitswapStoreTransaction) Delete(key ds.Key) error {
 }
 
 func (self BitswapStoreTransaction) Get(key ds.Key) (value []byte, err error) {
+
 	bucket := self.tx.Bucket([]byte("data"))
 	res := bucket.Get(key.Bytes())
 	if res == nil {
@@ -226,12 +231,14 @@ func (self BitswapStoreTransaction) Get(key ds.Key) (value []byte, err error) {
 }
 
 func (self BitswapStoreTransaction) Has(key ds.Key) (exists bool, err error) {
+
 	bucket := self.tx.Bucket([]byte("data"))
 	res := bucket.Get(key.Bytes())
 	return res != nil, nil
 }
 
 func (self BitswapStoreTransaction) GetSize(key ds.Key) (size int, err error) {
+
 	bucket := self.tx.Bucket([]byte("data"))
 	res := bucket.Get(key.Bytes())
 	if res == nil {
@@ -242,6 +249,7 @@ func (self BitswapStoreTransaction) GetSize(key ds.Key) (size int, err error) {
 }
 
 func (self BitswapStoreTransaction) Query(q query.Query) (query.Results, error) {
+
 	panic("Not implemented")
 	return nil, nil
 }

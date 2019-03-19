@@ -70,3 +70,21 @@ func (self *DataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, er
 	//build the reader from the nodes DAG
 	return unixfsio.NewDagReader(ctx, node, self.service)
 }
+
+func (self *DataService) DropFile(ctx context.Context, id cid.Cid) error {
+
+	cids := make([]cid.Cid, 1)
+	cids[0] = id
+
+	visit := func(id cid.Cid) bool {
+		cids = append(cids, id)
+		return true
+	}
+
+	err := merkle.EnumerateChildren(ctx, merkle.GetLinksDirect(self.service), id, visit)
+	if err != nil {
+		return utils.StackError(err, "Unable to drop file")
+	}
+
+	return self.service.RemoveMany(ctx, cids)
+}
