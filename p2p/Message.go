@@ -20,7 +20,7 @@ const (
 	ERROR           MessageType = 1
 	PARTICIPATE     MessageType = 2
 	SUCCESS         MessageType = 3
-	EVENT           MessageType = 4
+	EVENTM          MessageType = 4
 	REQUESTBLOCK    MessageType = 6
 	REQUESTDATA     MessageType = 7
 	BLOCKDATA       MessageType = 8
@@ -31,7 +31,7 @@ var mtStrings = map[MessageType]string{
 	ERROR:           "ERROR",
 	PARTICIPATE:     "PARTICIPATE",
 	SUCCESS:         "SUCCESS",
-	EVENT:           "EVENT",
+	EVENTM:          "EVENTM",
 	REQUESTBLOCK:    "REQUESTBLOCK",
 	REQUESTDATA:     "REQUESTDATA",
 	BLOCKDATA:       "BLOCKDATA",
@@ -50,8 +50,8 @@ func NewMessage(t MessageType) Message {
 		return &Participate{}
 	case SUCCESS:
 		return &Success{}
-	case EVENT:
-		return &Event{}
+	case EVENTM:
+		return &Eventm{}
 	case REQUESTBLOCK:
 		return &RequestBlock{}
 	case REQUESTDATA:
@@ -84,14 +84,14 @@ type Success struct{}
 
 func (msg Success) MessageType() MessageType { return SUCCESS }
 
-// Event msg which transports events
-type Event struct {
+// Eventm msg which transports events
+type Eventm struct {
 	Uri    string
 	KwArgs Dict
 	Args   List
 }
 
-func (msg Event) MessageType() MessageType { return EVENT }
+func (msg Eventm) MessageType() MessageType { return EVENTM }
 
 //msg that requests a file block
 type RequestBlock struct {

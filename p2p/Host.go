@@ -25,8 +25,9 @@ type Host struct {
 	swarms     []*Swarm
 
 	//serivces the host provides
-	Rpc  RPC
-	Data DataService
+	Rpc   RPC
+	Data  DataService
+	Event EventService
 }
 
 //Host creates p2p host which manages all peer connections
@@ -94,6 +95,10 @@ func (h *Host) Start() error {
 	h.Data, err = NewDataService(h)
 	if err != nil {
 		return utils.StackError(err, "Unable to startup data service")
+	}
+	h.Event, err = NewEventService(h)
+	if err != nil {
+		return utils.StackError(err, "Unable to startup event service")
 	}
 
 	log.Printf("Host successful stated at %s", addr)

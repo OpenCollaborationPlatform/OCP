@@ -217,7 +217,7 @@ func (s *Swarm) participate(pid PeerID, msg Participate, messenger streamMesseng
 
 	case "Event":
 		messenger.WriteMsg(Success{}, false)
-		s.handleEventStream(pid, messenger)
+		//		s.handleEventStream(pid, messenger)
 
 	case "Data":
 		messenger.WriteMsg(Success{}, false)

@@ -2,92 +2,100 @@
 package p2p
 
 import (
-	"fmt"
-	"log"
+	"context"
+
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
-func (s *Swarm) PostEvent(uri string, kwargs Dict) {
-
-	s.peerLock.RLock()
-	defer s.peerLock.RUnlock()
-
-	//lets call all our peers! Note: Could happen that we don't have a event messenger
-	//if the other peer allows us as read only!
-	for key, data := range s.peers {
-		if data.Event.Connected() {
-			fmt.Printf("Send event to %s", key.Pretty())
-			go func() {
-				err := data.Event.WriteMsg(Event{uri, kwargs, List{}}, false)
-				if err != nil {
-					fmt.Printf("Error writing Event: %s", err)
-				}
-			}()
-		}
-	}
+//small custom wrapper for message to expose custom Event type
+//TODO: Expose User that created the event
+type Event struct {
+	Data   []byte
+	Source PeerID
+	Topic  string
 }
 
-func (s *Swarm) RegisterEventChannel(uri string, channel chan Dict) {
-
-	s.eventLock.Lock()
-	defer s.eventLock.Unlock()
-
-	slice, ok := s.eventChannels[uri]
-	if !ok {
-		s.eventChannels[uri] = make([]chan Dict, 0)
-		slice, _ = s.eventChannels[uri]
-	}
-
-	s.eventChannels[uri] = append(slice, channel)
+//a small wrapper for subscription type
+//supports custom message type
+type Subscription struct {
+	sub *pubsub.Subscription
 }
 
-func (s *Swarm) RegisterEventCallback(uri string, function func(Dict)) {
-
-	s.eventLock.Lock()
-	defer s.eventLock.Unlock()
-
-	slice, ok := s.eventCallbacks[uri]
-	if !ok {
-		s.eventCallbacks[uri] = make([]func(Dict), 0)
-		slice, _ = s.eventCallbacks[uri]
+//blocks till a event arrives, the context is canceled or the subscription itself
+//is canceld
+func (self Subscription) Next(ctx context.Context) (*Event, error) {
+	msg, err := self.sub.Next(ctx)
+	if err != nil {
+		return nil, err
 	}
 
-	s.eventCallbacks[uri] = append(slice, function)
+	return &Event{msg.Data, PeerID{msg.GetFrom()}, self.Topic()}, nil
 }
 
-//this function handles events. Note that this stream not only has Event messages,
-//but is also used for some other internal messages, e.g. for data distribution
-func (s *Swarm) handleEventStream(pid PeerID, messenger streamMessenger) {
+//Cancels the subscription. Next will return with an error and no more events will
+//be catched
+func (self Subscription) Cancel() {
+	self.sub.Cancel()
+}
 
-	go func() {
-		msg, err := messenger.ReadMsg(false)
+func (self Subscription) Topic() string {
+	return self.sub.Topic()
+}
 
-		if err != nil {
-			log.Printf("Error reading message: %s", err.Error())
-			return
-		}
+//EventService must be an interface to allow specialized swarm implementation
+type EventService interface {
+	Publish(topic string, data []byte) error
+	Suscribe(topic string) (Subscription, error)
+	Stop()
+}
 
-		//verify the sender of the event and see if he is allowed to send events
-		//TODO: check signature of message and see if the sender is allowed to send it
+func NewEventService(host *Host) (EventService, error) {
 
-		switch msg.MessageType() {
+	ctx, cncl := context.WithCancel(context.Background())
+	ps, err := pubsub.NewGossipSub(ctx, host.host)
 
-		case EVENT:
-			event := msg.(*Event)
-			fmt.Printf("Event received: %s", event.Uri)
-			s.eventLock.RLock()
-			callbacks, ok := s.eventCallbacks[event.Uri]
-			if ok {
-				for _, call := range callbacks {
-					go call(event.KwArgs)
-				}
-			}
-			channels, ok := s.eventChannels[event.Uri]
-			if ok {
-				for _, channel := range channels {
-					go func() { channel <- event.KwArgs }()
-				}
-			}
-			s.eventLock.RUnlock()
-		}
-	}()
+	return &hostEventService{ps, cncl}, err
+}
+
+type hostEventService struct {
+	service *pubsub.PubSub
+	cancel  context.CancelFunc
+}
+
+func (self *hostEventService) Suscribe(topic string) (Subscription, error) {
+
+	//TODO: add validator that checks user signature
+	sub, err := self.service.Subscribe(topic)
+	return Subscription{sub}, err
+}
+
+func (self *hostEventService) Publish(topic string, data []byte) error {
+
+	//TODO: add signed user to the data
+	return self.service.Publish(topic, data)
+}
+
+func (self *hostEventService) Stop() {
+	self.cancel()
+}
+
+type swarmEventService struct {
+	service *hostEventService
+	id      SwarmID
+}
+
+func (self *swarmEventService) Suscribe(topic string) (Subscription, error) {
+
+	topic = self.id.Pretty() + `/` + topic
+
+	//TODO: add validator that checks user signature and swarm rights
+	return self.service.Suscribe(topic)
+}
+
+func (self *swarmEventService) Publish(topic string, data []byte) error {
+
+	topic = self.id.Pretty() + `/` + topic
+
+	//TODO: add signed user to the data
+	return self.service.Publish(topic, data)
 }

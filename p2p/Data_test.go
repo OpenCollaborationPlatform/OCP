@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
+	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-/*
 func TestBlockStore(t *testing.T) {
 
 	//make temporary folder for the data
@@ -63,7 +63,6 @@ func TestBlockStore(t *testing.T) {
 		})
 	})
 }
-
 
 func TestBitswap(t *testing.T) {
 
@@ -119,7 +118,7 @@ func TestBitswap(t *testing.T) {
 		})
 	})
 }
-*/
+
 func TestDataService(t *testing.T) {
 
 	//make temporary folder for the data
