@@ -1,4 +1,7 @@
-// Swarm: event functions
+// Provides subscibing and publishng to events.
+// Event do not have a clear peer as target, but propagate
+// through the whole netork and are accepted from everyone who is subscribed
+// to it. The propagation happen through the already existing connections.
 package p2p
 
 import (
@@ -45,7 +48,7 @@ func (self Subscription) Topic() string {
 //EventService must be an interface to allow specialized swarm implementation
 type EventService interface {
 	Publish(topic string, data []byte) error
-	Suscribe(topic string) (Subscription, error)
+	Subscribe(topic string) (Subscription, error)
 	Stop()
 }
 
@@ -62,7 +65,7 @@ type hostEventService struct {
 	cancel  context.CancelFunc
 }
 
-func (self *hostEventService) Suscribe(topic string) (Subscription, error) {
+func (self *hostEventService) Subscribe(topic string) (Subscription, error) {
 
 	//TODO: add validator that checks user signature
 	sub, err := self.service.Subscribe(topic)
@@ -89,7 +92,7 @@ func (self *swarmEventService) Suscribe(topic string) (Subscription, error) {
 	topic = self.id.Pretty() + `/` + topic
 
 	//TODO: add validator that checks user signature and swarm rights
-	return self.service.Suscribe(topic)
+	return self.service.Subscribe(topic)
 }
 
 func (self *swarmEventService) Publish(topic string, data []byte) error {
