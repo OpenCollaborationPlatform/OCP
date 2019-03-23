@@ -10,9 +10,9 @@ import (
 )
 
 //interface abstracting RPC behaviour
-type RPC interface {
+type RpcService interface {
 
-	// Call performs an RPC call to a registered Server service and blocks until
+	// Call performs an RpcService call to a registered Server service and blocks until
 	// completed. If dest is empty ("") or matches the Client's host ID, it will
 	// attempt to use the local configured Server when possible.
 	Call(dest peer.ID, svcName, svcMethod string, args, reply interface{}) error
@@ -21,7 +21,7 @@ type RPC interface {
 	// the user the possibility of cancelling the operation at any point.
 	CallContext(ctx context.Context, dest peer.ID, svcName, svcMethod string, args, reply interface{}) error
 
-	// Go performs an RPC call asynchronously. The associated Call will be placed
+	// Go performs an RpcService call asynchronously. The associated Call will be placed
 	// in the provided channel upon completion, holding any Reply or Errors.
 	// The provided done channel must be nil, or have capacity for 1 element
 	// at least, or a panic will be triggered.
@@ -70,73 +70,73 @@ type RPC interface {
 
 var protocolID = protocol.ID("ocp/rpc")
 
-//The hostRPC exposes the RPC interface by combining the client and server type
+//The hostRpcService exposes the RpcService interface by combining the client and server type
 //of gorpc
-type hostRPC struct {
+type hostRpcService struct {
 	*gorpc.Client
 
 	server *gorpc.Server //cannot expose directly as Call is ambiguous
 }
 
-//setup a new RPC on the host and starts it
-func newRPC(host *Host) RPC {
+//setup a new RpcService on the host and starts it
+func newRpcService(host *Host) RpcService {
 
 	server := gorpc.NewServer(host.host, protocolID)
 	client := gorpc.NewClientWithServer(host.host, protocolID, server)
 
-	return &hostRPC{client, server}
+	return &hostRpcService{client, server}
 }
 
-func (self *hostRPC) Register(rcvr interface{}) error {
+func (self *hostRpcService) Register(rcvr interface{}) error {
 	return self.server.Register(rcvr)
 }
 
 /*******************************************************************************
-						Swarm RPC
+						Swarm RpcService
 *******************************************************************************/
 
-//implements the RPC interface. It does not create a own server, but uses the host RPC
+//implements the RpcService interface. It does not create a own server, but uses the host RpcService
 //server. The difference is that it allows to register services per swarm
-type swarmRPC struct {
-	rpc *hostRPC
+type swarmRpcService struct {
+	rpc *hostRpcService
 	id  SwarmID
 }
 
-//setups a swarm RPC on the host
-func newSwarmRPC(swarm *Swarm) RPC {
+//setups a swarm RpcService on the host
+func newSwarmRpcService(swarm *Swarm) RpcService {
 
-	return &swarmRPC{swarm.host.Rpc.(*hostRPC), swarm.ID}
+	return &swarmRpcService{swarm.host.Rpc.(*hostRpcService), swarm.ID}
 }
 
-func (self *swarmRPC) swarmService(service string) string {
+func (self *swarmRpcService) swarmService(service string) string {
 	return self.id.Pretty() + "/" + service
 }
 
-func (self *swarmRPC) Call(dest peer.ID, svcName, svcMethod string, args, reply interface{}) error {
+func (self *swarmRpcService) Call(dest peer.ID, svcName, svcMethod string, args, reply interface{}) error {
 	return self.rpc.Call(dest, self.swarmService(svcName), svcMethod, args, reply)
 }
 
-func (self *swarmRPC) CallContext(ctx context.Context, dest peer.ID, svcName, svcMethod string, args, reply interface{}) error {
+func (self *swarmRpcService) CallContext(ctx context.Context, dest peer.ID, svcName, svcMethod string, args, reply interface{}) error {
 	return self.rpc.CallContext(ctx, dest, self.swarmService(svcName), svcMethod, args, reply)
 }
 
-func (self *swarmRPC) Go(dest peer.ID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
+func (self *swarmRpcService) Go(dest peer.ID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
 	return self.rpc.Go(dest, self.swarmService(svcName), svcMethod, args, reply, done)
 }
 
-func (self *swarmRPC) GoContext(ctx context.Context, dest peer.ID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
+func (self *swarmRpcService) GoContext(ctx context.Context, dest peer.ID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
 	return self.rpc.GoContext(ctx, dest, self.swarmService(svcName), svcMethod, args, reply, done)
 }
 
-func (self *swarmRPC) MultiCall(ctxs []context.Context, dests []peer.ID, svcName, svcMethod string, args interface{}, replies []interface{}) []error {
+func (self *swarmRpcService) MultiCall(ctxs []context.Context, dests []peer.ID, svcName, svcMethod string, args interface{}, replies []interface{}) []error {
 	return self.rpc.MultiCall(ctxs, dests, self.swarmService(svcName), svcMethod, args, replies)
 }
 
-func (self *swarmRPC) MultiGo(ctxs []context.Context, dests []peer.ID, svcName, svcMethod string, args interface{}, replies []interface{}, dones []chan *gorpc.Call) error {
+func (self *swarmRpcService) MultiGo(ctxs []context.Context, dests []peer.ID, svcName, svcMethod string, args interface{}, replies []interface{}, dones []chan *gorpc.Call) error {
 	return self.rpc.MultiGo(ctxs, dests, self.swarmService(svcName), svcMethod, args, replies, dones)
 }
 
-func (self *swarmRPC) Register(rcvr interface{}) error {
+func (self *swarmRpcService) Register(rcvr interface{}) error {
 
 	value := reflect.ValueOf(rcvr)
 	name := self.swarmService(reflect.Indirect(value).Type().Name())

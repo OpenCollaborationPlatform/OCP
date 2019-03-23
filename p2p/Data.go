@@ -18,33 +18,39 @@ import (
 	"github.com/spf13/viper"
 )
 
+type DataService interface {
+	AddFile(ctx context.Context, path string) (cid.Cid, error)
+	GetFile(ctx context.Context, id cid.Cid) (io.Reader, error)
+	DropFile(ctx context.Context, id cid.Cid) error
+}
+
 func NewDataService(host *Host) (DataService, error) {
 
 	//build the blockstore
 	store, err := NewBitswapStore(viper.GetString("directory"))
 	if err != nil {
-		return DataService{}, err
+		return nil, err
 	}
 	bstore := blockstore.NewBlockstore(store)
 
 	//build the blockservice from a blockstore and a bitswap
 	bitswap, err := NewBitswap(bstore, host)
 	if err != nil {
-		return DataService{}, err
+		return nil, err
 	}
 	blockservice := bserv.New(bstore, bitswap)
 
 	//build dagservice (merkledag) ontop of the blockservice
 	dagservice := merkle.NewDAGService(blockservice)
 
-	return DataService{dagservice}, nil
+	return &hostDataService{dagservice}, nil
 }
 
-type DataService struct {
+type hostDataService struct {
 	service ipld.DAGService
 }
 
-func (self *DataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
+func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
 
 	//read the file
 	file, err := os.Open(path)
@@ -59,7 +65,7 @@ func (self *DataService) AddFile(ctx context.Context, path string) (cid.Cid, err
 	return dagnode.Cid(), err
 }
 
-func (self *DataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, error) {
+func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, error) {
 
 	//get the root node
 	node, err := self.service.Get(ctx, id)
@@ -71,7 +77,7 @@ func (self *DataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, er
 	return unixfsio.NewDagReader(ctx, node, self.service)
 }
 
-func (self *DataService) DropFile(ctx context.Context, id cid.Cid) error {
+func (self *hostDataService) DropFile(ctx context.Context, id cid.Cid) error {
 
 	cids := make([]cid.Cid, 1)
 	cids[0] = id
@@ -87,4 +93,49 @@ func (self *DataService) DropFile(ctx context.Context, id cid.Cid) error {
 	}
 
 	return self.service.RemoveMany(ctx, cids)
+}
+
+//SwarmDataService
+//This dataservice behaves sligthly different than the normal one:
+// - Adding/Dropping a file automatically distributes it within the swarm
+// - Added files are encryptet, so that they are unreadable outside of the swarm
+
+type swarmDataService struct {
+	data  *hostDataService
+	event *swarmEventService
+}
+
+func newSwarmDataService(swarm *Swarm) DataService {
+
+	hostdata := swarm.host.Data.(*hostDataService)
+	return &swarmDataService{hostdata, swarm.Event}
+}
+
+func (self *swarmDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
+
+	cid, err := self.data.AddFile(ctx, path)
+	/*
+		//announce file if we have been successfull
+		if err != nil {
+			self.event.Publish("NewDataFile", cid.Bytes())
+		}
+	*/
+	return cid, err
+}
+
+func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, error) {
+
+	return self.data.GetFile(ctx, id)
+}
+
+func (self *swarmDataService) DropFile(ctx context.Context, id cid.Cid) error {
+
+	err := self.data.DropFile(ctx, id)
+	/*
+		//announce file if we have been successfull
+		if err != nil {
+			self.event.Publish("DroppedDataFile", id.Bytes())
+		}
+	*/
+	return err
 }

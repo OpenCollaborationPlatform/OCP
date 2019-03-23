@@ -88,7 +88,7 @@ func randomHostWithoutDataSerivce() (*Host, error) {
 	}
 
 	host := &Host{host: p2phost, swarms: make([]*Swarm, 0)}
-	host.Rpc = newRPC(host)
+	host.Rpc = newRpcService(host)
 
 	return host, nil
 }

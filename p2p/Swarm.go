@@ -3,38 +3,55 @@ package p2p
 
 import (
 	"context"
-	"path/filepath"
+	"fmt"
 	"sync"
-
-	crypto "github.com/libp2p/go-libp2p-crypto"
-	"github.com/spf13/viper"
 )
 
-//Type that represents a collection if peers which are connected together and form
-//a swarm. It allows to share data between all peers, as well as have common events
-//and provide rpc calls
-//The following properties hold:
-// - Each peer is connected to all other peers in the swarm (for now at least)
-// -- No forwarding of events
-// -- No douplication of event
-// - If a peer is allowed to send and receive data depends on the swarms peer list
-// -- Authorisation must happen outside of the swarm: AddPeer has holy information
-// -- Messages need to be signed with swarm key, but swarmkey is not exclusive right
-//	  guarantee (a peer could have been removed from allowed peers afterwards)
-// - Data cannot be send to a peer, only be requested by it
-// - Data is split and transfer is split to all peers if possible
-// - Event and rpc handling mimics the wamp interface
+type AUTH_STATE uint
+
+const (
+	AUTH_NONE      = AUTH_STATE(0)
+	AUTH_READONLY  = AUTH_STATE(1)
+	AUTH_READWRITE = AUTH_STATE(2)
+)
+
+// Type that represents a collection if peers which are connected together and form
+// a swarm. It allows to share data between all peers, as well as have common events
+// and provide rpc calls.
+//
+// A swarm does always allow reading for its pears! It is not possible to make it secure,
+// don't use it if the shared information is not public. Even if a peer is not added it is
+// easily possible to catch the information for attacking nodes.
+//
+// It does allow for a certain Authorisation sheme: ReadOnly or ReadWrite. It has the
+// folloing impact on the swarm services:
+// - RPC:
+// 	-- ReadOnly Peer can be adressed for all RPC calls it offers (may fail dependend on its on AUTH info)
+//  -- ReadOnly Peer is allowed to call all registered ReadOnly RPCs of this swarm
+//  -- ReadOnly Peer is not allowed to call all registered ReadWrtie RPCs of this swarm. Those calls will fail.
+//  -- ReadWrite Peer is additionaly allowed to call ReadWrite RPC's of this swarm
+// - Event:
+//  -- ReadOnly Peer will receive all events send from this swarm (may fail dependend on its on AUTH info)
+//  -- ReadOnly Peer can publish ReadOnly events to this swarm
+//  -- ReadOnly Peer can not publish ReadWrite event to this swarm
+//  -- ReadWrite Peer can additionally publish ReadWrite events to this swarm
+// - Data:
+//  -- ReadOnly Peer will receive all shared file information and the files itself
+//  -- ReadOnly Peer will not be able to add new files to the swarm
+//  -- ReadWrite Peer will be able to add new files to the swarm
 type Swarm struct {
+	//provided services
+	Event *swarmEventService
+	RPC   RpcService
+	Data  DataService
+
 	//general stuff
-	peerLock sync.RWMutex
 	host     *Host
 	ID       SwarmID
-	privKey  crypto.PrivKey
-	pubKey   crypto.PubKey
-	//peers    map[PeerID]peerConnection
-	public bool
-	ctx    context.Context
-	cancel context.CancelFunc
+	peers    map[PeerID]AUTH_STATE
+	peerLock sync.RWMutex
+	ctx      context.Context
+	cancel   context.CancelFunc
 }
 
 type SwarmID string
@@ -44,74 +61,77 @@ func (id SwarmID) Pretty() string {
 }
 
 //not accassible outside the package: should be used via Host only
-func newSwarm(host *Host, id SwarmID, public bool, privKey crypto.PrivKey, pubKey crypto.PubKey) *Swarm {
+func newSwarm(host *Host, id SwarmID) *Swarm {
 
 	//the context to use for all goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
 	swarm := &Swarm{
-		host:     host,
-		peerLock: sync.RWMutex{},
-		ID:       id,
-		privKey:  privKey,
-		pubKey:   pubKey,
-		public:   public,
-		//peers:          make(map[PeerID]peerConnection, 0),
+		host:   host,
+		ID:     id,
+		peers:  make(map[PeerID]AUTH_STATE),
 		ctx:    ctx,
 		cancel: cancel}
 
-	return swarm
-}
+	//build the services
+	swarm.RPC = newSwarmRpcService(swarm)
+	swarm.Event = newSwarmEventService(swarm)
+	swarm.Data = newSwarmDataService(swarm)
 
-func (self *Swarm) Path() string {
-	dir := viper.GetString("directory")
-	return filepath.Join(dir, self.ID.Pretty())
+	return swarm
 }
 
 /* Peer handling
  *************  */
 
-//Peer is added, either as readonly, or with write allowance.
-// - Connection only succeeds if the other peer has same swarm
-// - Connection only succedds if the other peer has us added to swarm
-// - Connection is retried periodically whenever it fails
-func (s *Swarm) AddPeer(pid PeerID, readOnly bool) error {
-	/*
-		s.peerLock.Lock()
-		//check if peer exist already
-		_, ok := s.peers[pid]
-		if ok {
-			s.peerLock.Unlock()
-			return nil
-		}
-		//and now add it
-		s.peers[pid] = peerConnection{WriteAccess: !readOnly}
-		s.peerLock.Unlock()
+//Peer is added and hence allowed to use all swarm functionality
+func (s *Swarm) AddPeer(pid PeerID, state AUTH_STATE) error {
 
-		s.connectPeer(pid)
-	*/
+	s.peerLock.Lock()
+	defer s.peerLock.Unlock()
+	_, ok := s.peers[pid]
+	if ok {
+		return fmt.Errorf("Peer already added")
+	}
+	s.peers[pid] = state
 	return nil
 }
 
-func (s *Swarm) RemovePeer(peer PeerID) {
+func (s *Swarm) RemovePeer(peer PeerID) error {
 
+	s.peerLock.Lock()
+	defer s.peerLock.Unlock()
+	delete(s.peers, peer)
+	return nil
 }
 
 func (s *Swarm) HasPeer(peer PeerID) bool {
-	/*
-		s.peerLock.RLock()
-		defer s.peerLock.RUnlock()
-		_, ok := s.peers[peer]
-		return ok*/
-	return false
+
+	s.peerLock.RLock()
+	defer s.peerLock.RUnlock()
+	_, has := s.peers[peer]
+	return has
+}
+
+func (self *Swarm) PeerAuth(peer PeerID) AUTH_STATE {
+
+	//the swarm itself is always readwrite
+	//TODO: Makes this sense or should it be correct state?
+	if peer == self.host.ID() {
+		return AUTH_READWRITE
+	}
+
+	self.peerLock.RLock()
+	defer self.peerLock.RUnlock()
+	state, ok := self.peers[peer]
+	if !ok {
+		return AUTH_NONE
+	}
+	return state
 }
 
 /* General functions
  ******************  */
-
-func (s *Swarm) IsPublic() bool {
-	return s.public
-}
 
 func (s *Swarm) Close() {
 	s.cancel()

@@ -60,12 +60,12 @@ func (self BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, 
 		go func(id PeerID) {
 			var hasCID bool
 			subctx, _ := context.WithCancel(ctx)
-			err := self.host.Rpc.CallContext(subctx, id.ID, "RoutingService", "HasCID", val, &hasCID)
+			err := self.host.Rpc.CallContext(subctx, id.pid(), "RoutingService", "HasCID", val, &hasCID)
 			if err != nil {
 				log.Printf("Error in Routing service: %v", err)
 
 			} else if hasCID {
-				result <- self.host.host.Peerstore().PeerInfo(id.ID)
+				result <- self.host.host.Peerstore().PeerInfo(id.pid())
 			}
 		}(peerid)
 	}

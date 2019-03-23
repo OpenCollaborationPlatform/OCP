@@ -25,9 +25,9 @@ type Host struct {
 	swarms     []*Swarm
 
 	//serivces the host provides
-	Rpc   RPC
+	Rpc   RpcService
 	Data  DataService
-	Event EventService
+	Event *hostEventService
 }
 
 //Host creates p2p host which manages all peer connections
@@ -91,12 +91,12 @@ func (h *Host) Start() error {
 	}
 
 	//add the services
-	h.Rpc = newRPC(h)
+	h.Rpc = newRpcService(h)
 	h.Data, err = NewDataService(h)
 	if err != nil {
 		return utils.StackError(err, "Unable to startup data service")
 	}
-	h.Event, err = NewEventService(h)
+	h.Event, err = newHostEventService(h)
 	if err != nil {
 		return utils.StackError(err, "Unable to startup event service")
 	}
@@ -113,31 +113,31 @@ func (h *Host) Stop() error {
 
 func (h *Host) SetAdress(peer PeerID, addr ma.Multiaddr) error {
 
-	h.host.Peerstore().AddAddr(peer.ID, addr, peerstore.PermanentAddrTTL)
+	h.host.Peerstore().AddAddr(peer.pid(), addr, peerstore.PermanentAddrTTL)
 	return nil
 }
 
 func (self *Host) SetMultipleAdress(peer PeerID, addrs []ma.Multiaddr) error {
 
-	self.host.Peerstore().AddAddrs(peer.ID, addrs, peerstore.PermanentAddrTTL)
+	self.host.Peerstore().AddAddrs(peer.pid(), addrs, peerstore.PermanentAddrTTL)
 	return nil
 }
 
 func (h *Host) Connect(ctx context.Context, peer PeerID) error {
 
-	info := h.host.Peerstore().PeerInfo(peer.ID)
+	info := h.host.Peerstore().PeerInfo(peer.pid())
 	return h.host.Connect(ctx, info)
 }
 
 func (h *Host) CloseConnection(peer PeerID) error {
-	return h.host.Network().ClosePeer(peer.ID)
+	return h.host.Network().ClosePeer(peer.pid())
 }
 
 func (h *Host) IsConnected(peer PeerID) bool {
 
 	for _, p := range h.host.Network().Peers() {
-		if peer.ID == p {
-			if len(h.host.Network().ConnsToPeer(peer.ID)) > 0 {
+		if peer.pid() == p {
+			if len(h.host.Network().ConnsToPeer(peer.pid())) > 0 {
 				return true
 			}
 			return false
@@ -152,7 +152,7 @@ func (h *Host) Peers(connectedOnly bool) []PeerID {
 	if connectedOnly {
 		result := make([]PeerID, len(h.host.Network().Peers()))
 		for i, peer := range h.host.Network().Peers() {
-			result[i] = PeerID{peer}
+			result[i] = PeerID(peer)
 		}
 		return result
 	}
@@ -161,7 +161,7 @@ func (h *Host) Peers(connectedOnly bool) []PeerID {
 	peers := h.host.Peerstore().Peers()
 	result := make([]PeerID, len(peers))
 	for i, p := range peers {
-		result[i] = PeerID{p}
+		result[i] = PeerID(p)
 	}
 
 	return result
@@ -175,12 +175,12 @@ func (h *Host) OwnAddresses() []ma.Multiaddr {
 func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {
 
 	proto := ma.ProtocolWithCode(ma.P_IPFS).Name
-	p2paddr, err := ma.NewMultiaddr("/" + proto + "/" + peer.Pretty())
+	p2paddr, err := ma.NewMultiaddr("/" + proto + "/" + peer.pid().Pretty())
 	if err != nil {
 		return nil, err
 	}
 
-	pi := h.host.Peerstore().PeerInfo(peer.ID)
+	pi := h.host.Peerstore().PeerInfo(peer.pid())
 	var addrs []ma.Multiaddr
 	for _, addr := range pi.Addrs {
 		addrs = append(addrs, addr.Encapsulate(p2paddr))
@@ -190,7 +190,7 @@ func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {
 }
 
 func (h *Host) ID() PeerID {
-	return PeerID{h.host.ID()}
+	return PeerID(h.host.ID())
 }
 
 /*		Swarm Handling
@@ -202,11 +202,11 @@ func (h *Host) Swarms() []*Swarm {
 	return h.swarms
 }
 
-func (h *Host) CreateSwarm(id SwarmID, privKey crypto.PrivKey, public bool) *Swarm {
+func (h *Host) CreateSwarm(id SwarmID) *Swarm {
 
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	swarm := newSwarm(h, id, public, privKey, privKey.GetPublic())
+	swarm := newSwarm(h, id)
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
 	}

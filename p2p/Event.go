@@ -6,7 +6,9 @@ package p2p
 
 import (
 	"context"
+	"fmt"
 
+	peer "github.com/libp2p/go-libp2p-peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
@@ -32,7 +34,7 @@ func (self Subscription) Next(ctx context.Context) (*Event, error) {
 		return nil, err
 	}
 
-	return &Event{msg.Data, PeerID{msg.GetFrom()}, self.Topic()}, nil
+	return &Event{msg.Data, PeerID(msg.GetFrom()), self.Topic()}, nil
 }
 
 //Cancels the subscription. Next will return with an error and no more events will
@@ -45,17 +47,10 @@ func (self Subscription) Topic() string {
 	return self.sub.Topic()
 }
 
-//EventService must be an interface to allow specialized swarm implementation
-type EventService interface {
-	Publish(topic string, data []byte) error
-	Subscribe(topic string) (Subscription, error)
-	Stop()
-}
-
-func NewEventService(host *Host) (EventService, error) {
+func newHostEventService(host *Host) (*hostEventService, error) {
 
 	ctx, cncl := context.WithCancel(context.Background())
-	ps, err := pubsub.NewGossipSub(ctx, host.host)
+	ps, err := pubsub.NewFloodSub(ctx, host.host)
 
 	return &hostEventService{ps, cncl}, err
 }
@@ -83,22 +78,61 @@ func (self *hostEventService) Stop() {
 }
 
 type swarmEventService struct {
-	service *hostEventService
-	id      SwarmID
+	service *pubsub.PubSub
+	swarm   *Swarm
 }
 
-func (self *swarmEventService) Suscribe(topic string) (Subscription, error) {
+func newSwarmEventService(swarm *Swarm) *swarmEventService {
 
-	topic = self.id.Pretty() + `/` + topic
-
-	//TODO: add validator that checks user signature and swarm rights
-	return self.service.Subscribe(topic)
+	hostservice := swarm.host.Event
+	return &swarmEventService{hostservice.service, swarm}
 }
 
-func (self *swarmEventService) Publish(topic string, data []byte) error {
+//Subscribe to a topic which requires a certain authorisation state
+// - ReadOnly:  The topic is publishable by ReadOnly peers, hence everyone can publish on it
+// - ReadWrite: The topic is only publishable by ReadWrite peers, hence publishing is only allowed by them
+func (self *swarmEventService) Subscribe(topic string, required_auth AUTH_STATE) (Subscription, error) {
 
-	topic = self.id.Pretty() + `/` + topic
+	if required_auth == AUTH_READONLY {
+		topic = self.swarm.ID.Pretty() + `.` + topic
 
-	//TODO: add signed user to the data
+	} else if required_auth == AUTH_READWRITE {
+		topic = self.swarm.ID.Pretty() + `.private.` + topic
+
+	} else {
+		return Subscription{}, fmt.Errorf("Unsupportet authorisation mode")
+	}
+
+	sub, err := self.service.Subscribe(topic)
+
+	if required_auth == AUTH_READWRITE {
+		swarm := self.swarm
+		validator := func(ctx context.Context, id peer.ID, msg *pubsub.Message) bool {
+			auth := swarm.PeerAuth(PeerID(id))
+			return auth == AUTH_READWRITE
+		}
+		self.service.RegisterTopicValidator(topic, validator)
+	}
+
+	return Subscription{sub}, err
+}
+
+//Publish to a topic which requires a certain authorisation state. It must be the same state the listeners
+//have subscribed with. If it is ReadWrite than they will only receive it if they have stored us with
+//ReadWrite authorisation state.
+func (self *swarmEventService) Publish(topic string, required_auth AUTH_STATE, data []byte) error {
+
+	if required_auth == AUTH_READONLY {
+		topic = self.swarm.ID.Pretty() + `.` + topic
+
+	} else if required_auth == AUTH_READWRITE {
+		topic = self.swarm.ID.Pretty() + `.private.` + topic
+
+	} else {
+		return fmt.Errorf("Unsupportet authorisation mode")
+	}
+
 	return self.service.Publish(topic, data)
 }
+
+func (self *swarmEventService) Stop() {}
