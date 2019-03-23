@@ -4,7 +4,10 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
+
+	"github.com/spf13/viper"
 )
 
 // Type that represents a collection if peers which are connected together and form
@@ -124,6 +127,10 @@ func (self *Swarm) PeerAuth(peer PeerID) AUTH_STATE {
 
 /* General functions
  ******************  */
+
+func (self *Swarm) GetPath() string {
+	return filepath.Join(viper.GetString("directory"), self.ID.Pretty())
+}
 
 func (s *Swarm) Close() {
 	s.cancel()
