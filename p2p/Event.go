@@ -6,9 +6,7 @@ package p2p
 
 import (
 	"context"
-	"fmt"
 
-	peer "github.com/libp2p/go-libp2p-peer"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
@@ -23,18 +21,36 @@ type Event struct {
 //a small wrapper for subscription type
 //supports custom message type
 type Subscription struct {
-	sub *pubsub.Subscription
+	sub           *pubsub.Subscription
+	authorisation *authorizer
 }
 
 //blocks till a event arrives, the context is canceled or the subscription itself
 //is canceld
 func (self Subscription) Next(ctx context.Context) (*Event, error) {
-	msg, err := self.sub.Next(ctx)
-	if err != nil {
-		return nil, err
-	}
 
-	return &Event{msg.Data, PeerID(msg.GetFrom()), self.Topic()}, nil
+	for {
+		//get the message
+		msg, err := self.sub.Next(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		//check if the authorisation of the caller checks out
+		if self.authorisation == nil {
+			// no authorisation required, return event!
+			return self.eventFromMessage(msg), nil
+
+		} else if self.authorisation.peerIsAuthorized(self.sub.Topic(), PeerID(msg.GetFrom())) {
+			//the event publisher is allowed to post this event
+			return self.eventFromMessage(msg), nil
+		}
+		//the posted message is not allowed to reach us. lets go on with waiting for a massage.
+	}
+}
+
+func (self Subscription) eventFromMessage(msg *pubsub.Message) *Event {
+	return &Event{msg.Data, PeerID(msg.GetFrom()), self.Topic()}
 }
 
 //Cancels the subscription. Next will return with an error and no more events will
@@ -50,7 +66,7 @@ func (self Subscription) Topic() string {
 func newHostEventService(host *Host) (*hostEventService, error) {
 
 	ctx, cncl := context.WithCancel(context.Background())
-	ps, err := pubsub.NewFloodSub(ctx, host.host)
+	ps, err := pubsub.NewFloodSub(ctx, host.host, pubsub.WithMessageSigning(true))
 
 	return &hostEventService{ps, cncl}, err
 }
@@ -64,7 +80,7 @@ func (self *hostEventService) Subscribe(topic string) (Subscription, error) {
 
 	//TODO: add validator that checks user signature
 	sub, err := self.service.Subscribe(topic)
-	return Subscription{sub}, err
+	return Subscription{sub, nil}, err
 }
 
 func (self *hostEventService) Publish(topic string, data []byte) error {
@@ -93,45 +109,23 @@ func newSwarmEventService(swarm *Swarm) *swarmEventService {
 // - ReadWrite: The topic is only publishable by ReadWrite peers, hence publishing is only allowed by them
 func (self *swarmEventService) Subscribe(topic string, required_auth AUTH_STATE) (Subscription, error) {
 
-	if required_auth == AUTH_READONLY {
-		topic = self.swarm.ID.Pretty() + `.` + topic
-
-	} else if required_auth == AUTH_READWRITE {
-		topic = self.swarm.ID.Pretty() + `.private.` + topic
-
-	} else {
-		return Subscription{}, fmt.Errorf("Unsupportet authorisation mode")
-	}
-
+	topic = self.swarm.ID.Pretty() + `.` + topic
 	sub, err := self.service.Subscribe(topic)
 
-	if required_auth == AUTH_READWRITE {
-		swarm := self.swarm
-		validator := func(ctx context.Context, id peer.ID, msg *pubsub.Message) bool {
-			auth := swarm.PeerAuth(PeerID(id))
-			return auth == AUTH_READWRITE
-		}
-		self.service.RegisterTopicValidator(topic, validator)
-	}
+	//we have one authorizer per topic, as one can subscripe multiple times to a topic, and each time
+	//theoretical with a different authorisation requriement
+	auth := newAuthorizer()
+	auth.addAuth(topic, required_auth, self.swarm)
 
-	return Subscription{sub}, err
+	return Subscription{sub, auth}, err
 }
 
 //Publish to a topic which requires a certain authorisation state. It must be the same state the listeners
 //have subscribed with. If it is ReadWrite than they will only receive it if they have stored us with
 //ReadWrite authorisation state.
-func (self *swarmEventService) Publish(topic string, required_auth AUTH_STATE, data []byte) error {
+func (self *swarmEventService) Publish(topic string, data []byte) error {
 
-	if required_auth == AUTH_READONLY {
-		topic = self.swarm.ID.Pretty() + `.` + topic
-
-	} else if required_auth == AUTH_READWRITE {
-		topic = self.swarm.ID.Pretty() + `.private.` + topic
-
-	} else {
-		return fmt.Errorf("Unsupportet authorisation mode")
-	}
-
+	topic = self.swarm.ID.Pretty() + `.` + topic
 	return self.service.Publish(topic, data)
 }
 
