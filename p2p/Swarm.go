@@ -34,7 +34,7 @@ import (
 type Swarm struct {
 	//provided services
 	Event *swarmEventService
-	RPC   *swarmRpcService
+	Rpc   *swarmRpcService
 	Data  DataService
 
 	//general stuff
@@ -66,7 +66,7 @@ func newSwarm(host *Host, id SwarmID) *Swarm {
 		cancel: cancel}
 
 	//build the services
-	swarm.RPC = newSwarmRpcService(swarm)
+	swarm.Rpc = newSwarmRpcService(swarm)
 	swarm.Event = newSwarmEventService(swarm)
 	swarm.Data = newSwarmDataService(swarm)
 

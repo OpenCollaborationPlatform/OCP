@@ -101,18 +101,19 @@ func (self *authorizer) peerIsAuthorized(name string, peer PeerID) bool {
 		return false
 	}
 
+	//get the authstate of the peer
+	auth, ok := self.peerAuth[name]
+	if !ok {
+		return false
+	}
+	authstate := auth.PeerAuth(peer)
+
 	if req == AUTH_READONLY {
-		//everyone is allowed
-		return true
+		//everyone is allowed, but the peer has to exist at least
+		return authstate == AUTH_READONLY || authstate == AUTH_READWRITE
 
 	} else if req == AUTH_READWRITE {
-
-		//get the authstate of the peer
-		auth, ok := self.peerAuth[name]
-		if !ok {
-			return false
-		}
-		authstate := auth.PeerAuth(peer)
+		//only read write peers are allowed
 		return authstate == AUTH_READWRITE
 	}
 
