@@ -25,7 +25,7 @@ type Host struct {
 	swarms     []*Swarm
 
 	//serivces the host provides
-	Rpc   RpcService
+	Rpc   *hostRpcService
 	Data  DataService
 	Event *hostEventService
 }

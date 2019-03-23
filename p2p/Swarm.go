@@ -7,14 +7,6 @@ import (
 	"sync"
 )
 
-type AUTH_STATE uint
-
-const (
-	AUTH_NONE      = AUTH_STATE(0)
-	AUTH_READONLY  = AUTH_STATE(1)
-	AUTH_READWRITE = AUTH_STATE(2)
-)
-
 // Type that represents a collection if peers which are connected together and form
 // a swarm. It allows to share data between all peers, as well as have common events
 // and provide rpc calls.
@@ -42,7 +34,7 @@ const (
 type Swarm struct {
 	//provided services
 	Event *swarmEventService
-	RPC   RpcService
+	RPC   *swarmRpcService
 	Data  DataService
 
 	//general stuff

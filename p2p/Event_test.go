@@ -1,5 +1,6 @@
 package p2p
 
+/*
 import (
 	"bytes"
 	"context"
@@ -271,4 +272,4 @@ func TestSwarmEvent(t *testing.T) {
 		})
 
 	})
-}
+}*/
