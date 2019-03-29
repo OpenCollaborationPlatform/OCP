@@ -4,6 +4,7 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 
@@ -39,6 +40,7 @@ type Swarm struct {
 	Event *swarmEventService
 	Rpc   *swarmRpcService
 	Data  DataService
+	State *sharedStateService
 
 	//general stuff
 	host     *Host
@@ -47,6 +49,9 @@ type Swarm struct {
 	peerLock sync.RWMutex
 	ctx      context.Context
 	cancel   context.CancelFunc
+
+	//some intenral data
+	path string
 }
 
 type SwarmID string
@@ -66,12 +71,17 @@ func newSwarm(host *Host, id SwarmID) *Swarm {
 		ID:     id,
 		peers:  make(map[PeerID]AUTH_STATE),
 		ctx:    ctx,
-		cancel: cancel}
+		cancel: cancel,
+		path:   filepath.Join(viper.GetString("directory"), id.Pretty())}
 
 	//build the services
 	swarm.Rpc = newSwarmRpcService(swarm)
 	swarm.Event = newSwarmEventService(swarm)
+	swarm.State = newSharedStateService(swarm)
 	swarm.Data = newSwarmDataService(swarm)
+
+	//ensure our folder exist
+	os.MkdirAll(swarm.GetPath(), os.ModePerm)
 
 	return swarm
 }
@@ -129,7 +139,7 @@ func (self *Swarm) PeerAuth(peer PeerID) AUTH_STATE {
  ******************  */
 
 func (self *Swarm) GetPath() string {
-	return filepath.Join(viper.GetString("directory"), self.ID.Pretty())
+	return self.path
 }
 
 func (s *Swarm) Close() {

@@ -1,63 +1,84 @@
 package p2p
 
 import (
-	"CollaborationNode/utils"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"reflect"
-	"time"
-
 	raft "github.com/hashicorp/raft"
-	boltstore "github.com/hashicorp/raft-boltdb"
 )
 
 type sharedState struct {
 	raftServer *raft.Raft
 }
 
-func newSharedState(swarm *Swarm, fsm raft.FSM) (*sharedState, error) {
+type sharedStateService struct {
+	swarm *Swarm
+}
 
-	//the name used to distuinguish is the class name of the fsm
-	value := reflect.ValueOf(fsm)
-	name := swarm.ID.Pretty() + `/` + reflect.Indirect(value).Type().Name()
+func newSharedStateService(swarm *Swarm) *sharedStateService {
 
-	//the p2p transport
-	transport, err := NewLibp2pTransport(swarm.host.host, name, time.Minute)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to load new transport")
-	}
+	return &sharedStateService{swarm}
+}
 
-	//log and conf store
-	path := filepath.Join(swarm.GetPath(), name, `-logstore.db`)
-	logstore, err := boltstore.NewBoltStore(path)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to load logstore")
-	}
+func (self *sharedStateService) Share(fsm raft.FSM, isRoot bool) (*sharedState, error) {
+	/*
+		//the name used to distuinguish is the class name of the fsm
+		value := reflect.ValueOf(fsm)
+		fsmname := reflect.Indirect(value).Type().Name()
 
-	//snapshot store: for now the default file one (change to bolt, as we do not
-	//store much data)
-	path = filepath.Join(swarm.GetPath(), name, `-snapshots`)
-	err = os.MkdirAll(path, os.ModePerm)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to create director for snapshotstore")
-	}
-	snapstore, err := raft.NewFileSnapshotStore(path, 3, ioutil.Discard)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to create snapshotstore")
-	}
+		//the p2p transport
+		transport, err := NewLibp2pTransport(self.swarm.host.host, self.swarm.ID.Pretty()+`/`+fsmname, time.Minute)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to load new transport")
+		}
 
-	//config
-	config := raft.DefaultConfig()
-	config.LogOutput = ioutil.Discard
-	config.Logger = nil
-	config.LocalID = raft.ServerID(swarm.host.ID().pid().Pretty())
+		//log and conf store
+		path := filepath.Join(self.swarm.GetPath(), fsmname+`-logstore.db`)
+		logstore, err := boltstore.NewBoltStore(path)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to load logstore")
+		}
 
-	//start up
-	raftserver, err := raft.NewRaft(config, fsm, logstore, logstore, snapstore, transport)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to startup raft server")
-	}
+		//snapshot store: for now the default file one (change to bolt, as we do not
+		//store much data)
+		path = filepath.Join(self.swarm.GetPath(), fsmname+`-snapshots`)
+		err = os.MkdirAll(path, os.ModePerm)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to create director for snapshotstore")
+		}
+		snapstore, err := raft.NewFileSnapshotStore(path, 3, ioutil.Discard)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to create snapshotstore")
+		}
 
-	return &sharedState{raftserver}, nil
+		//config
+		config := raft.DefaultConfig()
+		//config.LogOutput = ioutil.Discard
+		config.Logger = nil
+		config.LocalID = raft.ServerID(self.swarm.host.ID().pid().Pretty())
+		config.StartAsLeader = false
+
+		//Bootstrap if required
+		var clusterConfig raft.Configuration
+		if isRoot {
+			servers := []raft.Server{
+				raft.Server{
+					Suffrage: raft.Voter,
+					ID:       raft.ServerID(self.swarm.host.ID().pid().Pretty()),
+					Address:  raft.ServerAddress(self.swarm.host.ID().pid().Pretty()),
+				},
+			}
+			clusterConfig = raft.Configuration{servers}
+
+		} else {
+			clusterConfig = raft.Configuration{}
+		}
+
+		raft.BootstrapCluster(config, logstore, logstore, snapstore, transport, clusterConfig.Clone())
+
+		//start up
+		raftserver, err := raft.NewRaft(config, fsm, logstore, logstore, snapstore, transport)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to startup raft server")
+		}
+
+		return &sharedState{raftserver}, nil*/
+	return nil, nil
 }

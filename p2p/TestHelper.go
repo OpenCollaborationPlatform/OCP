@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"path/filepath"
 
@@ -18,11 +17,11 @@ import (
 	"github.com/spf13/viper"
 )
 
-var testport int = 9005
+var testport int = 9015
 
 func init() {
 	//disable logging for this tests
-	log.SetOutput(ioutil.Discard)
+	//log.SetOutput(ioutil.Discard)
 	ipfslog.Configure(ipfslog.Output(ioutil.Discard))
 	//ipfslog.SetDebugLogging() // ipfslog "github.com/ipfs/go-log"
 }
