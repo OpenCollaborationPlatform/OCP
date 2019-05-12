@@ -23,39 +23,48 @@ func init() {
 	rand.Seed(time.Now().Unix())
 }
 
-type requestState struct {
-	ctx  context.Context
-	cncl context.CancelFunc
-
-	state      int8
-	fetchedLog Log
-}
-
 type Replica struct {
 	transport Transport
 	requests  map[uint64]requestState
 	followers []Follower
+	name      string
 
 	//syncronizing via channels
-	ctx        context.Context
-	cncl       context.CancelFunc
-	commitChan chan Log
+	ctx          context.Context
+	cncl         context.CancelFunc
+	commitChan   chan Log
+	newStateChan chan newStateStruct
+	newCmdChan   chan newCmdStruct
 
 	//state handling
 	states []State
 	logs   LogStore
 }
 
-func NewReplica(path string, name string, state State) (*Replica, error) {
+func NewReplica(path string, name string, trans Transport) (*Replica, error) {
 
 	//create new logstore for this state
-	/*store, err := NewLogStore(path, name)
+	store, err := NewLogStore(path, name)
 	if err != nil {
 		return nil, utils.StackError(err, "Cannot create replica")
 	}
 
-	return &Replica{nil, state, store}, nil*/
-	return nil, nil
+	//setup the main context
+	ctx, cncl := context.WithCancel(context.Background())
+
+	return &Replica{
+		transport:    trans,
+		requests:     make(map[uint64]requestState),
+		followers:    make([]Follower, 0),
+		ctx:          ctx,
+		cncl:         cncl,
+		commitChan:   make(chan Log, 10),
+		newStateChan: make(chan newStateStruct),
+		newCmdChan:   make(chan newCmdStruct),
+		states:       make([]State, 0),
+		logs:         store,
+		name:         name,
+	}, nil
 }
 
 func (self *Replica) Start() {
@@ -64,7 +73,45 @@ func (self *Replica) Start() {
 
 func (self *Replica) Stop() {
 	self.cncl()
+	self.logs.Close()
 }
+
+func (self *Replica) CreateFollowerAPI() FollowerAPI {
+	return FollowerAPI{self}
+}
+
+func (self *Replica) AddState(s State) uint8 {
+
+	retChan := make(chan uint8)
+	self.newStateChan <- newStateStruct{s, retChan}
+
+	return <-retChan
+}
+
+/******************************************************************************
+					helper structs
+******************************************************************************/
+type requestState struct {
+	ctx  context.Context
+	cncl context.CancelFunc
+
+	state      int8
+	fetchedLog Log
+}
+
+type newStateStruct struct {
+	state   State
+	retChan chan uint8
+}
+
+type newCmdStruct struct {
+	cmd     []byte
+	retChan chan struct{}
+}
+
+/******************************************************************************
+					internal functions
+******************************************************************************/
 
 func (self *Replica) run() error {
 
@@ -76,6 +123,14 @@ func (self *Replica) run() error {
 
 		case log := <-self.commitChan:
 			self.commitLog(log)
+
+		case val := <-self.newStateChan:
+			self.states = append(self.states, val.state)
+			val.retChan <- uint8(len(self.states) - 1)
+			close(val.retChan)
+
+		case val := <-self.newCmdChan:
+			self.newLog(val.cmd)
 		}
 	}
 }
@@ -195,4 +250,8 @@ func (self *Replica) applyLog(log Log) {
 		}
 		self.states[log.Type].Apply(log.Data)
 	}
+}
+
+func (self *Replica) newLog(data []byte) {
+
 }
