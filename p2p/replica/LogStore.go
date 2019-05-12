@@ -15,12 +15,17 @@ import (
 var (
 	// Bucket names we perform transactions in
 	dbLogs = []byte("logs")
-	dbConf = []byte("conf")
 )
 
 type Log struct {
 	Index uint64
+	Epoch uint64
+	Type  uint8
 	Data  []byte
+}
+
+func (self *Log) IsValid() bool {
+	return self.Data != nil
 }
 
 func (self *Log) ToBytes() ([]byte, error) {
@@ -52,7 +57,6 @@ func NewLogStore(path string, name string) (LogStore, error) {
 	//make sure the basic structure exists
 	db.Update(func(tx *bolt.Tx) error {
 		tx.CreateBucketIfNotExists(dbLogs)
-		tx.CreateBucketIfNotExists(dbConf)
 		return nil
 	})
 
@@ -171,54 +175,6 @@ func (self *LogStore) DeleteRange(min, max uint64) error {
 
 	return tx.Commit()
 }
-
-/*
-// Set is used to set a key/value set outside of the raft log
-func (self *LogStore) Set(k, v []byte) error {
-	tx, err := self.db.Begin(true)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	bucket := tx.Bucket(dbConf)
-	if err := bucket.Put(k, v); err != nil {
-		return err
-	}
-
-	return tx.Commit()
-}
-
-// Get is used to retrieve a value from the k/v store by key
-func (self *LogStore) Get(k []byte) ([]byte, error) {
-	tx, err := self.db.Begin(false)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	bucket := tx.Bucket(dbConf)
-	val := bucket.Get(k)
-
-	if val == nil {
-		return nil, fmt.Errorf("Unable to find entry")
-	}
-	return append([]byte(nil), val...), nil
-}
-
-// SetUint64 is like Set, but handles uint64 values
-func (self *LogStore) SetUint64(key []byte, val uint64) error {
-	return self.Set(key, uint64ToBytes(val))
-}
-
-// GetUint64 is like Get, but handles uint64 values
-func (self *LogStore) GetUint64(key []byte) (uint64, error) {
-	val, err := self.Get(key)
-	if err != nil {
-		return 0, err
-	}
-	return bytesToUint64(val), nil
-}*/
 
 // Converts bytes to an integer
 func bytesToUint64(b []byte) uint64 {
