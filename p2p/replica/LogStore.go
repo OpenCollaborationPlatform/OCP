@@ -3,7 +3,6 @@ package replica
 import (
 	"CollaborationNode/utils"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,27 +15,6 @@ var (
 	// Bucket names we perform transactions in
 	dbLogs = []byte("logs")
 )
-
-type Log struct {
-	Index uint64
-	Epoch uint64
-	Type  uint8
-	Data  []byte
-}
-
-func (self *Log) IsValid() bool {
-	return self.Data != nil
-}
-
-func (self *Log) ToBytes() ([]byte, error) {
-	return json.Marshal(self)
-}
-
-func LogFromBytes(data []byte) (Log, error) {
-	var log Log
-	err := json.Unmarshal(data, &log)
-	return log, err
-}
 
 type LogStore struct {
 	db *bolt.DB

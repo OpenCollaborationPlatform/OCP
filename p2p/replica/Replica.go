@@ -26,7 +26,7 @@ func init() {
 type Replica struct {
 	transport Transport
 	requests  map[uint64]requestState
-	followers []Follower
+	followers []Address
 	name      string
 
 	//syncronizing via channels
@@ -55,7 +55,7 @@ func NewReplica(path string, name string, trans Transport) (*Replica, error) {
 	return &Replica{
 		transport:    trans,
 		requests:     make(map[uint64]requestState),
-		followers:    make([]Follower, 0),
+		followers:    make([]Address, 0),
 		ctx:          ctx,
 		cncl:         cncl,
 		commitChan:   make(chan Log, 10),
@@ -76,8 +76,8 @@ func (self *Replica) Stop() {
 	self.logs.Close()
 }
 
-func (self *Replica) CreateFollowerAPI() FollowerAPI {
-	return FollowerAPI{self}
+func (self *Replica) CreateAPIs() (ReadAPI, WriteAPI, ElectionAPI) {
+	return ReadAPI{self}, WriteAPI{self}, ElectionAPI{self}
 }
 
 func (self *Replica) AddState(s State) uint8 {
@@ -216,7 +216,7 @@ func (self *Replica) requestLog(idx uint64) {
 				ctx, _ := context.WithTimeout(ctx, 1*time.Second)
 				reply := Log{}
 				addr := self.followers[rand.Intn(len(self.followers))]
-				err := self.transport.FollowerCall(ctx, addr, `GetLog`, idx, &reply)
+				err := self.transport.Call(ctx, addr, `GetLog`, idx, &reply)
 
 				//handle the commit if we received it
 				if err != nil {
