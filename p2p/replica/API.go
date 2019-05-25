@@ -5,7 +5,7 @@ import (
 	"context"
 )
 
-/*API types: How other replicas or the overloard interact with the replica. Those
+/*API types: How replicas interact with each other. Those
   APIs must be callable with the replica transport
 */
 

@@ -1,38 +1,48 @@
 package replica
 
 import (
+	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
+	logging "github.com/ipfs/go-log"
+	crypto "github.com/libp2p/go-libp2p-crypto"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func setupReplicas(num uint, path string) ([]*Replica, error) {
+func init() {
+	logging.SetDebugLogging()
+}
 
-	trans := &testTransport{delay: 0 * time.Millisecond, followerAPIs: make(map[Follower]FollowerAPI)}
+func setupReplicas(num uint, path string, name string) ([]*Replica, error) {
+
+	trans := newTestTransport()
+	overlord := newTestOverlord()
+
 	replicas := make([]*Replica, num)
 
 	names := make([]string, len(replicas))
 	for i := 0; i < int(num); i++ {
 
-		rep, err := NewReplica(path, strconv.Itoa(i), trans)
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+		priv, pub, err := crypto.GenerateRSAKeyPair(512, r)
+		if err != nil {
+			return nil, err
+		}
+		rep, err := NewReplica(path, fmt.Sprintf("%s_%v", name, i), trans, *priv.(*crypto.RsaPrivateKey))
 		if err != nil {
 			return nil, err
 		}
 
 		names[i] = rep.name
 		replicas[i] = rep
-		trans.followerAPIs[rep.name] = rep.CreateFollowerAPI()
+		overlord.leader[uint64(i)] = Address(rep.name)
+		overlord.key[uint64(i)] = *pub.(*crypto.RsaPublicKey)
 
 		rep.Start()
-	}
-
-	//connect them all!
-	for _, rep := range replicas {
-		rep.followers = append(rep.followers, names...)
 	}
 
 	return replicas, nil
@@ -65,9 +75,11 @@ func TestReplicaBasics(t *testing.T) {
 	path, _ := ioutil.TempDir("", "replica")
 	defer os.RemoveAll(path)
 
+	num := 3
+
 	Convey("Setting up 3 replicas with basic state", t, func() {
 
-		reps, err := setupReplicas(3, path)
+		reps, err := setupReplicas(3, path, "base")
 		defer closeReplicas(reps)
 		So(err, ShouldBeNil)
 
@@ -80,7 +92,7 @@ func TestReplicaBasics(t *testing.T) {
 
 		Convey("Adding commits to all replicas should work", func() {
 
-			for i := 0; i < 10; i++ {
+			for i := 0; i < num; i++ {
 				log := Log{Index: uint64(i), Epoch: 0, Type: 0, Data: intToByte(uint64(i))}
 
 				for j := 0; j < len(reps); j++ {
@@ -88,13 +100,16 @@ func TestReplicaBasics(t *testing.T) {
 				}
 			}
 
+			for _, state := range states {
+				So(len(state.Value), ShouldEqual, num)
+			}
 			So(areStatesEqual(states), ShouldBeTrue)
 		})
 
 		Convey("and letting a replica fetch missing logs works", func() {
 
 			//the las replica does not get any logs
-			for i := 0; i < 10; i++ {
+			for i := 0; i < num; i++ {
 				log := Log{Index: uint64(i), Epoch: 0, Type: 0, Data: intToByte(uint64(i))}
 
 				for j := 0; j < (len(reps) - 1); j++ {
@@ -103,9 +118,13 @@ func TestReplicaBasics(t *testing.T) {
 			}
 
 			//we now add only the last log to the last replica
-			log := Log{Index: uint64(9), Epoch: 0, Type: 0, Data: intToByte(uint64(9))}
+			log := Log{Index: uint64(num - 1), Epoch: 0, Type: 0, Data: intToByte(uint64(num - 1))}
 			reps[len(reps)-1].commitLog(log)
+			time.Sleep(50 * time.Millisecond)
 
+			for _, state := range states {
+				So(len(state.Value), ShouldEqual, num)
+			}
 			So(areStatesEqual(states), ShouldBeTrue)
 		})
 

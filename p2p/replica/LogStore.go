@@ -16,6 +16,17 @@ var (
 	dbLogs = []byte("logs")
 )
 
+type NoEntryError struct{}
+
+func (self *NoEntryError) Error() string {
+	return "No entry availbale in log"
+}
+
+func IsNoEntryError(err error) bool {
+	_, ok := err.(*NoEntryError)
+	return ok
+}
+
 type LogStore struct {
 	db *bolt.DB
 }
@@ -55,7 +66,7 @@ func (self *LogStore) FirstIndex() (uint64, error) {
 
 	curs := tx.Bucket(dbLogs).Cursor()
 	if first, _ := curs.First(); first == nil {
-		return 0, nil
+		return 0, &NoEntryError{}
 	} else {
 		return bytesToUint64(first), nil
 	}
@@ -71,7 +82,7 @@ func (self *LogStore) LastIndex() (uint64, error) {
 
 	curs := tx.Bucket(dbLogs).Cursor()
 	if last, _ := curs.Last(); last == nil {
-		return 0, nil
+		return 0, &NoEntryError{}
 	} else {
 		return bytesToUint64(last), nil
 	}

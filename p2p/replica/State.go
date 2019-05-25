@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 )
 
 /* State to be replicated
@@ -35,8 +36,9 @@ func (self *testState) Apply(cmd []byte) {
 
 	buf := bytes.NewBuffer(cmd)
 	val, err := binary.ReadUvarint(buf)
-	if err != nil {
+	if err == nil {
 		self.Value = append(self.Value, val)
+
 	}
 }
 
@@ -70,6 +72,14 @@ func (self *testState) Equals(other *testState) bool {
 	}
 
 	return true
+}
+
+func (self *testState) Print() {
+
+	fmt.Printf("Test state with %v entries:\n", len(self.Value))
+	for i, val := range self.Value {
+		fmt.Printf("%v: %v\n", i, val)
+	}
 }
 
 func intToByte(val uint64) []byte {
