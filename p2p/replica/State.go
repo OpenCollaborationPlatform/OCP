@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"sync"
 )
 
 /* State to be replicated
@@ -22,6 +23,39 @@ type State interface {
 	LoadSnaphot([]byte) error
 }
 
+type stateStore struct {
+	states []State
+	mutex  sync.RWMutex
+}
+
+func newStateStore() stateStore {
+	return stateStore{
+		states: make([]State, 0),
+		mutex:  sync.RWMutex{},
+	}
+}
+
+func (self *stateStore) Add(state State) uint8 {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.states = append(self.states, state)
+	return uint8(len(self.states) - 1)
+}
+
+func (self *stateStore) Get(state uint8) State {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	if int(state) >= len(self.states) {
+		logger.Errorf("Want access state %v, but is not available", state)
+		return nil
+	}
+
+	return self.states[state]
+}
+
+//a simple state for testing
 func newTestState() *testState {
 	return &testState{make([]uint64, 0)}
 }

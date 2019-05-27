@@ -32,15 +32,16 @@ func setupReplicas(num uint, path string, name string) ([]*Replica, error) {
 		if err != nil {
 			return nil, err
 		}
-		rep, err := NewReplica(path, fmt.Sprintf("%s_%v", name, i), trans, *priv.(*crypto.RsaPrivateKey))
+		rep, err := NewReplica(path, fmt.Sprintf("%s_%v", name, i), trans, overlord, *priv.(*crypto.RsaPrivateKey))
 		if err != nil {
 			return nil, err
 		}
 
+		//register the key with the overlord
+		overlord.setApiPubKey(*pub.(*crypto.RsaPublicKey))
+
 		names[i] = rep.name
 		replicas[i] = rep
-		overlord.leader[uint64(i)] = Address(rep.name)
-		overlord.key[uint64(i)] = *pub.(*crypto.RsaPublicKey)
 
 		rep.Start()
 	}

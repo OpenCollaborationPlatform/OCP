@@ -129,7 +129,15 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 	return fmt.Errorf("No replica couldd be called")
 }
 
-func (self *testTransport) Send(api string, fnc string, arguments interface{}) error {
+func (self *testTransport) Send(api string, fnc string, argument interface{}) error {
+
+	idxs := rand.Perm(len(self.readAPIs))
+	for _, idx := range idxs {
+		go func() {
+			callFncByName(self.readAPIs[idx], fnc, argument)
+		}()
+	}
+
 	return nil
 }
 

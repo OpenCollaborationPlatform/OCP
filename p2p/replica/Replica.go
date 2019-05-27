@@ -11,7 +11,7 @@ import (
 	crypto "github.com/libp2p/go-libp2p-crypto"
 )
 
-var logger = logging.Logger("replica")
+var logger = logging.Logger("Replica")
 
 const (
 	requestState_Fetching = iota
@@ -29,27 +29,27 @@ func init() {
 
 type Replica struct {
 	transport Transport
+	overlord  Overlord
 	requests  map[uint64]requestState
 	leaders   map[uint64]leaderData
 	name      string
 	key       crypto.RsaPrivateKey
 
 	//syncronizing via channels
-	ctx          context.Context
-	cncl         context.CancelFunc
-	commitChan   chan Log
-	newStateChan chan newStateStruct
-	newCmdChan   chan newCmdStruct
+	ctx        context.Context
+	cncl       context.CancelFunc
+	commitChan chan Log
+	newCmdChan chan newCmdStruct
 
 	//state handling
-	states []State
-	logs   LogStore
+	states stateStore
+	logs   logStore
 }
 
-func NewReplica(path string, name string, trans Transport, key crypto.RsaPrivateKey) (*Replica, error) {
+func NewReplica(path string, name string, trans Transport, ol Overlord, key crypto.RsaPrivateKey) (*Replica, error) {
 
-	//create new logstore for this state
-	store, err := NewLogStore(path, name)
+	//create new logStore for this state
+	store, err := NewlogStore(path, name)
 	if err != nil {
 		return nil, utils.StackError(err, "Cannot create replica")
 	}
@@ -58,18 +58,18 @@ func NewReplica(path string, name string, trans Transport, key crypto.RsaPrivate
 	ctx, cncl := context.WithCancel(context.Background())
 
 	replica := &Replica{
-		transport:    trans,
-		requests:     make(map[uint64]requestState),
-		leaders:      make(map[uint64]leaderData, 0),
-		ctx:          ctx,
-		cncl:         cncl,
-		commitChan:   make(chan Log, 10),
-		newStateChan: make(chan newStateStruct),
-		newCmdChan:   make(chan newCmdStruct),
-		states:       make([]State, 0),
-		logs:         store,
-		name:         name,
-		key:          key,
+		transport:  trans,
+		overlord:   ol,
+		requests:   make(map[uint64]requestState),
+		leaders:    make(map[uint64]leaderData, 0),
+		ctx:        ctx,
+		cncl:       cncl,
+		commitChan: make(chan Log, 10),
+		newCmdChan: make(chan newCmdStruct),
+		states:     newStateStore(),
+		logs:       store,
+		name:       name,
+		key:        key,
 	}
 
 	//setup transport correctly
@@ -93,11 +93,7 @@ func (self *Replica) Stop() {
 }
 
 func (self *Replica) AddState(s State) uint8 {
-
-	retChan := make(chan uint8)
-	self.newStateChan <- newStateStruct{s, retChan}
-
-	return <-retChan
+	return self.states.Add(s)
 }
 
 func (self *Replica) AddCommand(state uint8, cmd []byte) {
@@ -113,11 +109,6 @@ type requestState struct {
 
 	state      int8
 	fetchedLog Log
-}
-
-type newStateStruct struct {
-	state   State
-	retChan chan uint8
 }
 
 type newCmdStruct struct {
@@ -144,11 +135,6 @@ func (self *Replica) run() {
 
 		case log := <-self.commitChan:
 			self.commitLog(log)
-
-		case val := <-self.newStateChan:
-			self.states = append(self.states, val.state)
-			val.retChan <- uint8(len(self.states) - 1)
-			close(val.retChan)
 
 		case val := <-self.newCmdChan:
 			self.newLog(val.cmd)
@@ -297,11 +283,7 @@ func (self *Replica) applyLog(log Log) {
 	case logType_Snapshot:
 
 	default:
-		if uint8(len(self.states)) <= log.Type {
-			return
-		}
-
-		state := self.states[log.Type]
+		state := self.states.Get(log.Type)
 		if state != nil {
 			state.Apply(log.Data)
 

@@ -7,13 +7,21 @@ import (
 	crypto "github.com/libp2p/go-libp2p-crypto"
 )
 
-type LeaderStore struct {
+type leaderStore struct {
 	adress map[uint64]Address
 	keys   map[uint64]crypto.RsaPublicKey
 	mutex  sync.RWMutex
 }
 
-func (self *LeaderStore) HasEpoch(epoch uint64) bool {
+func newLeaderStore() leaderStore {
+	return leaderStore{
+		adress: make(map[uint64]Address),
+		keys:   make(map[uint64]crypto.RsaPublicKey),
+		mutex:  sync.RWMutex{},
+	}
+}
+
+func (self *leaderStore) HasEpoch(epoch uint64) bool {
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
 
@@ -21,7 +29,14 @@ func (self *LeaderStore) HasEpoch(epoch uint64) bool {
 	return has
 }
 
-func (self *LeaderStore) GetLeaderAdressForEpoch(epoch uint64) (Address, error) {
+func (self *leaderStore) EpochCount() uint64 {
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	return uint64(len(self.adress))
+}
+
+func (self *leaderStore) GetLeaderAdressForEpoch(epoch uint64) (Address, error) {
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
 
@@ -32,7 +47,7 @@ func (self *LeaderStore) GetLeaderAdressForEpoch(epoch uint64) (Address, error) 
 	return addr, nil
 }
 
-func (self *LeaderStore) GetLeaderKeyForEpoch(epoch uint64) (crypto.RsaPublicKey, error) {
+func (self *leaderStore) GetLeaderKeyForEpoch(epoch uint64) (crypto.RsaPublicKey, error) {
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
 
@@ -43,7 +58,7 @@ func (self *LeaderStore) GetLeaderKeyForEpoch(epoch uint64) (crypto.RsaPublicKey
 	return key, nil
 }
 
-func (self *LeaderStore) AddEpoch(epoch uint64, addr Address, key crypto.RsaPublicKey) {
+func (self *leaderStore) AddEpoch(epoch uint64, addr Address, key crypto.RsaPublicKey) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 
