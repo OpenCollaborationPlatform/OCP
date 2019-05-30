@@ -56,7 +56,7 @@ type Replica struct {
 func NewReplica(path string, name string, trans Transport, ol Overlord, key crypto.RsaPrivateKey) (*Replica, error) {
 
 	//create new logStore for this state
-	store, err := NewlogStore(path, name)
+	store, err := newLogStore(path, name)
 	if err != nil {
 		return nil, utils.StackError(err, "Cannot create replica")
 	}

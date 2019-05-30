@@ -23,6 +23,9 @@ func (self *NoEntryError) Error() string {
 }
 
 func IsNoEntryError(err error) bool {
+	if err == nil {
+		return false
+	}
 	_, ok := err.(*NoEntryError)
 	return ok
 }
@@ -31,7 +34,7 @@ type logStore struct {
 	db *bolt.DB
 }
 
-func NewlogStore(path string, name string) (logStore, error) {
+func newLogStore(path string, name string) (logStore, error) {
 
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
