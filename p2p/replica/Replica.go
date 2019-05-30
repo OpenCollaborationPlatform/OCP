@@ -74,7 +74,7 @@ func NewReplica(path string, name string, trans Transport, ol Overlord, key cryp
 		commitChan:    make(chan Log, 10),
 		cmdChan:       make(chan cmdStruct),
 		setLeaderChan: make(chan uint64),
-		appliedChan:   make(chan uint64),
+		appliedChan:   make(chan uint64, 10),
 		states:        newStateStore(),
 		logs:          store,
 		name:          name,
@@ -227,7 +227,6 @@ func (self *Replica) commitLog(log Log) {
 			delete(self.requests, log.Index)
 
 		} else {
-			self.logger.Debugf("Keep log %v in request list but set to AVAILABLE", log.Index)
 			req.state = requestState_Available
 			req.fetchedLog = log
 			self.requests[log.Index] = req
@@ -238,40 +237,28 @@ func (self *Replica) commitLog(log Log) {
 	if requiredIdx == log.Index {
 
 		//commit
-		self.logger.Debugf("Commit log %v", log.Index)
 		self.logs.StoreLog(log)
 		self.applyLog(log)
 
 		//see if we can finalize more requests (already received in the request log)
-		self.logger.Debugf("Start looking through requests:\n")
-		for key, req := range self.requests {
-			fmt.Printf("Map %v: Log Idx %v, state %v\n", key, req.fetchedLog.Index, req.state)
-		}
 		maxIdx := (requiredIdx + uint64(len(self.requests)))
-		self.logger.Debugf("loop %v to %v", requiredIdx+1, maxIdx)
 		for i := requiredIdx + 1; i <= maxIdx; i++ {
 
-			self.logger.Debugf("check key %v", i)
 			req, ok := self.requests[i]
 			if !ok || req.state != requestState_Available {
-				self.logger.Debugf("not available: %v", i)
 				break
 			}
 
 			//we have a finished request! commit
-			self.logger.Debugf("Commit log %v from request store", req.fetchedLog.Index)
 			delete(self.requests, i)
 			self.logs.StoreLog(req.fetchedLog)
 			self.applyLog(req.fetchedLog)
-			self.logger.Debugf("done commit %v", req.fetchedLog.Index)
 		}
-		self.logger.Debug("end of loop")
 
 	} else if requiredIdx < log.Index {
 
 		//and add the received log to the request log, to ensure it is added
 		//when possible
-		self.logger.Debug("Cannot commit yet, keep in request store")
 		rstate := requestState{nil, nil, requestState_Available, log}
 		self.requests[log.Index] = rstate
 

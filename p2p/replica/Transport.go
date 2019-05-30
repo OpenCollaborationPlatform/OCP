@@ -85,11 +85,10 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 	}
 
 	//call the function
-	result, err := callFncByName(apiObj, fnc, ctx, arguments, reply)
+	err = callFncByName(apiObj, fnc, ctx, arguments, reply)
 	if err != nil {
 		return utils.StackError(err, "Unable to call replica")
 	}
-	reply = result[0].Interface()
 
 	return nil
 }
@@ -112,9 +111,8 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 		}
 
 		//call the function
-		result, err := callFncByName(apiObj, fnc, ctx, argument, reply)
+		err := callFncByName(apiObj, fnc, ctx, argument, reply)
 		if err == nil {
-			reply = result[0].Interface()
 			return nil
 		}
 	}
@@ -134,18 +132,26 @@ func (self *testTransport) Send(api string, fnc string, argument interface{}) er
 	return nil
 }
 
-func callFncByName(obj interface{}, fncName string, params ...interface{}) (out []reflect.Value, err error) {
+func callFncByName(obj interface{}, fncName string, params ...interface{}) error {
 
 	objValue := reflect.ValueOf(obj)
 	method := objValue.MethodByName(fncName)
 	if !method.IsValid() {
-		return make([]reflect.Value, 0), fmt.Errorf("Method not found \"%s\"", fncName)
+		return fmt.Errorf("Method not found \"%s\"", fncName)
 	}
 
 	in := make([]reflect.Value, len(params))
 	for i, param := range params {
 		in[i] = reflect.ValueOf(param)
 	}
-	out = method.Call(in)
-	return
+	out := method.Call(in)
+	if len(out) == 0 {
+		return nil
+	}
+
+	if out[0].IsNil() {
+		return nil
+	}
+
+	return out[0].Interface().(error)
 }

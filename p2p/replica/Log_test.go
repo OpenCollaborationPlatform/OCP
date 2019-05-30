@@ -200,7 +200,5 @@ func TestLogStore(t *testing.T) {
 				})
 			})
 		})
-
 	})
-
 }
