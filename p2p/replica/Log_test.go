@@ -97,7 +97,7 @@ func TestLog(t *testing.T) {
 	})
 }
 
-func TestLogStore(t *testing.T) {
+func TestPersistentLogStore(t *testing.T) {
 
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	priv, _, _ := crypto.GenerateRSAKeyPair(512, r)
@@ -108,8 +108,113 @@ func TestLogStore(t *testing.T) {
 
 	Convey("A empty logstore", t, func() {
 
-		store, err := newLogStore(path, "teststore")
+		store, err := newPersistentLogStore(path, "teststore")
 		So(err, ShouldBeNil)
+		defer store.Close()
+
+		Convey("Should return NoEntry error for index query", func() {
+			_, err := store.FirstIndex()
+			So(IsNoEntryError(err), ShouldBeTrue)
+
+			_, err = store.LastIndex()
+			So(IsNoEntryError(err), ShouldBeTrue)
+		})
+
+		Convey("and normal error for log query", func() {
+
+			_, err := store.GetLog(0)
+			So(err, ShouldNotBeNil)
+			So(IsNoEntryError(err), ShouldBeFalse)
+		})
+
+		Convey("Storing a log", func() {
+
+			log := Log{0, 1, 2, []byte("test"), nil}
+			log.Sign(rsapriv)
+
+			err := store.StoreLog(log)
+			So(err, ShouldBeNil)
+
+			Convey("changes the indexes", func() {
+				idx, err := store.FirstIndex()
+				So(err, ShouldBeNil)
+				So(idx, ShouldEqual, 0)
+
+				idx, err = store.LastIndex()
+				So(err, ShouldBeNil)
+				So(idx, ShouldEqual, 0)
+			})
+
+			Convey("and makes it accessible by index", func() {
+
+				_, err := store.GetLog(0)
+				So(err, ShouldBeNil)
+			})
+
+			Convey("while preserving all information", func() {
+
+				log, _ := store.GetLog(0)
+
+				So(log.Index, ShouldEqual, 0)
+				So(log.Epoch, ShouldEqual, 1)
+				So(log.Type, ShouldEqual, 2)
+				So(bytes.Equal(log.Data, []byte("test")), ShouldBeTrue)
+			})
+
+			Convey("Adding annother log", func() {
+
+				log := Log{1, 2, 3, []byte("test2"), nil}
+				log.Sign(rsapriv)
+
+				err := store.StoreLog(log)
+				So(err, ShouldBeNil)
+
+				Convey("changes the index queries", func() {
+					idx, err := store.FirstIndex()
+					So(err, ShouldBeNil)
+					So(idx, ShouldEqual, 0)
+
+					idx, err = store.LastIndex()
+					So(err, ShouldBeNil)
+					So(idx, ShouldEqual, 1)
+				})
+
+				Convey("makes the new log accessible", func() {
+
+					log, _ := store.GetLog(1)
+
+					So(log.Index, ShouldEqual, 1)
+					So(log.Epoch, ShouldEqual, 2)
+					So(log.Type, ShouldEqual, 3)
+					So(bytes.Equal(log.Data, []byte("test2")), ShouldBeTrue)
+				})
+
+				Convey("while preserving the older information", func() {
+
+					log, _ := store.GetLog(0)
+
+					So(log.Index, ShouldEqual, 0)
+					So(log.Epoch, ShouldEqual, 1)
+					So(log.Type, ShouldEqual, 2)
+					So(bytes.Equal(log.Data, []byte("test")), ShouldBeTrue)
+				})
+			})
+		})
+	})
+}
+
+func TestMemoryLogStore(t *testing.T) {
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	priv, _, _ := crypto.GenerateRSAKeyPair(512, r)
+	rsapriv := *priv.(*crypto.RsaPrivateKey)
+
+	path, _ := ioutil.TempDir("", "logstore")
+	defer os.RemoveAll(path)
+
+	Convey("A empty logstore", t, func() {
+
+		store := newMemoryLogStore()
 		defer store.Close()
 
 		Convey("Should return NoEntry error for index query", func() {

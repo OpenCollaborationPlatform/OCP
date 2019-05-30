@@ -10,18 +10,16 @@ import (
 	"testing"
 	"time"
 
-	logging "github.com/ipfs/go-log"
+	//logging "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func init() {
-	logging.SetDebugLogging()
+	//logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, path string, name string) ([]*Replica, error) {
-
-	fmt.Printf("\n\n\n Setup Replicas \n\n\n")
 
 	trans := newTestTransport()
 	overlord := newTestOverlord()
@@ -182,7 +180,82 @@ func TestReplicaCommit(t *testing.T) {
 			So(areStatesEqual(states), ShouldBeTrue)
 		})
 
+		Convey("Introducing random delays do not break the commiting", func() {
+
+			rndNum := 100
+			tt := reps[0].transport.(*testTransport)
+			tt.delay = 100 * time.Millisecond
+
+			waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 1*time.Second)
+
+			//random commiting of logs, no replica gets them all
+			for i := 0; i < rndNum; i++ {
+				log := Log{Index: uint64(i), Epoch: 0, Type: 0, Data: intToByte(uint64(i))}
+
+				for j := 0; j < len(reps); j++ {
+					reps[j].commitLog(log)
+				}
+			}
+
+			So(<-waiter, ShouldBeNil)
+
+			for _, state := range states {
+				So(len(state.Value), ShouldEqual, rndNum)
+			}
+			So(areStatesEqual(states), ShouldBeTrue)
+		})
+
 	})
+}
+
+func BenchmarkSingleReplicaCommits(b *testing.B) {
+
+	b.StopTimer()
+	//make temporary folder for the data
+	path, _ := ioutil.TempDir("", "benchmark")
+	defer os.RemoveAll(path)
+
+	reps, _ := setupReplicas(1, path, "Replica")
+	st := newTestState()
+	reps[0].AddState(st)
+
+	b.StartTimer()
+	//run the benchmark
+	for n := 0; n < b.N; n++ {
+		for i := 0; i < 1000; i++ {
+			log := Log{Index: uint64(n*1000 + i), Epoch: 0, Type: 0, Data: intToByte(uint64(n*1000 + i))}
+			reps[0].commitLog(log)
+		}
+	}
+}
+
+func BenchmarkMultiReplicaCommits(b *testing.B) {
+
+	b.StopTimer()
+	path, _ := ioutil.TempDir("", "replica")
+	defer os.RemoveAll(path)
+
+	reps, _ := setupReplicas(3, path, "Replica")
+	defer closeReplicas(reps)
+
+	for _, rep := range reps {
+		rep.AddState(newTestState())
+	}
+
+	rndNum := 1000
+	waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 20*time.Second)
+
+	b.StartTimer()
+	//random commiting of logs, no replica gets them all
+	for i := 0; i < rndNum; i++ {
+		log := Log{Index: uint64(i), Epoch: 0, Type: 0, Data: intToByte(uint64(i))}
+
+		for j := 0; j < len(reps); j++ {
+			reps[j].commitLog(log)
+		}
+	}
+
+	<-waiter
 }
 
 func TestReplicaLeader(t *testing.T) {
@@ -231,6 +304,32 @@ func TestReplicaLeader(t *testing.T) {
 				}
 				So(areStatesEqual(states), ShouldBeTrue)
 			})
+		})
+
+		Convey("Introducing random delays do not break the command adding", func() {
+
+			rndNum := 10
+			tt := reps[0].transport.(*testTransport)
+			tt.delay = 100 * time.Millisecond
+
+			ctx, _ := context.WithTimeout(context.Background(), 50*time.Millisecond)
+
+			waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 10*time.Second)
+
+			//random commiting of logs, no replica gets them all
+			for i := 0; i < rndNum; i++ {
+				cmd := intToByte(uint64(0))
+
+				idx := rand.Intn(len(reps))
+				reps[idx].AddCommand(ctx, 0, cmd)
+			}
+
+			So(<-waiter, ShouldBeNil)
+
+			for _, state := range states {
+				So(len(state.Value), ShouldEqual, rndNum)
+			}
+			So(areStatesEqual(states), ShouldBeTrue)
 		})
 
 	})

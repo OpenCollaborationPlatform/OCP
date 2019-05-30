@@ -1,7 +1,6 @@
 package replica
 
 import (
-	"CollaborationNode/utils"
 	"context"
 	"fmt"
 	"math"
@@ -56,10 +55,10 @@ type Replica struct {
 func NewReplica(path string, name string, trans Transport, ol Overlord, key crypto.RsaPrivateKey) (*Replica, error) {
 
 	//create new logStore for this state
-	store, err := newLogStore(path, name)
-	if err != nil {
+	store := newMemoryLogStore()
+	/*if err != nil {
 		return nil, utils.StackError(err, "Cannot create replica")
-	}
+	}*/
 
 	//setup the main context
 	ctx, cncl := context.WithCancel(context.Background())
@@ -74,7 +73,7 @@ func NewReplica(path string, name string, trans Transport, ol Overlord, key cryp
 		commitChan:    make(chan Log, 10),
 		cmdChan:       make(chan cmdStruct),
 		setLeaderChan: make(chan uint64),
-		appliedChan:   make(chan uint64, 10),
+		appliedChan:   make(chan uint64, 100),
 		states:        newStateStore(),
 		logs:          store,
 		name:          name,

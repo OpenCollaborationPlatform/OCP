@@ -30,20 +30,110 @@ func IsNoEntryError(err error) bool {
 	return ok
 }
 
-type logStore struct {
+type logStore interface {
+	Close() error
+	FirstIndex() (uint64, error)
+	LastIndex() (uint64, error)
+	GetLog(idx uint64) (Log, error)
+	StoreLog(log Log) error
+	StoreLogs(logs []Log) error
+	DeleteRange(min, max uint64) error
+}
+
+type memoryLogStore struct {
+	memory map[uint64]Log
+	min    uint64
+	max    uint64
+}
+
+func newMemoryLogStore() logStore {
+
+	return &memoryLogStore{make(map[uint64]Log, 0), 0, 0}
+}
+
+func (self *memoryLogStore) Close() error {
+	self.memory = make(map[uint64]Log, 0)
+	return nil
+}
+
+func (self *memoryLogStore) FirstIndex() (uint64, error) {
+	if len(self.memory) == 0 {
+		return 0, &NoEntryError{}
+	}
+
+	return self.min, nil
+}
+
+func (self *memoryLogStore) LastIndex() (uint64, error) {
+	if len(self.memory) == 0 {
+		return 0, &NoEntryError{}
+	}
+
+	return self.max, nil
+}
+
+func (self *memoryLogStore) GetLog(idx uint64) (Log, error) {
+
+	log, ok := self.memory[idx]
+	if !ok {
+		return Log{}, fmt.Errorf("Log is not available")
+	}
+
+	return log, nil
+}
+
+func (self *memoryLogStore) StoreLog(log Log) error {
+
+	if len(self.memory) == 0 {
+		self.max = log.Index
+		self.min = log.Index
+	}
+
+	self.memory[log.Index] = log
+	if log.Index < self.min {
+		self.min = log.Index
+
+	} else if log.Index > self.max {
+		self.max = log.Index
+	}
+	return nil
+}
+
+func (self *memoryLogStore) StoreLogs(logs []Log) error {
+
+	for _, log := range logs {
+		self.StoreLog(log)
+	}
+
+	return nil
+}
+
+func (self *memoryLogStore) DeleteRange(min, max uint64) error {
+
+	if min == self.min && max == self.max {
+		self.memory = make(map[uint64]Log, 0)
+		self.max = 0
+		self.min = 0
+		return nil
+	}
+
+	return fmt.Errorf("Not implemented")
+}
+
+type persistentLogStore struct {
 	db *bolt.DB
 }
 
-func newLogStore(path string, name string) (logStore, error) {
+func newPersistentLogStore(path string, name string) (logStore, error) {
 
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
-		return logStore{}, utils.StackError(err, "Cannot open path %s for replica store", path)
+		return nil, utils.StackError(err, "Cannot open path %s for replica store", path)
 	}
 	dbpath := filepath.Join(path, name+"-log.db")
 	db, err := bolt.Open(dbpath, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return logStore{}, utils.StackError(err, "Unable to open bolt db: %s", dbpath)
+		return nil, utils.StackError(err, "Unable to open bolt db: %s", dbpath)
 	}
 
 	//make sure the basic structure exists
@@ -52,15 +142,15 @@ func newLogStore(path string, name string) (logStore, error) {
 		return err
 	})
 
-	return logStore{db}, err
+	return &persistentLogStore{db}, err
 }
 
 // Close is used to gracefully close the DB connection.
-func (self *logStore) Close() error {
+func (self *persistentLogStore) Close() error {
 	return self.db.Close()
 }
 
-func (self *logStore) FirstIndex() (uint64, error) {
+func (self *persistentLogStore) FirstIndex() (uint64, error) {
 	tx, err := self.db.Begin(false)
 	if err != nil {
 		return 0, err
@@ -76,7 +166,7 @@ func (self *logStore) FirstIndex() (uint64, error) {
 }
 
 // LastIndex returns the last known index from the Raft log.
-func (self *logStore) LastIndex() (uint64, error) {
+func (self *persistentLogStore) LastIndex() (uint64, error) {
 	tx, err := self.db.Begin(false)
 	if err != nil {
 		return 0, err
@@ -91,7 +181,7 @@ func (self *logStore) LastIndex() (uint64, error) {
 	}
 }
 
-func (self *logStore) GetLog(idx uint64) (Log, error) {
+func (self *persistentLogStore) GetLog(idx uint64) (Log, error) {
 	tx, err := self.db.Begin(false)
 	if err != nil {
 		return Log{}, err
@@ -113,13 +203,13 @@ func (self *logStore) GetLog(idx uint64) (Log, error) {
 	return log, nil
 }
 
-// logStoreLog is used to store a single raft log
-func (self *logStore) StoreLog(log Log) error {
+// persistentLogStoreLog is used to store a single raft log
+func (self *persistentLogStore) StoreLog(log Log) error {
 	return self.StoreLogs([]Log{log})
 }
 
-// logStoreLogs is used to store a set of raft logs
-func (self *logStore) StoreLogs(logs []Log) error {
+// persistentLogStoreLogs is used to store a set of raft logs
+func (self *persistentLogStore) StoreLogs(logs []Log) error {
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
@@ -143,7 +233,7 @@ func (self *logStore) StoreLogs(logs []Log) error {
 }
 
 // DeleteRange is used to delete logs within a given range inclusively.
-func (self *logStore) DeleteRange(min, max uint64) error {
+func (self *persistentLogStore) DeleteRange(min, max uint64) error {
 	minKey := uint64ToBytes(min)
 
 	tx, err := self.db.Begin(true)

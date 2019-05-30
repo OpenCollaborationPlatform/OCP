@@ -2,7 +2,8 @@ package replica
 
 import (
 	"CollaborationNode/utils"
-	"encoding/json"
+	"bytes"
+	"encoding/gob"
 	"fmt"
 
 	crypto "github.com/libp2p/go-libp2p-crypto"
@@ -63,11 +64,17 @@ func (self *Log) Verify(key crypto.RsaPublicKey) bool {
 }
 
 func (self *Log) ToBytes() ([]byte, error) {
-	return json.Marshal(self)
+	b := new(bytes.Buffer)
+	err := gob.NewEncoder(b).Encode(self)
+	if err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
 }
 
 func LogFromBytes(data []byte) (Log, error) {
 	var log Log
-	err := json.Unmarshal(data, &log)
+	b := bytes.NewBuffer(data)
+	err := gob.NewDecoder(b).Decode(&log)
 	return log, err
 }

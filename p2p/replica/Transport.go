@@ -85,7 +85,7 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 	}
 
 	//call the function
-	err = callFncByName(apiObj, fnc, ctx, arguments, reply)
+	err = callFncByName(self.delay, apiObj, fnc, ctx, arguments, reply)
 	if err != nil {
 		return utils.StackError(err, "Unable to call replica")
 	}
@@ -111,7 +111,7 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 		}
 
 		//call the function
-		err := callFncByName(apiObj, fnc, ctx, argument, reply)
+		err := callFncByName(self.delay, apiObj, fnc, ctx, argument, reply)
 		if err == nil {
 			return nil
 		}
@@ -125,14 +125,19 @@ func (self *testTransport) Send(api string, fnc string, argument interface{}) er
 	idxs := rand.Perm(len(self.readAPIs))
 	for _, idx := range idxs {
 		go func(idx int) {
-			callFncByName(self.readAPIs[idx], fnc, argument)
+			callFncByName(self.delay, self.readAPIs[idx], fnc, argument)
 		}(idx)
 	}
 
 	return nil
 }
 
-func callFncByName(obj interface{}, fncName string, params ...interface{}) error {
+func callFncByName(delay time.Duration, obj interface{}, fncName string, params ...interface{}) error {
+
+	if delay > 0 {
+		r := rand.Intn(int(delay.Nanoseconds()))
+		time.Sleep(time.Duration(r) * time.Nanosecond)
+	}
 
 	objValue := reflect.ValueOf(obj)
 	method := objValue.MethodByName(fncName)
