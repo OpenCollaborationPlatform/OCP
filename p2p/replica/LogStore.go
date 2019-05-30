@@ -44,12 +44,12 @@ func NewlogStore(path string, name string) (logStore, error) {
 	}
 
 	//make sure the basic structure exists
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucketIfNotExists(dbLogs)
-		return nil
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists(dbLogs)
+		return err
 	})
 
-	return logStore{db}, nil
+	return logStore{db}, err
 }
 
 // Close is used to gracefully close the DB connection.

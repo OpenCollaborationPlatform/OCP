@@ -52,18 +52,12 @@ func newTestTransport() *testTransport {
 }
 
 func (self *testTransport) RegisterReadAPI(api *ReadAPI) error {
-	if len(self.readAPIs) != len(self.writeAPIs) {
-		return fmt.Errorf("Something wrong with replica data, cannot register new")
-	}
 	self.readAPIs = append(self.readAPIs, api)
 	return nil
 }
 
 func (self *testTransport) RegisterWriteAPI(api *WriteAPI) error {
 
-	if len(self.readAPIs) != len(self.writeAPIs) {
-		return fmt.Errorf("Something wrong with replica data, cannot register new")
-	}
 	self.writeAPIs = append(self.writeAPIs, api)
 	return nil
 }
@@ -76,7 +70,7 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 		return err
 	}
 	if idx >= len(self.readAPIs) {
-		return fmt.Errorf("Invalid address: no such replica known")
+		return fmt.Errorf("Invalid address (%v): no such replica known", idx)
 	}
 
 	//get the correct API to use
@@ -91,7 +85,7 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 	}
 
 	//call the function
-	result, err := callFncByName(apiObj, fnc, arguments)
+	result, err := callFncByName(apiObj, fnc, ctx, arguments, reply)
 	if err != nil {
 		return utils.StackError(err, "Unable to call replica")
 	}
@@ -118,8 +112,7 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 		}
 
 		//call the function
-		newctx, _ := context.WithCancel(ctx)
-		result, err := callFncByName(apiObj, fnc, newctx, argument, reply)
+		result, err := callFncByName(apiObj, fnc, ctx, argument, reply)
 		if err == nil {
 			reply = result[0].Interface()
 			return nil
@@ -133,9 +126,9 @@ func (self *testTransport) Send(api string, fnc string, argument interface{}) er
 
 	idxs := rand.Perm(len(self.readAPIs))
 	for _, idx := range idxs {
-		go func() {
+		go func(idx int) {
 			callFncByName(self.readAPIs[idx], fnc, argument)
-		}()
+		}(idx)
 	}
 
 	return nil

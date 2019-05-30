@@ -3,6 +3,7 @@ package replica
 import (
 	"CollaborationNode/utils"
 	"encoding/json"
+	"fmt"
 
 	crypto "github.com/libp2p/go-libp2p-crypto"
 )
@@ -25,6 +26,10 @@ func (self *Log) IsValid() bool {
 }
 
 func (self *Log) Sign(key crypto.RsaPrivateKey) error {
+
+	if len(self.Data) == 0 {
+		return fmt.Errorf("Cannot sign empty log")
+	}
 
 	self.Signature = make([]byte, 0)
 	data, err := self.ToBytes()

@@ -48,7 +48,7 @@ func (self *stateStore) Get(state uint8) State {
 	defer self.mutex.RUnlock()
 
 	if int(state) >= len(self.states) {
-		logger.Errorf("Want access state %v, but is not available", state)
+		//logger.Errorf("Want access state %v, but is not available", state)
 		return nil
 	}
 

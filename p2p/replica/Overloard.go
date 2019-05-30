@@ -20,13 +20,13 @@ var ologger = logging.Logger("Overlord")
 type Overlord interface {
 
 	//Register a OverloardAPI so that the overloard can interact with the replica
-	RegisterOverloardAPI(api OverloardAPI) error
+	RegisterOverloardAPI(api *OverloardAPI) error
 
 	//request a new leader election starts
-	RequestNewLeader(ctx context.Context)
+	RequestNewLeader(ctx context.Context) error
 
 	//gather information for a certain epoch
-	GetCurrentEpoch() uint64
+	GetCurrentEpoch() (uint64, error)
 	GetLeaderDataForEpoch(uint64) (Address, crypto.RsaPublicKey, error)
 
 	//Handling of destructive replicas
@@ -43,7 +43,14 @@ func (self *OverloardAPI) GetHighestLogIndex(ctx context.Context, result *uint64
 	//logstore is threadsafe
 	idx, err := self.replica.logs.LastIndex()
 	if err != nil {
-		return utils.StackError(err, "Unable to access latest log")
+
+		*result = 0
+		if IsNoEntryError(err) {
+			return err
+
+		} else {
+			return utils.StackError(err, "Unable to access latest log")
+		}
 	}
 
 	*result = idx
@@ -52,17 +59,23 @@ func (self *OverloardAPI) GetHighestLogIndex(ctx context.Context, result *uint64
 
 func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64) error {
 
-	//	self.replica
-	return nil
+	select {
+	case self.replica.setLeaderChan <- epoch:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("Unable to set as leader: operation canceld")
+	}
 }
 
 func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leader Address, key crypto.RsaPublicKey) error {
 
+	self.replica.logger.Infof("Start new epoch %v with leader %v", epoch, leader)
+	self.replica.leaders.AddEpoch(epoch, leader, key)
 	return nil
 }
 
 type testOverlord struct {
-	apis       []OverloardAPI
+	apis       []*OverloardAPI
 	epoche     uint64
 	leader     leaderStore
 	apimutex   sync.RWMutex
@@ -72,7 +85,7 @@ type testOverlord struct {
 
 func newTestOverlord() *testOverlord {
 	return &testOverlord{
-		apis:       make([]OverloardAPI, 0),
+		apis:       make([]*OverloardAPI, 0),
 		epoche:     0,
 		leader:     newLeaderStore(),
 		isElecting: false,
@@ -89,7 +102,7 @@ func (self *testOverlord) setApiPubKey(key crypto.RsaPublicKey) error {
 	return nil
 }
 
-func (self *testOverlord) RegisterOverloardAPI(api OverloardAPI) error {
+func (self *testOverlord) RegisterOverloardAPI(api *OverloardAPI) error {
 	self.apimutex.Lock()
 	defer self.apimutex.Unlock()
 
@@ -97,20 +110,20 @@ func (self *testOverlord) RegisterOverloardAPI(api OverloardAPI) error {
 	return nil
 }
 
-func (self *testOverlord) RequestNewLeader(ctx context.Context) {
+func (self *testOverlord) RequestNewLeader(ctx context.Context) error {
 
 	self.apimutex.Lock()
 	defer self.apimutex.Unlock()
 
 	if len(self.apis) <= 0 {
 		ologger.Error("Request for new leader received, but no API is registered")
-		return
+		return fmt.Errorf("failed")
 	}
 
 	//we may already have started an election
 	if self.isElecting {
 		ologger.Info("Request for leader election, but already ongoing")
-		return
+		return fmt.Errorf("failed")
 	}
 	self.isElecting = true
 	defer func() { self.isElecting = false }()
@@ -124,19 +137,19 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context) {
 		nctx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
 		var res uint64
 		err := api.GetHighestLogIndex(nctx, &res)
-		if err == nil {
-			if res > max {
+		if err == nil || IsNoEntryError(err) {
+			if res >= max {
 				max = res
 				addr = i
 			}
 		} else {
-			ologger.Errorf("Failed to reach api %v", i)
+			ologger.Errorf("Failed to reach api %v: %v", i, err)
 		}
 	}
 
 	if addr < 0 {
 		ologger.Error("No API reached, no leader can be sellected")
-		return
+		return fmt.Errorf("failed")
 	}
 
 	//setup the new epoch (make sure we start with 0 instead of 1)
@@ -146,26 +159,28 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context) {
 	self.leader.AddEpoch(self.epoche, fmt.Sprintf("%v", addr), self.apiKeys[addr])
 
 	//communicate the result
-	nctx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
-	self.apis[addr].SetAsLeader(nctx, self.epoche)
+	ologger.Infof("Leader elected for epoch %v: %v", self.epoche, addr)
+	self.apis[addr].SetAsLeader(ctx, self.epoche)
 
 	idxs := rand.Perm(len(self.apis))
 	for _, idx := range idxs {
-		go func(api OverloardAPI) {
-			nctx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
+		go func(api *OverloardAPI) {
 			addr, _ := self.leader.GetLeaderAdressForEpoch(self.epoche)
 			key, _ := self.leader.GetLeaderKeyForEpoch(self.epoche)
-			api.StartNewEpoch(nctx, self.epoche, addr, key)
+			api.StartNewEpoch(ctx, self.epoche, addr, key)
 		}(self.apis[idx])
 	}
+	time.Sleep(100 * time.Millisecond)
+
+	return nil
 }
 
-func (self *testOverlord) GetCurrentEpoch() uint64 {
+func (self *testOverlord) GetCurrentEpoch() (uint64, error) {
 
 	self.apimutex.RLock()
 	defer self.apimutex.RUnlock()
 
-	return self.epoche
+	return self.epoche, nil
 }
 
 func (self *testOverlord) GetLeaderDataForEpoch(epoche uint64) (Address, crypto.RsaPublicKey, error) {
