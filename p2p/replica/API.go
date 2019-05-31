@@ -69,5 +69,9 @@ func (self *WriteAPI) RequestCommand(ctx context.Context,
 	err := <-ret
 	close(ret)
 
+	if err != nil {
+		self.replica.logger.Debugf("Unable to handle command request: %v", err)
+	}
+
 	return err
 }

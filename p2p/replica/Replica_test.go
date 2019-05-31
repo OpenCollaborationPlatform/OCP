@@ -2,6 +2,7 @@ package replica
 
 import (
 	"context"
+	//	"context"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -10,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	//logging "github.com/ipfs/go-log"
+	logging "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func init() {
-	//logging.SetDebugLogging()
+	logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, path string, name string) ([]*Replica, error) {
@@ -34,7 +35,12 @@ func setupReplicas(num uint, path string, name string) ([]*Replica, error) {
 		if err != nil {
 			return nil, err
 		}
-		rep, err := NewReplica(path, fmt.Sprintf("%s_%v", name, i), trans, overlord, *priv.(*crypto.RsaPrivateKey))
+		addr := Address(fmt.Sprintf("%v", i))
+		rep, err := NewReplica(path,
+			fmt.Sprintf("%s_%v", name, i), addr, trans,
+			overlord, *priv.(*crypto.RsaPrivateKey),
+			*pub.(*crypto.RsaPublicKey))
+
 		if err != nil {
 			return nil, err
 		}
@@ -116,6 +122,7 @@ func areStatesEqual(st []*testState) bool {
 	return true
 }
 
+/*
 func TestReplicaCommit(t *testing.T) {
 
 	//make temporary folder for the data
@@ -184,9 +191,9 @@ func TestReplicaCommit(t *testing.T) {
 
 			rndNum := 100
 			tt := reps[0].transport.(*testTransport)
-			tt.delay = 100 * time.Millisecond
+			tt.rndDelay = 100 * time.Millisecond
 
-			waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 1*time.Second)
+			waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 200*time.Millisecond)
 
 			//random commiting of logs, no replica gets them all
 			for i := 0; i < rndNum; i++ {
@@ -207,6 +214,7 @@ func TestReplicaCommit(t *testing.T) {
 
 	})
 }
+
 
 func BenchmarkSingleReplicaCommits(b *testing.B) {
 
@@ -257,6 +265,63 @@ func BenchmarkMultiReplicaCommits(b *testing.B) {
 
 	<-waiter
 }
+*/
+/*
+func TestReplicaRequest(t *testing.T) {
+
+	//make temporary folder for the data
+	path, _ := ioutil.TempDir("", "replica")
+	defer os.RemoveAll(path)
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	_, pub, _ := crypto.GenerateRSAKeyPair(512, r)
+	rsapub := *pub.(*crypto.RsaPublicKey)
+
+	Convey("Setting up 3 replicas with basic state", t, func() {
+
+		reps, err := setupReplicas(3, path, "Replica")
+		defer closeReplicas(reps)
+		So(err, ShouldBeNil)
+
+		states := make([]*testState, len(reps))
+		for i, rep := range reps {
+			st := newTestState()
+			states[i] = st
+			So(rep.AddState(st), ShouldEqual, 0)
+		}
+
+		Convey("Without setting leader command requests should fail", func() {
+
+			for _, rep := range reps {
+				err := rep.requestCommand([]byte("test"), 0)
+				So(err, ShouldNotBeNil)
+			}
+		})
+
+		Convey("But after setting a leader within the replicas", func() {
+
+			for _, rep := range reps {
+				rep.leaders.AddEpoch(0, Address("0"), rsapub)
+				rep.epoch = 0
+			}
+			reps[0].isLeader = true
+
+			Convey("a cmd request on leader should succeed", func() {
+
+				waiter := waitTillCommitIdx(reps, uint64(0), 100*time.Millisecond)
+
+				err := reps[0].requestCommand([]byte("test"), 0)
+				So(err, ShouldBeNil)
+				So(<-waiter, ShouldBeNil)
+
+				for _, state := range states {
+					So(len(state.Value), ShouldEqual, 1)
+				}
+				So(areStatesEqual(states), ShouldBeTrue)
+			})
+		})
+	})
+}*/
 
 func TestReplicaLeader(t *testing.T) {
 
@@ -277,7 +342,7 @@ func TestReplicaLeader(t *testing.T) {
 			So(rep.AddState(st), ShouldEqual, 0)
 		}
 
-		Convey("Adding commits to replica after setup", func() {
+		Convey("Adding commit to replica after setup", func() {
 			ctx := context.Background()
 
 			waiter := waitTillCommitIdx(reps, 0, 1*time.Second)
@@ -286,7 +351,7 @@ func TestReplicaLeader(t *testing.T) {
 			So(<-waiter, ShouldBeNil)
 
 			Convey("a new epoch should have startet,", func() {
-				epoch, err := reps[0].overlord.GetCurrentEpoch()
+				epoch, err := reps[0].overlord.GetCurrentEpoch(ctx)
 				So(err, ShouldBeNil)
 				So(epoch, ShouldEqual, 0)
 			})
@@ -304,26 +369,46 @@ func TestReplicaLeader(t *testing.T) {
 				}
 				So(areStatesEqual(states), ShouldBeTrue)
 			})
+
+			Convey("A second commit from a different replica works too", func() {
+				ctx := context.Background()
+
+				waiter := waitTillCommitIdx(reps, 0, 1*time.Second)
+				err := reps[1].AddCommand(ctx, 0, intToByte(uint64(0)))
+				So(err, ShouldBeNil)
+				So(<-waiter, ShouldBeNil)
+
+				Convey("and all states should have received the commit", func() {
+					for _, state := range states {
+						So(len(state.Value), ShouldEqual, 2)
+					}
+					So(areStatesEqual(states), ShouldBeTrue)
+				})
+			})
 		})
 
 		Convey("Introducing random delays do not break the command adding", func() {
 
-			rndNum := 10
+			rndNum := 100
 			tt := reps[0].transport.(*testTransport)
-			tt.delay = 100 * time.Millisecond
+			tt.rndDelay = 50 * time.Millisecond
 
-			ctx, _ := context.WithTimeout(context.Background(), 50*time.Millisecond)
+			ctx, _ := context.WithTimeout(context.Background(), 4000*time.Millisecond)
 
-			waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 10*time.Second)
+			waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 5*time.Second)
 
 			//random commiting of logs, no replica gets them all
+			var err error
 			for i := 0; i < rndNum; i++ {
 				cmd := intToByte(uint64(0))
 
 				idx := rand.Intn(len(reps))
-				reps[idx].AddCommand(ctx, 0, cmd)
+				err = reps[idx].AddCommand(ctx, 0, cmd)
+				if err != nil {
+					break
+				}
 			}
-
+			So(err, ShouldBeNil)
 			So(<-waiter, ShouldBeNil)
 
 			for _, state := range states {

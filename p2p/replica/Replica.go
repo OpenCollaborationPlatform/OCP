@@ -25,34 +25,48 @@ func init() {
 	rand.Seed(time.Now().Unix())
 }
 
+type NotLeaderError struct{}
+
+func (self *NotLeaderError) Error() string {
+	return "Not leader, cannot execute command"
+}
+
+func IsNotLeaderError(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, ok := err.(*NotLeaderError)
+	return ok
+}
+
 type Replica struct {
 	//init values
 	transport Transport
 	overlord  Overlord
 	name      string
-	key       crypto.RsaPrivateKey
+	privKey   crypto.RsaPrivateKey
+	pubKey    crypto.RsaPublicKey
 	logger    logging.EventLogger
+	address   Address
 
 	//replica state handling
 	requests map[uint64]requestState
 	leaders  leaderStore
-	isLeader bool
-	epoch    uint64
 
 	//user state handling
 	states stateStore
 	logs   logStore
 
 	//syncronizing via channels
-	ctx           context.Context
-	cncl          context.CancelFunc
-	commitChan    chan Log
-	cmdChan       chan cmdStruct
-	appliedChan   chan uint64
-	setLeaderChan chan uint64
+	ctx         context.Context
+	cncl        context.CancelFunc
+	commitChan  chan Log
+	cmdChan     chan cmdStruct
+	appliedChan chan uint64
 }
 
-func NewReplica(path string, name string, trans Transport, ol Overlord, key crypto.RsaPrivateKey) (*Replica, error) {
+func NewReplica(path string, name string, addr Address, trans Transport, ol Overlord,
+	priv crypto.RsaPrivateKey, pub crypto.RsaPublicKey) (*Replica, error) {
 
 	//create new logStore for this state
 	store := newMemoryLogStore()
@@ -64,22 +78,22 @@ func NewReplica(path string, name string, trans Transport, ol Overlord, key cryp
 	ctx, cncl := context.WithCancel(context.Background())
 
 	replica := &Replica{
-		transport:     trans,
-		overlord:      ol,
-		requests:      make(map[uint64]requestState),
-		leaders:       newLeaderStore(),
-		ctx:           ctx,
-		cncl:          cncl,
-		commitChan:    make(chan Log, 10),
-		cmdChan:       make(chan cmdStruct),
-		setLeaderChan: make(chan uint64),
-		appliedChan:   make(chan uint64, 100),
-		states:        newStateStore(),
-		logs:          store,
-		name:          name,
-		key:           key,
-		isLeader:      false,
-		logger:        logging.Logger(name),
+		transport:   trans,
+		overlord:    ol,
+		requests:    make(map[uint64]requestState),
+		leaders:     newLeaderStore(),
+		ctx:         ctx,
+		cncl:        cncl,
+		commitChan:  make(chan Log),
+		cmdChan:     make(chan cmdStruct),
+		appliedChan: make(chan uint64, 100),
+		states:      newStateStore(),
+		logs:        store,
+		name:        name,
+		privKey:     priv,
+		pubKey:      pub,
+		address:     addr,
+		logger:      logging.Logger(name),
 	}
 
 	//setup transport correctly
@@ -169,11 +183,12 @@ type leaderData struct {
 
 func (self *Replica) run() {
 
+loop:
 	for {
 		select {
 
 		case <-self.ctx.Done():
-			break
+			break loop
 
 		case log := <-self.commitChan:
 			self.commitLog(log)
@@ -183,15 +198,11 @@ func (self *Replica) run() {
 				val.retChan <- self.newCommand(val.ctx, val.cmd, val.state)
 
 			} else {
-				val.retChan <- self.requestCommand(val.ctx, val.cmd, val.state)
+				val.retChan <- self.requestCommand(val.cmd, val.state)
 			}
-
-		case epoch := <-self.setLeaderChan:
-			self.logger.Infof("Become leader for epoch %v", epoch)
-			self.isLeader = true
-			self.epoch = epoch
 		}
 	}
+	self.logger.Debug("Shutdown run loop")
 }
 
 //internal functions
@@ -283,7 +294,7 @@ func (self *Replica) requestLog(idx uint64) {
 	self.logger.Debugf("Request log %v started", idx)
 
 	//build the request state
-	ctx, cncl := context.WithCancel(context.Background())
+	ctx, cncl := context.WithCancel(self.ctx)
 	rstate := requestState{ctx, cncl, requestState_Fetching, Log{}}
 	self.requests[idx] = rstate
 
@@ -320,6 +331,7 @@ func (self *Replica) requestLog(idx uint64) {
 
 				} else {
 					self.logger.Debugf("Call of function GetLog in ReadAPI failed: %v", err.Error())
+					time.Sleep(100 * time.Microsecond)
 				}
 			}
 		}
@@ -363,38 +375,100 @@ func (self *Replica) applyLog(log Log) {
 //do not use for remote requests, as this can go into deadlook if some replica adresses the wrong leader
 func (self *Replica) newCommand(ctx context.Context, cmd []byte, state uint8) error {
 
-	//check if we are leader. If so, it is easy to commit!
-	if self.isLeader {
-		return self.requestCommand(ctx, cmd, state)
-	}
+	self.logger.Debug("New local command added")
 
-	//check if there is a leader, if not we need to request a new one
-	if self.leaders.EpochCount() == 0 {
-		self.overlord.RequestNewLeader(ctx)
-	}
-
-	//otherwise we are asking the leader to commit!
-	addr, err := self.leaders.GetLeaderAdressForEpoch(self.epoch)
-
-	if err != nil {
-		self.logger.Errorf("New log cannot be handled: %v", err)
+	if err := self.ensureLeader(ctx); err != nil {
+		self.logger.Debugf("Anort new command: %v", err)
 		return err
 	}
 
+	//check if we are leader. If so, it is easy to commit!
+	leader := self.leaders.GetLeaderAddress()
+	if self.address == leader {
+		return self.requestCommand(cmd, state)
+	}
+
+	//we are not, so lets call the leader for the command request
 	args := struct {
 		state uint8
 		cmd   []byte
 	}{state, cmd}
 	var ret uint64
-	return self.transport.Call(ctx, addr, `WriteAPI`, `RequestCommand`, args, &ret)
+
+	for {
+		self.logger.Debugf("Request command from leader %v", leader)
+
+		err := self.transport.Call(ctx, leader, `WriteAPI`, `RequestCommand`, args, &ret)
+
+		//if it failed because of wrong leader data we need to check what is the correct one
+		if IsNotLeaderError(err) {
+
+			err := self.ensureLeader(ctx)
+			if err != nil {
+				self.logger.Debugf("Unable to get correct leader: %v", err)
+			}
+
+			if leader == self.leaders.GetLeaderAddress() {
+				self.logger.Error("Replica says it is not leader, but overlord says so")
+				return fmt.Errorf("Replica says it is not leader, but overlord says so")
+			}
+
+		} else if err != nil {
+			self.logger.Error("Unable to call leader: %v", err)
+			return err
+
+		} else {
+			return nil
+		}
+	}
+
+	return nil
 }
 
-//handles remoe command requests
-func (self *Replica) requestCommand(ctx context.Context, cmd []byte, state uint8) error {
+//ensures that there is a leader in the current leaderStore. If none is known it triggers an election.
+//However, it does not reassure the known leader with the overlord, it assumes the internal state is up to date
+func (self *Replica) ensureLeader(ctx context.Context) error {
+
+	if self.leaders.EpochCount() == 0 {
+
+		//maybe there is a new epoch we don't know about?
+		epoch, addr, key, err := self.overlord.GetCurrentEpochData(ctx)
+
+		if IsNoEpochError(err) {
+			//there is no epoch yet, lets start one!
+			err := self.overlord.RequestNewLeader(ctx, 0)
+			if err != nil {
+				return fmt.Errorf("Unable to reach overlord, abort: %v", err)
+			}
+			epoch, addr, key, err = self.overlord.GetCurrentEpochData(ctx)
+
+		} else if err != nil {
+			return fmt.Errorf("Unable to reach overlord for leader epoch inquery: %v", err)
+		}
+
+		self.leaders.AddEpoch(epoch, addr, key)
+		self.leaders.SetEpoch(epoch)
+	}
+	return nil
+}
+
+//ensures that the known leader is the one provided by the overlord. It updates the internal state if not
+func (self *Replica) reassureLeader(ctx context.Context) error {
+
+	return nil
+}
+
+//handles remote command requests.
+// - Not thread safe, only call from within "run"
+// - Does not need a context as it is fast and does not call any context aware funcitons
+func (self *Replica) requestCommand(cmd []byte, state uint8) error {
+
+	self.logger.Debugf("Received command request")
 
 	//we only process if we are the leader!
-	if !self.isLeader {
-		return fmt.Errorf("Not the leader, abort request")
+	if (self.leaders.EpochCount() == 0) || (self.address != self.leaders.GetLeaderAddress()) {
+		self.logger.Error("Abort command request, I'm not leader")
+		return &NotLeaderError{}
 	}
 
 	//fetch some infos
@@ -414,15 +488,17 @@ func (self *Replica) requestCommand(ctx context.Context, cmd []byte, state uint8
 	//build the log
 	log := Log{
 		Index: idx,
-		Epoch: self.epoch,
+		Epoch: self.leaders.GetEpoch(),
 		Type:  state,
 		Data:  cmd,
 	}
-	log.Sign(self.key)
+	log.Sign(self.privKey)
 
 	//store and inform
 	self.logs.StoreLog(log)
 	self.applyLog(log)
+
+	self.logger.Debugf("Send out new log")
 	err = self.transport.Send(`ReadAPI`, `NewLog`, log)
 	if err != nil {
 		self.logger.Errorf("Unable to send out commited log: %v", err)

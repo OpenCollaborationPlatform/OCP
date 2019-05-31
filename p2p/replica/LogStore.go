@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -44,19 +45,25 @@ type memoryLogStore struct {
 	memory map[uint64]Log
 	min    uint64
 	max    uint64
+	mutex  sync.RWMutex
 }
 
 func newMemoryLogStore() logStore {
 
-	return &memoryLogStore{make(map[uint64]Log, 0), 0, 0}
+	return &memoryLogStore{make(map[uint64]Log, 0), 0, 0, sync.RWMutex{}}
 }
 
 func (self *memoryLogStore) Close() error {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
 	self.memory = make(map[uint64]Log, 0)
 	return nil
 }
 
 func (self *memoryLogStore) FirstIndex() (uint64, error) {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
 	if len(self.memory) == 0 {
 		return 0, &NoEntryError{}
 	}
@@ -65,6 +72,10 @@ func (self *memoryLogStore) FirstIndex() (uint64, error) {
 }
 
 func (self *memoryLogStore) LastIndex() (uint64, error) {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
 	if len(self.memory) == 0 {
 		return 0, &NoEntryError{}
 	}
@@ -73,6 +84,9 @@ func (self *memoryLogStore) LastIndex() (uint64, error) {
 }
 
 func (self *memoryLogStore) GetLog(idx uint64) (Log, error) {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
 
 	log, ok := self.memory[idx]
 	if !ok {
@@ -83,6 +97,9 @@ func (self *memoryLogStore) GetLog(idx uint64) (Log, error) {
 }
 
 func (self *memoryLogStore) StoreLog(log Log) error {
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
 
 	if len(self.memory) == 0 {
 		self.max = log.Index
@@ -110,6 +127,8 @@ func (self *memoryLogStore) StoreLogs(logs []Log) error {
 
 func (self *memoryLogStore) DeleteRange(min, max uint64) error {
 
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
 	if min == self.min && max == self.max {
 		self.memory = make(map[uint64]Log, 0)
 		self.max = 0

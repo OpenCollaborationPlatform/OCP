@@ -37,7 +37,8 @@ type Transport interface {
 
 //A simple test transport for local replica communication. Allows randomized delay
 type testTransport struct {
-	delay     time.Duration
+	rndDelay  time.Duration
+	fixDelay  time.Duration
 	readAPIs  []*ReadAPI
 	writeAPIs []*WriteAPI
 }
@@ -45,7 +46,8 @@ type testTransport struct {
 func newTestTransport() *testTransport {
 
 	return &testTransport{
-		delay:     0 * time.Millisecond,
+		rndDelay:  0 * time.Millisecond,
+		fixDelay:  0 * time.Millisecond,
 		readAPIs:  make([]*ReadAPI, 0),
 		writeAPIs: make([]*WriteAPI, 0),
 	}
@@ -85,7 +87,7 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 	}
 
 	//call the function
-	err = callFncByName(self.delay, apiObj, fnc, ctx, arguments, reply)
+	err = callFncByName(self.rndDelay, self.fixDelay, apiObj, fnc, ctx, arguments, reply)
 	if err != nil {
 		return utils.StackError(err, "Unable to call replica")
 	}
@@ -111,32 +113,48 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 		}
 
 		//call the function
-		err := callFncByName(self.delay, apiObj, fnc, ctx, argument, reply)
+		err := callFncByName(self.rndDelay, self.fixDelay, apiObj, fnc, ctx, argument, reply)
 		if err == nil {
 			return nil
 		}
 	}
 
-	return fmt.Errorf("No replica couldd be called")
+	return fmt.Errorf("No replica could be called")
 }
 
 func (self *testTransport) Send(api string, fnc string, argument interface{}) error {
 
 	idxs := rand.Perm(len(self.readAPIs))
 	for _, idx := range idxs {
-		go func(idx int) {
-			callFncByName(self.delay, self.readAPIs[idx], fnc, argument)
-		}(idx)
+
+		//get the correct API to use
+		var apiObj interface{}
+		switch api {
+		case `ReadAPI`:
+			apiObj = self.readAPIs[idx]
+		case `WriteAPI`:
+			apiObj = self.writeAPIs[idx]
+		default:
+			return fmt.Errorf("Unknown API: don't know what to do")
+		}
+
+		go func(api interface{}) {
+			callFncByName(self.rndDelay, self.fixDelay, api, fnc, argument)
+		}(apiObj)
 	}
 
 	return nil
 }
 
-func callFncByName(delay time.Duration, obj interface{}, fncName string, params ...interface{}) error {
+func callFncByName(rndDelay time.Duration, fixDelay time.Duration, obj interface{}, fncName string, params ...interface{}) error {
 
-	if delay > 0 {
-		r := rand.Intn(int(delay.Nanoseconds()))
+	if rndDelay > 0 {
+		r := rand.Intn(int(rndDelay.Nanoseconds()))
 		time.Sleep(time.Duration(r) * time.Nanosecond)
+	}
+
+	if fixDelay > 0 {
+		time.Sleep(fixDelay)
 	}
 
 	objValue := reflect.ValueOf(obj)
