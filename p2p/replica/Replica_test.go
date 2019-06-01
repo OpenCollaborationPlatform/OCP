@@ -2,25 +2,22 @@ package replica
 
 import (
 	"context"
-	//	"context"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
-	"os"
 	"sync"
 	"testing"
 	"time"
 
-	//logging "github.com/ipfs/go-log"
+	logging "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func init() {
-	//logging.SetDebugLogging()
+	logging.SetDebugLogging()
 }
 
-func setupReplicas(num uint, path string, name string) ([]*Replica, error) {
+func setupReplicas(num uint, name string) ([]*Replica, error) {
 
 	trans := newTestTransport()
 	overlord := newTestOverlord()
@@ -36,10 +33,8 @@ func setupReplicas(num uint, path string, name string) ([]*Replica, error) {
 			return nil, err
 		}
 		addr := Address(fmt.Sprintf("%v", i))
-		rep, err := NewReplica(path,
-			fmt.Sprintf("%s_%v", name, i), addr, trans,
-			overlord, *priv.(*crypto.RsaPrivateKey),
-			*pub.(*crypto.RsaPublicKey))
+		rep, err := NewReplica(fmt.Sprintf("%s_%v", name, i), addr, trans,
+			overlord, *priv.(*crypto.RsaPrivateKey), *pub.(*crypto.RsaPublicKey), DefaultOptions())
 
 		if err != nil {
 			return nil, err
@@ -124,15 +119,11 @@ func areStatesEqual(st []*testState) bool {
 
 func TestReplicaCommit(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "replica")
-	defer os.RemoveAll(path)
-
 	num := 3
 
 	Convey("Setting up 3 replicas with basic state", t, func() {
 
-		reps, err := setupReplicas(3, path, "Replica")
+		reps, err := setupReplicas(3, "Replica")
 		defer closeReplicas(reps)
 		So(err, ShouldBeNil)
 
@@ -268,17 +259,13 @@ func BenchmarkMultiReplicaCommits(b *testing.B) {
 
 func TestReplicaRequest(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "replica")
-	defer os.RemoveAll(path)
-
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	_, pub, _ := crypto.GenerateRSAKeyPair(512, r)
 	rsapub := *pub.(*crypto.RsaPublicKey)
 
 	Convey("Setting up 3 replicas with basic state", t, func() {
 
-		reps, err := setupReplicas(3, path, "Replica")
+		reps, err := setupReplicas(3, "Replica")
 		defer closeReplicas(reps)
 		So(err, ShouldBeNil)
 
@@ -323,13 +310,9 @@ func TestReplicaRequest(t *testing.T) {
 
 func TestReplicaLeader(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "replica")
-	defer os.RemoveAll(path)
-
 	Convey("Setting up 3 replicas with basic state", t, func() {
 
-		reps, err := setupReplicas(3, path, "Replica")
+		reps, err := setupReplicas(3, "Replica")
 		defer closeReplicas(reps)
 		So(err, ShouldBeNil)
 
@@ -371,7 +354,7 @@ func TestReplicaLeader(t *testing.T) {
 			Convey("A second commit from a different replica works too", func() {
 				ctx := context.Background()
 
-				waiter := waitTillCommitIdx(reps, 0, 1*time.Second)
+				waiter := waitTillCommitIdx(reps, 1, 1*time.Second)
 				err := reps[1].AddCommand(ctx, 0, intToByte(uint64(0)))
 				So(err, ShouldBeNil)
 				So(<-waiter, ShouldBeNil)
@@ -387,12 +370,11 @@ func TestReplicaLeader(t *testing.T) {
 
 		Convey("Introducing random delays do not break the command adding", func() {
 
-			rndNum := 50
+			rndNum := 5
 			tt := reps[0].transport.(*testTransport)
 			tt.rndDelay = 50 * time.Millisecond
 
-			ctx, _ := context.WithTimeout(context.Background(), 4000*time.Millisecond)
-
+			ctx, _ := context.WithTimeout(context.Background(), 4*time.Second)
 			waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 5*time.Second)
 
 			//random commiting of logs, no replica gets them all
@@ -413,6 +395,72 @@ func TestReplicaLeader(t *testing.T) {
 				So(len(state.Value), ShouldEqual, rndNum)
 			}
 			So(areStatesEqual(states), ShouldBeTrue)
+		})
+
+	})
+}
+
+func TestSnapshot(t *testing.T) {
+
+	Convey("Setting up 3 replicas with MaxLogLength of 10", t, func() {
+
+		reps, err := setupReplicas(3, "Replica")
+		defer closeReplicas(reps)
+		So(err, ShouldBeNil)
+
+		states := make([]*testState, len(reps))
+		for i, rep := range reps {
+			st := newTestState()
+			states[i] = st
+			So(rep.AddState(st), ShouldEqual, 0)
+		}
+
+		//we want a snapshot after 10 commits to ease testing
+		for _, rep := range reps {
+			rep.options.MaxLogLength = 10
+		}
+
+		Convey("and adding 11 cmds to replica", func() {
+
+			ctx := context.Background()
+			waiter := waitTillCommitIdx(reps, uint64(12), 1*time.Second)
+
+			//random commiting of logs, no replica gets them all
+			var err error
+			for i := 0; i <= 11; i++ {
+				cmd := intToByte(uint64(0))
+
+				idx := rand.Intn(len(reps))
+				err = reps[idx].AddCommand(ctx, 0, cmd)
+				if err != nil {
+					break
+				}
+			}
+
+			So(err, ShouldBeNil)
+			So(<-waiter, ShouldBeNil)
+
+			Convey("should leaf 2 logs in the store,", func() {
+
+				for _, rep := range reps {
+					first, _ := rep.logs.FirstIndex()
+					last, _ := rep.logs.LastIndex()
+
+					So(first, ShouldEqual, 11)
+					So(last, ShouldEqual, 12)
+				}
+			})
+
+			Convey("with the first being the snapshot log", func() {
+
+				for _, rep := range reps {
+					first, _ := rep.logs.FirstIndex()
+					log, err := rep.logs.GetLog(first)
+					So(err, ShouldBeNil)
+					So(log.Type, ShouldEqual, logType_Snapshot)
+				}
+			})
+
 		})
 
 	})

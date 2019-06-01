@@ -140,6 +140,7 @@ func (self *memoryLogStore) DeleteUpTo(idx uint64) error {
 		delete(self.memory, i)
 	}
 	self.min = idx
+	return nil
 }
 
 func (self *memoryLogStore) Clear() error {
@@ -150,6 +151,8 @@ func (self *memoryLogStore) Clear() error {
 	self.memory = make(map[uint64]Log)
 	self.max = 0
 	self.min = 0
+
+	return nil
 }
 
 type persistentLogStore struct {
@@ -297,7 +300,7 @@ func (self *persistentLogStore) Clear() error {
 	}
 	defer tx.Rollback()
 
-	curs := tx.Bucket(dbLogs)
+	curs := tx.Bucket(dbLogs).Cursor()
 	for k, _ := curs.First(); k != nil; k, _ = curs.Next() {
 		if err := curs.Delete(); err != nil {
 			return err

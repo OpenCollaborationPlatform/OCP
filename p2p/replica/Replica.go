@@ -1,6 +1,7 @@
 package replica
 
 import (
+	"CollaborationNode/utils"
 	"context"
 	"fmt"
 	"math"
@@ -39,6 +40,19 @@ func IsNotLeaderError(err error) bool {
 	return ok
 }
 
+type Options struct {
+	MaxLogLength    uint
+	PersistentLog   bool
+	PersistencePath string
+}
+
+func DefaultOptions() Options {
+	return Options{
+		MaxLogLength:  1000,
+		PersistentLog: false,
+	}
+}
+
 type Replica struct {
 	//init values
 	transport Transport
@@ -48,6 +62,7 @@ type Replica struct {
 	pubKey    crypto.RsaPublicKey
 	logger    logging.EventLogger
 	address   Address
+	options   Options
 
 	//replica state handling
 	requests map[uint64]requestState
@@ -65,14 +80,23 @@ type Replica struct {
 	appliedChan chan uint64
 }
 
-func NewReplica(path string, name string, addr Address, trans Transport, ol Overlord,
-	priv crypto.RsaPrivateKey, pub crypto.RsaPublicKey) (*Replica, error) {
+func NewReplica(name string, addr Address, trans Transport, ol Overlord,
+	priv crypto.RsaPrivateKey, pub crypto.RsaPublicKey, opts Options) (*Replica, error) {
 
 	//create new logStore for this state
-	store := newMemoryLogStore()
-	/*if err != nil {
-		return nil, utils.StackError(err, "Cannot create replica")
-	}*/
+	var store logStore
+	if opts.PersistentLog {
+		if opts.PersistencePath == "" {
+			return nil, fmt.Errorf("Persistent log required, but not persistance path provided")
+		}
+		var err error
+		store, err = newPersistentLogStore(opts.PersistencePath, name)
+		if err != nil {
+			return nil, utils.StackError(err, "Cannot create replica")
+		}
+	} else {
+		store = newMemoryLogStore()
+	}
 
 	//setup the main context
 	ctx, cncl := context.WithCancel(context.Background())
@@ -94,6 +118,7 @@ func NewReplica(path string, name string, addr Address, trans Transport, ol Over
 		pubKey:      pub,
 		address:     addr,
 		logger:      logging.Logger(name),
+		options:     opts,
 	}
 
 	//setup transport correctly
@@ -116,10 +141,7 @@ func (self *Replica) Start() {
 
 func (self *Replica) Stop() {
 	self.cncl()
-
-	first, _ := self.logs.FirstIndex()
-	last, _ := self.logs.LastIndex()
-	self.logs.DeleteRange(first, last)
+	self.logs.Clear()
 	self.logs.Close()
 }
 
@@ -357,17 +379,18 @@ func (self *Replica) applyLog(log Log) {
 		if state != nil {
 			state.Apply(log.Data)
 
-			//inform (but do not block if noone listends)
-			select {
-			case self.appliedChan <- log.Index:
-				break
-			default:
-				break
-			}
-
 		} else {
 			self.logger.Error("Cannot apply command: Unknown state")
+			return
 		}
+	}
+
+	//inform (but do not block if noone listends)
+	select {
+	case self.appliedChan <- log.Index:
+		break
+	default:
+		break
 	}
 }
 
@@ -414,7 +437,7 @@ func (self *Replica) newCommand(ctx context.Context, cmd []byte, state uint8) er
 			}
 
 		} else if err != nil {
-			self.logger.Error("Unable to call leader: %v", err)
+			self.logger.Errorf("Unable to call leader: %v", err)
 			return err
 
 		} else {
@@ -510,12 +533,12 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 	if err != nil {
 		self.logger.Errorf("Snapshoting cannot be done: %v", err)
 	}
-	last, err := self.logs.LastIndex()
+	last, err = self.logs.LastIndex()
 	if err != nil {
 		self.logger.Errorf("Snapshoting cannot be done: %v", err)
 	}
-	if (last - first) >= 1000 {
-		self.logger.Debugf("Snapshot needed for log compaction")
+	if (last - first) >= uint64(self.options.MaxLogLength) {
+		self.logger.Debugf("Snapshot needed for log compaction (%v to %v, max length %v)", first, last, self.options.MaxLogLength)
 
 		//lets do a snapshot!
 		data, err := self.states.Snaphot()

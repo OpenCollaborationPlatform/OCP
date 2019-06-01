@@ -160,13 +160,13 @@ func (self *testState) Apply(cmd []byte) {
 	}
 }
 
-func (self *testState) Snaphot() []byte {
+func (self *testState) Snapshot() []byte {
 
 	res, _ := json.Marshal(self.Value)
 	return res
 }
 
-func (self *testState) LoadSnaphot(cmd []byte) error {
+func (self *testState) LoadSnapshot(cmd []byte) error {
 
 	self.Value = make([]uint64, 0)
 	err := json.Unmarshal(cmd, &self.Value)
@@ -174,6 +174,11 @@ func (self *testState) LoadSnaphot(cmd []byte) error {
 		return utils.StackError(err, "Unable to load snapshot")
 	}
 
+	return nil
+}
+
+func (self *testState) EnsureSnapshot(snap []byte) error {
+	//snapshot holds all required data, hence yes, we can apply it
 	return nil
 }
 
