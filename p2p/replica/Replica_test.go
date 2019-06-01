@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	logging "github.com/ipfs/go-log"
+	//logging "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func init() {
-	logging.SetDebugLogging()
+	//logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, path string, name string) ([]*Replica, error) {
@@ -122,7 +122,6 @@ func areStatesEqual(st []*testState) bool {
 	return true
 }
 
-/*
 func TestReplicaCommit(t *testing.T) {
 
 	//make temporary folder for the data
@@ -215,7 +214,7 @@ func TestReplicaCommit(t *testing.T) {
 	})
 }
 
-
+/*
 func BenchmarkSingleReplicaCommits(b *testing.B) {
 
 	b.StopTimer()
@@ -266,7 +265,7 @@ func BenchmarkMultiReplicaCommits(b *testing.B) {
 	<-waiter
 }
 */
-/*
+
 func TestReplicaRequest(t *testing.T) {
 
 	//make temporary folder for the data
@@ -302,9 +301,8 @@ func TestReplicaRequest(t *testing.T) {
 
 			for _, rep := range reps {
 				rep.leaders.AddEpoch(0, Address("0"), rsapub)
-				rep.epoch = 0
+				rep.leaders.SetEpoch(0)
 			}
-			reps[0].isLeader = true
 
 			Convey("a cmd request on leader should succeed", func() {
 
@@ -321,7 +319,7 @@ func TestReplicaRequest(t *testing.T) {
 			})
 		})
 	})
-}*/
+}
 
 func TestReplicaLeader(t *testing.T) {
 
@@ -389,7 +387,7 @@ func TestReplicaLeader(t *testing.T) {
 
 		Convey("Introducing random delays do not break the command adding", func() {
 
-			rndNum := 100
+			rndNum := 50
 			tt := reps[0].transport.(*testTransport)
 			tt.rndDelay = 50 * time.Millisecond
 

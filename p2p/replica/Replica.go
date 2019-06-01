@@ -346,11 +346,11 @@ func (self *Replica) applyLog(log Log) {
 
 	case logType_Leader:
 
-	case logType_MemberAdd:
-
-	case logType_MemberRemove:
-
 	case logType_Snapshot:
+		//make sure we are able to load the snapshot
+		self.states.EnsureSnapshot(log.Data)
+		//start log compaction
+		self.logs.DeleteUpTo(log.Index)
 
 	default:
 		state := self.states.Get(log.Type)
@@ -503,6 +503,45 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 	if err != nil {
 		self.logger.Errorf("Unable to send out commited log: %v", err)
 		return err
+	}
+
+	//check if we need to snapshot
+	first, err := self.logs.FirstIndex()
+	if err != nil {
+		self.logger.Errorf("Snapshoting cannot be done: %v", err)
+	}
+	last, err := self.logs.LastIndex()
+	if err != nil {
+		self.logger.Errorf("Snapshoting cannot be done: %v", err)
+	}
+	if (last - first) >= 1000 {
+		self.logger.Debugf("Snapshot needed for log compaction")
+
+		//lets do a snapshot!
+		data, err := self.states.Snaphot()
+		if err != nil {
+			self.logger.Errorf("Snapshoting failed: %v", err)
+			return err
+		}
+		//build the log
+		log := Log{
+			Index: idx + 1,
+			Epoch: self.leaders.GetEpoch(),
+			Type:  logType_Snapshot,
+			Data:  data,
+		}
+		log.Sign(self.privKey)
+
+		//store and inform
+		self.logs.StoreLog(log)
+		self.applyLog(log)
+
+		self.logger.Debugf("Send out snapshopt log")
+		err = self.transport.Send(`ReadAPI`, `NewLog`, log)
+		if err != nil {
+			self.logger.Errorf("Unable to send out snapshot log: %v", err)
+			return err
+		}
 	}
 
 	return nil

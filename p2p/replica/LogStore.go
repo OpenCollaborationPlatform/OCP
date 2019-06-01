@@ -38,7 +38,8 @@ type logStore interface {
 	GetLog(idx uint64) (Log, error)
 	StoreLog(log Log) error
 	StoreLogs(logs []Log) error
-	DeleteRange(min, max uint64) error
+	DeleteUpTo(idx uint64) error
+	Clear() error
 }
 
 type memoryLogStore struct {
@@ -125,18 +126,30 @@ func (self *memoryLogStore) StoreLogs(logs []Log) error {
 	return nil
 }
 
-func (self *memoryLogStore) DeleteRange(min, max uint64) error {
+//deletes all entries up to (but not including) the given idx
+func (self *memoryLogStore) DeleteUpTo(idx uint64) error {
 
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	if min == self.min && max == self.max {
-		self.memory = make(map[uint64]Log, 0)
-		self.max = 0
-		self.min = 0
-		return nil
+
+	if idx > self.max {
+		return fmt.Errorf("TThe provided idx does not exist, cannot delete")
 	}
 
-	return fmt.Errorf("Not implemented")
+	for i := self.min; i < idx; i++ {
+		delete(self.memory, i)
+	}
+	self.min = idx
+}
+
+func (self *memoryLogStore) Clear() error {
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
+	self.memory = make(map[uint64]Log)
+	self.max = 0
+	self.min = 0
 }
 
 type persistentLogStore struct {
@@ -252,8 +265,7 @@ func (self *persistentLogStore) StoreLogs(logs []Log) error {
 }
 
 // DeleteRange is used to delete logs within a given range inclusively.
-func (self *persistentLogStore) DeleteRange(min, max uint64) error {
-	minKey := uint64ToBytes(min)
+func (self *persistentLogStore) DeleteUpTo(idx uint64) error {
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
@@ -262,13 +274,31 @@ func (self *persistentLogStore) DeleteRange(min, max uint64) error {
 	defer tx.Rollback()
 
 	curs := tx.Bucket(dbLogs).Cursor()
-	for k, _ := curs.Seek(minKey); k != nil; k, _ = curs.Next() {
+	for k, _ := curs.First(); k != nil; k, _ = curs.Next() {
 		// Handle out-of-range log index
-		if bytesToUint64(k) > max {
+		if bytesToUint64(k) >= idx {
 			break
 		}
 
 		// Delete in-range log index
+		if err := curs.Delete(); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (self *persistentLogStore) Clear() error {
+
+	tx, err := self.db.Begin(true)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	curs := tx.Bucket(dbLogs)
+	for k, _ := curs.First(); k != nil; k, _ = curs.Next() {
 		if err := curs.Delete(); err != nil {
 			return err
 		}
