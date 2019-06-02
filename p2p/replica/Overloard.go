@@ -42,7 +42,7 @@ type Overlord interface {
 	//gather information for a certain epoch
 	GetCurrentEpoch(ctx context.Context) (uint64, error)
 	GetCurrentEpochData(ctx context.Context) (uint64, Address, crypto.RsaPublicKey, error)
-	GetLeaderDataForEpoch(uint64) (Address, crypto.RsaPublicKey, error)
+	GetDataForEpoch(ctx context.Context, epoch uint64) (Address, crypto.RsaPublicKey, error)
 
 	//Handling of destructive replicas
 	//ReportReplica(addr Address, readon string)
@@ -211,7 +211,7 @@ func (self *testOverlord) GetCurrentEpochData(ctx context.Context) (uint64, Addr
 	return self.epoche, addr, key, nil
 }
 
-func (self *testOverlord) GetLeaderDataForEpoch(epoche uint64) (Address, crypto.RsaPublicKey, error) {
+func (self *testOverlord) GetDataForEpoch(ctx context.Context, epoche uint64) (Address, crypto.RsaPublicKey, error) {
 
 	self.apimutex.RLock()
 	defer self.apimutex.RUnlock()

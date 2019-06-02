@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	logging "github.com/ipfs/go-log"
+	//logging "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func init() {
-	logging.SetDebugLogging()
+	//logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, name string) ([]*Replica, error) {
@@ -134,11 +134,17 @@ func TestReplicaCommit(t *testing.T) {
 			So(rep.AddState(st), ShouldEqual, 0)
 		}
 
+		//define reps[0] as leader
+		to := reps[0].overlord.(*testOverlord)
+		to.leader.AddEpoch(0, "0", reps[0].pubKey)
+		to.leader.SetEpoch(0)
+
 		Convey("Adding commits to all replicas should work", func() {
 
 			waiter := waitTillCommitIdx(reps, uint64(num-1), 1*time.Second)
 			for i := 0; i < num; i++ {
 				log := Log{Index: uint64(i), Epoch: 0, Type: 0, Data: intToByte(uint64(i))}
+				log.Sign(reps[0].privKey)
 
 				for j := 0; j < len(reps); j++ {
 					reps[j].commitLog(log)
@@ -159,6 +165,7 @@ func TestReplicaCommit(t *testing.T) {
 
 			for i := 0; i < num; i++ {
 				log := Log{Index: uint64(i), Epoch: 0, Type: 0, Data: intToByte(uint64(i))}
+				log.Sign(reps[0].privKey)
 
 				for j := 0; j < (len(reps) - 1); j++ {
 					reps[j].commitLog(log)
@@ -167,6 +174,8 @@ func TestReplicaCommit(t *testing.T) {
 
 			//we now add only the last log to the last replica
 			log := Log{Index: uint64(num - 1), Epoch: 0, Type: 0, Data: intToByte(uint64(num - 1))}
+			log.Sign(reps[0].privKey)
+
 			reps[len(reps)-1].commitLog(log)
 
 			So(<-waiter, ShouldBeNil)
@@ -188,6 +197,7 @@ func TestReplicaCommit(t *testing.T) {
 			//random commiting of logs, no replica gets them all
 			for i := 0; i < rndNum; i++ {
 				log := Log{Index: uint64(i), Epoch: 0, Type: 0, Data: intToByte(uint64(i))}
+				log.Sign(reps[0].privKey)
 
 				for j := 0; j < len(reps); j++ {
 					reps[j].commitLog(log)
@@ -259,10 +269,6 @@ func BenchmarkMultiReplicaCommits(b *testing.B) {
 
 func TestReplicaRequest(t *testing.T) {
 
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	_, pub, _ := crypto.GenerateRSAKeyPair(512, r)
-	rsapub := *pub.(*crypto.RsaPublicKey)
-
 	Convey("Setting up 3 replicas with basic state", t, func() {
 
 		reps, err := setupReplicas(3, "Replica")
@@ -287,7 +293,7 @@ func TestReplicaRequest(t *testing.T) {
 		Convey("But after setting a leader within the replicas", func() {
 
 			for _, rep := range reps {
-				rep.leaders.AddEpoch(0, Address("0"), rsapub)
+				rep.leaders.AddEpoch(0, Address("0"), reps[0].pubKey)
 				rep.leaders.SetEpoch(0)
 			}
 

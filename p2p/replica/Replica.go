@@ -40,6 +40,22 @@ func IsNotLeaderError(err error) bool {
 	return ok
 }
 
+type InvalidError struct {
+	msg string
+}
+
+func (self *InvalidError) Error() string {
+	return self.msg
+}
+
+func IsInvalidError(err error) bool {
+	if err == nil {
+		return false
+	}
+	_, ok := err.(*InvalidError)
+	return ok
+}
+
 type Options struct {
 	MaxLogLength    uint
 	PersistentLog   bool
@@ -227,10 +243,25 @@ loop:
 	self.logger.Debug("Shutdown run loop")
 }
 
-//internal functions
+//								internal functions
+//******************************************************************************
+
+//commit a log.
 func (self *Replica) commitLog(log Log) {
 
 	self.logger.Debugf("Received log entry %v in epoch %v (which is of type %v)", log.Index, log.Epoch, log.Type)
+
+	//check if log is valid
+	//TODO: currently verify has no timeout... check if this is a good thing
+	err := self.verifyLog(self.ctx, log)
+	if IsInvalidError(err) {
+		self.logger.Errorf("Log %v received for commit, but is invalid: %v", log.Index, err)
+		return
+
+	} else if err != nil {
+		self.logger.Errorf("Log %v received for commit, but unable to finish verification: %v", log.Index, err)
+
+	}
 
 	//check the required next index
 	var requiredIdx uint64
@@ -478,6 +509,48 @@ func (self *Replica) ensureLeader(ctx context.Context) error {
 //ensures that the known leader is the one provided by the overlord. It updates the internal state if not
 func (self *Replica) reassureLeader(ctx context.Context) error {
 
+	epoch, addr, key, err := self.overlord.GetCurrentEpochData(ctx)
+
+	if err != nil {
+		self.logger.Errorf("Cannot query overlord for epoch data: %v", err)
+		return err
+	}
+
+	if self.leaders.GetEpoch() == epoch {
+		//we are up to data, done!
+		return nil
+
+	} else if self.leaders.GetEpoch() < epoch {
+
+		//somehow we have a epoch that came not from the overlord...
+		//that should be impossible, as all epochs have been from there... ahhh
+		self.logger.Panicf("Overlord says epoch is %v, but we are already at %v", epoch, self.leaders.GetEpoch())
+		return fmt.Errorf("damm")
+	}
+
+	//there is a new epoch, we know that now! but are there more than one?
+	for i := self.leaders.GetEpoch() + 1; i < epoch; i++ {
+		laddr, lkey, err := self.overlord.GetDataForEpoch(ctx, i)
+
+		if err != nil {
+			self.logger.Errorf("Cannot query overlord for epoch data: %v", err)
+			return err
+		}
+
+		err = self.leaders.AddEpoch(i, laddr, lkey)
+		if err != nil {
+			self.logger.Errorf("Unable to add epoch %v data: %v", i, err)
+			return err
+		}
+	}
+
+	//finally add the newest epoch!
+	err = self.leaders.AddEpoch(epoch, addr, key)
+	if err != nil {
+		self.logger.Errorf("Unable to add epoch %v data: %v", epoch, err)
+		return err
+	}
+
 	return nil
 }
 
@@ -565,6 +638,40 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 			self.logger.Errorf("Unable to send out snapshot log: %v", err)
 			return err
 		}
+	}
+
+	return nil
+}
+
+//verifies the log. It checks if it is from the leader of the epoch it claims to
+//be from. It does not check if this epoch is the current one
+func (self *Replica) verifyLog(ctx context.Context, log Log) error {
+
+	//make sure there is a leader and we know a epoch
+	if err := self.ensureLeader(ctx); err != nil {
+		return err
+	}
+
+	//if the log has a different epoch there is a chance we simply do not
+	//know about it
+	if !self.leaders.HasEpoch(log.Epoch) {
+		if err := self.reassureLeader(ctx); err != nil {
+			return err
+		}
+	}
+
+	//check if log is valid. that means
+
+	//it must belong to a known epoch (we know all after reassureLeader)
+	if !self.leaders.HasEpoch(log.Epoch) {
+		return &InvalidError{"Log does not belong to a known epoch"}
+	}
+
+	//must be signed by the epoch leader it claims to be from
+	key, _ := self.leaders.GetLeaderKeyForEpoch(log.Epoch)
+
+	if valid := log.Verify(key); !valid {
+		return &InvalidError{"Log is not from leader of claimed epoch"}
 	}
 
 	return nil
