@@ -41,8 +41,8 @@ type Overlord interface {
 
 	//gather information for a certain epoch
 	GetCurrentEpoch(ctx context.Context) (uint64, error)
-	GetCurrentEpochData(ctx context.Context) (uint64, Address, crypto.RsaPublicKey, error)
-	GetDataForEpoch(ctx context.Context, epoch uint64) (Address, crypto.RsaPublicKey, error)
+	GetCurrentEpochData(ctx context.Context) (uint64, Address, crypto.RsaPublicKey, uint64, error)
+	GetDataForEpoch(ctx context.Context, epoch uint64) (Address, crypto.RsaPublicKey, uint64, error)
 
 	//Handling of destructive replicas
 	//ReportReplica(addr Address, readon string)
@@ -74,7 +74,8 @@ func (self *OverloardAPI) GetHighestLogIndex(ctx context.Context, result *uint64
 
 func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64) error {
 
-	err := self.replica.leaders.AddEpoch(epoch, self.replica.address, self.replica.pubKey)
+	last, _ := self.replica.logs.LastIndex()
+	err := self.replica.leaders.AddEpoch(epoch, self.replica.address, self.replica.pubKey, last+1)
 	if err != nil {
 		self.replica.logger.Errorf("Set as leader by overlord, but cannot comply: %v", err)
 		return err
@@ -87,16 +88,15 @@ func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64) error {
 	return nil
 }
 
-func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leader Address, key crypto.RsaPublicKey) error {
+func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leader Address, key crypto.RsaPublicKey, startIdx uint64) error {
 
 	self.replica.logger.Infof("Start new epoch %v with leader %v", epoch, leader)
-	self.replica.leaders.AddEpoch(epoch, leader, key)
+	self.replica.leaders.AddEpoch(epoch, leader, key, startIdx)
 	return nil
 }
 
 type testOverlord struct {
 	apis     []*OverloardAPI
-	epoche   uint64
 	leader   leaderStore
 	apimutex sync.RWMutex
 	apiKeys  []crypto.RsaPublicKey
@@ -105,7 +105,6 @@ type testOverlord struct {
 func newTestOverlord() *testOverlord {
 	return &testOverlord{
 		apis:    make([]*OverloardAPI, 0),
-		epoche:  0,
 		leader:  newLeaderStore(),
 		apiKeys: make([]crypto.RsaPublicKey, 0),
 	}
@@ -130,8 +129,8 @@ func (self *testOverlord) RegisterOverloardAPI(api *OverloardAPI) error {
 
 func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) error {
 
-	self.apimutex.Lock()
-	defer self.apimutex.Unlock()
+	self.apimutex.RLock()
+	defer self.apimutex.RUnlock()
 
 	if len(self.apis) <= 0 {
 		ologger.Error("Request for new leader received, but no API is registered")
@@ -141,6 +140,11 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 	//check if the epoch is already elected
 	if self.leader.HasEpoch(epoch) {
 		return nil
+	}
+
+	//or not the next one
+	if (self.leader.EpochCount() != 0) && ((epoch - self.leader.GetEpoch()) != 1) {
+		return fmt.Errorf("The requested epoch %v is not the next in line, that would be %v", epoch, self.leader.GetEpoch()+1)
 	}
 
 	//collect the replica with highest log that is reachable
@@ -166,21 +170,26 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 	}
 
 	//setup the new epoch (make sure we start with 0 instead of 1)
+	var newEpoch uint64
 	if self.leader.EpochCount() != 0 {
-		self.epoche++
+		newEpoch = self.leader.GetEpoch() + 1
+	} else {
+		newEpoch = 0
 	}
-	self.leader.AddEpoch(self.epoche, fmt.Sprintf("%v", addr), self.apiKeys[addr])
+	self.leader.AddEpoch(newEpoch, fmt.Sprintf("%v", addr), self.apiKeys[addr], max)
+	self.leader.SetEpoch(newEpoch)
 
 	//communicate the result
-	ologger.Infof("Leader elected for epoch %v: %v", self.epoche, addr)
-	self.apis[addr].SetAsLeader(ctx, self.epoche)
+	ologger.Infof("Leader elected for epoch %v: %v", self.leader.GetEpoch(), addr)
+	self.apis[addr].SetAsLeader(ctx, self.leader.GetEpoch())
 
 	idxs := rand.Perm(len(self.apis))
 	for _, idx := range idxs {
 		go func(api *OverloardAPI) {
-			addr, _ := self.leader.GetLeaderAdressForEpoch(self.epoche)
-			key, _ := self.leader.GetLeaderKeyForEpoch(self.epoche)
-			api.StartNewEpoch(ctx, self.epoche, addr, key)
+			addr := self.leader.GetLeaderAddress()
+			key := self.leader.GetLeaderKey()
+			sidx := self.leader.GetLeaderStartIdx()
+			api.StartNewEpoch(ctx, self.leader.GetEpoch(), addr, key, sidx)
 		}(self.apis[idx])
 	}
 	time.Sleep(100 * time.Millisecond)
@@ -190,37 +199,31 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 
 func (self *testOverlord) GetCurrentEpoch(ctx context.Context) (uint64, error) {
 
-	self.apimutex.RLock()
-	defer self.apimutex.RUnlock()
-
-	return self.epoche, nil
+	return self.leader.GetEpoch(), nil
 }
 
-func (self *testOverlord) GetCurrentEpochData(ctx context.Context) (uint64, Address, crypto.RsaPublicKey, error) {
-
-	self.apimutex.RLock()
-	defer self.apimutex.RUnlock()
+func (self *testOverlord) GetCurrentEpochData(ctx context.Context) (uint64, Address, crypto.RsaPublicKey, uint64, error) {
 
 	if self.leader.EpochCount() == 0 {
-		return 0, Address(""), crypto.RsaPublicKey{}, &NoEpochError{}
+		return 0, Address(""), crypto.RsaPublicKey{}, 0, &NoEpochError{}
 	}
 
-	addr, _ := self.leader.GetLeaderAdressForEpoch(self.epoche)
-	key, _ := self.leader.GetLeaderKeyForEpoch(self.epoche)
+	addr := self.leader.GetLeaderAddress()
+	key := self.leader.GetLeaderKey()
+	sidx := self.leader.GetLeaderStartIdx()
 
-	return self.epoche, addr, key, nil
+	return self.leader.GetEpoch(), addr, key, sidx, nil
 }
 
-func (self *testOverlord) GetDataForEpoch(ctx context.Context, epoche uint64) (Address, crypto.RsaPublicKey, error) {
+func (self *testOverlord) GetDataForEpoch(ctx context.Context, epoche uint64) (Address, crypto.RsaPublicKey, uint64, error) {
 
-	self.apimutex.RLock()
-	defer self.apimutex.RUnlock()
-
-	if epoche > self.epoche || !self.leader.HasEpoch(epoche) {
-		return Address(""), crypto.RsaPublicKey{}, fmt.Errorf("Epoch unknown")
+	if epoche > self.leader.GetEpoch() || !self.leader.HasEpoch(epoche) {
+		return Address(""), crypto.RsaPublicKey{}, 0, fmt.Errorf("Epoch unknown")
 	}
 
-	addr, _ := self.leader.GetLeaderAdressForEpoch(self.epoche)
-	key, _ := self.leader.GetLeaderKeyForEpoch(self.epoche)
-	return addr, key, nil
+	addr := self.leader.GetLeaderAddress()
+	key := self.leader.GetLeaderKey()
+	sidx := self.leader.GetLeaderStartIdx()
+
+	return addr, key, sidx, nil
 }

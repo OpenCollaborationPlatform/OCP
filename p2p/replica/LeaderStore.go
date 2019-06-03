@@ -8,18 +8,20 @@ import (
 )
 
 type leaderStore struct {
-	adress  map[uint64]Address
-	keys    map[uint64]crypto.RsaPublicKey
-	current uint64
-	mutex   sync.RWMutex
+	adress   map[uint64]Address
+	keys     map[uint64]crypto.RsaPublicKey
+	startIdx map[uint64]uint64
+	current  uint64
+	mutex    sync.RWMutex
 }
 
 func newLeaderStore() leaderStore {
 	return leaderStore{
-		adress:  make(map[uint64]Address),
-		keys:    make(map[uint64]crypto.RsaPublicKey),
-		current: 0,
-		mutex:   sync.RWMutex{},
+		adress:   make(map[uint64]Address),
+		keys:     make(map[uint64]crypto.RsaPublicKey),
+		startIdx: make(map[uint64]uint64),
+		current:  0,
+		mutex:    sync.RWMutex{},
 	}
 }
 
@@ -84,7 +86,31 @@ func (self *leaderStore) GetLeaderKeyForEpoch(epoch uint64) (crypto.RsaPublicKey
 	return key, nil
 }
 
-func (self *leaderStore) AddEpoch(epoch uint64, addr Address, key crypto.RsaPublicKey) error {
+func (self *leaderStore) GetLeaderStartIdx() uint64 {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	idx, ok := self.startIdx[self.current]
+	if !ok {
+		panic("Request for start idx but no leader set")
+	}
+	return idx
+}
+
+func (self *leaderStore) GetLeaderStartIdxForEpoch(epoch uint64) (uint64, error) {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	idx, ok := self.startIdx[epoch]
+	if !ok {
+		return 0, fmt.Errorf("Epoch is unknown")
+	}
+	return idx, nil
+}
+
+func (self *leaderStore) AddEpoch(epoch uint64, addr Address, key crypto.RsaPublicKey, startIdx uint64) error {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 
@@ -94,6 +120,8 @@ func (self *leaderStore) AddEpoch(epoch uint64, addr Address, key crypto.RsaPubl
 
 	self.adress[epoch] = addr
 	self.keys[epoch] = key
+	self.startIdx[epoch] = startIdx
+
 	return nil
 }
 

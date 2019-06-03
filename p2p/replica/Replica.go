@@ -486,7 +486,7 @@ func (self *Replica) ensureLeader(ctx context.Context) error {
 	if self.leaders.EpochCount() == 0 {
 
 		//maybe there is a new epoch we don't know about?
-		epoch, addr, key, err := self.overlord.GetCurrentEpochData(ctx)
+		epoch, addr, key, startIdx, err := self.overlord.GetCurrentEpochData(ctx)
 
 		if IsNoEpochError(err) {
 			//there is no epoch yet, lets start one!
@@ -494,13 +494,13 @@ func (self *Replica) ensureLeader(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("Unable to reach overlord, abort: %v", err)
 			}
-			epoch, addr, key, err = self.overlord.GetCurrentEpochData(ctx)
+			epoch, addr, key, startIdx, err = self.overlord.GetCurrentEpochData(ctx)
 
 		} else if err != nil {
 			return fmt.Errorf("Unable to reach overlord for leader epoch inquery: %v", err)
 		}
 
-		self.leaders.AddEpoch(epoch, addr, key)
+		self.leaders.AddEpoch(epoch, addr, key, startIdx)
 		self.leaders.SetEpoch(epoch)
 	}
 	return nil
@@ -509,7 +509,7 @@ func (self *Replica) ensureLeader(ctx context.Context) error {
 //ensures that the known leader is the one provided by the overlord. It updates the internal state if not
 func (self *Replica) reassureLeader(ctx context.Context) error {
 
-	epoch, addr, key, err := self.overlord.GetCurrentEpochData(ctx)
+	epoch, addr, key, startIdx, err := self.overlord.GetCurrentEpochData(ctx)
 
 	if err != nil {
 		self.logger.Errorf("Cannot query overlord for epoch data: %v", err)
@@ -530,14 +530,14 @@ func (self *Replica) reassureLeader(ctx context.Context) error {
 
 	//there is a new epoch, we know that now! but are there more than one?
 	for i := self.leaders.GetEpoch() + 1; i < epoch; i++ {
-		laddr, lkey, err := self.overlord.GetDataForEpoch(ctx, i)
+		laddr, lkey, lstartIdx, err := self.overlord.GetDataForEpoch(ctx, i)
 
 		if err != nil {
 			self.logger.Errorf("Cannot query overlord for epoch data: %v", err)
 			return err
 		}
 
-		err = self.leaders.AddEpoch(i, laddr, lkey)
+		err = self.leaders.AddEpoch(i, laddr, lkey, lstartIdx)
 		if err != nil {
 			self.logger.Errorf("Unable to add epoch %v data: %v", i, err)
 			return err
@@ -545,7 +545,7 @@ func (self *Replica) reassureLeader(ctx context.Context) error {
 	}
 
 	//finally add the newest epoch!
-	err = self.leaders.AddEpoch(epoch, addr, key)
+	err = self.leaders.AddEpoch(epoch, addr, key, startIdx)
 	if err != nil {
 		self.logger.Errorf("Unable to add epoch %v data: %v", epoch, err)
 		return err

@@ -136,7 +136,7 @@ func TestReplicaCommit(t *testing.T) {
 
 		//define reps[0] as leader
 		to := reps[0].overlord.(*testOverlord)
-		to.leader.AddEpoch(0, "0", reps[0].pubKey)
+		to.leader.AddEpoch(0, "0", reps[0].pubKey, 0)
 		to.leader.SetEpoch(0)
 
 		Convey("Adding commits to all replicas should work", func() {
@@ -293,7 +293,7 @@ func TestReplicaRequest(t *testing.T) {
 		Convey("But after setting a leader within the replicas", func() {
 
 			for _, rep := range reps {
-				rep.leaders.AddEpoch(0, Address("0"), reps[0].pubKey)
+				rep.leaders.AddEpoch(0, Address("0"), reps[0].pubKey, 0)
 				rep.leaders.SetEpoch(0)
 			}
 
