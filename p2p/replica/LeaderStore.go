@@ -115,7 +115,15 @@ func (self *leaderStore) AddEpoch(epoch uint64, addr Address, key crypto.RsaPubl
 	defer self.mutex.Unlock()
 
 	if _, ok := self.adress[epoch]; ok {
-		return fmt.Errorf("Epoch already known and set")
+		//we have the epoch already, but it is only a error if it is different than the new one
+		if self.adress[epoch] != addr ||
+			self.keys[epoch] != key ||
+			self.startIdx[epoch] != startIdx {
+			fmt.Errorf("Epoch already known but with different values")
+		}
+
+		//same epoch known, thats fine
+		return nil
 	}
 
 	self.adress[epoch] = addr

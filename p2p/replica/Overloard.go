@@ -72,10 +72,9 @@ func (self *OverloardAPI) GetHighestLogIndex(ctx context.Context, result *uint64
 	return nil
 }
 
-func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64) error {
+func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64, idx uint64) error {
 
-	last, _ := self.replica.logs.LastIndex()
-	err := self.replica.leaders.AddEpoch(epoch, self.replica.address, self.replica.pubKey, last+1)
+	err := self.replica.leaders.AddEpoch(epoch, self.replica.address, self.replica.pubKey, idx)
 	if err != nil {
 		self.replica.logger.Errorf("Set as leader by overlord, but cannot comply: %v", err)
 		return err
@@ -90,8 +89,12 @@ func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64) error {
 
 func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leader Address, key crypto.RsaPublicKey, startIdx uint64) error {
 
-	self.replica.logger.Infof("Start new epoch %v with leader %v", epoch, leader)
-	self.replica.leaders.AddEpoch(epoch, leader, key, startIdx)
+	self.replica.logger.Infof("Start new epoch %v with leader %v (begining with index %v)", epoch, leader, startIdx)
+	err := self.replica.leaders.AddEpoch(epoch, leader, key, startIdx)
+	if err != nil {
+		self.replica.logger.Errorf("Unable to add new epoch: %v", err)
+		return err
+	}
 	return nil
 }
 
@@ -180,8 +183,8 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 	self.leader.SetEpoch(newEpoch)
 
 	//communicate the result
-	ologger.Infof("Leader elected for epoch %v: %v", self.leader.GetEpoch(), addr)
-	self.apis[addr].SetAsLeader(ctx, self.leader.GetEpoch())
+	ologger.Infof("Leader elected for epoch %v: %v (start index is %v)", self.leader.GetEpoch(), self.leader.GetLeaderAddress(), self.leader.GetLeaderStartIdx())
+	self.apis[addr].SetAsLeader(ctx, self.leader.GetEpoch(), self.leader.GetLeaderStartIdx())
 
 	idxs := rand.Perm(len(self.apis))
 	for _, idx := range idxs {

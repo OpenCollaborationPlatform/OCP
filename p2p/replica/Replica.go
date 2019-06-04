@@ -667,9 +667,20 @@ func (self *Replica) verifyLog(ctx context.Context, log Log) error {
 		return &InvalidError{"Log does not belong to a known epoch"}
 	}
 
+	//and the index must belong to this epoch
+	startIdx, _ := self.leaders.GetLeaderStartIdxForEpoch(log.Epoch)
+	if startIdx > log.Index {
+		return &InvalidError{fmt.Sprintf("Log index does not belong to the claimed epoch (epoch start with %v, log Index is %v)", startIdx, log.Index)}
+	}
+	if self.leaders.HasEpoch(log.Epoch + 1) {
+		startIdx, _ := self.leaders.GetLeaderStartIdxForEpoch(log.Epoch)
+		if startIdx <= log.Index {
+			return &InvalidError{fmt.Sprintf("Log index does not belong to the claimed epoch (epoch ends with %v, log Index is %v)", startIdx-1, log.Index)}
+		}
+	}
+
 	//must be signed by the epoch leader it claims to be from
 	key, _ := self.leaders.GetLeaderKeyForEpoch(log.Epoch)
-
 	if valid := log.Verify(key); !valid {
 		return &InvalidError{"Log is not from leader of claimed epoch"}
 	}

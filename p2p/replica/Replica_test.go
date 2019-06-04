@@ -341,12 +341,17 @@ func TestReplicaLeader(t *testing.T) {
 				epoch, err := reps[0].overlord.GetCurrentEpoch(ctx)
 				So(err, ShouldBeNil)
 				So(epoch, ShouldEqual, 0)
+
+				_, _, _, idx, err := reps[0].overlord.GetCurrentEpochData(ctx)
+				So(err, ShouldBeNil)
+				So(idx, ShouldEqual, 0)
 			})
 
 			Convey("all replicas know about it,", func() {
 				for _, rep := range reps {
 					So(rep.leaders.EpochCount(), ShouldBeGreaterThan, 0)
 					So(rep.leaders.HasEpoch(0), ShouldBeTrue)
+					So(rep.leaders.GetLeaderStartIdx(), ShouldEqual, 0)
 				}
 			})
 
