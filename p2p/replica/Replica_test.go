@@ -8,13 +8,13 @@ import (
 	"testing"
 	"time"
 
-	//logging "github.com/ipfs/go-log"
+	logging "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func init() {
-	//logging.SetDebugLogging()
+	logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, name string) ([]*Replica, error) {

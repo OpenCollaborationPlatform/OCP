@@ -36,9 +36,11 @@ type logStore interface {
 	FirstIndex() (uint64, error)
 	LastIndex() (uint64, error)
 	GetLog(idx uint64) (Log, error)
+	GetLatestLog() (Log, error)
 	StoreLog(log Log) error
 	StoreLogs(logs []Log) error
 	DeleteUpTo(idx uint64) error
+	DeleteUpFrom(idx uint64) error
 	Clear() error
 }
 
@@ -97,6 +99,23 @@ func (self *memoryLogStore) GetLog(idx uint64) (Log, error) {
 	return log, nil
 }
 
+func (self *memoryLogStore) GetLatestLog() (Log, error) {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	if len(self.memory) == 0 {
+		return Log{}, &NoEntryError{}
+	}
+
+	log, ok := self.memory[self.max]
+	if !ok {
+		return Log{}, fmt.Errorf("Error in internal store state")
+	}
+
+	return log, nil
+}
+
 func (self *memoryLogStore) StoreLog(log Log) error {
 
 	self.mutex.Lock()
@@ -132,7 +151,7 @@ func (self *memoryLogStore) DeleteUpTo(idx uint64) error {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 
-	if idx > self.max {
+	if idx > self.max || idx < self.min {
 		return fmt.Errorf("TThe provided idx does not exist, cannot delete")
 	}
 
@@ -140,6 +159,23 @@ func (self *memoryLogStore) DeleteUpTo(idx uint64) error {
 		delete(self.memory, i)
 	}
 	self.min = idx
+	return nil
+}
+
+//deletes all entries from (but not including) the given idx
+func (self *memoryLogStore) DeleteUpFrom(idx uint64) error {
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
+	if idx > self.max || idx < self.min {
+		return fmt.Errorf("TThe provided idx does not exist, cannot delete")
+	}
+
+	for i := idx + 1; i <= self.max; i++ {
+		delete(self.memory, i)
+	}
+	self.max = idx
 	return nil
 }
 
@@ -238,6 +274,28 @@ func (self *persistentLogStore) GetLog(idx uint64) (Log, error) {
 	return log, nil
 }
 
+func (self *persistentLogStore) GetLatestLog() (Log, error) {
+	tx, err := self.db.Begin(false)
+	if err != nil {
+		return Log{}, err
+	}
+	defer tx.Rollback()
+
+	bucket := tx.Bucket(dbLogs)
+	_, val := bucket.Cursor().Last()
+
+	if val == nil {
+		return Log{}, &NoEntryError{}
+	}
+
+	log, err := LogFromBytes(val)
+	if val == nil {
+		return Log{}, utils.StackError(err, "Entry badly formatted")
+	}
+
+	return log, nil
+}
+
 // persistentLogStoreLog is used to store a single raft log
 func (self *persistentLogStore) StoreLog(log Log) error {
 	return self.StoreLogs([]Log{log})
@@ -267,7 +325,7 @@ func (self *persistentLogStore) StoreLogs(logs []Log) error {
 	return tx.Commit()
 }
 
-// DeleteRange is used to delete logs within a given range inclusively.
+// Deletes all logs smaller than the given index (not including the index itself)
 func (self *persistentLogStore) DeleteUpTo(idx uint64) error {
 
 	tx, err := self.db.Begin(true)
@@ -281,6 +339,31 @@ func (self *persistentLogStore) DeleteUpTo(idx uint64) error {
 		// Handle out-of-range log index
 		if bytesToUint64(k) >= idx {
 			break
+		}
+
+		// Delete in-range log index
+		if err := curs.Delete(); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// Deletes all logs larger than the given index (not including the index itself)
+func (self *persistentLogStore) DeleteUpFrom(idx uint64) error {
+
+	tx, err := self.db.Begin(true)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	curs := tx.Bucket(dbLogs).Cursor()
+	for k, _ := curs.First(); k != nil; k, _ = curs.Next() {
+		// Handle out-of-range log index
+		if bytesToUint64(k) <= idx {
+			continue
 		}
 
 		// Delete in-range log index

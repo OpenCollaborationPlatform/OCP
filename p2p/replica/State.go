@@ -16,11 +16,12 @@ import (
  */
 type State interface {
 
-	//applying commands
-	Apply([]byte)
+	//manipulation
+	Apply([]byte) error //apply a command to change the state
+	Reset() error       //reset state to initial value without any apply
 
 	//snapshoting
-	Snapshot() []byte            //crete a snapshot from current state
+	Snapshot() ([]byte, error)   //crete a snapshot from current state
 	LoadSnapshot([]byte) error   //setup state according to snapshot
 	EnsureSnapshot([]byte) error //make sure this snapshot can be loaded later on
 }
@@ -74,7 +75,7 @@ func (self *stateStore) Snaphot() ([]byte, error) {
 
 	snap := make(map[uint8][]byte, 0)
 	for i, state := range self.states {
-		snap[uint8(i)] = state.Snapshot()
+		snap[uint8(i)], _ = state.Snapshot()
 	}
 
 	b := new(bytes.Buffer)
@@ -139,6 +140,25 @@ func (self *stateStore) EnsureSnapshot(data []byte) error {
 	return nil
 }
 
+func (self *stateStore) Reset() error {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	errs := make([]error, 0)
+	for _, state := range self.states {
+		err := state.Reset()
+		if err != nil {
+			errs = append(errs, utils.StackError(err, "Unable to restore snapshot for state %v"))
+		}
+	}
+
+	if len(errs) != 0 {
+		return errs[0]
+	}
+	return nil
+}
+
 //a simple state for testing
 func newTestState() *testState {
 	return &testState{make([]uint64, 0)}
@@ -150,20 +170,26 @@ type testState struct {
 }
 
 //cmd must be a binary uint which is added to the current list of values
-func (self *testState) Apply(cmd []byte) {
+func (self *testState) Apply(cmd []byte) error {
 
 	buf := bytes.NewBuffer(cmd)
 	val, err := binary.ReadUvarint(buf)
 	if err == nil {
 		self.Value = append(self.Value, val)
-
+		return nil
 	}
+	return fmt.Errorf("Unable to apply command: %v", err)
 }
 
-func (self *testState) Snapshot() []byte {
+func (self *testState) Reset() error {
+	self.Value = make([]uint64, 0)
+	return nil
+}
 
-	res, _ := json.Marshal(self.Value)
-	return res
+func (self *testState) Snapshot() ([]byte, error) {
+
+	res, err := json.Marshal(self.Value)
+	return res, err
 }
 
 func (self *testState) LoadSnapshot(cmd []byte) error {

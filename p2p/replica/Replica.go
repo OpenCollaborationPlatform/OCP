@@ -253,19 +253,36 @@ func (self *Replica) commitLog(log Log) {
 
 	//check if log is valid
 	//TODO: currently verify has no timeout... check if this is a good thing
-	err := self.verifyLog(self.ctx, log)
+	err := self.verifyLog(self.ctx, log, true)
 	if IsInvalidError(err) {
 		self.logger.Errorf("Log %v received for commit, but is invalid: %v", log.Index, err)
 		return
 
 	} else if err != nil {
 		self.logger.Errorf("Log %v received for commit, but unable to finish verification: %v", log.Index, err)
+		return
+	}
 
+	prev, err := self.logs.LastIndex()
+
+	//log is valid. There are additional things to check regarding internal state:
+	//- if the last log in the store is valid
+	//- and if the new log has same or higher epoch than the latest one
+	if err != nil && !IsNoEntryError(err) {
+
+		latest, _ := self.logs.GetLog(prev)
+		err := self.verifyLog(context.Background(), latest, false)
+		if IsInvalidError(err) {
+			self.recover()
+		}
+
+		if latest.Index == log.Index-1 && latest.Epoch > log.Epoch {
+			self.recover()
+		}
 	}
 
 	//check the required next index
 	var requiredIdx uint64
-	prev, err := self.logs.LastIndex()
 	if err == nil {
 		requiredIdx = prev + 1
 
@@ -326,7 +343,7 @@ func (self *Replica) commitLog(log Log) {
 		self.requests[log.Index] = rstate
 
 		//we need to request all missing logs!
-		for i := prev; i < log.Index; i++ {
+		for i := requiredIdx; i < log.Index; i++ {
 			self.requestLog(i)
 		}
 
@@ -408,6 +425,7 @@ func (self *Replica) applyLog(log Log) {
 	default:
 		state := self.states.Get(log.Type)
 		if state != nil {
+			self.logger.Debugf("Apply log %v", log.Index)
 			state.Apply(log.Data)
 
 		} else {
@@ -550,6 +568,7 @@ func (self *Replica) reassureLeader(ctx context.Context) error {
 		self.logger.Errorf("Unable to add epoch %v data: %v", epoch, err)
 		return err
 	}
+	self.leaders.SetEpoch(epoch)
 
 	return nil
 }
@@ -645,18 +664,31 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 
 //verifies the log. It checks if it is from the leader of the epoch it claims to
 //be from. It does not check if this epoch is the current one
-func (self *Replica) verifyLog(ctx context.Context, log Log) error {
+//If fetch = false it will not check if the replica knows all leaders at the overlord
+func (self *Replica) verifyLog(ctx context.Context, log Log, fetch bool) error {
+
+	if !log.IsValid() {
+		return &InvalidError{"Invalid log"}
+	}
 
 	//make sure there is a leader and we know a epoch
-	if err := self.ensureLeader(ctx); err != nil {
-		return err
+	if fetch {
+		if err := self.ensureLeader(ctx); err != nil {
+			return err
+		}
+	} else {
+		if self.leaders.EpochCount() == 0 {
+			return fmt.Errorf("No epoch known and fetching disabled")
+		}
 	}
 
 	//if the log has a different epoch there is a chance we simply do not
-	//know about it
-	if !self.leaders.HasEpoch(log.Epoch) {
-		if err := self.reassureLeader(ctx); err != nil {
-			return err
+	//know about it. if fetching is allowed we should try it
+	if fetch {
+		if !self.leaders.HasEpoch(log.Epoch) {
+			if err := self.reassureLeader(ctx); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -683,6 +715,89 @@ func (self *Replica) verifyLog(ctx context.Context, log Log) error {
 	key, _ := self.leaders.GetLeaderKeyForEpoch(log.Epoch)
 	if valid := log.Verify(key); !valid {
 		return &InvalidError{"Log is not from leader of claimed epoch"}
+	}
+
+	return nil
+}
+
+//ensures that our logs and states match with the epoch data we have
+//  - It removes all commited logs that are not valid according to leader data
+//  - It rewinds the states to represent the new log state
+//  - Note: it requires the leader state up to date, it does not fetch it again!
+func (self *Replica) recover() error {
+
+	self.logger.Info("Start recover process")
+
+	//stop all requests
+	for _, req := range self.requests {
+		if req.cncl != nil {
+			req.cncl()
+		}
+	}
+	self.requests = make(map[uint64]requestState, 0)
+
+	//find the last valid log. We only check epoch start and end index, as all other
+	//verifications have been done in the commit already
+	last, _ := self.logs.LastIndex()
+	first, _ := self.logs.FirstIndex()
+	var validLog Log
+	removeIdx := last + 1
+	for i := last; i >= first; i-- {
+		log, _ := self.logs.GetLog(i)
+
+		//if we are below the epoch start it must be deleted (unlikely, as this would have
+		//been captured during verify in commit. But better double check)
+		start, _ := self.leaders.GetLeaderStartIdxForEpoch(log.Epoch)
+		if log.Index < start {
+			removeIdx = log.Index
+			continue
+		}
+
+		//check if threre is a newer epoch which was made known to us after commiting
+		//the log (the realistic scenario for a recover)
+		if self.leaders.HasEpoch(log.Epoch + 1) {
+			end, _ := self.leaders.GetLeaderStartIdxForEpoch(log.Epoch + 1)
+			if log.Index >= end {
+				removeIdx = log.Index
+				continue
+			}
+		}
+
+		//when reached this position we found a valid log. hence all others are valid
+		//too.
+		validLog = log
+		break
+	}
+
+	//maybe we do not need to change anything?
+	if validLog.IsValid() && validLog.Index == last {
+		return nil
+	}
+
+	//check if we have a snapshot somewhere in our history we can recover from
+	var snap Log
+	for i := first; i < removeIdx; i++ {
+		log, _ := self.logs.GetLog(i)
+		if log.Type == logType_Snapshot {
+			snap = log
+			break
+		}
+	}
+
+	//if we do not have a single valid log or no snapshor to recover from we need to start all over
+	if !validLog.IsValid() || !snap.IsValid() {
+		self.logs.Clear()
+		self.states.Reset()
+
+	} else {
+
+		//otherwise we recover from snapshot
+		self.logs.DeleteUpFrom(removeIdx - 1)
+		err := self.states.LoadSnaphot(snap.Data)
+		if err != nil {
+			self.logger.Errorf("Unable to load snapshot: %v", err)
+			return err
+		}
 	}
 
 	return nil

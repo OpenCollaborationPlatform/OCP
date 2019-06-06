@@ -153,14 +153,20 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 	//collect the replica with highest log that is reachable
 	max := uint64(0)
 	addr := -1
+	start := uint64(0)
 	for i, api := range self.apis {
 		nctx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
 		var res uint64
 		err := api.GetHighestLogIndex(nctx, &res)
-		if err == nil || IsNoEntryError(err) {
+		if IsNoEntryError(err) {
+			if max == 0 {
+				addr = i
+			}
+		} else if err == nil {
 			if res >= max {
 				max = res
 				addr = i
+				start = res + 1
 			}
 		} else {
 			ologger.Errorf("Failed to reach api %v: %v", i, err)
@@ -179,7 +185,7 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 	} else {
 		newEpoch = 0
 	}
-	self.leader.AddEpoch(newEpoch, fmt.Sprintf("%v", addr), self.apiKeys[addr], max)
+	self.leader.AddEpoch(newEpoch, fmt.Sprintf("%v", addr), self.apiKeys[addr], start)
 	self.leader.SetEpoch(newEpoch)
 
 	//communicate the result

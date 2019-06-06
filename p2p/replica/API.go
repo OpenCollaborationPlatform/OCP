@@ -36,6 +36,26 @@ func (self *ReadAPI) GetLog(ctx context.Context, idx uint64, result *Log) error 
 	return nil
 }
 
+//returns what we think have as log for the given idx
+func (self *ReadAPI) GetNewestLog(ctx context.Context, empty struct{}, result *Log) error {
+
+	self.replica.logger.Debugf("Asked for newest log")
+
+	//check if the replica has the required log (logstore is threadsafe)
+	last, err := self.replica.logs.LastIndex()
+	if err != nil {
+		return utils.StackError(err, "Logs cannot be accessed")
+	}
+
+	log, err := self.replica.logs.GetLog(last)
+	if err != nil {
+		return utils.StackError(err, "Log not available")
+	}
+
+	*result = log
+	return nil
+}
+
 //receives a new log created by the leader
 func (self *ReadAPI) NewLog(log Log) {
 
