@@ -36,7 +36,7 @@ type Overlord interface {
 	//Register a OverloardAPI so that the overloard can interact with the replica
 	RegisterOverloardAPI(api *OverloardAPI) error
 
-	//request a new leader election starts
+	//request a new leader election for a certain epoch
 	RequestNewLeader(ctx context.Context, epoch uint64) error
 
 	//gather information for a certain epoch
@@ -99,10 +99,11 @@ func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leade
 }
 
 type testOverlord struct {
-	apis     []*OverloardAPI
-	leader   leaderStore
-	apimutex sync.RWMutex
-	apiKeys  []crypto.RsaPublicKey
+	apis        []*OverloardAPI
+	leader      leaderStore
+	apimutex    sync.RWMutex
+	apiKeys     []crypto.RsaPublicKey
+	unreachable []int
 }
 
 func newTestOverlord() *testOverlord {
@@ -122,6 +123,15 @@ func (self *testOverlord) setApiPubKey(key crypto.RsaPublicKey) error {
 	return nil
 }
 
+func (self *testOverlord) isReachable(idx int) bool {
+	for _, val := range self.unreachable {
+		if val == idx {
+			return false
+		}
+	}
+	return true
+}
+
 func (self *testOverlord) RegisterOverloardAPI(api *OverloardAPI) error {
 	self.apimutex.Lock()
 	defer self.apimutex.Unlock()
@@ -130,6 +140,7 @@ func (self *testOverlord) RegisterOverloardAPI(api *OverloardAPI) error {
 	return nil
 }
 
+//does not return an error if the epoch has already been elected
 func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) error {
 
 	self.apimutex.RLock()
@@ -155,9 +166,13 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 	addr := -1
 	start := uint64(0)
 	for i, api := range self.apis {
-		nctx, _ := context.WithTimeout(ctx, 10*time.Millisecond)
+
+		if !self.isReachable(i) {
+			continue
+		}
+
 		var res uint64
-		err := api.GetHighestLogIndex(nctx, &res)
+		err := api.GetHighestLogIndex(ctx, &res)
 		if IsNoEntryError(err) {
 			if max == 0 {
 				addr = i
@@ -194,6 +209,10 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 
 	idxs := rand.Perm(len(self.apis))
 	for _, idx := range idxs {
+		if !self.isReachable(idx) {
+			continue
+		}
+
 		go func(api *OverloardAPI) {
 			addr := self.leader.GetLeaderAddress()
 			key := self.leader.GetLeaderKey()

@@ -454,12 +454,6 @@ func (self *Replica) newCommand(ctx context.Context, cmd []byte, state uint8) er
 		return err
 	}
 
-	//check if we are leader. If so, it is easy to commit!
-	leader := self.leaders.GetLeaderAddress()
-	if self.address == leader {
-		return self.requestCommand(cmd, state)
-	}
-
 	//we are not, so lets call the leader for the command request
 	args := struct {
 		state uint8
@@ -468,14 +462,25 @@ func (self *Replica) newCommand(ctx context.Context, cmd []byte, state uint8) er
 	var ret uint64
 
 	for {
-		self.logger.Debugf("Request command from leader %v", leader)
 
+		//check if we are leader. If so, it is easy to commit!
+		//we mus do it in every loop as leaders can change on failure
+		leader := self.leaders.GetLeaderAddress()
+		if self.address == leader {
+			return self.requestCommand(cmd, state)
+		}
+
+		self.logger.Debugf("Request command from leader %v", leader)
 		err := self.transport.Call(ctx, leader, `WriteAPI`, `RequestCommand`, args, &ret)
 
 		//if it failed because of wrong leader data we need to check what is the correct one
+		//(or elect a new leader)
 		if IsNotLeaderError(err) {
+			//Known leader is not the leader... lets see if there is newer data
 
-			err := self.ensureLeader(ctx)
+			self.logger.Debugf("The known leader seems to be wrong, try to fix: %v", err)
+
+			err := self.reassureLeader(ctx)
 			if err != nil {
 				self.logger.Debugf("Unable to get correct leader: %v", err)
 			}
@@ -486,10 +491,19 @@ func (self *Replica) newCommand(ctx context.Context, cmd []byte, state uint8) er
 			}
 
 		} else if err != nil {
-			self.logger.Errorf("Unable to call leader: %v", err)
-			return err
+			//leader is unreachable, we try to setup a new one
+
+			self.logger.Debugf("Unable to call leader, try to setup a new one: %v", err)
+			err := self.forceLeader(ctx)
+
+			if err != nil {
+				self.logger.Errorf("Unable to enforce new leader: must abort new command")
+				return err
+			}
 
 		} else {
+			//success!
+
 			return nil
 		}
 	}
@@ -538,7 +552,7 @@ func (self *Replica) reassureLeader(ctx context.Context) error {
 		//we are up to data, done!
 		return nil
 
-	} else if self.leaders.GetEpoch() < epoch {
+	} else if self.leaders.GetEpoch() > epoch {
 
 		//somehow we have a epoch that came not from the overlord...
 		//that should be impossible, as all epochs have been from there... ahhh
@@ -571,6 +585,19 @@ func (self *Replica) reassureLeader(ctx context.Context) error {
 	self.leaders.SetEpoch(epoch)
 
 	return nil
+}
+
+//makes sure the leader is a replica we can reach! This function will start a leader
+//election, so only call it if you are sure the current leader is unreachable
+func (self *Replica) forceLeader(ctx context.Context) error {
+
+	epoch := self.leaders.GetEpoch()
+	err := self.overlord.RequestNewLeader(ctx, epoch+1)
+	if err != nil {
+		return fmt.Errorf("Unable to start election for epoch %v, abort: %v", epoch+1, err)
+	}
+
+	return self.reassureLeader(ctx)
 }
 
 //handles remote command requests.

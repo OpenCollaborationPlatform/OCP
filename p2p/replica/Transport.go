@@ -37,20 +37,30 @@ type Transport interface {
 
 //A simple test transport for local replica communication. Allows randomized delay
 type testTransport struct {
-	rndDelay  time.Duration
-	fixDelay  time.Duration
-	readAPIs  []*ReadAPI
-	writeAPIs []*WriteAPI
+	rndDelay     time.Duration
+	timeoutDelay time.Duration
+	readAPIs     []*ReadAPI
+	writeAPIs    []*WriteAPI
+	unreachable  []int
 }
 
 func newTestTransport() *testTransport {
 
 	return &testTransport{
-		rndDelay:  0 * time.Millisecond,
-		fixDelay:  0 * time.Millisecond,
-		readAPIs:  make([]*ReadAPI, 0),
-		writeAPIs: make([]*WriteAPI, 0),
+		rndDelay:     0 * time.Millisecond,
+		timeoutDelay: 0 * time.Millisecond,
+		readAPIs:     make([]*ReadAPI, 0),
+		writeAPIs:    make([]*WriteAPI, 0),
 	}
+}
+
+func (self *testTransport) isReachable(idx int) bool {
+	for _, val := range self.unreachable {
+		if val == idx {
+			return false
+		}
+	}
+	return true
 }
 
 func (self *testTransport) RegisterReadAPI(api *ReadAPI) error {
@@ -75,6 +85,12 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 		return fmt.Errorf("Invalid address (%v): no such replica known", idx)
 	}
 
+	//see if it is reachable
+	if !self.isReachable(idx) {
+		time.Sleep(self.timeoutDelay)
+		return fmt.Errorf("Unable to reach: timeout")
+	}
+
 	//get the correct API to use
 	var apiObj interface{}
 	switch api {
@@ -87,7 +103,7 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 	}
 
 	//call the function
-	err = callFncByName(self.rndDelay, self.fixDelay, apiObj, fnc, ctx, arguments, reply)
+	err = callFncByName(self.rndDelay, apiObj, fnc, ctx, arguments, reply)
 	if err != nil {
 		return utils.StackError(err, "Unable to call replica")
 	}
@@ -101,6 +117,12 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 	idxs := rand.Perm(len(self.readAPIs))
 	for _, idx := range idxs {
 
+		//see if it is reachable
+		if !self.isReachable(idx) {
+			time.Sleep(self.timeoutDelay)
+			return fmt.Errorf("Unable to reach: timeout")
+		}
+
 		//get the correct API to use
 		var apiObj interface{}
 		switch api {
@@ -113,7 +135,7 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 		}
 
 		//call the function
-		err := callFncByName(self.rndDelay, self.fixDelay, apiObj, fnc, ctx, argument, reply)
+		err := callFncByName(self.rndDelay, apiObj, fnc, ctx, argument, reply)
 		if err == nil {
 			return nil
 		}
@@ -127,6 +149,11 @@ func (self *testTransport) Send(api string, fnc string, argument interface{}) er
 	idxs := rand.Perm(len(self.readAPIs))
 	for _, idx := range idxs {
 
+		//see if it is reachable
+		if !self.isReachable(idx) {
+			continue
+		}
+
 		//get the correct API to use
 		var apiObj interface{}
 		switch api {
@@ -139,22 +166,18 @@ func (self *testTransport) Send(api string, fnc string, argument interface{}) er
 		}
 
 		go func(api interface{}) {
-			callFncByName(self.rndDelay, self.fixDelay, api, fnc, argument)
+			callFncByName(self.rndDelay, api, fnc, argument)
 		}(apiObj)
 	}
 
 	return nil
 }
 
-func callFncByName(rndDelay time.Duration, fixDelay time.Duration, obj interface{}, fncName string, params ...interface{}) error {
+func callFncByName(delay time.Duration, obj interface{}, fncName string, params ...interface{}) error {
 
-	if rndDelay > 0 {
-		r := rand.Intn(int(rndDelay.Nanoseconds()))
+	if delay > 0 {
+		r := rand.Intn(int(delay.Nanoseconds()))
 		time.Sleep(time.Duration(r) * time.Nanosecond)
-	}
-
-	if fixDelay > 0 {
-		time.Sleep(fixDelay)
 	}
 
 	objValue := reflect.ValueOf(obj)

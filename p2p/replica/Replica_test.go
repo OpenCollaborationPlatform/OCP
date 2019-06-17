@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +15,8 @@ import (
 )
 
 func init() {
-	logging.SetDebugLogging()
+	logging.GetSubsystems()
+	//logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, name string) ([]*Replica, error) {
@@ -408,6 +410,67 @@ func TestReplicaLeader(t *testing.T) {
 			So(areStatesEqual(states), ShouldBeTrue)
 		})
 
+		Convey("If the leader goes down in the middle of random commiting", func() {
+
+			ctx := context.Background()
+			waiter := waitTillCommitIdx(reps, uint64(3), 1*time.Second)
+
+			//random commiting of logs, no replica gets them all
+			var err error
+			for i := 0; i <= 3; i++ {
+				cmd := intToByte(uint64(i))
+
+				idx := rand.Intn(len(reps))
+				err = reps[idx].AddCommand(ctx, 0, cmd)
+				if err != nil {
+					break
+				}
+			}
+
+			So(err, ShouldBeNil)
+			So(<-waiter, ShouldBeNil)
+
+			//stop leader
+			oldEpoch, leader, _, _, _ := reps[0].overlord.GetCurrentEpochData(ctx)
+			leaderIdx, _ := strconv.Atoi(leader)
+			transport := reps[0].transport.(*testTransport)
+			transport.unreachable = append(transport.unreachable, leaderIdx)
+			reps[0].overlord.(*testOverlord).unreachable = append(reps[0].overlord.(*testOverlord).unreachable, leaderIdx)
+
+			//annother set of random commits to non-leader replicas.
+			//wait till all but leader received the commits
+			reachableReps := append(reps[:leaderIdx], reps[leaderIdx+1:]...)
+			waiter = waitTillCommitIdx(reachableReps, uint64(6), 1*time.Second)
+			for i := 4; i <= 6; i++ {
+				cmd := intToByte(uint64(i))
+
+				idx := rand.Intn(len(reachableReps))
+				err = reachableReps[idx].AddCommand(ctx, 0, cmd)
+				if err != nil {
+					break
+				}
+			}
+
+			So(err, ShouldBeNil)
+			So(<-waiter, ShouldBeNil)
+
+			Convey("a new leader should be established,", func() {
+
+				epoch, leader, _, _, _ := reps[0].overlord.GetCurrentEpochData(ctx)
+				So(leader, ShouldNotEqual, leaderIdx)
+				So(epoch, ShouldNotEqual, oldEpoch)
+			})
+
+			Convey("the other two replicas should still have all commits added to them,", func() {
+
+				for i, state := range states {
+					if i != leaderIdx {
+						So(len(state.Value), ShouldEqual, 7)
+					}
+				}
+			})
+		})
+
 	})
 }
 
@@ -476,3 +539,59 @@ func TestSnapshot(t *testing.T) {
 
 	})
 }
+
+/*
+func TestRecover(t *testing.T) {
+
+	Convey("Setting up 3 replicas", t, func() {
+
+		reps, err := setupReplicas(3, "Replica")
+		defer closeReplicas(reps)
+		So(err, ShouldBeNil)
+
+		states := make([]*testState, len(reps))
+		for i, rep := range reps {
+			st := newTestState()
+			states[i] = st
+			So(rep.AddState(st), ShouldEqual, 0)
+		}
+
+		//we want a snapshot after 10 commits to ease testing
+		for _, rep := range reps {
+			rep.options.MaxLogLength = 100
+		}
+
+		Convey("simulating randing commits with leader going down", func() {
+
+			ctx := context.Background()
+			waiter := waitTillCommitIdx(reps, uint64(20), 1*time.Second)
+
+			//random commiting of logs, no replica gets them all
+			var err error
+			for i := 0; i <= 20; i++ {
+				cmd := intToByte(uint64(0))
+
+				idx := rand.Intn(len(reps))
+				err = reps[idx].AddCommand(ctx, 0, cmd)
+				if err != nil {
+					break
+				}
+			}
+
+			So(err, ShouldBeNil)
+			So(<-waiter, ShouldBeNil)
+
+			Convey("should leaf 2 logs in the store,", func() {
+
+				for _, rep := range reps {
+					first, _ := rep.logs.FirstIndex()
+					last, _ := rep.logs.LastIndex()
+
+					So(first, ShouldEqual, 11)
+					So(last, ShouldEqual, 12)
+				}
+			})
+		})
+
+	})
+}*/
