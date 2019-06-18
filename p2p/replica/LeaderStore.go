@@ -2,6 +2,7 @@ package replica
 
 import (
 	"fmt"
+
 	"sync"
 
 	crypto "github.com/libp2p/go-libp2p-crypto"

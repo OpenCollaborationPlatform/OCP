@@ -102,7 +102,11 @@ func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64, idx uin
 	}
 
 	//it seems something is wrong... start recovery!
-	self.replica.recoverChan <- recoverStruct{epoch, ctx}
+	//--> not blocking, as it can sync with AddCommand if it requests a new leader which becomes the node itself
+	select {
+	case self.replica.recoverChan <- recoverStruct{epoch, ctx}:
+	default:
+	}
 
 	return nil
 }
@@ -135,7 +139,11 @@ func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leade
 	}
 
 	//it seems something is wrong... start recovery!
-	self.replica.recoverChan <- recoverStruct{epoch, ctx}
+	//--> not blocking, as it can sync with AddCommand if it requests a new leader which becomes the node itself
+	select {
+	case self.replica.recoverChan <- recoverStruct{epoch, ctx}:
+	default:
+	}
 	return nil
 }
 

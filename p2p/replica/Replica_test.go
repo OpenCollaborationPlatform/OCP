@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+
+	//"net/http"
+	//_ "net/http/pprof"
 	"strconv"
 	"sync"
 	"testing"
@@ -16,7 +19,7 @@ import (
 
 func init() {
 	logging.GetSubsystems()
-	//logging.SetDebugLogging()
+	logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, name string) ([]*Replica, error) {
@@ -112,6 +115,7 @@ func areStatesEqual(st []*testState) bool {
 		for j := i + 1; j < len(st); j++ {
 
 			if !st[i].Equals(st[j]) {
+				fmt.Printf("State %v failed equality with state %v\n", i, j)
 				return false
 			}
 		}
@@ -204,14 +208,10 @@ func timeoutReplica(reps []*Replica, disable int, duration time.Duration) {
 }
 
 //shutsdown the replicas randomly up to maxTimeout and does so till duration is over
-func randomReplicaTimeouts(reps []*Replica, duration time.Duration, maxTimeout time.Duration) chan struct{} {
-
-	ctx, _ := context.WithTimeout(context.Background(), duration)
-	wait := sync.WaitGroup{}
+func randomReplicaTimeouts(ctx context.Context, reps []*Replica, maxTimeout time.Duration) {
 
 	//start a timout function for each rep
 	for idx, _ := range reps {
-		wait.Add(1)
 		go func(idx int) {
 		loop:
 			for {
@@ -221,7 +221,7 @@ func randomReplicaTimeouts(reps []*Replica, duration time.Duration, maxTimeout t
 
 				default:
 					//let it live for a while
-					r := rand.Intn(int(4 * maxTimeout.Nanoseconds()))
+					r := rand.Intn(int(10 * maxTimeout.Nanoseconds()))
 					time.Sleep(time.Duration(r) * time.Nanosecond)
 
 					//shutdown
@@ -231,19 +231,8 @@ func randomReplicaTimeouts(reps []*Replica, duration time.Duration, maxTimeout t
 					enableReplica(reps, idx)
 				}
 			}
-			wait.Done()
 		}(idx)
 	}
-
-	//start a collection function to wait till all timoutfunctions have shutdown
-	ret := make(chan struct{})
-	go func() {
-		wait.Wait()
-		ret <- struct{}{}
-		close(ret)
-	}()
-
-	return ret
 }
 
 /******************************************************************************
@@ -286,7 +275,7 @@ func TestReplicaCommit(t *testing.T) {
 			So(<-waiter, ShouldBeNil)
 
 			for _, state := range states {
-				So(len(state.Value), ShouldEqual, num)
+				So(state.EntryCount(), ShouldEqual, num)
 			}
 			So(areStatesEqual(states), ShouldBeTrue)
 		})
@@ -314,7 +303,7 @@ func TestReplicaCommit(t *testing.T) {
 			So(<-waiter, ShouldBeNil)
 
 			for _, state := range states {
-				So(len(state.Value), ShouldEqual, num)
+				So(state.EntryCount(), ShouldEqual, num)
 			}
 			So(areStatesEqual(states), ShouldBeTrue)
 		})
@@ -340,7 +329,7 @@ func TestReplicaCommit(t *testing.T) {
 			So(<-waiter, ShouldBeNil)
 
 			for _, state := range states {
-				So(len(state.Value), ShouldEqual, rndNum)
+				So(state.EntryCount(), ShouldEqual, rndNum)
 			}
 			So(areStatesEqual(states), ShouldBeTrue)
 		})
@@ -439,7 +428,7 @@ func TestReplicaRequest(t *testing.T) {
 				So(<-waiter, ShouldBeNil)
 
 				for _, state := range states {
-					So(len(state.Value), ShouldEqual, 1)
+					So(state.EntryCount(), ShouldEqual, 1)
 				}
 				So(areStatesEqual(states), ShouldBeTrue)
 			})
@@ -490,7 +479,7 @@ func TestReplicaLeader(t *testing.T) {
 
 			Convey("and all states should have received the commit", func() {
 				for _, state := range states {
-					So(len(state.Value), ShouldEqual, 1)
+					So(state.EntryCount(), ShouldEqual, 1)
 				}
 				So(areStatesEqual(states), ShouldBeTrue)
 			})
@@ -505,7 +494,7 @@ func TestReplicaLeader(t *testing.T) {
 
 				Convey("and all states should have received the commit", func() {
 					for _, state := range states {
-						So(len(state.Value), ShouldEqual, 2)
+						So(state.EntryCount(), ShouldEqual, 2)
 					}
 					So(areStatesEqual(states), ShouldBeTrue)
 				})
@@ -536,7 +525,7 @@ func TestReplicaLeader(t *testing.T) {
 			So(<-waiter, ShouldBeNil)
 
 			for _, state := range states {
-				So(len(state.Value), ShouldEqual, rndNum)
+				So(state.EntryCount(), ShouldEqual, rndNum)
 			}
 			So(areStatesEqual(states), ShouldBeTrue)
 		})
@@ -593,7 +582,7 @@ func TestReplicaLeader(t *testing.T) {
 
 				for i, state := range states {
 					if i != leaderIdx {
-						So(len(state.Value), ShouldEqual, 7)
+						So(state.EntryCount(), ShouldEqual, 7)
 					}
 				}
 			})
@@ -718,45 +707,62 @@ func TestRecover(t *testing.T) {
 			Convey("all replicas should have the 6 commits", func() {
 
 				for _, state := range states {
-					So(len(state.Value), ShouldEqual, 6)
+					So(state.EntryCount(), ShouldEqual, 6)
 				}
 
 				So(areStatesEqual(states), ShouldBeTrue)
 			})
 
 		})
-		/*
-			Convey("simulating random commits with random replicas going down", func() {
 
-				ctx := context.Background()
+		Convey("simulating random commits with random replicas going down", func() {
+
+			//make sure we have some snapshots
+			for _, rep := range reps {
+				rep.options.MaxLogLength = 100
+				rep.options.Beacon = 100 * time.Millisecond
+			}
+
+			//print stacktrace
+			//go func() {
+			//	http.ListenAndServe("localhost:6060", nil)
+			//}()
+
+			//random commiting of logs, no replica gets them all
+			ctx := context.Background()
+			for j := 0; j < 100; j++ {
 
 				//randomly disable followers
-				finish := randomReplicaTimeouts(reps, 1000*time.Millisecond, 30*time.Millisecond)
+				toCtx, cncl := context.WithTimeout(context.Background(), 10*time.Second)
+				randomReplicaTimeouts(toCtx, reps, 30*time.Millisecond)
 
-				//random commiting of logs, no replica gets them all
 				for i := 0; i <= 200; i++ {
 					time.Sleep(5 * time.Millisecond)
-					cmd := intToByte(uint64(i))
+					cmd := intToByte(uint64(i + j*1000))
 
 					idx := rand.Intn(len(reps))
-					err = reps[idx].AddCommand(ctx, 0, cmd)
-					if err != nil {
-						break
-					}
+					reps[idx].AddCommand(ctx, 0, cmd)
 				}
 
-				So(err, ShouldBeNil)
-				<-finish
+				//cancel timeouts and wait till all are back up
+				fmt.Printf("\n\n Call cancel! \n\n")
+				cncl()
+				time.Sleep(1000 * time.Millisecond)
+				//add a final command so that no excuses can be given
+				So(reps[0].AddCommand(ctx, 0, intToByte(100000)), ShouldBeNil)
+				time.Sleep(1000 * time.Millisecond)
+				So(areStatesEqual(states), ShouldBeTrue)
+			}
 
-				Convey("all replicas should have the same commits,", func() {
+			Convey("all replicas should have the same commits,", func() {
 
-					for i, state := range states {
-						fmt.Printf("\nState %v has length %v\n", i, len(state.Value))
-					}
+				for i, state := range states {
+					fmt.Printf("\nState %v has length %v\n", i, state.EntryCount())
+				}
 
-					So(areStatesEqual(states), ShouldBeTrue)
-				})
-			})*/
+				So(areStatesEqual(states), ShouldBeTrue)
+			})
+		})
 
 	})
 }

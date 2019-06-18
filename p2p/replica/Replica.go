@@ -60,12 +60,14 @@ type Options struct {
 	MaxLogLength    uint
 	PersistentLog   bool
 	PersistencePath string
+	Beacon          time.Duration
 }
 
 func DefaultOptions() Options {
 	return Options{
 		MaxLogLength:  1000,
 		PersistentLog: false,
+		Beacon:        1 * time.Second,
 	}
 }
 
@@ -91,9 +93,10 @@ type Replica struct {
 	//syncronizing via channels
 	ctx         context.Context
 	cncl        context.CancelFunc
-	commitChan  chan Log
+	commitChan  chan commitStruct
 	cmdChan     chan cmdStruct
 	recoverChan chan recoverStruct
+	beaconChan  chan beaconStruct
 	appliedChan chan uint64
 }
 
@@ -125,9 +128,10 @@ func NewReplica(name string, addr Address, trans Transport, ol Overlord,
 		leaders:     newLeaderStore(),
 		ctx:         ctx,
 		cncl:        cncl,
-		commitChan:  make(chan Log),
+		commitChan:  make(chan commitStruct),
 		cmdChan:     make(chan cmdStruct),
 		recoverChan: make(chan recoverStruct),
+		beaconChan:  make(chan beaconStruct),
 		appliedChan: make(chan uint64, 100),
 		states:      newStateStore(),
 		logs:        store,
@@ -204,6 +208,11 @@ type requestState struct {
 	fetchedLog Log
 }
 
+type commitStruct struct {
+	log     Log
+	retChan chan error
+}
+
 type cmdStruct struct {
 	cmd     []byte
 	state   uint8
@@ -222,11 +231,19 @@ type recoverStruct struct {
 	ctx   context.Context
 }
 
+type beaconStruct struct {
+	sender Address
+	epoch  uint64
+}
+
 /******************************************************************************
 					internal functions
 ******************************************************************************/
 
 func (self *Replica) run() {
+
+	//setup the beacon
+	beaconTicker := time.NewTicker(self.options.Beacon)
 
 loop:
 	for {
@@ -235,8 +252,12 @@ loop:
 		case <-self.ctx.Done():
 			break loop
 
-		case log := <-self.commitChan:
-			self.commitLog(log)
+		case commit := <-self.commitChan:
+
+			err := self.commitLog(commit.log)
+			if commit.retChan != nil {
+				commit.retChan <- err
+			}
 
 		case val := <-self.cmdChan:
 			if val.local {
@@ -252,8 +273,24 @@ loop:
 				break
 			}
 			self.recoverIfNeeded()
+
+		case <-beaconTicker.C:
+			//if we are leader we need to make sure to emit our beacon
+			if self.leaders.GetLeaderAddress() == self.address {
+				self.sendBeacon()
+			}
+
+		case beacon := <-self.beaconChan:
+			timeout := self.options.Beacon
+			if timeout > 1*time.Second {
+				timeout = 1 * time.Second
+			}
+			ctx, _ := context.WithTimeout(self.ctx, timeout)
+			self.processBeacon(ctx, beacon)
 		}
 	}
+
+	beaconTicker.Stop()
 	self.logger.Debug("Shutdown run loop")
 }
 
@@ -261,7 +298,7 @@ loop:
 //******************************************************************************
 
 //commit a log.
-func (self *Replica) commitLog(log Log) {
+func (self *Replica) commitLog(log Log) error {
 
 	self.logger.Debugf("Received log entry %v in epoch %v (which is of type %v)", log.Index, log.Epoch, log.Type)
 
@@ -269,34 +306,24 @@ func (self *Replica) commitLog(log Log) {
 	//TODO: currently verify has no timeout... check if this is a good thing
 	err := self.verifyLog(self.ctx, log, true)
 	if IsInvalidError(err) || err != nil {
-		return
-	}
-
-	prev, err := self.logs.LastIndex()
-
-	//log is valid. There are additional things to check regarding internal state:
-	//- and if the new log has same or higher epoch than the latest one
-	if err != nil && !IsNoEntryError(err) {
-
-		latest, _ := self.logs.GetLog(prev)
-		if latest.Index == log.Index-1 && latest.Epoch > log.Epoch {
-			self.logger.Infof("The last known log %v has epoch %v, the received one with index %v has %v. Thats an error.",
-				latest.Index, latest.Epoch, log.Index, log.Epoch)
-
-			self.recoverIfNeeded()
-		}
+		return err
 	}
 
 	//check the required next index
+	prev, err := self.logs.LastIndex()
 	var requiredIdx uint64
 	if err == nil {
 		requiredIdx = prev + 1
 
 	} else if IsNoEntryError(err) {
 		requiredIdx = 0
-
 	} else {
 		self.logger.Errorf("Unable to commit entry: %v", err.Error())
+	}
+
+	//if the log is a snapshot, and in the future for our logs, we directly forward to it
+	if (log.Type == logType_Snapshot) && (log.Index > requiredIdx) {
+		return self.forwardToSnapshot(log)
 	}
 
 	//test if this commit is in the request loop and handle the request if so
@@ -316,10 +343,14 @@ func (self *Replica) commitLog(log Log) {
 			req.state = requestState_Available
 			req.fetchedLog = log
 			self.requests[log.Index] = req
+
+			//we return here, as we cannot commit but also do not need to issue
+			//new requests, as all missing commits have been requested already
+			return nil
 		}
 	}
 
-	//check if we can commit, and do so or request what is missing bevore commit
+	//check if we can commit, and do so (or request what is missing bevore commit)
 	if requiredIdx == log.Index {
 
 		//commit
@@ -355,7 +386,50 @@ func (self *Replica) commitLog(log Log) {
 
 	} else {
 		self.logger.Warning("Received log commit, but is already applyed")
+		//as we have it already no error needs to be returned!
 	}
+
+	return nil
+}
+
+//this function handles a received snapshot that is further in the future than our commited logs.
+//it takes care about the requests
+func (self *Replica) forwardToSnapshot(log Log) error {
+
+	if log.Type != logType_Snapshot {
+		msg := "Cannot forward to snapshot: Not a snapshot log"
+		self.logger.Errorf(msg)
+		return fmt.Errorf(msg)
+	}
+
+	//first check if forward is possible: it is not if there are higher logs already
+	latest, err := self.logs.LastIndex()
+	if err != nil && !IsNoEntryError(err) {
+		msg := "Cannot forward to snapshot: logstore not acceessbile"
+		self.logger.Errorf(msg)
+		return fmt.Errorf(msg)
+	}
+	if latest >= log.Index {
+		msg := "Cannot forward to snapshot: higher index logs available"
+		self.logger.Errorf(msg)
+		return fmt.Errorf(msg)
+	}
+
+	self.logger.Infof("Forward to snapshot %v from log %v", log.Index, latest)
+
+	//cancel all requests that are bevore the snapshot: don't need them anymore
+	for idx, request := range self.requests {
+		if idx <= log.Index {
+			if request.cncl != nil {
+				request.cncl()
+			}
+			delete(self.requests, idx)
+		}
+	}
+
+	//apply snapshot. this makes sure the store is updated to this log
+	self.applyLog(log)
+	return nil
 }
 
 //a request loop tries to fetch the missing log. It does add a new request state
@@ -393,17 +467,28 @@ func (self *Replica) requestLog(idx uint64) {
 				//handle the commit if we received it
 				if err == nil {
 
-					if reply.Index != reqIdx {
-						self.logger.Errorf("Request for log %v returned log %v", reqIdx, reply.Index)
+					if reply.Index != reqIdx && reply.Type != logType_Snapshot {
+						self.logger.Errorf("Request for log %v returned log %v, but is not snapshot", reqIdx, reply.Index)
 						continue loop
 					}
 					self.logger.Debugf("Request for log %v successfull", reply.Index)
 
-					//we simply push it into the replic, the commit handler will
+					//we simply push it into the replica, the commit handler will
 					//take care of cleaning the request state (we cant do it as
 					//we are a asynchrous thread)
-					self.commitChan <- reply
-					break loop
+					//but we need to be aware of possible rejections (could be a invalid log)
+					//Note: the received log could be a future snapshot. but it still is handled by the commit
+					//function, which also cleans up this request if not needed anymore
+
+					errChan := make(chan error)
+					self.commitChan <- commitStruct{reply, errChan}
+					err := <-errChan
+					close(errChan)
+
+					if err == nil {
+						break loop
+					}
+					self.logger.Errorf("Log from request was rejected, try again: %v", err)
 
 				} else {
 					self.logger.Debugf("Call of function GetLog in ReadAPI failed: %v", err.Error())
@@ -868,4 +953,18 @@ func (self *Replica) recoverIfNeeded() (bool, error) {
 	}
 
 	return true, err
+}
+
+func (self *Replica) sendBeacon() {
+
+	arg := beaconStruct{self.address, self.leaders.GetEpoch()}
+	self.transport.Send("ReadAPI", "NewBeacon", arg)
+}
+
+func (self *Replica) processBeacon(ctx context.Context, beacon beaconStruct) {
+
+	if beacon.epoch != self.leaders.GetEpoch() {
+		self.logger.Info("Received beacon with different epoch!")
+		self.reassureLeader(ctx)
+	}
 }

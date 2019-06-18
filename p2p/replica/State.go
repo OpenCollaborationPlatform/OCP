@@ -159,43 +159,58 @@ func (self *stateStore) Reset() error {
 	return nil
 }
 
-//a simple state for testing
+//a simple state for testing. This one must be thread safe (in contrast to real states) as
+//it is also accessed by the test functions
 func newTestState() *testState {
-	return &testState{make([]uint64, 0)}
+	return &testState{make([]uint64, 0), sync.RWMutex{}}
 }
 
 //simple state that stores each uint given to apply
 type testState struct {
-	Value []uint64
+	value []uint64
+	mutex sync.RWMutex
 }
 
 //cmd must be a binary uint which is added to the current list of values
 func (self *testState) Apply(cmd []byte) error {
 
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
 	buf := bytes.NewBuffer(cmd)
 	val, err := binary.ReadUvarint(buf)
 	if err == nil {
-		self.Value = append(self.Value, val)
+		self.value = append(self.value, val)
 		return nil
 	}
 	return fmt.Errorf("Unable to apply command: %v", err)
 }
 
 func (self *testState) Reset() error {
-	self.Value = make([]uint64, 0)
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
+	self.value = make([]uint64, 0)
 	return nil
 }
 
 func (self *testState) Snapshot() ([]byte, error) {
 
-	res, err := json.Marshal(self.Value)
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	res, err := json.Marshal(self.value)
 	return res, err
 }
 
 func (self *testState) LoadSnapshot(cmd []byte) error {
 
-	self.Value = make([]uint64, 0)
-	err := json.Unmarshal(cmd, &self.Value)
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
+	self.value = make([]uint64, 0)
+	err := json.Unmarshal(cmd, &self.value)
 	if err != nil {
 		return utils.StackError(err, "Unable to load snapshot")
 	}
@@ -210,12 +225,19 @@ func (self *testState) EnsureSnapshot(snap []byte) error {
 
 func (self *testState) Equals(other *testState) bool {
 
-	if len(self.Value) != len(other.Value) {
+	self.mutex.RLock()
+	other.mutex.RLock()
+	defer self.mutex.RUnlock()
+	defer other.mutex.RUnlock()
+
+	if len(self.value) != len(other.value) {
+		fmt.Printf("Length wrong: %v vs %v\n", len(self.value), len(other.value))
 		return false
 	}
 
-	for i, val := range self.Value {
-		if other.Value[i] != val {
+	for i, val := range self.value {
+		if other.value[i] != val {
+			fmt.Printf("Entry %v wrong: %v vs %v\n", i, val, other.value[i])
 			return false
 		}
 	}
@@ -223,10 +245,21 @@ func (self *testState) Equals(other *testState) bool {
 	return true
 }
 
+func (self *testState) EntryCount() int {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	return len(self.value)
+}
+
 func (self *testState) Print() {
 
-	fmt.Printf("Test state with %v entries:\n", len(self.Value))
-	for i, val := range self.Value {
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	fmt.Printf("Test state with %v entries:\n", len(self.value))
+	for i, val := range self.value {
 		fmt.Printf("%v: %v\n", i, val)
 	}
 }

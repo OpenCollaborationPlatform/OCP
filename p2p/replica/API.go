@@ -20,12 +20,26 @@ type WriteAPI struct {
 	replica *Replica
 }
 
-//returns what we think have as log for the given idx
+//returns what we think have as log for the given idx, or a snapshot that superseeds this log index
 func (self *ReadAPI) GetLog(ctx context.Context, idx uint64, result *Log) error {
 
 	self.replica.logger.Debugf("Asked for log %v", idx)
 
-	//check if the replica has the required log (logstore is threadsafe)
+	//should we go for the snapshot?
+	first, err := self.replica.logs.FirstIndex()
+	if err != nil {
+		return err
+	}
+	if first != 0 && first >= idx {
+		snap, err := self.replica.logs.GetLog(first)
+		if err != nil {
+			return err
+		}
+		*result = snap
+		return nil
+	}
+
+	//check if the replica has the required log
 	log, err := self.replica.logs.GetLog(idx)
 
 	if err != nil {
@@ -59,7 +73,13 @@ func (self *ReadAPI) GetNewestLog(ctx context.Context, empty struct{}, result *L
 //receives a new log created by the leader
 func (self *ReadAPI) NewLog(log Log) {
 
-	self.replica.commitChan <- log
+	self.replica.commitChan <- commitStruct{log, nil}
+}
+
+//receives a beacon from the leader
+func (self *ReadAPI) NewBeacon(beacon beaconStruct) {
+
+	self.replica.beaconChan <- beacon
 }
 
 func (self *WriteAPI) RequestCommand(ctx context.Context,
