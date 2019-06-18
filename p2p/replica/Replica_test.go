@@ -19,7 +19,7 @@ import (
 
 func init() {
 	logging.GetSubsystems()
-	logging.SetDebugLogging()
+	//logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, name string) ([]*Replica, error) {
@@ -238,7 +238,7 @@ func randomReplicaTimeouts(ctx context.Context, reps []*Replica, maxTimeout time
 /******************************************************************************
 							start tests
 ******************************************************************************/
-/*
+
 func TestReplicaCommit(t *testing.T) {
 
 	num := 3
@@ -335,7 +335,7 @@ func TestReplicaCommit(t *testing.T) {
 		})
 
 	})
-}*/
+}
 
 /*
 func BenchmarkSingleReplicaCommits(b *testing.B) {
@@ -388,7 +388,7 @@ func BenchmarkMultiReplicaCommits(b *testing.B) {
 	<-waiter
 }
 */
-/*
+
 func TestReplicaRequest(t *testing.T) {
 
 	Convey("Setting up 3 replicas with basic state", t, func() {
@@ -656,7 +656,8 @@ func TestSnapshot(t *testing.T) {
 
 	})
 }
-*/
+
+/*
 func TestRecover(t *testing.T) {
 
 	Convey("Setting up 3 replicas", t, func() {
@@ -766,3 +767,4 @@ func TestRecover(t *testing.T) {
 
 	})
 }
+*/

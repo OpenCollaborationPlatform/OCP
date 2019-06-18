@@ -83,7 +83,7 @@ type Replica struct {
 	options   Options
 
 	//replica state handling
-	requests map[uint64]requestState
+	requests map[uint64]requestStruct
 	leaders  leaderStore
 
 	//user state handling
@@ -96,6 +96,7 @@ type Replica struct {
 	commitChan  chan commitStruct
 	cmdChan     chan cmdStruct
 	recoverChan chan recoverStruct
+	requestChan chan requestStruct
 	beaconChan  chan beaconStruct
 	appliedChan chan uint64
 }
@@ -124,7 +125,7 @@ func NewReplica(name string, addr Address, trans Transport, ol Overlord,
 	replica := &Replica{
 		transport:   trans,
 		overlord:    ol,
-		requests:    make(map[uint64]requestState),
+		requests:    make(map[uint64]requestStruct),
 		leaders:     newLeaderStore(),
 		ctx:         ctx,
 		cncl:        cncl,
@@ -132,6 +133,7 @@ func NewReplica(name string, addr Address, trans Transport, ol Overlord,
 		cmdChan:     make(chan cmdStruct),
 		recoverChan: make(chan recoverStruct),
 		beaconChan:  make(chan beaconStruct),
+		requestChan: make(chan requestStruct, opts.MaxLogLength*3),
 		appliedChan: make(chan uint64, 100),
 		states:      newStateStore(),
 		logs:        store,
@@ -200,10 +202,11 @@ func (self *Replica) AddCommand(ctx context.Context, state uint8, cmd []byte) er
 /******************************************************************************
 					helper structs
 ******************************************************************************/
-type requestState struct {
+type requestStruct struct {
 	ctx  context.Context
 	cncl context.CancelFunc
 
+	index      uint64
 	state      int8
 	fetchedLog Log
 }
@@ -241,6 +244,9 @@ type beaconStruct struct {
 ******************************************************************************/
 
 func (self *Replica) run() {
+
+	//start request workers
+	self.startRequestWorkers(5)
 
 	//setup the beacon
 	beaconTicker := time.NewTicker(self.options.Beacon)
@@ -290,7 +296,9 @@ loop:
 		}
 	}
 
-	beaconTicker.Stop()
+	beaconTicker.Stop()     //stop ticker
+	close(self.requestChan) //stop request workers
+
 	self.logger.Debug("Shutdown run loop")
 }
 
@@ -376,7 +384,7 @@ func (self *Replica) commitLog(log Log) error {
 
 		//and add the received log to the request log, to ensure it is added
 		//when possible
-		rstate := requestState{nil, nil, requestState_Available, log}
+		rstate := requestStruct{nil, nil, log.Index, requestState_Available, log}
 		self.requests[log.Index] = rstate
 
 		//we need to request all missing logs!
@@ -432,8 +440,66 @@ func (self *Replica) forwardToSnapshot(log Log) error {
 	return nil
 }
 
-//a request loop tries to fetch the missing log. It does add a new request state
-//and starts fetching.
+//starts request workers which try to fetch the missing logs they receive on the requestChan.
+func (self *Replica) startRequestWorkers(num int) {
+
+	for i := 0; i < num; i++ {
+
+		go func() {
+
+			//we get a request for a log till the channel is closed
+			for request := range self.requestChan {
+
+				select {
+
+				//if the context is closed already we need nothing to do!
+				case <-request.ctx.Done():
+					break
+
+				default:
+					reply := Log{}
+					err := self.transport.CallAny(request.ctx, `ReadAPI`, `GetLog`, request.index, &reply)
+
+					//handle the commit if we received it
+					if err == nil {
+
+						if reply.Index != request.index && reply.Type != logType_Snapshot {
+							self.logger.Errorf("Request for log %v returned log %v, but is not snapshot. Try again", request.index, reply.Index)
+							self.requestChan <- request
+						}
+						self.logger.Debugf("Request for log %v successfull", reply.Index)
+
+						//we simply push it into the replica, the commit handler will
+						//take care of cleaning the request state (we cant do it as
+						//we are a asynchrous thread)
+						//but we need to be aware of possible rejections (could be a invalid log)
+						//Note: the received log could be a future snapshot. but it still is handled by the commit
+						//function, which also cleans up this request if not needed anymore
+
+						errChan := make(chan error)
+						self.commitChan <- commitStruct{reply, errChan}
+						err := <-errChan
+						close(errChan)
+
+						if err != nil {
+							//push it in again for the next try
+							self.logger.Errorf("Log from request was rejected, try again: %v", err)
+							self.requestChan <- request
+						}
+
+					} else {
+						self.logger.Debugf("Call of function GetLog in ReadAPI failed, try again: %v", err.Error())
+						//push it in again for the next try
+						self.requestChan <- request
+					}
+				}
+			}
+
+		}()
+	}
+}
+
+//request does add a new request struct to the list and forwards it to a worker
 func (self *Replica) requestLog(idx uint64) {
 
 	//if we are already requesting nothing needs to be done
@@ -443,61 +509,13 @@ func (self *Replica) requestLog(idx uint64) {
 
 	self.logger.Debugf("Request log %v started", idx)
 
-	//build the request state
+	//build the requestStruct
 	ctx, cncl := context.WithCancel(self.ctx)
-	rstate := requestState{ctx, cncl, requestState_Fetching, Log{}}
-	self.requests[idx] = rstate
+	request := requestStruct{ctx, cncl, idx, requestState_Fetching, Log{}}
+	self.requests[idx] = request
 
-	//run the fetch. We ask one follower after the other to give us the missing
-	//log, till it is received or the context is canceled
-	go func(ctx context.Context, reqIdx uint64) {
-
-	loop:
-		for {
-			select {
-
-			case <-ctx.Done():
-				break
-
-			default:
-				ctx, _ := context.WithTimeout(ctx, 500*time.Millisecond)
-				reply := Log{}
-				err := self.transport.CallAny(ctx, `ReadAPI`, `GetLog`, reqIdx, &reply)
-
-				//handle the commit if we received it
-				if err == nil {
-
-					if reply.Index != reqIdx && reply.Type != logType_Snapshot {
-						self.logger.Errorf("Request for log %v returned log %v, but is not snapshot", reqIdx, reply.Index)
-						continue loop
-					}
-					self.logger.Debugf("Request for log %v successfull", reply.Index)
-
-					//we simply push it into the replica, the commit handler will
-					//take care of cleaning the request state (we cant do it as
-					//we are a asynchrous thread)
-					//but we need to be aware of possible rejections (could be a invalid log)
-					//Note: the received log could be a future snapshot. but it still is handled by the commit
-					//function, which also cleans up this request if not needed anymore
-
-					errChan := make(chan error)
-					self.commitChan <- commitStruct{reply, errChan}
-					err := <-errChan
-					close(errChan)
-
-					if err == nil {
-						break loop
-					}
-					self.logger.Errorf("Log from request was rejected, try again: %v", err)
-
-				} else {
-					self.logger.Debugf("Call of function GetLog in ReadAPI failed: %v", err.Error())
-					time.Sleep(100 * time.Microsecond)
-				}
-			}
-		}
-
-	}(ctx, idx)
+	//start the request
+	self.requestChan <- request
 }
 
 //applie the log to the state, or to internal config if required
@@ -918,7 +936,7 @@ func (self *Replica) recoverIfNeeded() (bool, error) {
 			req.cncl()
 		}
 	}
-	self.requests = make(map[uint64]requestState, 0)
+	self.requests = make(map[uint64]requestStruct, 0)
 
 	//check if we have a snapshot somewhere in our history we can recover from
 	var snap Log
