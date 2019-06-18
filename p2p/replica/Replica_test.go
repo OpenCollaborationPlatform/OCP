@@ -337,58 +337,6 @@ func TestReplicaCommit(t *testing.T) {
 	})
 }
 
-/*
-func BenchmarkSingleReplicaCommits(b *testing.B) {
-
-	b.StopTimer()
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "benchmark")
-	defer os.RemoveAll(path)
-
-	reps, _ := setupReplicas(1, path, "Replica")
-	st := newTestState()
-	reps[0].AddState(st)
-
-	b.StartTimer()
-	//run the benchmark
-	for n := 0; n < b.N; n++ {
-		for i := 0; i < 1000; i++ {
-			log := Log{Index: uint64(n*1000 + i), Epoch: 0, Type: 0, Data: intToByte(uint64(n*1000 + i))}
-			reps[0].commitLog(log)
-		}
-	}
-}
-
-func BenchmarkMultiReplicaCommits(b *testing.B) {
-
-	b.StopTimer()
-	path, _ := ioutil.TempDir("", "replica")
-	defer os.RemoveAll(path)
-
-	reps, _ := setupReplicas(3, path, "Replica")
-	defer closeReplicas(reps)
-
-	for _, rep := range reps {
-		rep.AddState(newTestState())
-	}
-
-	rndNum := 1000
-	waiter := waitTillCommitIdx(reps, uint64(rndNum-1), 20*time.Second)
-
-	b.StartTimer()
-	//random commiting of logs, no replica gets them all
-	for i := 0; i < rndNum; i++ {
-		log := Log{Index: uint64(i), Epoch: 0, Type: 0, Data: intToByte(uint64(i))}
-
-		for j := 0; j < len(reps); j++ {
-			reps[j].commitLog(log)
-		}
-	}
-
-	<-waiter
-}
-*/
-
 func TestReplicaRequest(t *testing.T) {
 
 	Convey("Setting up 3 replicas with basic state", t, func() {
@@ -657,7 +605,6 @@ func TestSnapshot(t *testing.T) {
 	})
 }
 
-/*
 func TestRecover(t *testing.T) {
 
 	Convey("Setting up 3 replicas", t, func() {
@@ -767,4 +714,3 @@ func TestRecover(t *testing.T) {
 
 	})
 }
-*/

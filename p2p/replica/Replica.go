@@ -296,7 +296,9 @@ loop:
 		}
 	}
 
-	beaconTicker.Stop()     //stop ticker
+	beaconTicker.Stop() //stop ticker
+	//wait a bit till the context has closed all goroutines
+	time.Sleep(100 * time.Millisecond)
 	close(self.requestChan) //stop request workers
 
 	self.logger.Debug("Shutdown run loop")
@@ -458,7 +460,8 @@ func (self *Replica) startRequestWorkers(num int) {
 
 				default:
 					reply := Log{}
-					err := self.transport.CallAny(request.ctx, `ReadAPI`, `GetLog`, request.index, &reply)
+					reqCtx, _ := context.WithTimeout(request.ctx, 500*time.Millisecond) //we give ourself 500 milliseconds, not more
+					err := self.transport.CallAny(reqCtx, `ReadAPI`, `GetLog`, request.index, &reply)
 
 					//handle the commit if we received it
 					if err == nil {

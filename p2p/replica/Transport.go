@@ -122,9 +122,11 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 	idxs := rand.Perm(len(self.readAPIs))
 	for _, idx := range idxs {
 
-		//see if it is reachable
+		//see if it is reachable. If not we wait till the context expires
+		//this is realistic if we don't want multipe calls but do each replica
+		//one after annother
 		if !self.isReachable(idx) {
-			time.Sleep(self.timeoutDelay)
+			<-ctx.Done()
 			return fmt.Errorf("Unable to reach: timeout")
 		}
 
