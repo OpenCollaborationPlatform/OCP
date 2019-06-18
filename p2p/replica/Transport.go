@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -42,6 +43,7 @@ type testTransport struct {
 	readAPIs     []*ReadAPI
 	writeAPIs    []*WriteAPI
 	unreachable  []int
+	mutex        sync.RWMutex //for unreachable
 }
 
 func newTestTransport() *testTransport {
@@ -55,6 +57,9 @@ func newTestTransport() *testTransport {
 }
 
 func (self *testTransport) isReachable(idx int) bool {
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
 	for _, val := range self.unreachable {
 		if val == idx {
 			return false

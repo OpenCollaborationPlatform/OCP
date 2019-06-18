@@ -74,27 +74,68 @@ func (self *OverloardAPI) GetHighestLogIndex(ctx context.Context, result *uint64
 
 func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64, idx uint64) error {
 
-	err := self.replica.leaders.AddEpoch(epoch, self.replica.address, self.replica.pubKey, idx)
-	if err != nil {
-		self.replica.logger.Errorf("Set as leader by overlord, but cannot comply: %v", err)
-		return err
+	//do we have this already?
+	if self.replica.leaders.HasEpoch(epoch) {
+		return nil
 	}
-	err = self.replica.leaders.SetEpoch(epoch)
-	if err != nil {
-		self.replica.logger.Errorf("Set as leader by overlord, but cannot comply: %v", err)
-		return err
+
+	//check if we can simply add!
+	if (epoch == 0 && self.replica.leaders.EpochCount() == 0) ||
+		(epoch != 0) && self.replica.leaders.HasEpoch(epoch-1) {
+
+		log, err := self.replica.logs.GetLatestLog()
+		if ((err == nil) && (log.Epoch == epoch-1)) ||
+			IsNoEntryError(err) {
+
+			err := self.replica.leaders.AddEpoch(epoch, self.replica.address, self.replica.pubKey, idx)
+			if err != nil {
+				self.replica.logger.Errorf("Set as leader by overlord, but cannot comply: %v", err)
+				return err
+			}
+			err = self.replica.leaders.SetEpoch(epoch)
+			if err != nil {
+				self.replica.logger.Errorf("Set as leader by overlord, but cannot comply: %v", err)
+				return err
+			}
+			return nil
+		}
 	}
+
+	//it seems something is wrong... start recovery!
+	self.replica.recoverChan <- recoverStruct{epoch, ctx}
+
 	return nil
 }
 
 func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leader Address, key crypto.RsaPublicKey, startIdx uint64) error {
 
 	self.replica.logger.Infof("Start new epoch %v with leader %v (begining with index %v)", epoch, leader, startIdx)
-	err := self.replica.leaders.AddEpoch(epoch, leader, key, startIdx)
-	if err != nil {
-		self.replica.logger.Errorf("Unable to add new epoch: %v", err)
-		return err
+
+	//nothing to be done if we have it already
+	if self.replica.leaders.HasEpoch(epoch) {
+		return nil
 	}
+
+	//if we have the previous epoch and the last log complies to the change we ca
+	//simply add the new one (no recovery needed)
+	if (epoch == 0 && self.replica.leaders.EpochCount() == 0) ||
+		(epoch != 0) && self.replica.leaders.HasEpoch(epoch-1) {
+
+		log, err := self.replica.logs.GetLatestLog()
+		if ((err == nil) && (log.Epoch == epoch-1)) ||
+			IsNoEntryError(err) {
+
+			err := self.replica.leaders.AddEpoch(epoch, leader, key, startIdx)
+			if err != nil {
+				self.replica.logger.Errorf("Unable to add new epoch: %v", err)
+				return err
+			}
+			return nil
+		}
+	}
+
+	//it seems something is wrong... start recovery!
+	self.replica.recoverChan <- recoverStruct{epoch, ctx}
 	return nil
 }
 
@@ -104,6 +145,7 @@ type testOverlord struct {
 	apimutex    sync.RWMutex
 	apiKeys     []crypto.RsaPublicKey
 	unreachable []int
+	urmutex     sync.RWMutex //for uneachable
 }
 
 func newTestOverlord() *testOverlord {
@@ -124,6 +166,10 @@ func (self *testOverlord) setApiPubKey(key crypto.RsaPublicKey) error {
 }
 
 func (self *testOverlord) isReachable(idx int) bool {
+
+	self.urmutex.RLock()
+	defer self.urmutex.RUnlock()
+
 	for _, val := range self.unreachable {
 		if val == idx {
 			return false

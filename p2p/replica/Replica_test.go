@@ -119,6 +119,137 @@ func areStatesEqual(st []*testState) bool {
 	return true
 }
 
+//shutdown a single replica and returns all reachable ones.
+//Note: If some replicas are shutdown already the not reenabled
+func shutdownReplica(reps []*Replica, shutdown int) []*Replica {
+
+	//we need some replicas
+	if len(reps) <= 0 || len(reps) <= shutdown {
+		return reps
+	}
+
+	transport := reps[0].transport.(*testTransport)
+	transport.mutex.Lock()
+	transport.unreachable = append(transport.unreachable, shutdown)
+	transport.mutex.Unlock()
+
+	overlord := reps[0].overlord.(*testOverlord)
+	overlord.urmutex.Lock()
+	overlord.unreachable = append(overlord.unreachable, shutdown)
+	overlord.urmutex.Unlock()
+
+	reachable := make([]*Replica, 0)
+	for _, rep := range reps {
+
+		//leader addess is its index
+		idx, _ := strconv.Atoi(rep.address)
+		if transport.isReachable(idx) {
+			reachable = append(reachable, rep)
+		}
+	}
+
+	return reachable
+}
+
+//reenable a single replica and returns all reachable ones.
+//Note: If some replicas are not shutdown then nopthing happens
+func enableReplica(reps []*Replica, enable int) []*Replica {
+
+	//we need some replicas
+	if len(reps) <= 0 || len(reps) <= enable {
+		return reps
+	}
+
+	transport := reps[0].transport.(*testTransport)
+	transport.mutex.Lock()
+	for idx, ur := range transport.unreachable {
+		if ur == enable {
+			transport.unreachable = append(transport.unreachable[:idx], transport.unreachable[idx+1:]...)
+			break
+		}
+	}
+	transport.mutex.Unlock()
+
+	overlord := reps[0].overlord.(*testOverlord)
+	overlord.urmutex.Lock()
+	for idx, ur := range overlord.unreachable {
+		if ur == enable {
+			overlord.unreachable = append(overlord.unreachable[:idx], overlord.unreachable[idx+1:]...)
+			break
+		}
+	}
+	overlord.urmutex.Unlock()
+
+	reachable := make([]*Replica, 0)
+	for _, rep := range reps {
+
+		//leader addess is its index
+		idx, _ := strconv.Atoi(rep.address)
+		if transport.isReachable(idx) {
+			reachable = append(reachable, rep)
+		}
+	}
+
+	return reachable
+}
+
+//shuts down the replica for a given duration
+func timeoutReplica(reps []*Replica, disable int, duration time.Duration) {
+
+	go func() {
+		shutdownReplica(reps, disable)
+		time.Sleep(duration)
+		enableReplica(reps, disable)
+	}()
+}
+
+//shutsdown the replicas randomly up to maxTimeout and does so till duration is over
+func randomReplicaTimeouts(reps []*Replica, duration time.Duration, maxTimeout time.Duration) chan struct{} {
+
+	ctx, _ := context.WithTimeout(context.Background(), duration)
+	wait := sync.WaitGroup{}
+
+	//start a timout function for each rep
+	for idx, _ := range reps {
+		wait.Add(1)
+		go func(idx int) {
+		loop:
+			for {
+				select {
+				case <-ctx.Done():
+					break loop
+
+				default:
+					//let it live for a while
+					r := rand.Intn(int(4 * maxTimeout.Nanoseconds()))
+					time.Sleep(time.Duration(r) * time.Nanosecond)
+
+					//shutdown
+					shutdownReplica(reps, idx)
+					r = rand.Intn(int(maxTimeout.Nanoseconds()))
+					time.Sleep(time.Duration(r) * time.Nanosecond)
+					enableReplica(reps, idx)
+				}
+			}
+			wait.Done()
+		}(idx)
+	}
+
+	//start a collection function to wait till all timoutfunctions have shutdown
+	ret := make(chan struct{})
+	go func() {
+		wait.Wait()
+		ret <- struct{}{}
+		close(ret)
+	}()
+
+	return ret
+}
+
+/******************************************************************************
+							start tests
+******************************************************************************/
+/*
 func TestReplicaCommit(t *testing.T) {
 
 	num := 3
@@ -215,7 +346,7 @@ func TestReplicaCommit(t *testing.T) {
 		})
 
 	})
-}
+}*/
 
 /*
 func BenchmarkSingleReplicaCommits(b *testing.B) {
@@ -268,7 +399,7 @@ func BenchmarkMultiReplicaCommits(b *testing.B) {
 	<-waiter
 }
 */
-
+/*
 func TestReplicaRequest(t *testing.T) {
 
 	Convey("Setting up 3 replicas with basic state", t, func() {
@@ -433,13 +564,10 @@ func TestReplicaLeader(t *testing.T) {
 			//stop leader
 			oldEpoch, leader, _, _, _ := reps[0].overlord.GetCurrentEpochData(ctx)
 			leaderIdx, _ := strconv.Atoi(leader)
-			transport := reps[0].transport.(*testTransport)
-			transport.unreachable = append(transport.unreachable, leaderIdx)
-			reps[0].overlord.(*testOverlord).unreachable = append(reps[0].overlord.(*testOverlord).unreachable, leaderIdx)
+			reachableReps := shutdownReplica(reps, leaderIdx)
 
 			//annother set of random commits to non-leader replicas.
 			//wait till all but leader received the commits
-			reachableReps := append(reps[:leaderIdx], reps[leaderIdx+1:]...)
 			waiter = waitTillCommitIdx(reachableReps, uint64(6), 1*time.Second)
 			for i := 4; i <= 6; i++ {
 				cmd := intToByte(uint64(i))
@@ -539,8 +667,7 @@ func TestSnapshot(t *testing.T) {
 
 	})
 }
-
-/*
+*/
 func TestRecover(t *testing.T) {
 
 	Convey("Setting up 3 replicas", t, func() {
@@ -556,42 +683,80 @@ func TestRecover(t *testing.T) {
 			So(rep.AddState(st), ShouldEqual, 0)
 		}
 
-		//we want a snapshot after 10 commits to ease testing
-		for _, rep := range reps {
-			rep.options.MaxLogLength = 100
-		}
-
-		Convey("simulating randing commits with leader going down", func() {
+		Convey("Having the leader gone down for a single commits", func() {
 
 			ctx := context.Background()
-			waiter := waitTillCommitIdx(reps, uint64(20), 1*time.Second)
+			cnt := uint64(0)
+			reps[0].AddCommand(ctx, 0, intToByte(cnt))
+			cnt++
+			time.Sleep(50 * time.Millisecond)
 
-			//random commiting of logs, no replica gets them all
-			var err error
-			for i := 0; i <= 20; i++ {
-				cmd := intToByte(uint64(0))
+			//shutdown the leader
+			_, leader, _, _, _ := reps[0].overlord.GetCurrentEpochData(ctx)
+			leaderIdx, _ := strconv.Atoi(leader)
+			shutdownReplica(reps, leaderIdx)
 
-				idx := rand.Intn(len(reps))
-				err = reps[idx].AddCommand(ctx, 0, cmd)
-				if err != nil {
-					break
-				}
+			//add a commit to each replica (including leader)
+			//this should elect a new leader and bring the old one in a errounous state
+			for _, rep := range reps {
+				rep.AddCommand(ctx, 0, intToByte(cnt))
+				cnt++
+				time.Sleep(50 * time.Millisecond)
 			}
 
-			So(err, ShouldBeNil)
-			So(<-waiter, ShouldBeNil)
+			//reenable leader
+			enableReplica(reps, leaderIdx)
 
-			Convey("should leaf 2 logs in the store,", func() {
+			//and add another commit to each replica
+			for _, rep := range reps {
+				rep.AddCommand(ctx, 0, intToByte(cnt))
+				cnt++
+				time.Sleep(50 * time.Millisecond)
+			}
 
-				for _, rep := range reps {
-					first, _ := rep.logs.FirstIndex()
-					last, _ := rep.logs.LastIndex()
+			//six commits: Initial + 2 while leader down + 3 while leader up
+			Convey("all replicas should have the 6 commits", func() {
 
-					So(first, ShouldEqual, 11)
-					So(last, ShouldEqual, 12)
+				for _, state := range states {
+					So(len(state.Value), ShouldEqual, 6)
 				}
+
+				So(areStatesEqual(states), ShouldBeTrue)
 			})
+
 		})
+		/*
+			Convey("simulating random commits with random replicas going down", func() {
+
+				ctx := context.Background()
+
+				//randomly disable followers
+				finish := randomReplicaTimeouts(reps, 1000*time.Millisecond, 30*time.Millisecond)
+
+				//random commiting of logs, no replica gets them all
+				for i := 0; i <= 200; i++ {
+					time.Sleep(5 * time.Millisecond)
+					cmd := intToByte(uint64(i))
+
+					idx := rand.Intn(len(reps))
+					err = reps[idx].AddCommand(ctx, 0, cmd)
+					if err != nil {
+						break
+					}
+				}
+
+				So(err, ShouldBeNil)
+				<-finish
+
+				Convey("all replicas should have the same commits,", func() {
+
+					for i, state := range states {
+						fmt.Printf("\nState %v has length %v\n", i, len(state.Value))
+					}
+
+					So(areStatesEqual(states), ShouldBeTrue)
+				})
+			})*/
 
 	})
-}*/
+}
