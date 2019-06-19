@@ -576,7 +576,7 @@ func (self *Replica) startRequestWorkers(num int) {
 
 						if err != nil {
 							//inform the replica that it send us bogus!
-							s_err := self.transport.Send(addr, `WriteAPI`, `InvalidLogReceived`, reply.Index)
+							s_err := self.transport.Send(addr, `ReadAPI`, `InvalidLogReceived`, reply.Index)
 							if s_err != nil {
 								self.logger.Errorf("Cannot inform replica about problematic log: %v", s_err)
 							}
@@ -894,7 +894,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 	}
 
 	self.logger.Debugf("Send out new log")
-	err = self.transport.SendAll(`ReadAPI`, `NewLog`, log)
+	err = self.transport.SendAll(`WriteAPI`, `NewLog`, log)
 	if err != nil {
 		self.logger.Errorf("Unable to send out commited log: %v", err)
 		return err
@@ -938,7 +938,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 		}
 
 		self.logger.Debugf("Send out snapshopt log")
-		err = self.transport.SendAll(`ReadAPI`, `NewLog`, log)
+		err = self.transport.SendAll(`WriteAPI`, `NewLog`, log)
 		if err != nil {
 			self.logger.Errorf("Unable to send out snapshot log: %v", err)
 			return err
@@ -1157,7 +1157,7 @@ func (self *Replica) sendBeacon() {
 
 	last, _ := self.logs.LastIndex()
 	arg := beaconStruct{self.address, self.leaders.GetEpoch(), last}
-	self.transport.SendAll("ReadAPI", "NewBeacon", arg)
+	self.transport.SendAll("WriteAPI", "NewBeacon", arg)
 }
 
 func (self *Replica) processBeacon(ctx context.Context, beacon beaconStruct) {

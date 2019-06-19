@@ -1,84 +1,68 @@
 package p2p
 
 import (
-	raft "github.com/hashicorp/raft"
+	"CollaborationNode/p2p/replica"
 )
 
-type sharedState struct {
-	raftServer *raft.Raft
+type eventHandler struct {
+	sub *Subscription
 }
 
-type sharedStateService struct {
+//a replica transport implementation based on events and rpcs
+type swarmTransport struct {
 	swarm *Swarm
+	eventhandler
 }
 
-func newSharedStateService(swarm *Swarm) *sharedStateService {
+//Register APIs to be accessbile by other replicas using their transports Call functions.
+//APIs have two different function syntaxes:
+//with return value, used for "Call" and "CallAny": 	fnc(ctx context.Context, arg Type1, result *Type2) error
+//without return value, used for "Send": 				fnc(arg Type1)
+//The register function should handle all API functions according to their structure for the call or send.
+func (self *swarmTransport) RegisterReadAPI(api *replica.ReadAPI) error {
 
-	return &sharedStateService{swarm}
-}
+	//registering rpc functions is easy!
+	self.swarm.Rpc.Register(api, AUTH_READONLY)
 
-func (self *sharedStateService) Share(fsm raft.FSM, isRoot bool) (*sharedState, error) {
-	/*
-		//the name used to distuinguish is the class name of the fsm
-		value := reflect.ValueOf(fsm)
-		fsmname := reflect.Indirect(value).Type().Name()
-
-		//the p2p transport
-		transport, err := NewLibp2pTransport(self.swarm.host.host, self.swarm.ID.Pretty()+`/`+fsmname, time.Minute)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to load new transport")
-		}
-
-		//log and conf store
-		path := filepath.Join(self.swarm.GetPath(), fsmname+`-logstore.db`)
-		logstore, err := boltstore.NewBoltStore(path)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to load logstore")
-		}
-
-		//snapshot store: for now the default file one (change to bolt, as we do not
-		//store much data)
-		path = filepath.Join(self.swarm.GetPath(), fsmname+`-snapshots`)
-		err = os.MkdirAll(path, os.ModePerm)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to create director for snapshotstore")
-		}
-		snapstore, err := raft.NewFileSnapshotStore(path, 3, ioutil.Discard)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to create snapshotstore")
-		}
-
-		//config
-		config := raft.DefaultConfig()
-		//config.LogOutput = ioutil.Discard
-		config.Logger = nil
-		config.LocalID = raft.ServerID(self.swarm.host.ID().pid().Pretty())
-		config.StartAsLeader = false
-
-		//Bootstrap if required
-		var clusterConfig raft.Configuration
-		if isRoot {
-			servers := []raft.Server{
-				raft.Server{
-					Suffrage: raft.Voter,
-					ID:       raft.ServerID(self.swarm.host.ID().pid().Pretty()),
-					Address:  raft.ServerAddress(self.swarm.host.ID().pid().Pretty()),
-				},
+	//now go over all event functions. We don't use reflect to keep it simple
+	sub, err := self.swarm.Event.Subscribe("SharedState/NewBeacon", AUTH_READONLY)
+	go func() {
+		for {
+			event, err := sub.Next()
+			if err != nil {
+				return
 			}
-			clusterConfig = raft.Configuration{servers}
-
-		} else {
-			clusterConfig = raft.Configuration{}
+			event.Data
 		}
+	}()
+	api.NewBeacon()
+	api.NewLog()
+}
 
-		raft.BootstrapCluster(config, logstore, logstore, snapstore, transport, clusterConfig.Clone())
+func (self *swarmTransport) RegisterWriteAPI(api *replica.WriteAPI) error {
 
-		//start up
-		raftserver, err := raft.NewRaft(config, fsm, logstore, logstore, snapstore, transport)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to startup raft server")
-		}
+	//registering rpc functions is easy!
+	self.swarm.Rpc.Register(api, AUTH_READWRITE)
+}
 
-		return &sharedState{raftserver}, nil*/
-	return nil, nil
+//call a replica with the given adress. Usally used for the leader. If an error occurs during the call
+//it will be returned
+func (self *replicaSwarmTransport) Call(ctx context.Context, addr replica.Address, api string, fnc string, arguments interface{}, reply interface{}) error {
+
+}
+
+//call a random replica (except self). The function should try all replicas till one does successfully execute the call
+//(no error returned). CallAny fails only if no replica can execute the called function. It does return the Address which
+//responded.
+func (self *replicaSwarmTransport) CallAny(ctx context.Context, api string, fnc string, arguments interface{}, reply interface{}) (Address, error) {
+}
+
+//Calls a function on a given replicas but does not get any return value, hence does not wait for the execution.
+//As it does not wait no context is required. There is no indication if the replica was reached.
+func (self *replicaSwarmTransport) Send(addr replica.Address, api string, fnc string, arguments interface{}) error {
+}
+
+//Calls a function on all replicas but does not get any return value, hence does not wait for the execution.
+//As it does not wait no context is required. There is no indicator if the call was successfull for all replicas.
+func (self *replicaSwarmTransport) SendAll(api string, fnc string, arguments interface{}) error {
 }

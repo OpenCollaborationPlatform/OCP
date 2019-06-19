@@ -11,12 +11,12 @@ import (
   APIs must be callable with the replica transport
 */
 
-//p2p rpc api for read only auth
+//p2p rpc api for read only auth: can be called by anyone with readonly authorisation
 type ReadAPI struct {
 	replica *Replica
 }
 
-//p2p rpc api for read/write auth
+//p2p rpc api for read/write auth: can be called by anyone with write auth
 type WriteAPI struct {
 	replica *Replica
 }
@@ -71,16 +71,15 @@ func (self *ReadAPI) GetNewestLog(ctx context.Context, empty struct{}, result *L
 	return nil
 }
 
-//receives a new log created by the leader
-func (self *ReadAPI) NewLog(log Log) {
+func (self *ReadAPI) InvalidLogReceived(index uint64) {
 
-	self.replica.commitChan <- commitStruct{log, nil}
-}
+	//someone informed us that one of our log is invalid. thats bad! we need to check if we need
+	//to recover!
+	self.replica.logger.Infof("We received notice that a log was invalid: go into recover!")
+	ctx, _ := context.WithTimeout(self.replica.ctx, 1*time.Second)
+	arg := recoverStruct{0, ctx}
 
-//receives a beacon from the leader
-func (self *ReadAPI) NewBeacon(beacon beaconStruct) {
-
-	self.replica.beaconChan <- beacon
+	self.replica.recoverChan <- arg
 }
 
 func (self *WriteAPI) RequestCommand(ctx context.Context,
@@ -117,13 +116,14 @@ func (self *WriteAPI) RequestCommand(ctx context.Context,
 	return err
 }
 
-func (self *WriteAPI) InvalidLogReceived(index uint64) {
+//receives a new log created by the leader
+func (self *WriteAPI) NewLog(log Log) {
 
-	//someone informed us that one of our logs is invalid. thats bad! we need to check if we need
-	//recover!
-	self.replica.logger.Errorf("We received notice that a log was invalid: go into recover!")
-	ctx, _ := context.WithTimeout(self.replica.ctx, 1*time.Second)
-	arg := recoverStruct{0, ctx}
+	self.replica.commitChan <- commitStruct{log, nil}
+}
 
-	self.replica.recoverChan <- arg
+//receives a beacon from the leader
+func (self *WriteAPI) NewBeacon(beacon beaconStruct) {
+
+	self.replica.beaconChan <- beacon
 }
