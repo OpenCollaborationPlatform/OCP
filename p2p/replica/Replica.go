@@ -556,7 +556,7 @@ func (self *Replica) startRequestWorkers(num int) {
 				default:
 					reply := Log{}
 					reqCtx, _ := context.WithTimeout(request.ctx, 700*time.Millisecond) //we give ourself 500 milliseconds, not more
-					err := self.transport.CallAny(reqCtx, `ReadAPI`, `GetLog`, request.index, &reply)
+					addr, err := self.transport.CallAny(reqCtx, `ReadAPI`, `GetLog`, request.index, &reply)
 
 					//handle the commit if we received it
 					if err == nil {
@@ -580,6 +580,9 @@ func (self *Replica) startRequestWorkers(num int) {
 						close(errChan)
 
 						if err != nil {
+							//inform the replica that it send us bogus!
+							self.transport.Send(addr, `WriteAPI`, `InvalidLogReceived`, reply.Index)
+
 							//push it in again for the next try
 							self.logger.Errorf("Log from request was rejected, try again: %v", err)
 							time.Sleep(100 * time.Millisecond)
@@ -893,7 +896,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 	}
 
 	self.logger.Debugf("Send out new log")
-	err = self.transport.Send(`ReadAPI`, `NewLog`, log)
+	err = self.transport.SendAll(`ReadAPI`, `NewLog`, log)
 	if err != nil {
 		self.logger.Errorf("Unable to send out commited log: %v", err)
 		return err
@@ -937,7 +940,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 		}
 
 		self.logger.Debugf("Send out snapshopt log")
-		err = self.transport.Send(`ReadAPI`, `NewLog`, log)
+		err = self.transport.SendAll(`ReadAPI`, `NewLog`, log)
 		if err != nil {
 			self.logger.Errorf("Unable to send out snapshot log: %v", err)
 			return err
@@ -1156,7 +1159,7 @@ func (self *Replica) sendBeacon() {
 
 	last, _ := self.logs.LastIndex()
 	arg := beaconStruct{self.address, self.leaders.GetEpoch(), last}
-	self.transport.Send("ReadAPI", "NewBeacon", arg)
+	self.transport.SendAll("ReadAPI", "NewBeacon", arg)
 }
 
 func (self *Replica) processBeacon(ctx context.Context, beacon beaconStruct) {
@@ -1167,9 +1170,9 @@ func (self *Replica) processBeacon(ctx context.Context, beacon beaconStruct) {
 	}
 
 	//maybe we missed some logs?
-	last, _ := self.logs.LastIndex()
-	if beacon.maxIdx > last {
-		for i := last; last <= beacon.maxIdx; i++ {
+	last, err := self.logs.LastIndex()
+	if err == nil && beacon.maxIdx > last {
+		for i := last; i <= beacon.maxIdx; i++ {
 			self.requestLog(i)
 		}
 	}

@@ -4,6 +4,7 @@ import (
 	"CollaborationNode/utils"
 	"context"
 	"fmt"
+	"time"
 )
 
 /*API types: How replicas interact with each other. Those
@@ -114,4 +115,14 @@ func (self *WriteAPI) RequestCommand(ctx context.Context,
 	}
 
 	return err
+}
+
+func (self *WriteAPI) InvalidLogReceived(index uint64) {
+
+	//someone informed us that one of our logs is invalid. thats bad! we need to check if we need
+	//recover!
+	ctx, _ := context.WithTimeout(self.replica.ctx, 1*time.Second)
+	arg := recoverStruct{0, ctx}
+
+	self.replica.recoverChan <- arg
 }

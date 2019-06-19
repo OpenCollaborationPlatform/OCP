@@ -29,11 +29,16 @@ type Transport interface {
 	//it will be returned
 	Call(ctx context.Context, addr Address, api string, fnc string, arguments interface{}, reply interface{}) error
 	//call a random replica (except self). The function should try all replicas till one does successfully execute the call
-	//(no error returned). CallAny fails only if no replica can execute the called function.
-	CallAny(ctx context.Context, api string, fnc string, arguments interface{}, reply interface{}) error
+	//(no error returned). CallAny fails only if no replica can execute the called function. It does return the Address which
+	//responded.
+	CallAny(ctx context.Context, api string, fnc string, arguments interface{}, reply interface{}) (Address, error)
+
+	//Calls a function on a given replicas but does not get any return value, hence does not wait for the execution.
+	//As it does not wait no context is required. There is no indication if the replica was reached.
+	Send(addr Address, api string, fnc string, arguments interface{}) error
 	//Calls a function on all replicas but does not get any return value, hence does not wait for the execution.
-	//As it does not wait no context is required.
-	Send(api string, fnc string, arguments interface{}) error
+	//As it does not wait no context is required. There is no indicator if the call was successfull for all replicas.
+	SendAll(api string, fnc string, arguments interface{}) error
 }
 
 //A simple test transport for local replica communication. Allows randomized delay
@@ -116,7 +121,7 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 	return nil
 }
 
-func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, argument interface{}, reply interface{}) error {
+func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, argument interface{}, reply interface{}) (Address, error) {
 
 	//try each replica in random order
 	idxs := rand.Perm(len(self.readAPIs))
@@ -136,20 +141,57 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 		case `WriteAPI`:
 			apiObj = self.writeAPIs[idx]
 		default:
-			return fmt.Errorf("Unknown API: don't know what to do")
+			return Address(""), fmt.Errorf("Unknown API: don't know what to do")
 		}
 
 		//call the function
 		err := callFncByName(self.rndDelay, apiObj, fnc, ctx, argument, reply)
 		if err == nil {
-			return nil
+			return fmt.Sprintf("%v", idx), nil
 		}
 	}
 
-	return fmt.Errorf("No replica could be called")
+	return Address(""), fmt.Errorf("No replica could be called")
 }
 
-func (self *testTransport) Send(api string, fnc string, argument interface{}) error {
+func (self *testTransport) Send(addr Address, api string, fnc string, arguments interface{}) error {
+
+	//get the address: its an int!
+	idx, err := strconv.Atoi(addr)
+	if err != nil {
+		return err
+	}
+	if idx >= len(self.readAPIs) {
+		return fmt.Errorf("Invalid address (%v): no such replica known", idx)
+	}
+
+	//see if it is reachable
+	if !self.isReachable(idx) {
+		return nil
+	}
+
+	//get the correct API to use
+	var apiObj interface{}
+	switch api {
+	case "ReadAPI":
+		apiObj = self.readAPIs[idx]
+	case "WriteAPI":
+		apiObj = self.writeAPIs[idx]
+	default:
+		return fmt.Errorf("Unknown API: don't know what to do")
+
+	}
+
+	go func(api interface{}) {
+		//call the function
+		callFncByName(self.rndDelay, api, fnc, arguments)
+
+	}(apiObj)
+
+	return nil
+}
+
+func (self *testTransport) SendAll(api string, fnc string, argument interface{}) error {
 
 	idxs := rand.Perm(len(self.readAPIs))
 	for _, idx := range idxs {
