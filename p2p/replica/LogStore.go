@@ -2,12 +2,14 @@ package replica
 
 import (
 	"CollaborationNode/utils"
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/boltdb/bolt"
 )
@@ -189,6 +191,66 @@ func (self *memoryLogStore) Clear() error {
 	self.min = 0
 
 	return nil
+}
+
+func (self *memoryLogStore) Compare(other *memoryLogStore) bool {
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
+	other.mutex.Lock()
+	defer other.mutex.Unlock()
+
+	if len(self.memory) != len(other.memory) {
+		fmt.Printf("Lengths of logstores are different: %v vs %v\n", len(self.memory), len(other.memory))
+		return false
+	}
+
+	if self.min != other.min {
+		fmt.Printf("First indexes of logstores are different: %v vs %v\n", self.min, other.min)
+		return false
+	}
+
+	if self.max != other.max {
+		fmt.Printf("Last indexes of logstores are different: %v vs %v\n", self.max, other.max)
+		return false
+	}
+
+	for i := self.min; i <= self.max; i++ {
+
+		val, ok := self.memory[i]
+		oval, ook := self.memory[i]
+
+		if ok != ook {
+			fmt.Printf("Indexes %v available in 1 store, but not the otehr\n", i)
+			return false
+		}
+
+		if ok {
+			//compare the log
+			if val.Index != oval.Index {
+				fmt.Printf("Logs %v have different indexes: %v vs %v\n", i, val.Index, oval.Index)
+				return false
+			}
+			if val.Epoch != oval.Epoch {
+				fmt.Printf("Logs %v have different epochs: %v vs %v\n", i, val.Epoch, oval.Epoch)
+				return false
+			}
+			if val.Type != oval.Type {
+				fmt.Printf("Logs %v have different types: %v vs %v\n", i, val.Type, oval.Type)
+				return false
+			}
+			if !bytes.Equal(val.Signature, oval.Signature) {
+				fmt.Printf("Logs %v have different signatures\n", i)
+				return false
+			}
+			if !bytes.Equal(val.Data, oval.Data) {
+				fmt.Printf("Logs %v have different data\n", i)
+				return false
+			}
+		}
+	}
+	return true
 }
 
 type persistentLogStore struct {

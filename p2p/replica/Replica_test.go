@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"math/rand"
 
-	//"net/http"
-	//_ "net/http/pprof"
+	"net/http"
+	_ "net/http/pprof"
 	"strconv"
 	"sync"
 	"testing"
@@ -19,7 +19,7 @@ import (
 
 func init() {
 	logging.GetSubsystems()
-	//logging.SetDebugLogging()
+	logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, name string) ([]*Replica, error) {
@@ -116,6 +116,24 @@ func areStatesEqual(st []*testState) bool {
 
 			if !st[i].Equals(st[j]) {
 				fmt.Printf("State %v failed equality with state %v\n", i, j)
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func compareLogs(reps []*Replica) bool {
+
+	for i := 0; i < (len(reps) - 1); i++ {
+
+		for j := i + 1; j < len(reps); j++ {
+
+			ilog := reps[i].logs.(*memoryLogStore)
+			jlog := reps[j].logs.(*memoryLogStore)
+
+			if !ilog.Compare(jlog) {
+				fmt.Printf("Logstore %v failed equality with Logstore %v\n", i, j)
 				return false
 			}
 		}
@@ -238,7 +256,7 @@ func randomReplicaTimeouts(ctx context.Context, reps []*Replica, maxTimeout time
 /******************************************************************************
 							start tests
 ******************************************************************************/
-
+/*
 func TestReplicaCommit(t *testing.T) {
 
 	num := 3
@@ -604,7 +622,7 @@ func TestSnapshot(t *testing.T) {
 
 	})
 }
-
+*/
 func TestRecover(t *testing.T) {
 
 	Convey("Setting up 3 replicas", t, func() {
@@ -619,6 +637,11 @@ func TestRecover(t *testing.T) {
 			states[i] = st
 			So(rep.AddState(st), ShouldEqual, 0)
 		}
+
+		//print stacktrace
+		go func() {
+			http.ListenAndServe("localhost:6060", nil)
+		}()
 
 		Convey("Having the leader gone down for a single commits", func() {
 
@@ -671,11 +694,6 @@ func TestRecover(t *testing.T) {
 				rep.options.Beacon = 100 * time.Millisecond
 			}
 
-			//print stacktrace
-			//go func() {
-			//	http.ListenAndServe("localhost:6060", nil)
-			//}()
-
 			//random commiting of logs, no replica gets them all
 			ctx := context.Background()
 			for j := 0; j < 100; j++ {
@@ -696,9 +714,27 @@ func TestRecover(t *testing.T) {
 				fmt.Printf("\n\n Call cancel! \n\n")
 				cncl()
 				time.Sleep(1000 * time.Millisecond)
+				fmt.Printf("\n")
+				for _, rep := range reps {
+					rep.printStats()
+					fmt.Printf("\n")
+				}
+				compareLogs(reps)
+
 				//add a final command so that no excuses can be given
+				fmt.Printf("Add last command\n")
 				So(reps[0].AddCommand(ctx, 0, intToByte(100000)), ShouldBeNil)
 				time.Sleep(1000 * time.Millisecond)
+
+				fmt.Printf("\n")
+				for _, rep := range reps {
+					rep.printStats()
+					fmt.Printf("\n")
+				}
+				if compareLogs(reps) {
+					fmt.Println("Log stores are equal!")
+				}
+
 				So(areStatesEqual(states), ShouldBeTrue)
 			}
 

@@ -3,7 +3,7 @@ package replica
 import (
 	"fmt"
 
-	"sync"
+	sync "github.com/sasha-s/go-deadlock"
 
 	crypto "github.com/libp2p/go-libp2p-crypto"
 )

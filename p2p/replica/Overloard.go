@@ -111,7 +111,8 @@ func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64, idx uin
 	return nil
 }
 
-func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leader Address, key crypto.RsaPublicKey, startIdx uint64) error {
+//Note: This can block, so use it in events only!
+func (self *OverloardAPI) StartNewEpoch(epoch uint64, leader Address, key crypto.RsaPublicKey, startIdx uint64) error {
 
 	self.replica.logger.Infof("Start new epoch %v with leader %v (begining with index %v)", epoch, leader, startIdx)
 
@@ -134,16 +135,18 @@ func (self *OverloardAPI) StartNewEpoch(ctx context.Context, epoch uint64, leade
 				self.replica.logger.Errorf("Unable to add new epoch: %v", err)
 				return err
 			}
+			err = self.replica.leaders.SetEpoch(epoch)
+			if err != nil {
+				self.replica.logger.Errorf("Unable to set new epoch: %v", err)
+				return err
+			}
 			return nil
 		}
 	}
 
 	//it seems something is wrong... start recovery!
 	//--> not blocking, as it can sync with AddCommand if it requests a new leader which becomes the node itself
-	select {
-	case self.replica.recoverChan <- recoverStruct{epoch, ctx}:
-	default:
-	}
+	self.replica.recoverChan <- recoverStruct{epoch, nil}
 	return nil
 }
 
@@ -271,7 +274,7 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 			addr := self.leader.GetLeaderAddress()
 			key := self.leader.GetLeaderKey()
 			sidx := self.leader.GetLeaderStartIdx()
-			api.StartNewEpoch(ctx, self.leader.GetEpoch(), addr, key, sidx)
+			api.StartNewEpoch(self.leader.GetEpoch(), addr, key, sidx)
 		}(self.apis[idx])
 	}
 	time.Sleep(100 * time.Millisecond)

@@ -23,7 +23,7 @@ type State interface {
 	//snapshoting
 	Snapshot() ([]byte, error)   //crete a snapshot from current state
 	LoadSnapshot([]byte) error   //setup state according to snapshot
-	EnsureSnapshot([]byte) error //make sure this snapshot can be loaded later on
+	EnsureSnapshot([]byte) error //make sure this snapshot represents the current state
 }
 
 //Internal state store to make multiple state handling easier
@@ -74,8 +74,13 @@ func (self *stateStore) Snaphot() ([]byte, error) {
 	defer self.mutex.RUnlock()
 
 	snap := make(map[uint8][]byte, 0)
+	errs := make([]error, 0)
 	for i, state := range self.states {
-		snap[uint8(i)], _ = state.Snapshot()
+		var err error = nil
+		snap[uint8(i)], err = state.Snapshot()
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
 
 	b := new(bytes.Buffer)
@@ -83,10 +88,13 @@ func (self *stateStore) Snaphot() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(errs) != 0 {
+		return b.Bytes(), errs[0]
+	}
 	return b.Bytes(), nil
 }
 
-func (self *stateStore) LoadSnaphot(data []byte) error {
+func (self *stateStore) LoadSnapshot(data []byte) error {
 
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
@@ -219,7 +227,27 @@ func (self *testState) LoadSnapshot(cmd []byte) error {
 }
 
 func (self *testState) EnsureSnapshot(snap []byte) error {
-	//snapshot holds all required data, hence yes, we can apply it
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	value := make([]uint64, 0)
+	err := json.Unmarshal(snap, &value)
+	if err != nil {
+		return utils.StackError(err, "Unable to unmarshal snapshot")
+	}
+
+	//check if this is our current state
+	if len(value) != len(self.value) {
+		return fmt.Errorf("Length of snapshot %v does not match current state %v", len(value), len(self.value))
+	}
+
+	for i, val := range value {
+		if val != self.value[i] {
+			return fmt.Errorf("Entry %v missmatch: %v vs %v", i, val, self.value[i])
+		}
+	}
+
 	return nil
 }
 
