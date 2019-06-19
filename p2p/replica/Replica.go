@@ -67,7 +67,7 @@ func DefaultOptions() Options {
 	return Options{
 		MaxLogLength:  1000,
 		PersistentLog: false,
-		Beacon:        1 * time.Second,
+		Beacon:        5 * time.Second,
 	}
 }
 
@@ -581,7 +581,10 @@ func (self *Replica) startRequestWorkers(num int) {
 
 						if err != nil {
 							//inform the replica that it send us bogus!
-							self.transport.Send(addr, `WriteAPI`, `InvalidLogReceived`, reply.Index)
+							s_err := self.transport.Send(addr, `WriteAPI`, `InvalidLogReceived`, reply.Index)
+							if s_err != nil {
+								self.logger.Errorf("Cannot inform replica about problematic log: %v", s_err)
+							}
 
 							//push it in again for the next try
 							self.logger.Errorf("Log from request was rejected, try again: %v", err)

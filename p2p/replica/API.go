@@ -121,6 +121,7 @@ func (self *WriteAPI) InvalidLogReceived(index uint64) {
 
 	//someone informed us that one of our logs is invalid. thats bad! we need to check if we need
 	//recover!
+	self.replica.logger.Errorf("We received notice that a log was invalid: go into recover!")
 	ctx, _ := context.WithTimeout(self.replica.ctx, 1*time.Second)
 	arg := recoverStruct{0, ctx}
 

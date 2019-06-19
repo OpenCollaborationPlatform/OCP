@@ -713,28 +713,37 @@ func TestRecover(t *testing.T) {
 				//cancel timeouts and wait till all are back up
 				fmt.Printf("\n\n Call cancel! \n\n")
 				cncl()
-				time.Sleep(1000 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 				fmt.Printf("\n")
-				for _, rep := range reps {
-					rep.printStats()
-					fmt.Printf("\n")
-				}
-				compareLogs(reps)
-
-				//add a final command so that no excuses can be given
-				fmt.Printf("Add last command\n")
-				So(reps[0].AddCommand(ctx, 0, intToByte(100000)), ShouldBeNil)
-				time.Sleep(1000 * time.Millisecond)
-
-				fmt.Printf("\n")
-				for _, rep := range reps {
-					rep.printStats()
-					fmt.Printf("\n")
-				}
 				if compareLogs(reps) {
 					fmt.Println("Log stores are equal!")
+				} else {
+					for _, rep := range reps {
+						rep.printStats()
+						fmt.Printf("\n")
+					}
 				}
 
+				//add a final command so that no excuses can be given
+				//fmt.Printf("Add last command\n")
+				So(reps[0].AddCommand(ctx, 0, intToByte(100000)), ShouldBeNil)
+				time.Sleep(500 * time.Millisecond)
+
+				/*fmt.Printf("\n")
+				for _, rep := range reps {
+					rep.printStats()
+					fmt.Printf("\n")
+				}*/
+				if compareLogs(reps) {
+					fmt.Println("Log stores are equal!")
+				} else {
+					for _, rep := range reps {
+						rep.printStats()
+						fmt.Printf("\n")
+					}
+				}
+
+				So(compareLogs(reps), ShouldBeTrue)
 				So(areStatesEqual(states), ShouldBeTrue)
 			}
 
