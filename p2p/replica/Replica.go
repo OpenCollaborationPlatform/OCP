@@ -237,6 +237,7 @@ type recoverStruct struct {
 type beaconStruct struct {
 	sender Address
 	epoch  uint64
+	maxIdx uint64
 }
 
 /******************************************************************************
@@ -1153,7 +1154,8 @@ func (self *Replica) isLogstoreLegit() bool {
 
 func (self *Replica) sendBeacon() {
 
-	arg := beaconStruct{self.address, self.leaders.GetEpoch()}
+	last, _ := self.logs.LastIndex()
+	arg := beaconStruct{self.address, self.leaders.GetEpoch(), last}
 	self.transport.Send("ReadAPI", "NewBeacon", arg)
 }
 
@@ -1162,5 +1164,13 @@ func (self *Replica) processBeacon(ctx context.Context, beacon beaconStruct) {
 	if beacon.epoch != self.leaders.GetEpoch() {
 		self.logger.Info("Received beacon with different epoch!")
 		self.reassureLeader(ctx)
+	}
+
+	//maybe we missed some logs?
+	last, _ := self.logs.LastIndex()
+	if beacon.maxIdx > last {
+		for i := last; last <= beacon.maxIdx; i++ {
+			self.requestLog(i)
+		}
 	}
 }
