@@ -382,8 +382,15 @@ func (self *Replica) commitLog(log Log) error {
 	if requiredIdx == log.Index {
 
 		//commit
-		self.logs.StoreLog(log)
-		self.applyLog(log)
+		err := self.logs.StoreLog(log)
+		if err != nil {
+			self.logger.Errorf("Unable to store log: ignore it!")
+			return err
+		}
+		err = self.applyLog(log)
+		if err != nil {
+			return err
+		}
 
 		//see if we can finalize more requests (already received in the request log)
 		maxIdx := (requiredIdx + uint64(len(self.requests)))
@@ -400,8 +407,15 @@ func (self *Replica) commitLog(log Log) error {
 			//we need to verify each commit!
 			err := self.verifyLog(context.Background(), req.fetchedLog, false)
 			if err == nil {
-				self.logs.StoreLog(req.fetchedLog)
-				self.applyLog(req.fetchedLog)
+				err := self.logs.StoreLog(req.fetchedLog)
+				if err != nil {
+					self.logger.Errorf("Unable to store log: ignore it!")
+					return err
+				}
+				err = self.applyLog(req.fetchedLog)
+				if err != nil {
+					return err
+				}
 
 			} else {
 				self.logger.Errorf("A log from the requests is invalid: cannot be applied!")
@@ -500,8 +514,16 @@ func (self *Replica) forwardToSnapshot(log Log) error {
 		//we need to verify each commit!
 		err := self.verifyLog(context.Background(), req.fetchedLog, false)
 		if err == nil {
-			self.logs.StoreLog(req.fetchedLog)
-			self.applyLog(req.fetchedLog)
+			err := self.logs.StoreLog(req.fetchedLog)
+			if err != nil {
+				self.requestLog(i)
+				break
+			}
+			err = self.applyLog(req.fetchedLog)
+			if err != nil {
+				self.requestLog(i)
+				break
+			}
 
 		} else {
 			self.logger.Errorf("A log from the requests is invalid: cannot be applied!")
@@ -532,7 +554,7 @@ func (self *Replica) startRequestWorkers(num int) {
 
 				default:
 					reply := Log{}
-					reqCtx, _ := context.WithTimeout(request.ctx, 500*time.Millisecond) //we give ourself 500 milliseconds, not more
+					reqCtx, _ := context.WithTimeout(request.ctx, 700*time.Millisecond) //we give ourself 500 milliseconds, not more
 					err := self.transport.CallAny(reqCtx, `ReadAPI`, `GetLog`, request.index, &reply)
 
 					//handle the commit if we received it
@@ -590,12 +612,19 @@ func (self *Replica) requestLog(idx uint64) {
 	request := requestStruct{ctx, cncl, idx, requestState_Fetching, Log{}}
 	self.requests[idx] = request
 
-	//start the request
-	self.requestChan <- request
+	//start the request. We should not block!
+	select {
+	case self.requestChan <- request:
+	default:
+		//if not send we need to remove it from the request list
+		cncl()
+		delete(self.requests, idx)
+	}
+
 }
 
 //applie the log to the state, or to internal config if required
-func (self *Replica) applyLog(log Log) {
+func (self *Replica) applyLog(log Log) error {
 
 	switch log.Type {
 
@@ -604,24 +633,35 @@ func (self *Replica) applyLog(log Log) {
 		//make sure the snapshot is the current state...
 		err := self.states.EnsureSnapshot(log.Data)
 		if err != nil {
-			self.logger.Errorf("Ensuring snapshot failed: %v", err)
-			panic(fmt.Sprintf("%v: Snapshot cannot be ensured: what the heck?", self.name))
+			self.logger.Errorf("Ensuring snapshot failed, need to load it: %v", err)
+			err := self.states.LoadSnapshot(log.Data)
+			if err != nil {
+				self.logger.Panicf("Loading snapshot failed, don't know what to do: %v", err)
+			}
 		}
 		//start log compaction
 		err = self.logs.DeleteUpTo(log.Index)
 		if err != nil {
-			self.logger.Errorf("Deleting log range for snapshot failed: %v", err)
+			msg := fmt.Sprintf("Deleting log range for snapshot failed: %v", err)
+			self.logger.Error(msg)
+			return fmt.Errorf(msg)
 		}
 
 	default:
 		state := self.states.Get(log.Type)
 		if state != nil {
 			self.logger.Debugf("Apply log %v", log.Index)
-			state.Apply(log.Data)
+			err := state.Apply(log.Data)
+			if err != nil {
+				msg := fmt.Sprintf("Cannot apply log: %v", err)
+				self.logger.Error(msg)
+				return fmt.Errorf(msg)
+			}
 
 		} else {
-			self.logger.Error("Cannot apply command: Unknown state")
-			return
+			msg := "Cannot apply log: Unknown state"
+			self.logger.Error(msg)
+			return fmt.Errorf(msg)
 		}
 	}
 
@@ -632,6 +672,8 @@ func (self *Replica) applyLog(log Log) {
 	default:
 		break
 	}
+
+	return nil
 }
 
 //handles local commands: either process if we are leader or forward to leader.
@@ -840,8 +882,14 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 	log.Sign(self.privKey)
 
 	//store and inform
-	self.logs.StoreLog(log)
-	self.applyLog(log)
+	err = self.logs.StoreLog(log)
+	if err != nil {
+		return err
+	}
+	err = self.applyLog(log)
+	if err != nil {
+		return err
+	}
 
 	self.logger.Debugf("Send out new log")
 	err = self.transport.Send(`ReadAPI`, `NewLog`, log)
@@ -878,8 +926,14 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 		log.Sign(self.privKey)
 
 		//store and inform
-		self.logs.StoreLog(log)
-		self.applyLog(log)
+		err = self.logs.StoreLog(log)
+		if err != nil {
+			return err
+		}
+		err = self.applyLog(log)
+		if err != nil {
+			return err
+		}
 
 		self.logger.Debugf("Send out snapshopt log")
 		err = self.transport.Send(`ReadAPI`, `NewLog`, log)

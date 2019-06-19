@@ -19,7 +19,7 @@ import (
 
 func init() {
 	logging.GetSubsystems()
-	logging.SetDebugLogging()
+	//logging.SetDebugLogging()
 }
 
 func setupReplicas(num uint, name string) ([]*Replica, error) {

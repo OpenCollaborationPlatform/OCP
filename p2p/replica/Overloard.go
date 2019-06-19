@@ -121,32 +121,42 @@ func (self *OverloardAPI) StartNewEpoch(epoch uint64, leader Address, key crypto
 		return nil
 	}
 
-	//if we have the previous epoch and the last log complies to the change we ca
-	//simply add the new one (no recovery needed)
+	//check if we can add directly or if we need recover!
+	add := false
 	if (epoch == 0 && self.replica.leaders.EpochCount() == 0) ||
 		(epoch != 0) && self.replica.leaders.HasEpoch(epoch-1) {
 
 		log, err := self.replica.logs.GetLatestLog()
-		if ((err == nil) && (log.Epoch == epoch-1)) ||
-			IsNoEntryError(err) {
+		if err != nil {
+			add = false
 
-			err := self.replica.leaders.AddEpoch(epoch, leader, key, startIdx)
-			if err != nil {
-				self.replica.logger.Errorf("Unable to add new epoch: %v", err)
-				return err
-			}
-			err = self.replica.leaders.SetEpoch(epoch)
-			if err != nil {
-				self.replica.logger.Errorf("Unable to set new epoch: %v", err)
-				return err
-			}
-			return nil
+		} else if IsNoEntryError(err) {
+			add = true
+
+		} else if (log.Epoch == epoch-1) && (log.Index == startIdx-1) {
+			add = true
 		}
 	}
 
-	//it seems something is wrong... start recovery!
-	//--> not blocking, as it can sync with AddCommand if it requests a new leader which becomes the node itself
-	self.replica.recoverChan <- recoverStruct{epoch, nil}
+	if add {
+		err := self.replica.leaders.AddEpoch(epoch, leader, key, startIdx)
+		if err != nil {
+			self.replica.logger.Errorf("Unable to add new epoch: %v", err)
+			return err
+		}
+		err = self.replica.leaders.SetEpoch(epoch)
+		if err != nil {
+			self.replica.logger.Errorf("Unable to set new epoch: %v", err)
+			return err
+		}
+		return nil
+
+	} else {
+
+		//it seems something is wrong... start recovery!
+		//--> not blocking, as it can sync with AddCommand if it requests a new leader which becomes the node itself
+		self.replica.recoverChan <- recoverStruct{epoch, nil}
+	}
 	return nil
 }
 
