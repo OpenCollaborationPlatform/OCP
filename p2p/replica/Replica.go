@@ -295,16 +295,11 @@ loop:
 			ctx, _ := context.WithTimeout(self.ctx, timeout)
 			self.processBeacon(ctx, beacon)
 		}
-
-		//after each change the store should be legit!
-		if !self.isLogstoreLegit() {
-			panic(fmt.Sprintf("Store of %v not legit", self.name))
-		}
 	}
 
 	beaconTicker.Stop() //stop ticker
 	//wait a bit till the context has closed all goroutines
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	close(self.requestChan) //stop request workers
 
 	self.logger.Debug("Shutdown run loop")

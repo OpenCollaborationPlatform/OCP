@@ -256,7 +256,7 @@ func randomReplicaTimeouts(ctx context.Context, reps []*Replica, maxTimeout time
 /******************************************************************************
 							start tests
 ******************************************************************************/
-/*
+
 func TestReplicaCommit(t *testing.T) {
 
 	num := 3
@@ -622,7 +622,7 @@ func TestSnapshot(t *testing.T) {
 
 	})
 }
-*/
+
 func TestRecover(t *testing.T) {
 
 	Convey("Setting up 3 replicas", t, func() {
