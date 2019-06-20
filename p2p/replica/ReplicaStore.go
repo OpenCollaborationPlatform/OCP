@@ -14,6 +14,25 @@ type replicaStore struct {
 	mutex sync.RWMutex
 }
 
+//creates a replica store. If path is empty a memory store is created, otherwise
+//a persistent store
+func newReplicaStore(path, name string) (replicaStore, error) {
+
+	var log logStore
+	if path == "" {
+		log = newMemoryLogStore()
+	} else {
+		var err error
+		log, err = newPersistentLogStore(path, name)
+		if err != nil {
+			return replicaStore{}, utils.StackError(err, "Unable to create replica store")
+		}
+	}
+	state := newStateStore()
+
+	return replicaStore{log, state, sync.RWMutex{}}, nil
+}
+
 func (self *replicaStore) Close() error {
 	return self.logs.Close()
 }
@@ -111,6 +130,7 @@ func (self *replicaStore) ApplyLog(log Log, ret chan uint64) error {
 		if err != nil {
 			err := self.state.LoadSnapshot(log.Data)
 			if err != nil {
+				self.alignStatesToLog() //make sure everything is still aligned
 				return utils.StackError(err, "Unable to apply snapshot log")
 			}
 		}
@@ -126,6 +146,7 @@ func (self *replicaStore) ApplyLog(log Log, ret chan uint64) error {
 		if state != nil {
 			err := state.Apply(log.Data)
 			if err != nil {
+				self.alignStatesToLog() //make sure everything is still aligned
 				return utils.StackError(err, "Cannot apply log")
 			}
 
@@ -137,7 +158,8 @@ func (self *replicaStore) ApplyLog(log Log, ret chan uint64) error {
 	//store the log
 	err = self.logs.StoreLog(log)
 	if err != nil {
-		return utils.StackError(err, "Unable to store snapshot log")
+		self.alignStatesToLog() //make sure everything is still aligned
+		return utils.StackError(err, "Unable to store log")
 	}
 
 	//inform (but do not block if no-one listens)
@@ -176,18 +198,21 @@ func (self *replicaStore) ForwardToSnapshot(log Log, ret chan uint64) error {
 	//load the snapshot
 	err = self.state.LoadSnapshot(log.Data)
 	if err != nil {
+		self.alignStatesToLog() //make sure store is consistent
 		return utils.StackError(err, "Unable to apply snapshot log")
 	}
 
 	//start log compaction. Everything except the snapshot must go
 	err = self.logs.Clear()
 	if err != nil {
+		self.alignStatesToLog() //make sure store is consistent
 		return utils.StackError(err, "Deleting log range for snapshot failed")
 	}
 
 	//store the log
 	err = self.logs.StoreLog(log)
 	if err != nil {
+		self.alignStatesToLog() //make sure store is consistent
 		return utils.StackError(err, "Unable to store snapshot log")
 	}
 
@@ -251,7 +276,11 @@ func (self *replicaStore) AlignToLeaders(leader *leaderStore) (bool, error) {
 	}
 
 	//check if we have a snapshot in the beginning of our history
-	snap, _ := self.logs.GetLog(first)
+	log, _ := self.logs.GetLog(first)
+	var snap Log
+	if log.Type == logType_Snapshot {
+		snap = log
+	}
 
 	//if we do not have a snapshot to recover from we need to start all over
 	if !snap.IsValid() {
@@ -272,4 +301,78 @@ func (self *replicaStore) AlignToLeaders(leader *leaderStore) (bool, error) {
 	}
 
 	return true, err
+}
+
+//this is a recovery function: it resets the states to the logs
+//should only be called when something went wrong with applying logs to
+//states or storing logs... Pure internal function! Hence no locking!
+//--> Do not call from outside the store!
+func (self *replicaStore) alignStatesToLog() {
+
+	first, err := self.logs.FirstIndex()
+	if IsNoEntryError(err) {
+		//nothing to align for zero logs
+		return
+	} else if err != nil {
+		//TODO: replcae panic with some serious error handling
+		panic("Unable to align states to log")
+	}
+
+	//reset state if there is no snapshot
+	if log, err := self.logs.GetLog(first); err == nil {
+		if log.Type != logType_Snapshot {
+			self.state.Reset()
+		}
+	} else {
+		//TODO: replcae panic with some serious error handling
+		panic("Unable to align states to log")
+	}
+
+	//apply all logs
+	last, _ := self.logs.LastIndex()
+	for i := first; i <= last; i-- {
+		log, err := self.logs.GetLog(i)
+		if err != nil {
+			//TODO: replcae panic with some serious error handling
+			panic("Unable to align states to log")
+		}
+
+		if log.Type == logType_Snapshot {
+
+			self.state.LoadSnapshot(log.Data)
+
+		} else {
+			state := self.state.Get(log.Type)
+			if state == nil {
+				//TODO: replcae panic with some serious error handling
+				panic("Unable to align states to log")
+			}
+			state.Apply(log.Data)
+		}
+	}
+}
+
+func (self *replicaStore) Equals(others []*replicaStore) bool {
+
+	//lock all for comparison
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	for _, store := range others {
+		store.mutex.RLock()
+		defer store.mutex.RUnlock()
+	}
+
+	//compare
+	for _, rep := range others {
+
+		if !self.logs.Equals(rep.logs) {
+			return false
+		}
+		if !self.state.Equals(&rep.state) {
+			return false
+		}
+	}
+
+	return true
 }

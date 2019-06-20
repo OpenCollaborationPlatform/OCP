@@ -27,12 +27,12 @@ func (self *ReadAPI) GetLog(ctx context.Context, idx uint64, result *Log) error 
 	self.replica.logger.Debugf("Asked for log %v", idx)
 
 	//should we go for the snapshot?
-	first, err := self.replica.logs.FirstIndex()
+	first, err := self.replica.store.FirstIndex()
 	if err != nil {
 		return err
 	}
 	if first != 0 && first >= idx {
-		snap, err := self.replica.logs.GetLog(first)
+		snap, err := self.replica.store.GetLog(first)
 		if err != nil {
 			return err
 		}
@@ -41,7 +41,7 @@ func (self *ReadAPI) GetLog(ctx context.Context, idx uint64, result *Log) error 
 	}
 
 	//check if the replica has the required log
-	log, err := self.replica.logs.GetLog(idx)
+	log, err := self.replica.store.GetLog(idx)
 
 	if err != nil {
 		return utils.StackError(err, "Log not available")
@@ -57,12 +57,12 @@ func (self *ReadAPI) GetNewestLog(ctx context.Context, empty struct{}, result *L
 	self.replica.logger.Debugf("Asked for newest log")
 
 	//check if the replica has the required log (logstore is threadsafe)
-	last, err := self.replica.logs.LastIndex()
+	last, err := self.replica.store.LastIndex()
 	if err != nil {
 		return utils.StackError(err, "Logs cannot be accessed")
 	}
 
-	log, err := self.replica.logs.GetLog(last)
+	log, err := self.replica.store.GetLog(last)
 	if err != nil {
 		return utils.StackError(err, "Log not available")
 	}

@@ -56,7 +56,7 @@ type OverloardAPI struct {
 func (self *OverloardAPI) GetHighestLogIndex(ctx context.Context, result *uint64) error {
 
 	//logstore is threadsafe
-	idx, err := self.replica.logs.LastIndex()
+	idx, err := self.replica.store.LastIndex()
 	if err != nil {
 
 		*result = 0
@@ -83,7 +83,7 @@ func (self *OverloardAPI) SetAsLeader(ctx context.Context, epoch uint64, idx uin
 	if (epoch == 0 && self.replica.leaders.EpochCount() == 0) ||
 		(epoch != 0) && self.replica.leaders.HasEpoch(epoch-1) {
 
-		log, err := self.replica.logs.GetLatestLog()
+		log, err := self.replica.store.GetLatestLog()
 		if ((err == nil) && (log.Epoch == epoch-1)) ||
 			IsNoEntryError(err) {
 
@@ -126,7 +126,7 @@ func (self *OverloardAPI) StartNewEpoch(epoch uint64, leader Address, key crypto
 	if (epoch == 0 && self.replica.leaders.EpochCount() == 0) ||
 		(epoch != 0) && self.replica.leaders.HasEpoch(epoch-1) {
 
-		log, err := self.replica.logs.GetLatestLog()
+		log, err := self.replica.store.GetLatestLog()
 		if err != nil {
 			add = false
 

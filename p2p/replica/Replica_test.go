@@ -123,22 +123,15 @@ func areStatesEqual(st []*testState) bool {
 	return true
 }
 
-func compareLogs(reps []*Replica) bool {
+func compareStores(reps []*Replica) bool {
 
-	for i := 0; i < (len(reps) - 1); i++ {
+	stores := make([]*replicaStore, 0)
+	for i := 1; i < len(reps); i++ {
 
-		for j := i + 1; j < len(reps); j++ {
-
-			ilog := reps[i].logs.(*memoryLogStore)
-			jlog := reps[j].logs.(*memoryLogStore)
-
-			if !ilog.Compare(jlog) {
-				fmt.Printf("Logstore %v failed equality with Logstore %v\n", i, j)
-				return false
-			}
-		}
+		stores = append(stores, &reps[i].store)
 	}
-	return true
+
+	return reps[0].store.Equals(stores)
 }
 
 //shutdown a single replica and returns all reachable ones.
@@ -600,8 +593,8 @@ func TestSnapshot(t *testing.T) {
 			Convey("should leaf 2 logs in the store,", func() {
 
 				for _, rep := range reps {
-					first, _ := rep.logs.FirstIndex()
-					last, _ := rep.logs.LastIndex()
+					first, _ := rep.store.FirstIndex()
+					last, _ := rep.store.LastIndex()
 
 					So(first, ShouldEqual, 11)
 					So(last, ShouldEqual, 12)
@@ -611,8 +604,8 @@ func TestSnapshot(t *testing.T) {
 			Convey("with the first being the snapshot log", func() {
 
 				for _, rep := range reps {
-					first, _ := rep.logs.FirstIndex()
-					log, err := rep.logs.GetLog(first)
+					first, _ := rep.store.FirstIndex()
+					log, err := rep.store.GetLog(first)
 					So(err, ShouldBeNil)
 					So(log.Type, ShouldEqual, logType_Snapshot)
 				}
@@ -710,41 +703,37 @@ func TestRecover(t *testing.T) {
 					reps[idx].AddCommand(ctx, 0, cmd)
 				}
 
-				//cancel timeouts and wait till all are back up
+				//cancel timeouts and wait till all are back up and a beacon was send
 				fmt.Printf("\n\n Call cancel! \n\n")
 				cncl()
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(1500 * time.Millisecond)
 				fmt.Printf("\n")
-				if compareLogs(reps) {
-					fmt.Println("Log stores are equal!")
+				if compareStores(reps) {
+					fmt.Println("Replica stores are equal")
 				} else {
+					fmt.Println("Replica stores NOT equal")
 					for _, rep := range reps {
 						rep.printStats()
 						fmt.Printf("\n")
 					}
 				}
 
-				//add a final command so that no excuses can be given
-				//fmt.Printf("Add last command\n")
-				So(reps[0].AddCommand(ctx, 0, intToByte(100000)), ShouldBeNil)
-				time.Sleep(500 * time.Millisecond)
+				/*		//add a final command so that no excuses can be given
+						//fmt.Printf("Add last command\n")
+						So(reps[0].AddCommand(ctx, 0, intToByte(100000)), ShouldBeNil)
+						time.Sleep(500 * time.Millisecond)
 
-				/*fmt.Printf("\n")
-				for _, rep := range reps {
-					rep.printStats()
-					fmt.Printf("\n")
-				}*/
-				if compareLogs(reps) {
-					fmt.Println("Log stores are equal!")
-				} else {
-					for _, rep := range reps {
-						rep.printStats()
-						fmt.Printf("\n")
-					}
-				}
+						if compareStores(reps) {
+							fmt.Println("Replica stores are equal after last commit!")
+						} else {
+							fmt.Println("Replica stores NOT equal after last commit!")
+							for _, rep := range reps {
+								rep.printStats()
+								fmt.Printf("\n")
+							}
+						}*/
 
-				So(compareLogs(reps), ShouldBeTrue)
-				So(areStatesEqual(states), ShouldBeTrue)
+				So(compareStores(reps), ShouldBeTrue)
 			}
 
 			Convey("all replicas should have the same commits,", func() {
@@ -753,7 +742,7 @@ func TestRecover(t *testing.T) {
 					fmt.Printf("\nState %v has length %v\n", i, state.EntryCount())
 				}
 
-				So(areStatesEqual(states), ShouldBeTrue)
+				So(compareStores(reps), ShouldBeTrue)
 			})
 		})
 

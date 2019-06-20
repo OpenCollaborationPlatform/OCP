@@ -111,7 +111,7 @@ func (self *stateStore) LoadSnapshot(data []byte) error {
 	for i, state := range self.states {
 		err := state.LoadSnapshot(snap[uint8(i)])
 		if err != nil {
-			errs = append(errs, utils.StackError(err, "Unable to load snapshot for state %v"))
+			errs = append(errs, utils.StackError(err, "Unable to load snapshot for state %v", i))
 		}
 	}
 
@@ -165,6 +165,35 @@ func (self *stateStore) Reset() error {
 		return errs[0]
 	}
 	return nil
+}
+
+func (self *stateStore) Equals(other *stateStore) bool {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	other.mutex.RLock()
+	defer other.mutex.RUnlock()
+
+	if len(self.states) != len(other.states) {
+		return false
+	}
+
+	for i, state := range self.states {
+
+		snap1, err := state.Snapshot()
+		if err != nil {
+			return false
+		}
+		snap2, err := other.states[i].Snapshot()
+		if err != nil {
+			return false
+		}
+		if !bytes.Equal(snap1, snap2) {
+			return false
+		}
+	}
+	return true
 }
 
 //a simple state for testing. This one must be thread safe (in contrast to real states) as

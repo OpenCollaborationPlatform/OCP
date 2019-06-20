@@ -44,6 +44,7 @@ type logStore interface {
 	DeleteUpTo(idx uint64) error
 	DeleteUpFrom(idx uint64) error
 	Clear() error
+	Equals(logStore) bool
 }
 
 type memoryLogStore struct {
@@ -193,7 +194,13 @@ func (self *memoryLogStore) Clear() error {
 	return nil
 }
 
-func (self *memoryLogStore) Compare(other *memoryLogStore) bool {
+func (self *memoryLogStore) Equals(store logStore) bool {
+
+	other, ok := store.(*memoryLogStore)
+	if !ok {
+		//cannot compare to non-memory logstores
+		return false
+	}
 
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
@@ -453,6 +460,12 @@ func (self *persistentLogStore) Clear() error {
 	}
 
 	return tx.Commit()
+}
+
+func (self *persistentLogStore) Equals(store logStore) bool {
+
+	//not implemented (not needed for tests)
+	return false
 }
 
 // Converts bytes to an integer

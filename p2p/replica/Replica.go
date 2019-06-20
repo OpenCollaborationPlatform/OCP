@@ -67,7 +67,7 @@ func DefaultOptions() Options {
 	return Options{
 		MaxLogLength:  1000,
 		PersistentLog: false,
-		Beacon:        5 * time.Second,
+		Beacon:        1 * time.Second,
 	}
 }
 
@@ -87,8 +87,7 @@ type Replica struct {
 	leaders  leaderStore
 
 	//user state handling
-	states stateStore
-	logs   logStore
+	store replicaStore
 
 	//syncronizing via channels
 	ctx         context.Context
@@ -105,18 +104,18 @@ func NewReplica(name string, addr Address, trans Transport, ol Overlord,
 	priv crypto.RsaPrivateKey, pub crypto.RsaPublicKey, opts Options) (*Replica, error) {
 
 	//create new logStore for this state
-	var store logStore
+	var store replicaStore
 	if opts.PersistentLog {
 		if opts.PersistencePath == "" {
 			return nil, fmt.Errorf("Persistent log required, but not persistance path provided")
 		}
 		var err error
-		store, err = newPersistentLogStore(opts.PersistencePath, name)
+		store, err = newReplicaStore(opts.PersistencePath, name)
 		if err != nil {
 			return nil, utils.StackError(err, "Cannot create replica")
 		}
 	} else {
-		store = newMemoryLogStore()
+		store, _ = newReplicaStore("", "")
 	}
 
 	//setup the main context
@@ -135,8 +134,7 @@ func NewReplica(name string, addr Address, trans Transport, ol Overlord,
 		beaconChan:  make(chan beaconStruct),
 		requestChan: make(chan requestStruct, opts.MaxLogLength*3),
 		appliedChan: make(chan uint64, 100),
-		states:      newStateStore(),
-		logs:        store,
+		store:       store,
 		name:        name,
 		privKey:     priv,
 		pubKey:      pub,
@@ -165,12 +163,11 @@ func (self *Replica) Start() {
 
 func (self *Replica) Stop() {
 	self.cncl()
-	self.logs.Clear()
-	self.logs.Close()
+	self.store.Close()
 }
 
 func (self *Replica) AddState(s State) uint8 {
-	return self.states.Add(s)
+	return self.store.Add(s)
 }
 
 func (self *Replica) AddCommand(ctx context.Context, state uint8, cmd []byte) error {
@@ -279,7 +276,7 @@ loop:
 			if err != nil {
 				break
 			}
-			self.recoverIfNeeded()
+			self.store.AlignToLeaders(&self.leaders)
 
 		case <-beaconTicker.C:
 			//if we are leader we need to make sure to emit our beacon
@@ -313,8 +310,8 @@ func (self *Replica) printStats() {
 	fmt.Printf("Current epoch is %v with leader %v (start index %v)\n",
 		self.leaders.GetEpoch(), self.leaders.GetLeaderAddress(), self.leaders.GetLeaderStartIdx())
 
-	first, _ := self.logs.FirstIndex()
-	last, _ := self.logs.LastIndex()
+	first, _ := self.store.FirstIndex()
+	last, _ := self.store.LastIndex()
 	fmt.Printf("logs from %v to %v commited:\n", first, last)
 	fmt.Printf("%v logs is request\n", len(self.requests))
 }
@@ -332,7 +329,7 @@ func (self *Replica) commitLog(log Log) error {
 	}
 
 	//check the required next index
-	prev, err := self.logs.LastIndex()
+	prev, err := self.store.LastIndex()
 	var requiredIdx uint64
 	if err == nil {
 		requiredIdx = prev + 1
@@ -378,13 +375,10 @@ func (self *Replica) commitLog(log Log) error {
 	if requiredIdx == log.Index {
 
 		//commit
-		err := self.logs.StoreLog(log)
+		self.logger.Debugf("Apply log %v", log.Index)
+		err := self.store.ApplyLog(log, self.appliedChan)
 		if err != nil {
-			self.logger.Errorf("Unable to store log: ignore it!")
-			return err
-		}
-		err = self.applyLog(log)
-		if err != nil {
+			self.logger.Errorf("Unable to apply log, ignore it: %v", err)
 			return err
 		}
 
@@ -403,13 +397,10 @@ func (self *Replica) commitLog(log Log) error {
 			//we need to verify each commit!
 			err := self.verifyLog(context.Background(), req.fetchedLog, false)
 			if err == nil {
-				err := self.logs.StoreLog(req.fetchedLog)
+				self.logger.Debugf("Apply log %v from requests", log.Index)
+				err := self.store.ApplyLog(req.fetchedLog, self.appliedChan)
 				if err != nil {
-					self.logger.Errorf("Unable to store log: ignore it!")
-					return err
-				}
-				err = self.applyLog(req.fetchedLog)
-				if err != nil {
+					self.logger.Errorf("Unable to apply log, ignore it: %v", err)
 					return err
 				}
 
@@ -453,21 +444,6 @@ func (self *Replica) forwardToSnapshot(log Log) error {
 		return fmt.Errorf(msg)
 	}
 
-	//first check if forward is possible: it is not if there are higher logs already
-	latest, err := self.logs.LastIndex()
-	if err != nil && !IsNoEntryError(err) {
-		msg := "Cannot forward to snapshot: logstore not acceessbile"
-		self.logger.Errorf(msg)
-		return fmt.Errorf(msg)
-	}
-	if latest >= log.Index {
-		msg := "Cannot forward to snapshot: higher index logs available"
-		self.logger.Errorf(msg)
-		return fmt.Errorf(msg)
-	}
-
-	self.logger.Infof("Forward to snapshot %v from log %v", log.Index, latest)
-
 	//cancel all requests that are bevore the snapshot: don't need them anymore
 	for idx, request := range self.requests {
 		if idx <= log.Index {
@@ -478,22 +454,12 @@ func (self *Replica) forwardToSnapshot(log Log) error {
 		}
 	}
 
-	first, _ := self.logs.FirstIndex()
-
-	//store and apply. in this case it is ok to add a log with a gap to the last
-	//index, as all logs bevore the snapshot get deleted in applylog
-	//Note: apply does only ensure the snapshot is ok. But we skipped logs in forwarding,
-	//hence we definitely need to load the snapshot!
-	self.logs.StoreLog(log)
-	err = self.states.LoadSnapshot(log.Data)
+	//forward store to the snapshot!
+	err := self.store.ForwardToSnapshot(log, self.appliedChan)
 	if err != nil {
-		self.logger.Errorf("Loading snapshot failed: %v", err)
+		self.logger.Errorf("Unable to forward to snapshot: %v", err)
+		return err
 	}
-	self.applyLog(log)
-
-	newfirst, _ := self.logs.FirstIndex()
-	newlast, _ := self.logs.LastIndex()
-	self.logger.Debugf("Forwarded from %v-%v to %v-%v", first, latest, newfirst, newlast)
 
 	//check if we have some finished requests that can be commited now
 	maxIdx := (log.Index + uint64(len(self.requests)))
@@ -510,12 +476,7 @@ func (self *Replica) forwardToSnapshot(log Log) error {
 		//we need to verify each commit!
 		err := self.verifyLog(context.Background(), req.fetchedLog, false)
 		if err == nil {
-			err := self.logs.StoreLog(req.fetchedLog)
-			if err != nil {
-				self.requestLog(i)
-				break
-			}
-			err = self.applyLog(req.fetchedLog)
+			err := self.store.ApplyLog(req.fetchedLog, self.appliedChan)
 			if err != nil {
 				self.requestLog(i)
 				break
@@ -723,7 +684,7 @@ func (self *Replica) ensureLeader(ctx context.Context) error {
 		self.leaders.SetEpoch(epoch)
 
 		//a new epoch may have resulted in a bad log store
-		_, err = self.recoverIfNeeded()
+		_, err = self.store.AlignToLeaders(&self.leaders)
 		return err
 	}
 	return nil
@@ -776,7 +737,10 @@ func (self *Replica) reassureLeader(ctx context.Context) error {
 	self.leaders.SetEpoch(epoch)
 
 	//leader data change may have led to invalid logs in the store
-	_, err = self.recoverIfNeeded()
+	aligned, err := self.store.AlignToLeaders(&self.leaders)
+	if err == nil && aligned {
+		self.logger.Info("Replica store was aligned to new leader information")
+	}
 
 	return err
 }
@@ -809,7 +773,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 
 	//fetch some infos
 	var idx uint64
-	last, err := self.logs.LastIndex()
+	last, err := self.store.LastIndex()
 	if err == nil {
 		idx = last + 1
 
@@ -831,11 +795,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 	log.Sign(self.privKey)
 
 	//store and inform
-	err = self.logs.StoreLog(log)
-	if err != nil {
-		return err
-	}
-	err = self.applyLog(log)
+	err = self.store.ApplyLog(log, self.appliedChan)
 	if err != nil {
 		return err
 	}
@@ -848,11 +808,11 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 	}
 
 	//check if we need to snapshot
-	first, err := self.logs.FirstIndex()
+	first, err := self.store.FirstIndex()
 	if err != nil {
 		self.logger.Errorf("Snapshoting cannot be done: %v", err)
 	}
-	last, err = self.logs.LastIndex()
+	last, err = self.store.LastIndex()
 	if err != nil {
 		self.logger.Errorf("Snapshoting cannot be done: %v", err)
 	}
@@ -860,7 +820,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 		self.logger.Debugf("Snapshot needed for log compaction (%v to %v, max length %v)", first, last, self.options.MaxLogLength)
 
 		//lets do a snapshot!
-		data, err := self.states.Snaphot()
+		data, err := self.store.Snaphot()
 		if err != nil {
 			self.logger.Errorf("Snapshoting failed: %v", err)
 			return err
@@ -875,11 +835,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 		log.Sign(self.privKey)
 
 		//store and inform
-		err = self.logs.StoreLog(log)
-		if err != nil {
-			return err
-		}
-		err = self.applyLog(log)
+		err = self.store.ApplyLog(log, self.appliedChan)
 		if err != nil {
 			return err
 		}
@@ -966,103 +922,9 @@ func (self *Replica) verifyLog(ctx context.Context, log Log, fetch bool) error {
 	return nil
 }
 
-//ensures that our logs and states match with the epoch data we have
-//  - It removes all commited logs that are not valid according to leader data
-//  - It rewinds the states to represent the new log state
-//  - Note: it requires the leader state up to date, it does not fetch it again!
-//  - returns true if something was changed
-func (self *Replica) recoverIfNeeded() (bool, error) {
-
-	//find the last valid log. We only check epoch start and end index, as all other
-	//verifications have been done in the commit already
-	last, err := self.logs.LastIndex()
-	if IsNoEntryError(err) {
-		//nothing to recover for zero entries
-		return false, nil
-	}
-	first, _ := self.logs.FirstIndex()
-	var validLog Log
-	removeIdx := last + 1
-	for i := last; (i >= first) && (i != math.MaxUint64); i-- {
-		log, _ := self.logs.GetLog(i)
-
-		//if we are below the epoch start it must be deleted (unlikely, as this would have
-		//been captured during verify in commit. But better double check)
-		start, _ := self.leaders.GetLeaderStartIdxForEpoch(log.Epoch)
-		if log.Index < start {
-			removeIdx = log.Index
-			continue
-		}
-
-		//check if threre is a newer epoch which was made known to us after commiting
-		//the log (the realistic scenario for a recover)
-		if self.leaders.HasEpoch(log.Epoch + 1) {
-			end, _ := self.leaders.GetLeaderStartIdxForEpoch(log.Epoch + 1)
-			if log.Index >= end {
-				removeIdx = log.Index
-				continue
-			}
-		}
-
-		//when reached this position we found a valid log. hence all others are valid
-		//too.
-		validLog = log
-		break
-	}
-
-	//maybe we do not need to change anything?
-	if validLog.IsValid() && validLog.Index == last {
-		return false, nil
-	}
-
-	self.logger.Infof("Start recover process: Last valid log is %v (highest log is %v, lowest %v)", validLog.Index, last, first)
-
-	//we need to recover... stop all request for now
-	for _, req := range self.requests {
-		if req.cncl != nil {
-			req.cncl()
-		}
-	}
-	self.requests = make(map[uint64]requestStruct, 0)
-
-	//check if we have a snapshot somewhere in our history we can recover from
-	var snap Log
-	for i := first; i < removeIdx; i++ {
-		log, _ := self.logs.GetLog(i)
-		if log.Type == logType_Snapshot {
-			snap = log
-			break
-		}
-	}
-
-	//if we do not have a single valid log or no snapshor to recover from we need to start all over
-	if !validLog.IsValid() || !snap.IsValid() {
-		if !validLog.IsValid() {
-			self.logger.Debug("No valid log available: clear all logs and states")
-		} else {
-			self.logger.Debug("No snapshot available: clear all logs and states")
-		}
-		self.logs.Clear()
-		self.states.Reset()
-
-	} else {
-		//otherwise we recover from snapshot
-
-		self.logger.Debugf("Snapshot available: recover from %v", snap.Index)
-		self.logs.DeleteUpFrom(snap.Index)
-		err := self.states.LoadSnapshot(snap.Data)
-		if err != nil {
-			self.logger.Errorf("Unable to load snapshot: %v", err)
-			return true, err
-		}
-	}
-
-	return true, err
-}
-
 func (self *Replica) isLogstoreLegit() bool {
 
-	last, err := self.logs.LastIndex()
+	last, err := self.store.LastIndex()
 	if IsNoEntryError(err) {
 		//nothing in it is legit
 		return true
@@ -1070,10 +932,10 @@ func (self *Replica) isLogstoreLegit() bool {
 		return false
 	}
 
-	first, _ := self.logs.FirstIndex()
+	first, _ := self.store.FirstIndex()
 
 	for i := first; i <= last; i++ {
-		log, err := self.logs.GetLog(i)
+		log, err := self.store.GetLog(i)
 		if err != nil {
 			return false
 		}
@@ -1102,7 +964,7 @@ func (self *Replica) isLogstoreLegit() bool {
 
 func (self *Replica) sendBeacon() {
 
-	last, _ := self.logs.LastIndex()
+	last, _ := self.store.LastIndex()
 	arg := beaconStruct{self.address, self.leaders.GetEpoch(), last}
 	self.transport.SendAll("WriteAPI", "NewBeacon", arg)
 }
@@ -1115,7 +977,7 @@ func (self *Replica) processBeacon(ctx context.Context, beacon beaconStruct) {
 	}
 
 	//maybe we missed some logs?
-	last, err := self.logs.LastIndex()
+	last, err := self.store.LastIndex()
 	if err == nil && beacon.maxIdx > last {
 		for i := last; i <= beacon.maxIdx; i++ {
 			self.requestLog(i)
