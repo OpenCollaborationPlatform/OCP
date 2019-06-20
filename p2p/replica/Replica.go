@@ -625,59 +625,6 @@ func (self *Replica) requestLog(idx uint64) {
 
 }
 
-//applie the log to the state, or to internal config if required
-func (self *Replica) applyLog(log Log) error {
-
-	switch log.Type {
-
-	case logType_Snapshot:
-		self.logger.Debugf("Apply snapshot %v", log.Index)
-		//make sure the snapshot is the current state...
-		err := self.states.EnsureSnapshot(log.Data)
-		if err != nil {
-			self.logger.Errorf("Ensuring snapshot failed, need to load it: %v", err)
-			err := self.states.LoadSnapshot(log.Data)
-			if err != nil {
-				self.logger.Panicf("Loading snapshot failed, don't know what to do: %v", err)
-			}
-		}
-		//start log compaction
-		err = self.logs.DeleteUpTo(log.Index)
-		if err != nil {
-			msg := fmt.Sprintf("Deleting log range for snapshot failed: %v", err)
-			self.logger.Error(msg)
-			return fmt.Errorf(msg)
-		}
-
-	default:
-		state := self.states.Get(log.Type)
-		if state != nil {
-			self.logger.Debugf("Apply log %v", log.Index)
-			err := state.Apply(log.Data)
-			if err != nil {
-				msg := fmt.Sprintf("Cannot apply log: %v", err)
-				self.logger.Error(msg)
-				return fmt.Errorf(msg)
-			}
-
-		} else {
-			msg := "Cannot apply log: Unknown state"
-			self.logger.Error(msg)
-			return fmt.Errorf(msg)
-		}
-	}
-
-	//inform (but do not block if no-one listens)
-	select {
-	case self.appliedChan <- log.Index:
-		break
-	default:
-		break
-	}
-
-	return nil
-}
-
 //handles local commands: either process if we are leader or forward to leader.
 //do not use for remote requests, as this can go into deadlook if some replica adresses the wrong leader
 func (self *Replica) newCommand(ctx context.Context, cmd []byte, state uint8) error {

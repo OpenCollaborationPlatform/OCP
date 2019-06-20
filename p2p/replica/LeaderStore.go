@@ -30,6 +30,11 @@ func (self *leaderStore) HasEpoch(epoch uint64) bool {
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
 
+	return self.LockedHasEpoch(epoch)
+}
+
+func (self *leaderStore) LockedHasEpoch(epoch uint64) bool {
+
 	_, has := self.adress[epoch]
 	return has
 }
@@ -104,6 +109,11 @@ func (self *leaderStore) GetLeaderStartIdxForEpoch(epoch uint64) (uint64, error)
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
 
+	return self.LockedGetLeaderStartIdxForEpoch(epoch)
+}
+
+func (self *leaderStore) LockedGetLeaderStartIdxForEpoch(epoch uint64) (uint64, error) {
+
 	idx, ok := self.startIdx[epoch]
 	if !ok {
 		return 0, fmt.Errorf("Epoch is unknown")
@@ -152,4 +162,12 @@ func (self *leaderStore) SetEpoch(epoch uint64) error {
 
 	self.current = epoch
 	return nil
+}
+
+func (self *leaderStore) RLock() {
+	self.mutex.RLock()
+}
+
+func (self *leaderStore) RUnlock() {
+	self.mutex.RUnlock()
 }
