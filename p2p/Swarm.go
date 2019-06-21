@@ -61,7 +61,7 @@ func (id SwarmID) Pretty() string {
 }
 
 //not accassible outside the package: should be used via Host only
-func newSwarm(host *Host, id SwarmID) *Swarm {
+func newSwarm(host *Host, id SwarmID, overlord Overlord) *Swarm {
 
 	//the context to use for all goroutines
 	ctx, cancel := context.WithCancel(context.Background())
@@ -77,7 +77,7 @@ func newSwarm(host *Host, id SwarmID) *Swarm {
 	//build the services
 	swarm.Rpc = newSwarmRpcService(swarm)
 	swarm.Event = newSwarmEventService(swarm)
-	swarm.State = newSharedStateService(swarm)
+	swarm.State = newSharedStateService(swarm, overlord)
 	swarm.Data = newSwarmDataService(swarm)
 
 	//ensure our folder exist
@@ -116,6 +116,37 @@ func (s *Swarm) HasPeer(peer PeerID) bool {
 	defer s.peerLock.RUnlock()
 	_, has := s.peers[peer]
 	return has
+}
+
+//returns all peers with the given or higher auth state.
+//E.g. AUTH_READONLY returns all peers with read only as well as read write auth
+//If you want all peers use AUTH_NONE
+func (s *Swarm) GetPeers(state AUTH_STATE) []PeerID {
+
+	s.peerLock.RLock()
+	defer s.peerLock.RUnlock()
+
+	result := make([]PeerID, 0)
+	for peer, auth := range s.peers {
+
+		switch state {
+
+		case AUTH_NONE:
+			result = append(result, peer)
+
+		case AUTH_READONLY:
+			if auth != AUTH_NONE {
+				result = append(result, peer)
+			}
+
+		case AUTH_READWRITE:
+			if auth == AUTH_READWRITE {
+				result = append(result, peer)
+			}
+		}
+	}
+
+	return result
 }
 
 func (self *Swarm) PeerAuth(peer PeerID) AUTH_STATE {

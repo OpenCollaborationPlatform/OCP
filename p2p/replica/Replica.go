@@ -71,6 +71,12 @@ func DefaultOptions() Options {
 	}
 }
 
+type Beacon struct {
+	Sender Address
+	Epoch  uint64
+	MaxIdx uint64
+}
+
 type Replica struct {
 	//init values
 	transport Transport
@@ -96,7 +102,7 @@ type Replica struct {
 	cmdChan     chan cmdStruct
 	recoverChan chan recoverStruct
 	requestChan chan requestStruct
-	beaconChan  chan beaconStruct
+	beaconChan  chan Beacon
 	appliedChan chan uint64
 }
 
@@ -131,7 +137,7 @@ func NewReplica(name string, addr Address, trans Transport, ol Overlord,
 		commitChan:  make(chan commitStruct),
 		cmdChan:     make(chan cmdStruct),
 		recoverChan: make(chan recoverStruct),
-		beaconChan:  make(chan beaconStruct),
+		beaconChan:  make(chan Beacon),
 		requestChan: make(chan requestStruct, opts.MaxLogLength*3),
 		appliedChan: make(chan uint64, 100),
 		store:       store,
@@ -229,12 +235,6 @@ type leaderData struct {
 type recoverStruct struct {
 	epoch uint64
 	ctx   context.Context
-}
-
-type beaconStruct struct {
-	sender Address
-	epoch  uint64
-	maxIdx uint64
 }
 
 /******************************************************************************
@@ -965,21 +965,21 @@ func (self *Replica) isLogstoreLegit() bool {
 func (self *Replica) sendBeacon() {
 
 	last, _ := self.store.LastIndex()
-	arg := beaconStruct{self.address, self.leaders.GetEpoch(), last}
+	arg := Beacon{self.address, self.leaders.GetEpoch(), last}
 	self.transport.SendAll("WriteAPI", "NewBeacon", arg)
 }
 
-func (self *Replica) processBeacon(ctx context.Context, beacon beaconStruct) {
+func (self *Replica) processBeacon(ctx context.Context, beacon Beacon) {
 
-	if beacon.epoch != self.leaders.GetEpoch() {
+	if beacon.Epoch != self.leaders.GetEpoch() {
 		self.logger.Info("Received beacon with different epoch!")
 		self.reassureLeader(ctx)
 	}
 
 	//maybe we missed some logs?
 	last, err := self.store.LastIndex()
-	if err == nil && beacon.maxIdx > last {
-		for i := last; i <= beacon.maxIdx; i++ {
+	if err == nil && beacon.MaxIdx > last {
+		for i := last; i <= beacon.MaxIdx; i++ {
 			self.requestLog(i)
 		}
 	}

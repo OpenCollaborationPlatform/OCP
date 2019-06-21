@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"CollaborationNode/p2p/replica"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -69,8 +70,11 @@ func temporaryHost(dir string) (*Host, error) {
 	viper.Set("p2p.port", testport)
 	testport = testport + 1
 
+	//use a test overlord
+	ol := replica.NewTestOverlord()
+
 	//start the host
-	h := NewHost()
+	h := NewHost(ol)
 	return h, h.Start()
 }
 

@@ -123,7 +123,7 @@ func (self *WriteAPI) NewLog(log Log) {
 }
 
 //receives a beacon from the leader
-func (self *WriteAPI) NewBeacon(beacon beaconStruct) {
+func (self *WriteAPI) NewBeacon(beacon Beacon) {
 
 	self.replica.beaconChan <- beacon
 }

@@ -160,7 +160,7 @@ func (self *OverloardAPI) StartNewEpoch(epoch uint64, leader Address, key crypto
 	return nil
 }
 
-type testOverlord struct {
+type TestOverlord struct {
 	apis        []*OverloardAPI
 	leader      leaderStore
 	apimutex    sync.RWMutex
@@ -169,8 +169,8 @@ type testOverlord struct {
 	urmutex     sync.RWMutex //for uneachable
 }
 
-func newTestOverlord() *testOverlord {
-	return &testOverlord{
+func NewTestOverlord() *TestOverlord {
+	return &TestOverlord{
 		apis:    make([]*OverloardAPI, 0),
 		leader:  newLeaderStore(),
 		apiKeys: make([]crypto.RsaPublicKey, 0),
@@ -178,7 +178,7 @@ func newTestOverlord() *testOverlord {
 }
 
 //for testing only, not a interface function
-func (self *testOverlord) setApiPubKey(key crypto.RsaPublicKey) error {
+func (self *TestOverlord) setApiPubKey(key crypto.RsaPublicKey) error {
 	self.apimutex.Lock()
 	defer self.apimutex.Unlock()
 
@@ -186,7 +186,7 @@ func (self *testOverlord) setApiPubKey(key crypto.RsaPublicKey) error {
 	return nil
 }
 
-func (self *testOverlord) isReachable(idx int) bool {
+func (self *TestOverlord) isReachable(idx int) bool {
 
 	self.urmutex.RLock()
 	defer self.urmutex.RUnlock()
@@ -199,7 +199,7 @@ func (self *testOverlord) isReachable(idx int) bool {
 	return true
 }
 
-func (self *testOverlord) RegisterOverloardAPI(api *OverloardAPI) error {
+func (self *TestOverlord) RegisterOverloardAPI(api *OverloardAPI) error {
 	self.apimutex.Lock()
 	defer self.apimutex.Unlock()
 
@@ -208,7 +208,7 @@ func (self *testOverlord) RegisterOverloardAPI(api *OverloardAPI) error {
 }
 
 //does not return an error if the epoch has already been elected
-func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) error {
+func (self *TestOverlord) RequestNewLeader(ctx context.Context, epoch uint64) error {
 
 	self.apimutex.RLock()
 	defer self.apimutex.RUnlock()
@@ -292,12 +292,12 @@ func (self *testOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 	return nil
 }
 
-func (self *testOverlord) GetCurrentEpoch(ctx context.Context) (uint64, error) {
+func (self *TestOverlord) GetCurrentEpoch(ctx context.Context) (uint64, error) {
 
 	return self.leader.GetEpoch(), nil
 }
 
-func (self *testOverlord) GetCurrentEpochData(ctx context.Context) (uint64, Address, crypto.RsaPublicKey, uint64, error) {
+func (self *TestOverlord) GetCurrentEpochData(ctx context.Context) (uint64, Address, crypto.RsaPublicKey, uint64, error) {
 
 	if self.leader.EpochCount() == 0 {
 		return 0, Address(""), crypto.RsaPublicKey{}, 0, &NoEpochError{}
@@ -310,7 +310,7 @@ func (self *testOverlord) GetCurrentEpochData(ctx context.Context) (uint64, Addr
 	return self.leader.GetEpoch(), addr, key, sidx, nil
 }
 
-func (self *testOverlord) GetDataForEpoch(ctx context.Context, epoche uint64) (Address, crypto.RsaPublicKey, uint64, error) {
+func (self *TestOverlord) GetDataForEpoch(ctx context.Context, epoche uint64) (Address, crypto.RsaPublicKey, uint64, error) {
 
 	if epoche > self.leader.GetEpoch() || !self.leader.HasEpoch(epoche) {
 		return Address(""), crypto.RsaPublicKey{}, 0, fmt.Errorf("Epoch unknown")

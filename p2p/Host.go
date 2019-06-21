@@ -24,6 +24,10 @@ type Host struct {
 	swarmMutex sync.RWMutex
 	swarms     []*Swarm
 
+	privKey  crypto.PrivKey
+	pubKey   crypto.PubKey
+	overlord Overlord
+
 	//serivces the host provides
 	Rpc   *hostRpcService
 	Data  DataService
@@ -31,9 +35,9 @@ type Host struct {
 }
 
 //Host creates p2p host which manages all peer connections
-func NewHost() *Host {
+func NewHost(overlord Overlord) *Host {
 
-	return &Host{swarms: make([]*Swarm, 0)}
+	return &Host{swarms: make([]*Swarm, 0), overlord: overlord}
 }
 
 // Starts the listening for connections and the bootstrap prozess
@@ -44,6 +48,12 @@ func (h *Host) Start() error {
 	if err != nil {
 		log.Fatalf("Public key could not be read: %s\n", err)
 	}
+	pub, err := crypto.UnmarshalPublicKey(content)
+	if err != nil {
+		log.Fatalf("Private key is invalid: %s\n", err)
+	}
+	h.pubKey = pub
+
 	content, err = ioutil.ReadFile(filepath.Join(viper.GetString("directory"), "private"))
 	if err != nil {
 		log.Fatalf("Private key could not be read: %s\n", err)
@@ -52,6 +62,7 @@ func (h *Host) Start() error {
 	if err != nil {
 		log.Fatalf("Private key is invalid: %s\n", err)
 	}
+	h.privKey = priv
 
 	// Create the multiaddress we listen on
 	addr := fmt.Sprintf("/ip4/%s/tcp/%d", viper.GetString("p2p.uri"), viper.GetInt("p2p.port"))
@@ -193,6 +204,10 @@ func (h *Host) ID() PeerID {
 	return PeerID(h.host.ID())
 }
 
+func (h *Host) Keys() (crypto.PrivKey, crypto.PubKey) {
+	return h.privKey, h.pubKey
+}
+
 /*		Swarm Handling
 ****************************** */
 
@@ -206,7 +221,7 @@ func (h *Host) CreateSwarm(id SwarmID) *Swarm {
 
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	swarm := newSwarm(h, id)
+	swarm := newSwarm(h, id, h.overlord)
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
 	}

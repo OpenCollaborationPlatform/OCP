@@ -148,7 +148,7 @@ func shutdownReplica(reps []*Replica, shutdown int) []*Replica {
 	transport.unreachable = append(transport.unreachable, shutdown)
 	transport.mutex.Unlock()
 
-	overlord := reps[0].overlord.(*testOverlord)
+	overlord := reps[0].overlord.(*TestOverlord)
 	overlord.urmutex.Lock()
 	overlord.unreachable = append(overlord.unreachable, shutdown)
 	overlord.urmutex.Unlock()
@@ -185,7 +185,7 @@ func enableReplica(reps []*Replica, enable int) []*Replica {
 	}
 	transport.mutex.Unlock()
 
-	overlord := reps[0].overlord.(*testOverlord)
+	overlord := reps[0].overlord.(*TestOverlord)
 	overlord.urmutex.Lock()
 	for idx, ur := range overlord.unreachable {
 		if ur == enable {
@@ -268,7 +268,7 @@ func TestReplicaCommit(t *testing.T) {
 		}
 
 		//define reps[0] as leader
-		to := reps[0].overlord.(*testOverlord)
+		to := reps[0].overlord.(*TestOverlord)
 		to.leader.AddEpoch(0, "0", reps[0].pubKey, 0)
 		to.leader.SetEpoch(0)
 
@@ -684,7 +684,6 @@ func TestRecover(t *testing.T) {
 			//make sure we have some snapshots
 			for _, rep := range reps {
 				rep.options.MaxLogLength = 100
-				rep.options.Beacon = 100 * time.Millisecond
 			}
 
 			//random commiting of logs, no replica gets them all

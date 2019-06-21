@@ -16,6 +16,10 @@ func (self PeerID) pid() peer.ID {
 	return peer.ID(self)
 }
 
+func (self PeerID) String() string {
+	return peer.IDB58Encode(self.pid())
+}
+
 func PeerIDFromString(id string) (PeerID, error) {
 
 	peerid, err := peer.IDB58Decode(id)
