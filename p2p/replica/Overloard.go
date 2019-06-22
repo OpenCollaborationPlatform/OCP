@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"time"
 
 	logging "github.com/ipfs/go-log"
 	crypto "github.com/libp2p/go-libp2p-crypto"
@@ -165,6 +164,7 @@ type TestOverlord struct {
 	leader      leaderStore
 	apimutex    sync.RWMutex
 	apiKeys     []crypto.RsaPublicKey
+	apiAddr     []Address
 	unreachable []int
 	urmutex     sync.RWMutex //for uneachable
 }
@@ -174,15 +174,17 @@ func NewTestOverlord() *TestOverlord {
 		apis:    make([]*OverloardAPI, 0),
 		leader:  newLeaderStore(),
 		apiKeys: make([]crypto.RsaPublicKey, 0),
+		apiAddr: make([]Address, 0),
 	}
 }
 
 //for testing only, not a interface function
-func (self *TestOverlord) setApiPubKey(key crypto.RsaPublicKey) error {
+func (self *TestOverlord) SetApiData(addr Address, key crypto.RsaPublicKey) error {
 	self.apimutex.Lock()
 	defer self.apimutex.Unlock()
 
 	self.apiKeys = append(self.apiKeys, key)
+	self.apiAddr = append(self.apiAddr, addr)
 	return nil
 }
 
@@ -230,7 +232,8 @@ func (self *TestOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 
 	//collect the replica with highest log that is reachable
 	max := uint64(0)
-	addr := -1
+	addr := Address("")
+	idx := -1
 	start := uint64(0)
 	for i, api := range self.apis {
 
@@ -242,12 +245,14 @@ func (self *TestOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 		err := api.GetHighestLogIndex(ctx, &res)
 		if IsNoEntryError(err) {
 			if max == 0 {
-				addr = i
+				addr = self.apiAddr[i]
+				idx = i
 			}
 		} else if err == nil {
 			if res >= max {
 				max = res
-				addr = i
+				addr = self.apiAddr[i]
+				idx = i
 				start = res + 1
 			}
 		} else {
@@ -255,8 +260,8 @@ func (self *TestOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 		}
 	}
 
-	if addr < 0 {
-		ologger.Error("No API reached, no leader can be sellected")
+	if addr == Address("") {
+		ologger.Error("No API reached, no leader can be selected")
 		return fmt.Errorf("failed")
 	}
 
@@ -267,12 +272,12 @@ func (self *TestOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 	} else {
 		newEpoch = 0
 	}
-	self.leader.AddEpoch(newEpoch, fmt.Sprintf("%v", addr), self.apiKeys[addr], start)
+	self.leader.AddEpoch(newEpoch, addr, self.apiKeys[idx], start)
 	self.leader.SetEpoch(newEpoch)
 
 	//communicate the result
 	ologger.Infof("Leader elected for epoch %v: %v (start index is %v)", self.leader.GetEpoch(), self.leader.GetLeaderAddress(), self.leader.GetLeaderStartIdx())
-	self.apis[addr].SetAsLeader(ctx, self.leader.GetEpoch(), self.leader.GetLeaderStartIdx())
+	self.apis[idx].SetAsLeader(ctx, self.leader.GetEpoch(), self.leader.GetLeaderStartIdx())
 
 	idxs := rand.Perm(len(self.apis))
 	for _, idx := range idxs {
@@ -287,7 +292,6 @@ func (self *TestOverlord) RequestNewLeader(ctx context.Context, epoch uint64) er
 			api.StartNewEpoch(self.leader.GetEpoch(), addr, key, sidx)
 		}(self.apis[idx])
 	}
-	time.Sleep(100 * time.Millisecond)
 
 	return nil
 }

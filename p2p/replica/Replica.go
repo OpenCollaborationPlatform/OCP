@@ -598,8 +598,8 @@ func (self *Replica) newCommand(ctx context.Context, cmd []byte, state uint8) er
 	}
 
 	args := struct {
-		state uint8
-		cmd   []byte
+		State uint8
+		Cmd   []byte
 	}{state, cmd}
 	var ret uint64
 
@@ -800,7 +800,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 		return err
 	}
 
-	self.logger.Debugf("Send out new log")
+	self.logger.Debugf("Send out new log %v", log)
 	err = self.transport.SendAll(`WriteAPI`, `NewLog`, log)
 	if err != nil {
 		self.logger.Errorf("Unable to send out commited log: %v", err)

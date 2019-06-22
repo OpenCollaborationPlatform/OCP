@@ -89,8 +89,9 @@ func newSwarm(host *Host, id SwarmID, overlord Overlord) *Swarm {
 /* Peer handling
  *************  */
 
-//Peer is added and hence allowed to use all swarm functionality
-func (s *Swarm) AddPeer(pid PeerID, state AUTH_STATE) error {
+//Peer is added and hence allowed to use all swarm functionality. If not connected
+//already this will connect to the peer (hence the context)
+func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error {
 
 	s.peerLock.Lock()
 	defer s.peerLock.Unlock()
@@ -99,6 +100,10 @@ func (s *Swarm) AddPeer(pid PeerID, state AUTH_STATE) error {
 		return fmt.Errorf("Peer already added")
 	}
 	s.peers[pid] = state
+
+	if !s.host.IsConnected(pid) {
+		s.host.Connect(ctx, pid)
+	}
 	return nil
 }
 

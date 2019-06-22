@@ -25,7 +25,7 @@ func init() {
 func setupReplicas(num uint, name string) ([]*Replica, error) {
 
 	trans := newTestTransport()
-	overlord := newTestOverlord()
+	overlord := NewTestOverlord()
 
 	replicas := make([]*Replica, num)
 
@@ -46,7 +46,7 @@ func setupReplicas(num uint, name string) ([]*Replica, error) {
 		}
 
 		//register the key with the overlord
-		overlord.setApiPubKey(*pub.(*crypto.RsaPublicKey))
+		overlord.SetApiData(addr, *pub.(*crypto.RsaPublicKey))
 
 		names[i] = rep.name
 		replicas[i] = rep

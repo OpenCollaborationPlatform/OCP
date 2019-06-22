@@ -151,7 +151,7 @@ func (self *replicaStore) ApplyLog(log Log, ret chan uint64) error {
 			}
 
 		} else {
-			return fmt.Errorf("Cannot apply log: Unknown state")
+			return fmt.Errorf("Cannot apply log: Unknown state %v", log.Type)
 		}
 	}
 

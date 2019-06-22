@@ -11,6 +11,7 @@ import (
 
 	blocks "github.com/ipfs/go-block-format"
 
+	ipfslog "github.com/ipfs/go-log"
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	uuid "github.com/satori/go.uuid"
@@ -18,12 +19,19 @@ import (
 )
 
 var testport int = 9015
+var overlord *replica.TestOverlord
 
 func init() {
 	//disable logging for this tests
 	//log.SetOutput(ioutil.Discard)
+
+	//use a test overlord
+	overlord = replica.NewTestOverlord()
+
 	//ipfslog.Configure(ipfslog.Output(ioutil.Discard))// ipfslog "github.com/ipfs/go-log/writer"
-	//ipfslog.SetDebugLogging() // ipfslog "github.com/ipfs/go-log"
+	ipfslog.GetSubsystems()
+	ipfslog.SetDebugLogging()
+
 }
 
 //creates a random host. The used directory will be a sibling of the provided one.
@@ -70,12 +78,18 @@ func temporaryHost(dir string) (*Host, error) {
 	viper.Set("p2p.port", testport)
 	testport = testport + 1
 
-	//use a test overlord
-	ol := replica.NewTestOverlord()
-
 	//start the host
-	h := NewHost(ol)
-	return h, h.Start()
+	h := NewHost(overlord)
+	err = h.Start()
+	if err != nil {
+		return nil, err
+	}
+
+	//inform the overlord about new data
+	rsaPubKey := pub.(*crypto.RsaPublicKey)
+	overlord.SetApiData(h.ID().String(), *rsaPubKey)
+
+	return h, nil
 }
 
 func randomHostWithoutDataSerivce() (*Host, error) {

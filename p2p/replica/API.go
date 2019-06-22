@@ -84,15 +84,15 @@ func (self *ReadAPI) InvalidLogReceived(index uint64) {
 
 func (self *WriteAPI) RequestCommand(ctx context.Context,
 	args struct {
-		state uint8
-		cmd   []byte
+		State uint8
+		Cmd   []byte
 	}, result *uint64) error {
 
 	ret := make(chan error)
 
 	cmd := cmdStruct{
-		cmd:     args.cmd,
-		state:   args.state,
+		cmd:     args.Cmd,
+		state:   args.State,
 		retChan: ret,
 		local:   false,
 		ctx:     ctx,

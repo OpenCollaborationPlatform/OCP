@@ -75,7 +75,7 @@ func (self *p2pTransport) RegisterReadAPI(api *replica.ReadAPI) error {
 	}
 
 	//we implement this send function also via RPC as event is overkill: should only go to one address
-	err = self.swarm.Rpc.Register(RpcEvent{api}, AUTH_READONLY)
+	err = self.swarm.Rpc.Register(&RpcEvent{api}, AUTH_READONLY)
 	if err != nil {
 		return err
 	}
@@ -94,6 +94,7 @@ func (self *p2pTransport) RegisterWriteAPI(api *replica.WriteAPI) error {
 		var log replica.Log
 		err := dec.Decode(&log)
 		if err != nil {
+			fmt.Printf("\nError decoding log %v!\n", err)
 			return
 		}
 		api.NewLog(log)
@@ -239,9 +240,10 @@ func (self *p2pTransport) SendAll(api string, fnc string, arguments interface{})
 }
 
 /******************************************************************************
-							Overlord for replica
+							Replica Types
 *******************************************************************************/
 type Overlord = replica.Overlord
+type State = replica.State
 
 /******************************************************************************
 							shared state service
@@ -249,7 +251,7 @@ type Overlord = replica.Overlord
 
 type sharedStateService struct {
 	transport p2pTransport
-	replica   replica.Replica
+	replica   *replica.Replica
 }
 
 func newSharedStateService(swarm *Swarm, overlord Overlord) *sharedStateService {
@@ -271,11 +273,22 @@ func newSharedStateService(swarm *Swarm, overlord Overlord) *sharedStateService 
 	if !ok {
 		return nil //sharedStateService{}, fmt.Errorf("Host keys are not RSA, but is required")
 	}
-	rep, err := replica.NewReplica("SharedState", addr, &trans, overlord, *rsaPriv, *rsaPub, opts)
+	rep, err := replica.NewReplica(fmt.Sprintf("Rep_%v", addr), addr, &trans, overlord, *rsaPriv, *rsaPub, opts)
 	if err != nil {
 		return nil //sharedStateService{}, utils.StackError(err, "Unable to create replica for shared state")
 	}
+	rep.Start()
 
 	//service
-	return &sharedStateService{trans, *rep}
+	return &sharedStateService{trans, rep}
+}
+
+func (self *sharedStateService) Share(state State) uint8 {
+
+	return self.replica.AddState(state)
+}
+
+func (self *sharedStateService) AddCommand(ctx context.Context, state uint8, cmd []byte) error {
+
+	return self.replica.AddCommand(ctx, state, cmd)
 }
