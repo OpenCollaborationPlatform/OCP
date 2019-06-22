@@ -1,6 +1,5 @@
 package p2p
 
-/*
 import (
 	"context"
 	"fmt"
@@ -127,7 +126,7 @@ func TestSwarmRPC(t *testing.T) {
 
 				Convey("With default ReadOnly peer added this should work", func() {
 
-					sw1.AddPeer(h2.ID(), AUTH_READONLY)
+					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READONLY)
 					var res int
 					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
@@ -136,7 +135,7 @@ func TestSwarmRPC(t *testing.T) {
 
 				Convey("as well as with ReadWrite peer", func() {
 
-					sw1.AddPeer(h2.ID(), AUTH_READWRITE)
+					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READWRITE)
 					var res int
 					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
@@ -166,7 +165,7 @@ func TestSwarmRPC(t *testing.T) {
 
 				Convey("With default ReadOnly peer added this should still not work", func() {
 
-					sw1.AddPeer(h2.ID(), AUTH_READONLY)
+					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READONLY)
 					var res int
 					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldNotBeNil)
@@ -175,7 +174,7 @@ func TestSwarmRPC(t *testing.T) {
 
 				Convey("but finally with ReadWrite peer it shall succeed", func() {
 
-					sw1.AddPeer(h2.ID(), AUTH_READWRITE)
+					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READWRITE)
 					var res int
 					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
@@ -187,4 +186,3 @@ func TestSwarmRPC(t *testing.T) {
 
 	})
 }
-*/

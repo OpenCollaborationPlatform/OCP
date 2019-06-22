@@ -1,6 +1,5 @@
 package p2p
 
-/*
 import (
 	"bytes"
 	"context"
@@ -192,7 +191,7 @@ func TestSwarmEvent(t *testing.T) {
 					closed2 := false
 					m2 := asyncCatchEvents(sub2, &num2, &data2, &closed2)
 
-					sw1.AddPeer(h2.ID(), AUTH_READONLY)
+					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READONLY)
 
 					sw1.Event.Publish("testtopic", []byte("data"))
 					time.Sleep(100 * time.Millisecond)
@@ -231,7 +230,7 @@ func TestSwarmEvent(t *testing.T) {
 
 				Convey("and unadded as well as unauthorized peers shall not be to publish", func() {
 
-					sw1.AddPeer(h2.ID(), AUTH_READONLY)
+					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READONLY)
 
 					num1 := 0
 					data1 := make([][]byte, 0)
@@ -265,8 +264,8 @@ func TestSwarmEvent(t *testing.T) {
 
 					//h2 is allowed to post ReadWrite events to swarm 1, but not the other
 					//way around
-					sw1.AddPeer(h2.ID(), AUTH_READWRITE)
-					sw2.AddPeer(h1.ID(), AUTH_READONLY)
+					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READWRITE)
+					sw2.AddPeer(context.Background(), h1.ID(), AUTH_READONLY)
 
 					num1 := 0
 					data1 := make([][]byte, 0)
@@ -294,4 +293,3 @@ func TestSwarmEvent(t *testing.T) {
 		})
 	})
 }
-*/

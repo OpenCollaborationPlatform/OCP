@@ -119,6 +119,21 @@ func (h *Host) Start() error {
 
 func (h *Host) Stop() error {
 
+	//stop swarms
+	h.swarmMutex.RLock()
+	defer h.swarmMutex.RUnlock()
+	for _, swarm := range h.swarms {
+		swarm.Close()
+	}
+
+	//stop services
+	if h.Event != nil {
+		h.Event.Stop()
+	}
+	if h.Data != nil {
+		h.Data.Close()
+	}
+
 	return h.host.Close()
 }
 

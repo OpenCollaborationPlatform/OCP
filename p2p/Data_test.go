@@ -1,6 +1,5 @@
 package p2p
 
-/*
 import (
 	"bytes"
 	"context"
@@ -210,4 +209,3 @@ func TestDataService(t *testing.T) {
 		})
 	})
 }
-*/

@@ -5,8 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io/ioutil"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"testing"
 	"time"
@@ -63,6 +61,9 @@ func toByte(val int64) []byte {
 
 func TestBasicSharedState(t *testing.T) {
 
+	//clear all registered replicas in the overlord
+	overlord.Clear()
+
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "p2p")
 	defer os.RemoveAll(path)
@@ -81,6 +82,9 @@ func TestBasicSharedState(t *testing.T) {
 	h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 	h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
 
+	fmt.Printf("\n\nHost 1: %v\n", h1.ID().String())
+	fmt.Printf("Host 2: %v\n", h2.ID().String())
+
 	Convey("Giving the swarm write rigths,", t, func() {
 
 		ctx := context.Background()
@@ -98,10 +102,6 @@ func TestBasicSharedState(t *testing.T) {
 			So(sst2, ShouldEqual, 0)
 
 			Convey("adding command works from both swarms", func() {
-
-				go func() {
-					http.ListenAndServe("localhost:6060", nil)
-				}()
 
 				So(sw1.State.AddCommand(ctx, sst1, toByte(1)), ShouldBeNil)
 				So(sw2.State.AddCommand(ctx, sst2, toByte(1)), ShouldBeNil)

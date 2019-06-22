@@ -292,3 +292,8 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state uint8, cmd
 
 	return self.replica.AddCommand(ctx, state, cmd)
 }
+
+func (self *sharedStateService) Close() {
+
+	self.replica.Stop()
+}

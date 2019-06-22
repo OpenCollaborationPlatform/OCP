@@ -115,6 +115,19 @@ func (s *Swarm) RemovePeer(peer PeerID) error {
 	return nil
 }
 
+func (s *Swarm) ChangePeer(peer PeerID, auth AUTH_STATE) error {
+
+	s.peerLock.Lock()
+	defer s.peerLock.Unlock()
+
+	_, ok := s.peers[peer]
+	if !ok {
+		return fmt.Errorf("Peer not available, cannot be changed")
+	}
+	s.peers[peer] = auth
+	return nil
+}
+
 func (s *Swarm) HasPeer(peer PeerID) bool {
 
 	s.peerLock.RLock()
@@ -179,5 +192,9 @@ func (self *Swarm) GetPath() string {
 }
 
 func (s *Swarm) Close() {
+
+	s.Event.Stop()
+	s.Data.Close()
+	s.State.Close()
 	s.cancel()
 }

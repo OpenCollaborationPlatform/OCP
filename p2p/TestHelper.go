@@ -28,9 +28,9 @@ func init() {
 	//use a test overlord
 	overlord = replica.NewTestOverlord()
 
-	//ipfslog.Configure(ipfslog.Output(ioutil.Discard))// ipfslog "github.com/ipfs/go-log/writer"
+	//ipfslog.Configure(ipfslog.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
 	ipfslog.GetSubsystems()
-	ipfslog.SetDebugLogging()
+	//ipfslog.SetDebugLogging()
 
 }
 

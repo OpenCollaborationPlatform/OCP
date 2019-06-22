@@ -280,7 +280,7 @@ loop:
 
 		case <-beaconTicker.C:
 			//if we are leader we need to make sure to emit our beacon
-			if self.leaders.GetLeaderAddress() == self.address {
+			if self.leaders.HasLeader() && self.leaders.GetLeaderAddress() == self.address {
 				self.sendBeacon()
 			}
 

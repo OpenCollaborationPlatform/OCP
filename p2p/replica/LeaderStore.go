@@ -26,6 +26,16 @@ func newLeaderStore() leaderStore {
 	}
 }
 
+func (self *leaderStore) HasLeader() bool {
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	if len(self.adress) == 0 {
+		return false
+	}
+	return true
+}
+
 func (self *leaderStore) HasEpoch(epoch uint64) bool {
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()

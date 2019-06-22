@@ -188,6 +188,16 @@ func (self *TestOverlord) SetApiData(addr Address, key crypto.RsaPublicKey) erro
 	return nil
 }
 
+func (self *TestOverlord) Clear() {
+	self.apimutex.Lock()
+	defer self.apimutex.Unlock()
+
+	self.leader = newLeaderStore()
+	self.apis = make([]*OverloardAPI, 0)
+	self.apiKeys = make([]crypto.RsaPublicKey, 0)
+	self.apiAddr = make([]Address, 0)
+}
+
 func (self *TestOverlord) isReachable(idx int) bool {
 
 	self.urmutex.RLock()

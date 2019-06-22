@@ -22,6 +22,7 @@ type DataService interface {
 	AddFile(ctx context.Context, path string) (cid.Cid, error)
 	GetFile(ctx context.Context, id cid.Cid) (io.Reader, error)
 	DropFile(ctx context.Context, id cid.Cid) error
+	Close()
 }
 
 func NewDataService(host *Host) (DataService, error) {
@@ -43,11 +44,12 @@ func NewDataService(host *Host) (DataService, error) {
 	//build dagservice (merkledag) ontop of the blockservice
 	dagservice := merkle.NewDAGService(blockservice)
 
-	return &hostDataService{dagservice}, nil
+	return &hostDataService{dagservice, blockservice}, nil
 }
 
 type hostDataService struct {
-	service ipld.DAGService
+	service  ipld.DAGService
+	blockser bserv.BlockService
 }
 
 func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
@@ -95,6 +97,10 @@ func (self *hostDataService) DropFile(ctx context.Context, id cid.Cid) error {
 	return self.service.RemoveMany(ctx, cids)
 }
 
+func (self *hostDataService) Close() {
+	self.blockser.Close()
+}
+
 //SwarmDataService
 //This dataservice behaves sligthly different than the normal one:
 // - Adding/Dropping a file automatically distributes it within the swarm
@@ -138,4 +144,8 @@ func (self *swarmDataService) DropFile(ctx context.Context, id cid.Cid) error {
 		}
 	*/
 	return err
+}
+
+func (self *swarmDataService) Close() {
+
 }
