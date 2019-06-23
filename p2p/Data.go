@@ -10,13 +10,14 @@ import (
 	"os"
 	"path/filepath"
 
+	blocks "github.com/ipfs/go-block-format"
 	bserv "github.com/ipfs/go-blockservice"
 	cid "github.com/ipfs/go-cid"
 )
 
 type DataService interface {
 	AddFile(ctx context.Context, path string) (cid.Cid, error)
-	GetFile(ctx context.Context, id cid.Cid) (io.Reader, error)
+	GetFile(ctx context.Context, id cid.Cid) (*os.File, error)
 	DropFile(ctx context.Context, id cid.Cid) error
 	Close()
 }
@@ -51,14 +52,14 @@ type hostDataService struct {
 	store    BitswapStore
 }
 
-func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
+func (self *hostDataService) basicAddFile(ctx context.Context, path string) (cid.Cid, []blocks.Block, error) {
 
 	//we first blockify the file bevore moving it into our store.
 	//This is done to know the cid after which we name the file in the store
 	//to avoid having problems with same filenames for different files
 	blocks, filecid, err := blockifyFile(path)
 	if err != nil {
-		return filecid, err
+		return filecid, nil, err
 	}
 
 	//copy the file over
@@ -68,48 +69,59 @@ func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid,
 	destpath := filepath.Join(self.datapath, filecid.String())
 	destination, err := os.Create(destpath)
 	if err != nil {
-		return cid.Cid{}, err
+		return cid.Cid{}, nil, err
 	}
 	defer destination.Close()
 	_, err = io.Copy(destination, source)
 	if err != nil {
-		return cid.Cid{}, err
+		return cid.Cid{}, nil, err
 	}
 
 	//make the blocks available
 	err = self.service.AddBlocks(blocks)
+	return filecid, blocks, err
+}
+
+func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
+
+	filecid, blocks, err := self.basicAddFile(ctx, path)
+	if err != nil {
+		return cid.Cid{}, err
+	}
 
 	//set ownership
 	self.store.GetOwnership(blocks[0], "global")
 
+	//return
 	return filecid, err
 }
 
-func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, error) {
+func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid) (blocks.Block, *os.File, error) {
 
 	//get the root block
 	block, err := self.service.GetBlock(ctx, id)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to get root node")
+		return nil, nil, utils.StackError(err, "Unable to get root node")
 	}
 
 	//check if we need additional blocks (e.g. it's a multifile)
 	p2pblock, err := getP2PBlock(block)
 	if err != nil {
-		return nil, utils.StackError(err, "Node is not expected type")
+		return nil, nil, utils.StackError(err, "Node is not expected type")
 	}
 
 	switch p2pblock.Type() {
 	case BlockRaw:
-		return nil, fmt.Errorf("cid does not belong to a file")
+		return nil, nil, fmt.Errorf("cid does not belong to a file")
 
 	case BlockDirectory:
-		return nil, fmt.Errorf("cid does not belong to a file")
+		return nil, nil, fmt.Errorf("cid does not belong to a file")
 
 	case BlockFile:
 		//we are done.
 		path := filepath.Join(self.datapath, block.Cid().String())
-		return os.Open(path)
+		file, err := os.Open(path)
+		return block, file, err
 
 	case BlockMultiFile:
 		//get the rest of the blocks (TODO: Check if we have all blocks and simply
@@ -121,19 +133,63 @@ func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader
 			num--
 		}
 		if num != 0 {
-			return nil, fmt.Errorf("File was only partially received")
+			return nil, nil, fmt.Errorf("File was only partially received")
 		}
 		path := filepath.Join(self.datapath, block.Cid().String())
-		return os.Open(path)
+		file, err := os.Open(path)
+		return block, file, err
 
 	default:
-		return nil, fmt.Errorf("Unknown block type")
+		return nil, nil, fmt.Errorf("Unknown block type")
+	}
+
+	return nil, nil, fmt.Errorf("something got wrong")
+}
+
+func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File, error) {
+
+	block, file, err := self.basicGetFile(ctx, id)
+	if err != nil {
+		return nil, err
 	}
 
 	//set ownership (maybe not done yet)
 	err = self.store.GetOwnership(block, "global")
 
-	return nil, err
+	return file, err
+}
+
+func (self *hostDataService) basicDropFile(block blocks.Block) error {
+
+	//get all blocks to be deleted
+	p2pblock, err := getP2PBlock(block)
+	if err != nil {
+		return err
+	}
+
+	switch p2pblock.Type() {
+	case BlockRaw:
+		return fmt.Errorf("cid does not belong to a file")
+
+	case BlockDirectory:
+		return fmt.Errorf("cid does not belong to a file")
+
+	case BlockFile:
+		self.service.DeleteBlock(block.Cid())
+
+	case BlockMultiFile:
+		//get the rest of the blocks (TODO: Check if we have all blocks and simply
+		//load the file)
+		mfileblock := p2pblock.(P2PMultiFileBlock)
+		for _, block := range mfileblock.Blocks {
+			self.service.DeleteBlock(block)
+		}
+
+	default:
+		return fmt.Errorf("Unknown block type")
+	}
+
+	return nil
 }
 
 func (self *hostDataService) DropFile(ctx context.Context, id cid.Cid) error {
@@ -151,36 +207,8 @@ func (self *hostDataService) DropFile(ctx context.Context, id cid.Cid) error {
 	}
 
 	//there maybe someone else that needs this file
-	if !last {
-		return nil
-	}
-
-	//get all blocks to be deleted
-	p2pblock, err := getP2PBlock(block)
-	if err != nil {
-		return err
-	}
-
-	switch p2pblock.Type() {
-	case BlockRaw:
-		return fmt.Errorf("cid does not belong to a file")
-
-	case BlockDirectory:
-		return fmt.Errorf("cid does not belong to a file")
-
-	case BlockFile:
-		self.service.DeleteBlock(id)
-
-	case BlockMultiFile:
-		//get the rest of the blocks (TODO: Check if we have all blocks and simply
-		//load the file)
-		mfileblock := p2pblock.(P2PMultiFileBlock)
-		for _, block := range mfileblock.Blocks {
-			self.service.DeleteBlock(block)
-		}
-
-	default:
-		return fmt.Errorf("Unknown block type")
+	if last {
+		return self.basicDropFile(block)
 	}
 
 	return nil
@@ -216,28 +244,41 @@ func dataStateCommandFromByte(data []byte) (dataStateCommand, error) {
 
 //a shared state that is a list of CIDs this swarm shares.
 type dataState struct {
-	files []cid.Cid
+	files   []cid.Cid
+	service *swarmDataService
 }
 
 func (self *dataState) Apply(data []byte) error {
-
-	cmd, err := dataStateCommandFromByte(data)
-	if err != nil {
-		return err
-	}
-
-	if cmd.remove {
-
-		for i, val := range self.files {
-			if val == cmd.file {
-				self.files = append(self.files[:i], self.files[i+1:]...)
-				break
-			}
+	/*
+		cmd, err := dataStateCommandFromByte(data)
+		if err != nil {
+			return err
 		}
 
-	} else {
-		self.files = append(self.files, cmd.file)
-	}
+		if cmd.remove {
+
+			for i, val := range self.files {
+				if val == cmd.file {
+					self.files = append(self.files[:i], self.files[i+1:]...)
+					break
+				}
+			}
+			if self.service.data.store.Has(cmd.file) {
+				last, err := self.service.store.ReleaseOwnership(cmd.file)
+				if err != nil {
+					return err
+				}
+				if last {
+					self.service.se
+				}
+
+			} else {
+				return fmt.Errorf("Dropping file not possible as it is not available")
+			}
+
+		} else {
+			self.files = append(self.files, cmd.file)
+		}*/
 	return nil
 }
 
@@ -252,42 +293,63 @@ func (self *dataState) Apply(data []byte) error {
 
 type swarmDataService struct {
 	data  *hostDataService
-	event *swarmEventService
+	state *sharedStateService
+	id    SwarmID
 }
 
 func newSwarmDataService(swarm *Swarm) DataService {
 
 	hostdata := swarm.host.Data.(*hostDataService)
-	return &swarmDataService{hostdata, swarm.Event}
+	return &swarmDataService{hostdata, swarm.State, swarm.ID}
 }
 
 func (self *swarmDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
 
-	cid, err := self.data.AddFile(ctx, path)
-	/*
-		//announce file if we have been successfull
-		if err != nil {
-			self.event.Publish("NewDataFile", cid.Bytes())
-		}
-	*/
-	return cid, err
+	filecid, blocks, err := self.data.basicAddFile(ctx, path)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+
+	//set ownership
+	self.data.store.GetOwnership(blocks[0], string(self.id))
+
+	//return
+	return filecid, err
 }
 
-func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, error) {
+func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File, error) {
 
-	return self.data.GetFile(ctx, id)
+	block, file, err := self.data.basicGetFile(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	//set ownership (maybe not done yet)
+	err = self.data.store.GetOwnership(block, string(self.id))
+
+	return file, err
 }
 
 func (self *swarmDataService) DropFile(ctx context.Context, id cid.Cid) error {
 
-	err := self.data.DropFile(ctx, id)
-	/*
-		//announce file if we have been successfull
-		if err != nil {
-			self.event.Publish("DroppedDataFile", id.Bytes())
-		}
-	*/
-	return err
+	//get the root block
+	block, err := self.data.service.GetBlock(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	//release ownership
+	last, err := self.data.store.ReleaseOwnership(block, string(self.id))
+	if err != nil {
+		return err
+	}
+
+	//check if we can delete
+	if last {
+		return self.data.basicDropFile(block)
+	}
+
+	return nil
 }
 
 func (self *swarmDataService) Close() {

@@ -235,6 +235,49 @@ func (self BitswapStore) ReleaseOwnership(block blocks.Block, owner string) (boo
 	return false, nil
 }
 
+//Returns all blocks without a owner
+func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
+
+	tx, err := self.db.Begin(false)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	result := make([]cid.Cid, 0)
+	keys := [][]byte{DirKey, FileKey, MfileKey}
+
+	for _, key := range keys {
+
+		//we add ourself to the owner list of that block!
+		bucket := tx.Bucket(key)
+
+		c := bucket.Cursor()
+		if k, _ := c.Next(); k == nil {
+
+			bucket = bucket.Bucket(k)
+			bucket = bucket.Bucket(OwnerKey)
+			if bucket == nil {
+				tx.Rollback()
+				return nil, fmt.Errorf("Block is not setup correctly in the blockstore")
+			}
+			//check if owners are empty
+			c2 := bucket.Cursor()
+			if k2, _ := c2.Next(); k2 == nil {
+				key, err := cid.Cast(copyKey(k))
+				if err != nil {
+					return nil, err
+				}
+				result = append(result, key)
+			}
+		}
+	}
+
+	//we don't need to go over raw blocks as they are deleted together with the multifile
+
+	return result, nil
+}
+
 /******************************************************************************
 							Blockstore interface
 ******************************************************************************/
