@@ -154,6 +154,8 @@ func (self BitswapStore) GetOwnership(block blocks.Block, owner string) error {
 		return fmt.Errorf("Can only set owner for Directory, MFile and File")
 	}
 
+	//TODO: Directory ownership should mark the files of that dorectory owned too
+
 	//we add ourself to the owner list of that block!
 	bucket := tx.Bucket(key)
 	bucket = bucket.Bucket(block.Cid().Bytes())

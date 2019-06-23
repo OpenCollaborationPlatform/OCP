@@ -42,12 +42,13 @@ func NewDataService(host *Host) (DataService, error) {
 	}
 	blockservice := bserv.New(bstore, bitswap)
 
-	return &hostDataService{path, blockservice}, nil
+	return &hostDataService{path, blockservice, bstore}, nil
 }
 
 type hostDataService struct {
 	datapath string
 	service  bserv.BlockService
+	store    BitswapStore
 }
 
 func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
@@ -77,6 +78,9 @@ func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid,
 
 	//make the blocks available
 	err = self.service.AddBlocks(blocks)
+
+	//set ownership
+	self.store.GetOwnership(blocks[0], "global")
 
 	return filecid, err
 }
@@ -121,27 +125,63 @@ func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader
 		}
 		path := filepath.Join(self.datapath, block.Cid().String())
 		return os.Open(path)
+
+	default:
+		return nil, fmt.Errorf("Unknown block type")
 	}
 
-	return nil, nil
+	//set ownership (maybe not done yet)
+	err = self.store.GetOwnership(block, "global")
+
+	return nil, err
 }
 
 func (self *hostDataService) DropFile(ctx context.Context, id cid.Cid) error {
-	/*
-		cids := make([]cid.Cid, 1)
-		cids[0] = id
 
-		visit := func(id cid.Cid) bool {
-			cids = append(cids, id)
-			return true
+	//get the root block
+	block, err := self.service.GetBlock(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	//release ownership
+	last, err := self.store.ReleaseOwnership(block, "global")
+	if err != nil {
+		return err
+	}
+
+	//there maybe someone else that needs this file
+	if !last {
+		return nil
+	}
+
+	//get all blocks to be deleted
+	p2pblock, err := getP2PBlock(block)
+	if err != nil {
+		return err
+	}
+
+	switch p2pblock.Type() {
+	case BlockRaw:
+		return fmt.Errorf("cid does not belong to a file")
+
+	case BlockDirectory:
+		return fmt.Errorf("cid does not belong to a file")
+
+	case BlockFile:
+		self.service.DeleteBlock(id)
+
+	case BlockMultiFile:
+		//get the rest of the blocks (TODO: Check if we have all blocks and simply
+		//load the file)
+		mfileblock := p2pblock.(P2PMultiFileBlock)
+		for _, block := range mfileblock.Blocks {
+			self.service.DeleteBlock(block)
 		}
 
-		err := merkle.EnumerateChildren(ctx, merkle.GetLinksDirect(self.service), id, visit)
-		if err != nil {
-			return utils.StackError(err, "Unable to drop file")
-		}
-
-		return self.service.RemoveMany(ctx, cids)*/
+	default:
+		return fmt.Errorf("Unknown block type")
+	}
 
 	return nil
 }
