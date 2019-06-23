@@ -22,6 +22,7 @@ import (
 
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
+	bstore "github.com/ipfs/go-ipfs-blockstore"
 )
 
 var (
@@ -29,7 +30,7 @@ var (
 	MfileKey = []byte("multifiles")
 	FileKey  = []byte("files")
 	BlockKey = []byte("blocks")
-	OwnerKey = []byte("blocks")
+	OwnerKey = []byte("owners")
 )
 
 func intToByte(val int64) []byte {
@@ -59,10 +60,10 @@ func NewBitswapStore(path string) (BitswapStore, error) {
 	}
 
 	//build the blt db
-	path = filepath.Join(path, "bitswap.db")
-	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
+	dbpath := filepath.Join(path, "bitswap.db")
+	db, err := bolt.Open(dbpath, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return BitswapStore{}, utils.StackError(err, "Unable to open bolt db: %s", path)
+		return BitswapStore{}, utils.StackError(err, "Unable to open bolt db: %s", dbpath)
 	}
 
 	//make sure we have the default buckets
@@ -127,7 +128,12 @@ DB [
 /******************************************************************************
 							Custom functions
 ******************************************************************************/
-func (self BitswapStore) GetOwnership(block P2PDataBlock, owner string) error {
+func (self BitswapStore) GetOwnership(block blocks.Block, owner string) error {
+
+	p2pblock, err := getP2PBlock(block)
+	if err != nil {
+		return err
+	}
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
@@ -136,7 +142,7 @@ func (self BitswapStore) GetOwnership(block P2PDataBlock, owner string) error {
 	defer tx.Commit()
 
 	var key []byte
-	switch block.Type() {
+	switch p2pblock.Type() {
 
 	case BlockDirectory:
 		key = DirKey
@@ -177,7 +183,12 @@ func (self BitswapStore) GetOwnership(block P2PDataBlock, owner string) error {
 
 //Removes the owner, returns true if it was the last owner and the block is
 //ownerless
-func (self BitswapStore) ReleaseOwnership(block P2PDataBlock, owner string) (bool, error) {
+func (self BitswapStore) ReleaseOwnership(block blocks.Block, owner string) (bool, error) {
+
+	p2pblock, err := getP2PBlock(block)
+	if err != nil {
+		return false, err
+	}
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
@@ -186,7 +197,7 @@ func (self BitswapStore) ReleaseOwnership(block P2PDataBlock, owner string) (boo
 	defer tx.Commit()
 
 	var key []byte
-	switch block.Type() {
+	switch p2pblock.Type() {
 
 	case BlockDirectory:
 		key = DirKey
@@ -235,7 +246,11 @@ func (self BitswapStore) Put(block blocks.Block) error {
 	}
 	defer tx.Commit()
 
-	err = self.put(tx, block)
+	p2pblock, err := getP2PBlock(block)
+	if err != nil {
+		return err
+	}
+	err = self.put(tx, block.Cid(), p2pblock)
 	if err != nil {
 		tx.Rollback()
 		return err
@@ -252,7 +267,12 @@ func (self BitswapStore) PutMany(blocklist []blocks.Block) error {
 	defer tx.Commit()
 
 	for _, block := range blocklist {
-		err = self.put(tx, block)
+
+		p2pblock, err := getP2PBlock(block)
+		if err != nil {
+			return err
+		}
+		err = self.put(tx, block.Cid(), p2pblock)
 
 		if err != nil {
 			tx.Rollback()
@@ -316,7 +336,7 @@ func (self BitswapStore) Has(key cid.Cid) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer tx.Commit()
+	defer tx.Rollback()
 
 	//check if it is a directory
 	bucket := tx.Bucket(DirKey)
@@ -375,14 +395,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		if res == nil {
 			return nil, fmt.Errorf("Data not correctly setup")
 		}
-		buf := bytes.NewBuffer(res)
-		var block P2PDirectoryBlock
-		err := gob.NewDecoder(buf).Decode(&block)
-		if err != nil {
-			return nil, err
-		}
-		block.BlockCid = key
-		return block, nil
+		return blocks.NewBlock(res), nil
 	}
 
 	//maybe a multifile
@@ -407,8 +420,8 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 			return nil, err
 		}
 
-		block := P2PMultiFileBlock{size, name, blocks, key}
-		return block, nil
+		block := P2PMultiFileBlock{size, name, blocks}
+		return block.ToBlock(), nil
 	}
 
 	//or a normal file
@@ -427,10 +440,10 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		data := make([]byte, blocksize)
 		n, err := fi.Read(data)
 		if err != nil {
-			return P2PFileBlock{}, err
+			return nil, err
 		}
-		block := P2PFileBlock{name, data[:n], key}
-		return block, nil
+		block := P2PFileBlock{name, data[:n]}
+		return block.ToBlock(), nil
 	}
 
 	//seems to be a raw data block
@@ -443,11 +456,11 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		bucket = bucket.Bucket(BlockKey)
 		val := bucket.Get(key.Bytes())
 		if val == nil {
-			return P2PRawBlock{}, fmt.Errorf("block found, but no value set. This is not ok for raw blocks")
+			return nil, fmt.Errorf("block found, but no value set. This is not ok for raw blocks")
 		}
 		offset := byteToInt(val)
 		if offset == -1 {
-			return P2PRawBlock{}, fmt.Errorf("block does not exist")
+			return nil, bstore.ErrNotFound
 		}
 
 		//read in the data
@@ -460,13 +473,13 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		data := make([]byte, blocksize)
 		n, err := fi.ReadAt(data, offset)
 		if err != nil {
-			return P2PRawBlock{}, err
+			return nil, err
 		}
-		block := P2PRawBlock{offset, data[:n], key}
-		return block, nil
+		block := P2PRawBlock{offset, data[:n]}
+		return block.ToBlock(), nil
 	}
 
-	return P2PRawBlock{}, fmt.Errorf("block does not exist")
+	return nil, bstore.ErrNotFound
 }
 
 func (self BitswapStore) HashOnRead(enabled bool) {
@@ -567,48 +580,60 @@ func (self BitswapStore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error
 }
 
 // GetSize returns the CIDs mapped BlockSize
-func (self BitswapStore) GetSize(cid.Cid) (int, error) {
-	fmt.Println("ERROR: Unimplemented function GETSIZE called")
-	return 0, nil
+func (self BitswapStore) GetSize(key cid.Cid) (int, error) {
+
+	block, err := self.Get(key)
+	if err != nil {
+		return 0, nil
+	}
+
+	return len(block.RawData()), nil
 }
 
 func (self BitswapStore) Close() {
 	self.db.Close()
 }
 
-func (self BitswapStore) put(tx *bolt.Tx, block blocks.Block) error {
+func getP2PBlock(block blocks.Block) (P2PDataBlock, error) {
 
-	p2pblock, ok := block.(P2PDataBlock)
-	if !ok {
-		return fmt.Errorf("Only P2P data blocks can be exchanged")
+	//check if it is a basic block that can be converted from rawdata
+	buf := bytes.NewBuffer(block.RawData())
+	var res P2PDataBlock
+	err := gob.NewDecoder(buf).Decode(&res)
+	if err != nil {
+		return nil, err
 	}
+	return res, nil
+}
 
-	switch p2pblock.Type() {
+func (self BitswapStore) put(tx *bolt.Tx, c cid.Cid, block P2PDataBlock) error {
+
+	switch block.Type() {
 
 	case BlockDirectory:
-		return self.putDirectory(tx, p2pblock.(P2PDirectoryBlock))
+		return self.putDirectory(tx, c, block.(P2PDirectoryBlock))
 
 	case BlockMultiFile:
-		return self.putMultiFile(tx, p2pblock.(P2PMultiFileBlock))
+		return self.putMultiFile(tx, c, block.(P2PMultiFileBlock))
 
 	case BlockFile:
-		return self.putFile(tx, p2pblock.(P2PFileBlock))
+		return self.putFile(tx, c, block.(P2PFileBlock))
 
 	case BlockRaw:
-		return self.putRaw(tx, p2pblock.(P2PRawBlock))
+		return self.putRaw(tx, c, block.(P2PRawBlock))
 	}
 
 	return fmt.Errorf("Unknown block type")
 }
 
 //directories are simple: just store the raw data.
-func (self BitswapStore) putDirectory(tx *bolt.Tx, block P2PDirectoryBlock) error {
+func (self BitswapStore) putDirectory(tx *bolt.Tx, c cid.Cid, block P2PDirectoryBlock) error {
 
 	directories := tx.Bucket(DirKey)
 	if directories == nil {
 		return fmt.Errorf("Datastore is badly set up!")
 	}
-	directory, err := directories.CreateBucketIfNotExists(block.Cid().Bytes())
+	directory, err := directories.CreateBucketIfNotExists(c.Bytes())
 	if err != nil {
 		return err
 	}
@@ -620,18 +645,18 @@ func (self BitswapStore) putDirectory(tx *bolt.Tx, block P2PDirectoryBlock) erro
 	}
 
 	//write the data
-	return directory.Put([]byte("data"), block.RawData())
+	return directory.Put([]byte("data"), block.ToData())
 }
 
 //we store the raw blocks individual
-func (self BitswapStore) putMultiFile(tx *bolt.Tx, block P2PMultiFileBlock) error {
+func (self BitswapStore) putMultiFile(tx *bolt.Tx, c cid.Cid, block P2PMultiFileBlock) error {
 
 	mfiles := tx.Bucket(MfileKey)
 	if mfiles == nil {
 		return fmt.Errorf("Datastore is badly set up!")
 	}
 
-	mfile, err := mfiles.CreateBucketIfNotExists(block.Cid().Bytes())
+	mfile, err := mfiles.CreateBucketIfNotExists(c.Bytes())
 	if err != nil {
 		return fmt.Errorf("Unable to setup file in datastore")
 	}
@@ -714,9 +739,9 @@ func findMfileForRawBlock(tx *bolt.Tx, rawCid cid.Cid) (cid.Cid, error) {
 	return blockfilecid, nil
 }
 
-func (self BitswapStore) putRaw(tx *bolt.Tx, block P2PRawBlock) error {
+func (self BitswapStore) putRaw(tx *bolt.Tx, c cid.Cid, block P2PRawBlock) error {
 
-	blockfilecid, err := findMfileForRawBlock(tx, block.Cid())
+	blockfilecid, err := findMfileForRawBlock(tx, c)
 	if err != nil {
 		return err
 	}
@@ -725,7 +750,7 @@ func (self BitswapStore) putRaw(tx *bolt.Tx, block P2PRawBlock) error {
 	mfiles := tx.Bucket(MfileKey)
 	mfile := mfiles.Bucket(blockfilecid.Bytes())
 	blocks := mfile.Bucket(BlockKey)
-	blocks.Put(block.Cid().Bytes(), intToByte(block.Offset))
+	blocks.Put(c.Bytes(), intToByte(block.Offset))
 
 	//we found the multifile! lets put the data into the file
 	path := filepath.Join(self.path, blockfilecid.String())
@@ -745,7 +770,7 @@ func (self BitswapStore) putRaw(tx *bolt.Tx, block P2PRawBlock) error {
 	return nil
 }
 
-func (self BitswapStore) putFile(tx *bolt.Tx, block P2PFileBlock) error {
+func (self BitswapStore) putFile(tx *bolt.Tx, c cid.Cid, block P2PFileBlock) error {
 
 	//we need to find the mutifile this block belongs to
 	files := tx.Bucket(FileKey)
@@ -754,7 +779,7 @@ func (self BitswapStore) putFile(tx *bolt.Tx, block P2PFileBlock) error {
 	}
 
 	//store the block
-	file, err := files.CreateBucketIfNotExists(block.Cid().Bytes())
+	file, err := files.CreateBucketIfNotExists(c.Bytes())
 	if err != nil {
 		return err
 	}
@@ -767,7 +792,7 @@ func (self BitswapStore) putFile(tx *bolt.Tx, block P2PFileBlock) error {
 	}
 
 	//write the file
-	path := filepath.Join(self.path, block.Cid().String())
+	path := filepath.Join(self.path, c.String())
 	fi, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
 		return err

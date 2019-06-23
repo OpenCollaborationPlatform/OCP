@@ -113,7 +113,9 @@ func randomBlock(size int) blocks.Block {
 
 	data := make([]byte, size)
 	rand.Read(data)
-	return blocks.NewBlock(data)
+
+	block := P2PFileBlock{"RandomBlock", data}
+	return block.ToBlock()
 }
 
 func repeatableBlock(size int) blocks.Block {
@@ -123,5 +125,6 @@ func repeatableBlock(size int) blocks.Block {
 		data[i] = byte(i)
 	}
 
-	return blocks.NewBlock(data)
+	block := P2PFileBlock{"RepeatableBlock", data}
+	return block.ToBlock()
 }

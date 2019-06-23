@@ -11,7 +11,6 @@ import (
 
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
-	utils "github.com/ipfs/go-ipfs-util"
 )
 
 //A type describing the block types
@@ -26,6 +25,13 @@ const (
 	blocksize int64 = 1 << (10 * 2) //maximal size of a data block (1MB)
 )
 
+func init() {
+	gob.Register(P2PDirectoryBlock{})
+	gob.Register(P2PFileBlock{})
+	gob.Register(P2PMultiFileBlock{})
+	gob.Register(P2PRawBlock{})
+}
+
 /******************************************************************************
 							Block implementations
 ******************************************************************************/
@@ -34,154 +40,106 @@ const (
 //as well as type for processing.
 //Implements the ipfs Block interface to be used with bitswap.
 type P2PDataBlock interface {
-	blocks.Block
-
 	Type() BlockType
+	ToData() []byte
+	ToBlock() blocks.Block
 }
 
 //A block describing a raw data part
 type P2PRawBlock struct {
-	Offset   int64
-	Data     []byte
-	BlockCid cid.Cid
+	Offset int64
+	Data   []byte
 }
 
 func (self P2PRawBlock) Type() BlockType {
 	return BlockRaw
 }
 
-func (self P2PRawBlock) RawData() []byte {
-	oldcid := self.BlockCid
-	self.BlockCid = cid.Cid{}
+func (self P2PRawBlock) ToData() []byte {
 
 	buf := new(bytes.Buffer)
-	gob.NewEncoder(buf).Encode(self)
+	var inter P2PDataBlock = self
+	gob.NewEncoder(buf).Encode(&inter)
 
-	self.BlockCid = oldcid
 	return buf.Bytes()
 }
 
-func (self P2PRawBlock) Cid() cid.Cid {
-	return self.BlockCid
-}
+func (self P2PRawBlock) ToBlock() blocks.Block {
 
-func (self P2PRawBlock) String() string {
-	return fmt.Sprintf("Raw block %v: %v bytes from %v on", self.BlockCid, len(self.Data), self.Offset)
-}
-
-func (self P2PRawBlock) Loggable() map[string]interface{} {
-	return map[string]interface{}{
-		"Raw block": self.Cid().String(),
-	}
+	return blocks.NewBlock(self.ToData())
 }
 
 //A block describing a file small enough for a single block
 type P2PFileBlock struct {
-	Name     string
-	Data     []byte
-	BlockCid cid.Cid
+	Name string
+	Data []byte
 }
 
 func (self P2PFileBlock) Type() BlockType {
 	return BlockFile
 }
 
-func (self P2PFileBlock) RawData() []byte {
-	oldcid := self.BlockCid
-	self.BlockCid = cid.Cid{}
+func (self P2PFileBlock) ToData() []byte {
 
 	buf := new(bytes.Buffer)
-	gob.NewEncoder(buf).Encode(self)
+	var inter P2PDataBlock = self
+	gob.NewEncoder(buf).Encode(&inter)
 
-	self.BlockCid = oldcid
 	return buf.Bytes()
 }
 
-func (self P2PFileBlock) Cid() cid.Cid {
-	return self.BlockCid
-}
+func (self P2PFileBlock) ToBlock() blocks.Block {
 
-func (self P2PFileBlock) String() string {
-	return fmt.Sprintf("File block %v: %v, %v bytes", self.BlockCid, self.Name, len(self.Data))
-}
-
-func (self P2PFileBlock) Loggable() map[string]interface{} {
-	return map[string]interface{}{
-		"File block": self.Cid().String(),
-	}
+	return blocks.NewBlock(self.ToData())
 }
 
 //a block descibing a file which is too large for a single block
 type P2PMultiFileBlock struct {
-	Size     int64
-	Name     string
-	Blocks   []cid.Cid
-	BlockCid cid.Cid
+	Size   int64
+	Name   string
+	Blocks []cid.Cid
 }
 
 func (self P2PMultiFileBlock) Type() BlockType {
-	return BlockFile
+	return BlockMultiFile
 }
 
-func (self P2PMultiFileBlock) RawData() []byte {
-	oldcid := self.BlockCid
-	self.BlockCid = cid.Cid{}
+func (self P2PMultiFileBlock) ToData() []byte {
 
 	buf := new(bytes.Buffer)
-	gob.NewEncoder(buf).Encode(self)
+	var inter P2PDataBlock = self
+	gob.NewEncoder(buf).Encode(&inter)
 
-	self.BlockCid = oldcid
 	return buf.Bytes()
 }
 
-func (self P2PMultiFileBlock) Cid() cid.Cid {
-	return self.BlockCid
-}
+func (self P2PMultiFileBlock) ToBlock() blocks.Block {
 
-func (self P2PMultiFileBlock) String() string {
-	return fmt.Sprintf("MultiFile block %v: %v (%v bytes, %v blocks)", self.BlockCid, self.Name, self.Size, len(self.Blocks))
-}
-
-func (self P2PMultiFileBlock) Loggable() map[string]interface{} {
-	return map[string]interface{}{
-		"MultiFile block": self.Cid().String(),
-	}
+	return blocks.NewBlock(self.ToData())
 }
 
 //a block descibing a directory
 type P2PDirectoryBlock struct {
-	Name     string
-	Blocks   []cid.Cid
-	BlockCid cid.Cid
+	Name   string
+	Blocks []cid.Cid
 }
 
 func (self P2PDirectoryBlock) Type() BlockType {
 	return BlockDirectory
 }
 
-func (self P2PDirectoryBlock) RawData() []byte {
-	oldcid := self.BlockCid
-	self.BlockCid = cid.Cid{}
+func (self P2PDirectoryBlock) ToData() []byte {
 
 	buf := new(bytes.Buffer)
-	gob.NewEncoder(buf).Encode(self)
+	var inter P2PDataBlock = self
+	gob.NewEncoder(buf).Encode(&inter)
 
-	self.BlockCid = oldcid
 	return buf.Bytes()
 }
 
-func (self P2PDirectoryBlock) Cid() cid.Cid {
-	return self.BlockCid
-}
+func (self P2PDirectoryBlock) ToBlock() blocks.Block {
 
-func (self P2PDirectoryBlock) String() string {
-	return fmt.Sprintf("Directory block %v: %v (%v blocks)", self.BlockCid, self.Name, len(self.Blocks))
-}
-
-func (self P2PDirectoryBlock) Loggable() map[string]interface{} {
-	return map[string]interface{}{
-		"Directory block": self.Cid().String(),
-	}
+	return blocks.NewBlock(self.ToData())
 }
 
 /******************************************************************************
@@ -224,12 +182,10 @@ func blockifyFile(path string) ([]blocks.Block, cid.Cid, error) {
 			return result, cid.Cid{}, err
 		}
 
-		block := P2PFileBlock{name, data[:n], cid.Cid{}}
-		blockcid := cid.NewCidV1(cid.Raw, utils.Hash(block.RawData()))
-		block.BlockCid = blockcid
+		block := P2PFileBlock{name, data[:n]}
+		result = append(result, block.ToBlock())
 
-		result = append(result, block)
-		return result, blockcid, nil
+		return result, result[0].Cid(), nil
 	}
 
 	result = make([]blocks.Block, blocknum+1)
@@ -242,20 +198,16 @@ func blockifyFile(path string) ([]blocks.Block, cid.Cid, error) {
 		}
 
 		//the last block can be smaller than blocksize, hence always use n
-		block := P2PRawBlock{int64(i) * blocksize, data[:n], cid.Cid{}}
-		blockcid := cid.NewCidV1(cid.Raw, utils.Hash(block.RawData()))
-		block.BlockCid = blockcid
+		block := P2PRawBlock{int64(i) * blocksize, data[:n]}
 
 		//store the blocks
-		rawblocks[i] = blockcid
-		result[i+1] = block
+		result[i+1] = block.ToBlock()
+		rawblocks[i] = result[i+1].Cid()
 	}
 
 	//build the fileblock:
-	block := P2PMultiFileBlock{size, name, rawblocks, cid.Cid{}}
-	blockcid := cid.NewCidV1(cid.Raw, utils.Hash(block.RawData()))
-	block.BlockCid = blockcid
-	result[0] = block
+	block := P2PMultiFileBlock{size, name, rawblocks}
+	result[0] = block.ToBlock()
 
-	return result, blockcid, nil
+	return result, result[0].Cid(), nil
 }
