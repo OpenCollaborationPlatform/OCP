@@ -1,9 +1,11 @@
 package p2p
 
 import (
+	"CollaborationNode/utils"
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -80,15 +82,46 @@ func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid,
 }
 
 func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, error) {
-	/*
-		//get the root node
-		node, err := self.service.Get(ctx, id)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to get root node")
-		}
 
-		//build the reader from the nodes DAG
-		return unixfsio.NewDagReader(ctx, node, self.service)*/
+	//get the root block
+	block, err := self.service.GetBlock(ctx, id)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to get root node")
+	}
+
+	//check if we need additional blocks (e.g. it's a multifile)
+	p2pblock, err := getP2PBlock(block)
+	if err != nil {
+		return nil, utils.StackError(err, "Node is not expected type")
+	}
+
+	switch p2pblock.Type() {
+	case BlockRaw:
+		return nil, fmt.Errorf("cid does not belong to a file")
+
+	case BlockDirectory:
+		return nil, fmt.Errorf("cid does not belong to a file")
+
+	case BlockFile:
+		//we are done.
+		path := filepath.Join(self.datapath, block.Cid().String())
+		return os.Open(path)
+
+	case BlockMultiFile:
+		//get the rest of the blocks (TODO: Check if we have all blocks and simply
+		//load the file)
+		mfileblock := p2pblock.(P2PMultiFileBlock)
+		num := len(mfileblock.Blocks)
+		channel := self.service.GetBlocks(ctx, mfileblock.Blocks)
+		for range channel {
+			num--
+		}
+		if num != 0 {
+			return nil, fmt.Errorf("File was only partially received")
+		}
+		path := filepath.Join(self.datapath, block.Cid().String())
+		return os.Open(path)
+	}
 
 	return nil, nil
 }

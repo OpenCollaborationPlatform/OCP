@@ -12,7 +12,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/gob"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -592,18 +591,6 @@ func (self BitswapStore) GetSize(key cid.Cid) (int, error) {
 
 func (self BitswapStore) Close() {
 	self.db.Close()
-}
-
-func getP2PBlock(block blocks.Block) (P2PDataBlock, error) {
-
-	//check if it is a basic block that can be converted from rawdata
-	buf := bytes.NewBuffer(block.RawData())
-	var res P2PDataBlock
-	err := gob.NewDecoder(buf).Decode(&res)
-	if err != nil {
-		return nil, err
-	}
-	return res, nil
 }
 
 func (self BitswapStore) put(tx *bolt.Tx, c cid.Cid, block P2PDataBlock) error {

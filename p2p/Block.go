@@ -142,6 +142,18 @@ func (self P2PDirectoryBlock) ToBlock() blocks.Block {
 	return blocks.NewBlock(self.ToData())
 }
 
+func getP2PBlock(block blocks.Block) (P2PDataBlock, error) {
+
+	//check if it is a basic block that can be converted from rawdata
+	buf := bytes.NewBuffer(block.RawData())
+	var res P2PDataBlock
+	err := gob.NewDecoder(buf).Decode(&res)
+	if err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 /******************************************************************************
 							Block creation
 ******************************************************************************/

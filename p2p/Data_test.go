@@ -131,8 +131,10 @@ func TestDataService(t *testing.T) {
 
 	//generate a testfile
 	block := repeatableBlock(555)
+	p2pblock, _ := getP2PBlock(block)
+	fileblock := p2pblock.(P2PFileBlock)
 	testfilepath := filepath.Join(path, "testfile")
-	ioutil.WriteFile(testfilepath, block.RawData(), 0644)
+	ioutil.WriteFile(testfilepath, fileblock.Data, 0644)
 
 	//Setup the hosts
 	h1, _ := temporaryHost(path)
@@ -159,7 +161,7 @@ func TestDataService(t *testing.T) {
 			n, err := reader.Read(data)
 			So(err, ShouldBeNil)
 			So(n, ShouldEqual, 555)
-			So(bytes.Equal(data, block.RawData()), ShouldBeTrue)
+			So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
 
 			Convey("and retreiving from the other shall be possible too", func() {
 
@@ -176,7 +178,7 @@ func TestDataService(t *testing.T) {
 				n, err := reader.Read(data)
 				So(err, ShouldBeNil)
 				So(n, ShouldEqual, 555)
-				So(bytes.Equal(data, block.RawData()), ShouldBeTrue)
+				So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
 			})
 
 			Convey("Afterwards droping the file from the first host is possible", func() {
