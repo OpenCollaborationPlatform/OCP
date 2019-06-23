@@ -53,7 +53,7 @@ func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid,
 	//we first blockify the file bevore moving it into our store.
 	//This is done to know the cid after which we name the file in the store
 	//to avoid having problems with same filenames for different files
-	blocks, filecid, err := blockifyFile(path, SwarmID(""))
+	blocks, filecid, err := blockifyFile(path)
 	if err != nil {
 		return filecid, err
 	}

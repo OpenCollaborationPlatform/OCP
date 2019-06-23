@@ -29,6 +29,7 @@ var (
 	MfileKey = []byte("multifiles")
 	FileKey  = []byte("files")
 	BlockKey = []byte("blocks")
+	OwnerKey = []byte("blocks")
 )
 
 func intToByte(val int64) []byte {
@@ -94,13 +95,19 @@ type BitswapStore struct {
 /*
 DB [
 	directories [
-		cid: bytes
+		cid [
+			data: bytes
+			owners [
+				string:string
+			]
 	]
 	multifiles [
 		cid [
 			name: string
-			owner: string
 			size: int64
+			owners [
+				string:string
+			]
 			blocks [
 				cid: int64
 			]
@@ -109,7 +116,9 @@ DB [
 	files [
 		cid [
 			name: string
-			owner: string
+			owners [
+				string: string
+			]
 		]
 	]
 ]
@@ -159,14 +168,14 @@ func (self BitswapStore) DeleteBlock(key cid.Cid) error {
 
 	//check if it is a directory
 	bucket := tx.Bucket(DirKey)
-	res := bucket.Get(key.Bytes())
+	res := bucket.Bucket(key.Bytes())
 	if res != nil {
-		return bucket.Delete(key.Bytes())
+		return bucket.DeleteBucket(key.Bytes())
 	}
 
 	//maybe a multifile
 	bucket = tx.Bucket(MfileKey)
-	res = bucket.Get(key.Bytes())
+	res = bucket.Bucket(key.Bytes())
 	if res != nil {
 		bucket.DeleteBucket(key.Bytes())
 		//delete the file
@@ -176,7 +185,7 @@ func (self BitswapStore) DeleteBlock(key cid.Cid) error {
 
 	//or a normal file
 	bucket = tx.Bucket(FileKey)
-	res = bucket.Get(key.Bytes())
+	res = bucket.Bucket(key.Bytes())
 	if res != nil {
 		bucket.DeleteBucket(key.Bytes())
 		//delete the file
@@ -207,8 +216,8 @@ func (self BitswapStore) Has(key cid.Cid) (bool, error) {
 
 	//check if it is a directory
 	bucket := tx.Bucket(DirKey)
-	res := bucket.Get(key.Bytes())
-	if res != nil {
+	bucket = bucket.Bucket(key.Bytes())
+	if bucket != nil {
 		return true, nil
 	}
 
@@ -255,9 +264,13 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 
 	//check if it is a directory
 	bucket := tx.Bucket(DirKey)
-	res := bucket.Get(key.Bytes())
-	if res != nil {
+	bucket = bucket.Bucket(key.Bytes())
+	if bucket != nil {
 		//rebuild the block from raw data
+		res := bucket.Get([]byte("data"))
+		if res == nil {
+			return nil, fmt.Errorf("Data not correctly setup")
+		}
 		buf := bytes.NewBuffer(res)
 		var block P2PDirectoryBlock
 		err := gob.NewDecoder(buf).Decode(&block)
@@ -273,7 +286,6 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 	bucket = bucket.Bucket(key.Bytes())
 	if bucket != nil {
 		name := string(bucket.Get([]byte("name")))
-		owner := string(bucket.Get([]byte("owner")))
 		size := byteToInt(bucket.Get([]byte("size")))
 
 		//get all blocks!
@@ -291,7 +303,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 			return nil, err
 		}
 
-		block := P2PMultiFileBlock{size, name, blocks, SwarmID(owner), key}
+		block := P2PMultiFileBlock{size, name, blocks, key}
 		return block, nil
 	}
 
@@ -300,7 +312,6 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 	bucket = bucket.Bucket(key.Bytes())
 	if bucket != nil {
 		name := string(bucket.Get([]byte("name")))
-		owner := string(bucket.Get([]byte("owner")))
 
 		//read in the data
 		path := filepath.Join(self.path, key.String())
@@ -314,7 +325,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		if err != nil {
 			return P2PFileBlock{}, err
 		}
-		block := P2PFileBlock{name, data[:n], SwarmID(owner), key}
+		block := P2PFileBlock{name, data[:n], key}
 		return block, nil
 	}
 
@@ -324,7 +335,6 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 
 		bucket := tx.Bucket(MfileKey)
 		bucket = bucket.Bucket(mfile.Bytes())
-		owner := string(bucket.Get([]byte("owner")))
 
 		bucket = bucket.Bucket(BlockKey)
 		val := bucket.Get(key.Bytes())
@@ -348,7 +358,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		if err != nil {
 			return P2PRawBlock{}, err
 		}
-		block := P2PRawBlock{offset, data[:n], SwarmID(owner), key}
+		block := P2PRawBlock{offset, data[:n], key}
 		return block, nil
 	}
 
@@ -494,7 +504,19 @@ func (self BitswapStore) putDirectory(tx *bolt.Tx, block P2PDirectoryBlock) erro
 	if directories == nil {
 		return fmt.Errorf("Datastore is badly set up!")
 	}
-	return directories.Put(block.Cid().Bytes(), block.RawData())
+	directory, err := directories.CreateBucketIfNotExists(block.Cid().Bytes())
+	if err != nil {
+		return err
+	}
+
+	//make sure the owner bucket exists
+	_, err = directory.CreateBucketIfNotExists(OwnerKey)
+	if err != nil {
+		return err
+	}
+
+	//write the data
+	return directory.Put([]byte("data"), block.RawData())
 }
 
 //we store the raw blocks individual
@@ -512,7 +534,6 @@ func (self BitswapStore) putMultiFile(tx *bolt.Tx, block P2PMultiFileBlock) erro
 
 	//put the data in
 	mfile.Put([]byte("name"), []byte(block.Name))
-	mfile.Put([]byte("owner"), []byte(block.Owner()))
 	mfile.Put([]byte("size"), intToByte(block.Size))
 
 	//create a empty blocks bucket
@@ -537,7 +558,9 @@ func (self BitswapStore) putMultiFile(tx *bolt.Tx, block P2PMultiFileBlock) erro
 		}
 	}
 
-	return nil
+	//make sure the owner bucket exists
+	_, err = mfile.CreateBucketIfNotExists(OwnerKey)
+	return err
 }
 
 func findMfileForRawBlock(tx *bolt.Tx, rawCid cid.Cid) (cid.Cid, error) {
@@ -632,7 +655,12 @@ func (self BitswapStore) putFile(tx *bolt.Tx, block P2PFileBlock) error {
 		return err
 	}
 	file.Put([]byte("name"), []byte(block.Name))
-	file.Put([]byte("owner"), []byte(block.BlockOwner))
+
+	//make sure the owner bucket exists
+	_, err = file.CreateBucketIfNotExists(OwnerKey)
+	if err != nil {
+		return err
+	}
 
 	//write the file
 	path := filepath.Join(self.path, block.Cid().String())

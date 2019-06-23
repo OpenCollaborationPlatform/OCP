@@ -37,23 +37,17 @@ type P2PDataBlock interface {
 	blocks.Block
 
 	Type() BlockType
-	Owner() SwarmID
 }
 
 //A block describing a raw data part
 type P2PRawBlock struct {
-	Offset     int64
-	Data       []byte
-	BlockOwner SwarmID
-	BlockCid   cid.Cid
+	Offset   int64
+	Data     []byte
+	BlockCid cid.Cid
 }
 
 func (self P2PRawBlock) Type() BlockType {
 	return BlockRaw
-}
-
-func (self P2PRawBlock) Owner() SwarmID {
-	return self.BlockOwner
 }
 
 func (self P2PRawBlock) RawData() []byte {
@@ -83,18 +77,13 @@ func (self P2PRawBlock) Loggable() map[string]interface{} {
 
 //A block describing a file small enough for a single block
 type P2PFileBlock struct {
-	Name       string
-	Data       []byte
-	BlockOwner SwarmID
-	BlockCid   cid.Cid
+	Name     string
+	Data     []byte
+	BlockCid cid.Cid
 }
 
 func (self P2PFileBlock) Type() BlockType {
 	return BlockFile
-}
-
-func (self P2PFileBlock) Owner() SwarmID {
-	return self.BlockOwner
 }
 
 func (self P2PFileBlock) RawData() []byte {
@@ -124,19 +113,14 @@ func (self P2PFileBlock) Loggable() map[string]interface{} {
 
 //a block descibing a file which is too large for a single block
 type P2PMultiFileBlock struct {
-	Size       int64
-	Name       string
-	Blocks     []cid.Cid
-	BlockOwner SwarmID
-	BlockCid   cid.Cid
+	Size     int64
+	Name     string
+	Blocks   []cid.Cid
+	BlockCid cid.Cid
 }
 
 func (self P2PMultiFileBlock) Type() BlockType {
 	return BlockFile
-}
-
-func (self P2PMultiFileBlock) Owner() SwarmID {
-	return self.BlockOwner
 }
 
 func (self P2PMultiFileBlock) RawData() []byte {
@@ -166,18 +150,13 @@ func (self P2PMultiFileBlock) Loggable() map[string]interface{} {
 
 //a block descibing a directory
 type P2PDirectoryBlock struct {
-	Name       string
-	Blocks     []cid.Cid
-	BlockOwner SwarmID
-	BlockCid   cid.Cid
+	Name     string
+	Blocks   []cid.Cid
+	BlockCid cid.Cid
 }
 
 func (self P2PDirectoryBlock) Type() BlockType {
 	return BlockDirectory
-}
-
-func (self P2PDirectoryBlock) Owner() SwarmID {
-	return self.BlockOwner
 }
 
 func (self P2PDirectoryBlock) RawData() []byte {
@@ -213,7 +192,7 @@ func (self P2PDirectoryBlock) Loggable() map[string]interface{} {
 // - This does split the files into blocks
 // - same file returns exactly the same blocks, undependend of path
 // Returns all created blocks as well as the high level cid used to adress this file
-func blockifyFile(path string, owner SwarmID) ([]blocks.Block, cid.Cid, error) {
+func blockifyFile(path string) ([]blocks.Block, cid.Cid, error) {
 
 	result := make([]blocks.Block, 0)
 
@@ -245,7 +224,7 @@ func blockifyFile(path string, owner SwarmID) ([]blocks.Block, cid.Cid, error) {
 			return result, cid.Cid{}, err
 		}
 
-		block := P2PFileBlock{name, data[:n], owner, cid.Cid{}}
+		block := P2PFileBlock{name, data[:n], cid.Cid{}}
 		blockcid := cid.NewCidV1(cid.Raw, utils.Hash(block.RawData()))
 		block.BlockCid = blockcid
 
@@ -263,7 +242,7 @@ func blockifyFile(path string, owner SwarmID) ([]blocks.Block, cid.Cid, error) {
 		}
 
 		//the last block can be smaller than blocksize, hence always use n
-		block := P2PRawBlock{int64(i) * blocksize, data[:n], owner, cid.Cid{}}
+		block := P2PRawBlock{int64(i) * blocksize, data[:n], cid.Cid{}}
 		blockcid := cid.NewCidV1(cid.Raw, utils.Hash(block.RawData()))
 		block.BlockCid = blockcid
 
@@ -273,7 +252,7 @@ func blockifyFile(path string, owner SwarmID) ([]blocks.Block, cid.Cid, error) {
 	}
 
 	//build the fileblock:
-	block := P2PMultiFileBlock{size, name, rawblocks, owner, cid.Cid{}}
+	block := P2PMultiFileBlock{size, name, rawblocks, cid.Cid{}}
 	blockcid := cid.NewCidV1(cid.Raw, utils.Hash(block.RawData()))
 	block.BlockCid = blockcid
 	result[0] = block
