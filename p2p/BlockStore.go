@@ -123,6 +123,110 @@ DB [
 	]
 ]
 */
+
+/******************************************************************************
+							Custom functions
+******************************************************************************/
+func (self BitswapStore) GetOwnership(block P2PDataBlock, owner string) error {
+
+	tx, err := self.db.Begin(true)
+	if err != nil {
+		return err
+	}
+	defer tx.Commit()
+
+	var key []byte
+	switch block.Type() {
+
+	case BlockDirectory:
+		key = DirKey
+	case BlockFile:
+		key = FileKey
+	case BlockMultiFile:
+		key = MfileKey
+	default:
+		tx.Rollback()
+		return fmt.Errorf("Can only set owner for Directory, MFile and File")
+	}
+
+	//we add ourself to the owner list of that block!
+	bucket := tx.Bucket(key)
+	bucket = bucket.Bucket(block.Cid().Bytes())
+	if bucket == nil {
+		tx.Rollback()
+		return fmt.Errorf("Block does not exist")
+	}
+	bucket = bucket.Bucket(OwnerKey)
+	if bucket == nil {
+		tx.Rollback()
+		return fmt.Errorf("Block is not setup correctly in the blockstore")
+	}
+
+	//first see if the owner already is noted
+	c := bucket.Cursor()
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		if bytes.Equal(k, []byte(owner)) {
+			tx.Rollback()
+			return nil
+		}
+	}
+
+	//if we are here the owne was not found: add ourself!
+	return bucket.Put([]byte(owner), []byte(owner))
+}
+
+//Removes the owner, returns true if it was the last owner and the block is
+//ownerless
+func (self BitswapStore) ReleaseOwnership(block P2PDataBlock, owner string) (bool, error) {
+
+	tx, err := self.db.Begin(true)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Commit()
+
+	var key []byte
+	switch block.Type() {
+
+	case BlockDirectory:
+		key = DirKey
+	case BlockFile:
+		key = FileKey
+	case BlockMultiFile:
+		key = MfileKey
+	default:
+		tx.Rollback()
+		return false, fmt.Errorf("Can only set owner for Directory, MFile and File")
+	}
+
+	//we add ourself to the owner list of that block!
+	bucket := tx.Bucket(key)
+	bucket = bucket.Bucket(block.Cid().Bytes())
+	if bucket == nil {
+		tx.Rollback()
+		return false, fmt.Errorf("Block does not exist")
+	}
+	bucket = bucket.Bucket(OwnerKey)
+	if bucket == nil {
+		tx.Rollback()
+		return false, fmt.Errorf("Block is not setup correctly in the blockstore")
+	}
+
+	//delete the owner
+	bucket.Delete([]byte(owner))
+
+	//check if there are more or if we have been the last one
+	c := bucket.Cursor()
+	if k, _ := c.Next(); k == nil {
+		return true, nil
+	}
+	return false, nil
+}
+
+/******************************************************************************
+							Blockstore interface
+******************************************************************************/
+
 // Put puts a given block into the store
 func (self BitswapStore) Put(block blocks.Block) error {
 	tx, err := self.db.Begin(true)
