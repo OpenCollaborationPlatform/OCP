@@ -1,5 +1,6 @@
 package p2p
 
+/*
 import (
 	"context"
 	"encoding/binary"
@@ -116,3 +117,4 @@ func TestBasicSharedState(t *testing.T) {
 		})
 	})
 }
+*/

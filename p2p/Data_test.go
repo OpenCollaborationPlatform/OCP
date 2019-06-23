@@ -22,10 +22,9 @@ func TestBlockStore(t *testing.T) {
 
 	Convey("Setting up a blockstore,", t, func() {
 
-		batchingstore, err := NewBitswapStore(path)
+		bstore, err := NewBitswapStore(path)
 		So(err, ShouldBeNil)
-		bstore := blockstore.NewBlockstore(batchingstore)
-		defer batchingstore.Close()
+		defer bstore.Close()
 
 		Convey("Adding data should work", func() {
 
@@ -71,17 +70,15 @@ func TestBitswap(t *testing.T) {
 	defer os.RemoveAll(path)
 
 	//build blockstore
-	dstore, err := NewBitswapStore(filepath.Join(path, "store1"))
+	store1, err := NewBitswapStore(filepath.Join(path, "store1"))
 	if err != nil {
 		return
 	}
-	store1 := blockstore.NewBlockstore(dstore)
 
-	dstore, err = NewBitswapStore(filepath.Join(path, "store2"))
+	store2, err := NewBitswapStore(filepath.Join(path, "store2"))
 	if err != nil {
 		return
 	}
-	store2 := blockstore.NewBlockstore(dstore)
 
 	Convey("Setting up Bitswaps for two random hosts,", t, func() {
 

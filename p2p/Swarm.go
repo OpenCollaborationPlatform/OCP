@@ -50,7 +50,7 @@ type Swarm struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
 
-	//some intenral data
+	//some internal data
 	path string
 }
 

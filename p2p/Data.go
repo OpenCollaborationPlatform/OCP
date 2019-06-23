@@ -1,23 +1,15 @@
 package p2p
 
 import (
-	"CollaborationNode/utils"
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/gob"
 	"io"
 	"os"
+	"path/filepath"
 
 	bserv "github.com/ipfs/go-blockservice"
 	cid "github.com/ipfs/go-cid"
-	blockstore "github.com/ipfs/go-ipfs-blockstore"
-	chunker "github.com/ipfs/go-ipfs-chunker"
-	ipld "github.com/ipfs/go-ipld-format"
-	merkle "github.com/ipfs/go-merkledag"
-	unixfsimp "github.com/ipfs/go-unixfs/importer"
-	unixfsio "github.com/ipfs/go-unixfs/io"
-	"github.com/spf13/viper"
 )
 
 type DataService interface {
@@ -29,12 +21,17 @@ type DataService interface {
 
 func NewDataService(host *Host) (DataService, error) {
 
+	//check if we have the data dir, if not create it
+	path := filepath.Join(host.path, "DataExchange")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.Mkdir(path, os.ModePerm)
+	}
+
 	//build the blockstore
-	store, err := NewBitswapStore(viper.GetString("directory"))
+	bstore, err := NewBitswapStore(path)
 	if err != nil {
 		return nil, err
 	}
-	bstore := blockstore.NewBlockstore(store)
 
 	//build the blockservice from a blockstore and a bitswap
 	bitswap, err := NewBitswap(bstore, host)
@@ -43,64 +40,81 @@ func NewDataService(host *Host) (DataService, error) {
 	}
 	blockservice := bserv.New(bstore, bitswap)
 
-	//build dagservice (merkledag) ontop of the blockservice
-	dagservice := merkle.NewDAGService(blockservice)
-
-	return &hostDataService{dagservice, blockservice}, nil
+	return &hostDataService{path, blockservice}, nil
 }
 
 type hostDataService struct {
-	service  ipld.DAGService
-	blockser bserv.BlockService
+	datapath string
+	service  bserv.BlockService
 }
 
 func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
 
-	//read the file
-	file, err := os.Open(path)
+	//we first blockify the file bevore moving it into our store.
+	//This is done to know the cid after which we name the file in the store
+	//to avoid having problems with same filenames for different files
+	blocks, filecid, err := blockifyFile(path, SwarmID(""))
+	if err != nil {
+		return filecid, err
+	}
+
+	//copy the file over
+	source, _ := os.Open(path) //no error checking, blockify did this already
+	defer source.Close()
+
+	destpath := filepath.Join(self.datapath, filecid.String())
+	destination, err := os.Create(destpath)
+	if err != nil {
+		return cid.Cid{}, err
+	}
+	defer destination.Close()
+	_, err = io.Copy(destination, source)
 	if err != nil {
 		return cid.Cid{}, err
 	}
 
-	//build the dag
-	splitter := chunker.DefaultSplitter(bufio.NewReader(file))
-	dagnode, err := unixfsimp.BuildDagFromReader(self.service, splitter)
+	//make the blocks available
+	err = self.service.AddBlocks(blocks)
 
-	return dagnode.Cid(), err
+	return filecid, err
 }
 
 func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (io.Reader, error) {
+	/*
+		//get the root node
+		node, err := self.service.Get(ctx, id)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to get root node")
+		}
 
-	//get the root node
-	node, err := self.service.Get(ctx, id)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to get root node")
-	}
+		//build the reader from the nodes DAG
+		return unixfsio.NewDagReader(ctx, node, self.service)*/
 
-	//build the reader from the nodes DAG
-	return unixfsio.NewDagReader(ctx, node, self.service)
+	return nil, nil
 }
 
 func (self *hostDataService) DropFile(ctx context.Context, id cid.Cid) error {
+	/*
+		cids := make([]cid.Cid, 1)
+		cids[0] = id
 
-	cids := make([]cid.Cid, 1)
-	cids[0] = id
+		visit := func(id cid.Cid) bool {
+			cids = append(cids, id)
+			return true
+		}
 
-	visit := func(id cid.Cid) bool {
-		cids = append(cids, id)
-		return true
-	}
+		err := merkle.EnumerateChildren(ctx, merkle.GetLinksDirect(self.service), id, visit)
+		if err != nil {
+			return utils.StackError(err, "Unable to drop file")
+		}
 
-	err := merkle.EnumerateChildren(ctx, merkle.GetLinksDirect(self.service), id, visit)
-	if err != nil {
-		return utils.StackError(err, "Unable to drop file")
-	}
+		return self.service.RemoveMany(ctx, cids)*/
 
-	return self.service.RemoveMany(ctx, cids)
+	return nil
 }
 
 func (self *hostDataService) Close() {
-	self.blockser.Close()
+	self.service.Close()
 }
 
 //SwarmDataService

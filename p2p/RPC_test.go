@@ -1,5 +1,6 @@
 package p2p
 
+/*
 import (
 	"context"
 	"fmt"
@@ -185,4 +186,4 @@ func TestSwarmRPC(t *testing.T) {
 		})
 
 	})
-}
+}*/

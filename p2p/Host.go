@@ -32,6 +32,9 @@ type Host struct {
 	Rpc   *hostRpcService
 	Data  DataService
 	Event *hostEventService
+
+	//some internal data
+	path string
 }
 
 //Host creates p2p host which manages all peer connections
@@ -42,6 +45,9 @@ func NewHost(overlord Overlord) *Host {
 
 // Starts the listening for connections and the bootstrap prozess
 func (h *Host) Start() error {
+
+	//store the path
+	h.path = viper.GetString("directory")
 
 	//load the keys
 	content, err := ioutil.ReadFile(filepath.Join(viper.GetString("directory"), "public"))
