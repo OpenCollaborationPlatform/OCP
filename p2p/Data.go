@@ -3,7 +3,9 @@ package p2p
 import (
 	"CollaborationNode/utils"
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/gob"
 	"io"
 	"os"
 
@@ -104,7 +106,62 @@ func (self *hostDataService) Close() {
 //SwarmDataService
 //This dataservice behaves sligthly different than the normal one:
 // - Adding/Dropping a file automatically distributes it within the swarm
-// - Added files are encryptet, so that they are unreadable outside of the swarm
+
+type dataStateCommand struct {
+	file   cid.Cid //the cid to add or remove from the list
+	remove bool    //if true is removed from list, if false it is added
+}
+
+func (self dataStateCommand) toByte() ([]byte, error) {
+
+	buf := new(bytes.Buffer)
+	err := gob.NewEncoder(buf).Encode(self)
+	return buf.Bytes(), err
+}
+
+func dataStateCommandFromByte(data []byte) (dataStateCommand, error) {
+
+	cmd := dataStateCommand{}
+	buf := bytes.NewBuffer(data)
+	err := gob.NewDecoder(buf).Decode(&cmd)
+	return cmd, err
+}
+
+//a shared state that is a list of CIDs this swarm shares.
+type dataState struct {
+	files []cid.Cid
+}
+
+func (self *dataState) Apply(data []byte) error {
+
+	cmd, err := dataStateCommandFromByte(data)
+	if err != nil {
+		return err
+	}
+
+	if cmd.remove {
+
+		for i, val := range self.files {
+			if val == cmd.file {
+				self.files = append(self.files[:i], self.files[i+1:]...)
+				break
+			}
+		}
+
+	} else {
+		self.files = append(self.files, cmd.file)
+	}
+	return nil
+}
+
+/*
+	Reset() error       //reset state to initial value without any apply
+
+	//snapshoting
+	Snapshot() ([]byte, error)   //crete a snapshot from current state
+	LoadSnapshot([]byte) error   //setup state according to snapshot
+	EnsureSnapshot([]byte) error //make sure this snapshot represents the current state
+}*/
 
 type swarmDataService struct {
 	data  *hostDataService
