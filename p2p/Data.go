@@ -246,50 +246,135 @@ func dataStateCommandFromByte(data []byte) (dataStateCommand, error) {
 type dataState struct {
 	files   []cid.Cid
 	service *swarmDataService
+	ctx     context.Context
+	cancel  context.CancelFunc
+}
+
+func newDataState(service *swarmDataService) *dataState {
+
+	ctx, cncl := context.WithCancel(context.Background())
+	return &dataState{
+		files:   make([]cid.Cid, 0),
+		service: service,
+		ctx:     ctx,
+		cancel:  cncl,
+	}
 }
 
 func (self *dataState) Apply(data []byte) error {
-	/*
-		cmd, err := dataStateCommandFromByte(data)
-		if err != nil {
-			return err
+
+	cmd, err := dataStateCommandFromByte(data)
+	if err != nil {
+		return err
+	}
+
+	if cmd.remove {
+
+		for i, val := range self.files {
+			if val == cmd.file {
+				self.files = append(self.files[:i], self.files[i+1:]...)
+				break
+			}
 		}
+		self.service.DropFile(context.Background(), cmd.file)
 
-		if cmd.remove {
+	} else {
 
-			for i, val := range self.files {
-				if val == cmd.file {
-					self.files = append(self.files[:i], self.files[i+1:]...)
-					break
-				}
+		self.files = append(self.files, cmd.file)
+		//this could take a while... let's do it in a goroutine!
+		go func() {
+			file, err := self.service.GetFile(self.ctx, cmd.file)
+			if err != nil && file != nil {
+				file.Close()
 			}
-			if self.service.data.store.Has(cmd.file) {
-				last, err := self.service.store.ReleaseOwnership(cmd.file)
-				if err != nil {
-					return err
-				}
-				if last {
-					self.service.se
-				}
+		}()
+	}
 
-			} else {
-				return fmt.Errorf("Dropping file not possible as it is not available")
-			}
-
-		} else {
-			self.files = append(self.files, cmd.file)
-		}*/
 	return nil
 }
 
-/*
-	Reset() error       //reset state to initial value without any apply
+func (self *dataState) Reset() error {
 
-	//snapshoting
-	Snapshot() ([]byte, error)   //crete a snapshot from current state
-	LoadSnapshot([]byte) error   //setup state according to snapshot
-	EnsureSnapshot([]byte) error //make sure this snapshot represents the current state
-}*/
+	//drop all files we currently have
+	for _, file := range self.files {
+		err := self.service.DropFile(context.Background(), file)
+		if err != nil {
+			return err
+		}
+	}
+
+	self.files = make([]cid.Cid, 0)
+	return nil
+}
+
+func (self *dataState) Snapshot() ([]byte, error) {
+
+	buf := new(bytes.Buffer)
+	err := gob.NewEncoder(buf).Encode(&self.files)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func (self *dataState) EnsureSnapshot(snap []byte) error {
+
+	buf := bytes.NewBuffer(snap)
+	var list []cid.Cid
+	err := gob.NewEncoder(buf).Encode(&list)
+	if err != nil {
+		return err
+	}
+
+	//compare lists
+	if len(list) != len(self.files) {
+		return fmt.Errorf("Snapshot does not match current state")
+	}
+
+	for i, file := range list {
+		if self.files[i] != file {
+			return fmt.Errorf("Snapshot does not match current state")
+		}
+	}
+	return nil
+}
+
+func (self *dataState) LoadSnapshot(snap []byte) error {
+
+	//we make it simple: remove all, add the new ones and than garbage collect
+	buf := bytes.NewBuffer(snap)
+	var list []cid.Cid
+	err := gob.NewEncoder(buf).Encode(&list)
+	if err != nil {
+		return err
+	}
+
+	//drop ownership of all old files
+	for _, file := range self.files {
+		//get the root block
+		block, err := self.service.data.service.GetBlock(self.ctx, file)
+		if err != nil {
+			return err
+		}
+		//release ownership
+		_, err = self.service.data.store.ReleaseOwnership(block, string(self.service.id))
+		if err != nil {
+			return err
+		}
+	}
+
+	//grab ownership of new files
+	for _, file := range list {
+		go func(file cid.Cid) {
+			f, err := self.service.GetFile(self.ctx, file)
+			if err != nil && f != nil {
+				f.Close()
+			}
+		}(file)
+	}
+	self.files = list
+	return nil
+}
 
 type swarmDataService struct {
 	data  *hostDataService
