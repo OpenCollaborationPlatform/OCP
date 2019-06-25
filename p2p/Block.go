@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
@@ -118,6 +119,10 @@ func (self P2PMultiFileBlock) ToBlock() blocks.Block {
 	return blocks.NewBlock(self.ToData())
 }
 
+func (self P2PMultiFileBlock) Sort() {
+	sort.Slice(self.Blocks, func(i, j int) bool { return self.Blocks[i].String() < self.Blocks[j].String() })
+}
+
 //a block descibing a directory
 type P2PDirectoryBlock struct {
 	Name   string
@@ -140,6 +145,10 @@ func (self P2PDirectoryBlock) ToData() []byte {
 func (self P2PDirectoryBlock) ToBlock() blocks.Block {
 
 	return blocks.NewBlock(self.ToData())
+}
+
+func (self P2PDirectoryBlock) Sort() {
+	sort.Slice(self.Blocks, func(i, j int) bool { return self.Blocks[i].String() < self.Blocks[j].String() })
 }
 
 func getP2PBlock(block blocks.Block) (P2PDataBlock, error) {
@@ -219,6 +228,7 @@ func blockifyFile(path string) ([]blocks.Block, cid.Cid, error) {
 
 	//build the fileblock:
 	block := P2PMultiFileBlock{size, name, rawblocks}
+	block.Sort()
 	result[0] = block.ToBlock()
 
 	return result, result[0].Cid(), nil

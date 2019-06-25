@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -284,6 +285,7 @@ func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 
 // Put puts a given block into the store
 func (self BitswapStore) Put(block blocks.Block) error {
+
 	tx, err := self.db.Begin(true)
 	if err != nil {
 		return err
@@ -508,7 +510,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		}
 
 		//read in the data
-		path := filepath.Join(self.path, key.String())
+		path := filepath.Join(self.path, mfile.String())
 		fi, err := os.Open(path)
 		if err != nil {
 			return nil, err
@@ -516,8 +518,11 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		defer fi.Close()
 		data := make([]byte, blocksize)
 		n, err := fi.ReadAt(data, offset)
-		if err != nil {
+		if err != nil && err != io.EOF {
 			return nil, err
+		}
+		if n == 0 {
+			return nil, fmt.Errorf("Unable to read any data")
 		}
 		block := P2PRawBlock{offset, data[:n]}
 		return block.ToBlock(), nil
@@ -753,7 +758,7 @@ func findMfileForRawBlock(tx *bolt.Tx, rawCid cid.Cid) (cid.Cid, error) {
 			if bytes.Equal(k2, rawCid.Bytes()) {
 				//we found the block!
 				found = true
-				blockfilecid, _ = cid.Cast(copyKey(k2))
+				blockfilecid, _ = cid.Cast(copyKey(k))
 
 				break
 			}
@@ -782,7 +787,10 @@ func (self BitswapStore) putRaw(tx *bolt.Tx, c cid.Cid, block P2PRawBlock) error
 	mfiles := tx.Bucket(MfileKey)
 	mfile := mfiles.Bucket(blockfilecid.Bytes())
 	blocks := mfile.Bucket(BlockKey)
-	blocks.Put(c.Bytes(), intToByte(block.Offset))
+	err = blocks.Put(c.Bytes(), intToByte(block.Offset))
+	if err != nil {
+		return err
+	}
 
 	//we found the multifile! lets put the data into the file
 	path := filepath.Join(self.path, blockfilecid.String())

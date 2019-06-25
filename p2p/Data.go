@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -62,23 +61,9 @@ func (self *hostDataService) basicAddFile(ctx context.Context, path string) (cid
 		return filecid, nil, err
 	}
 
-	//copy the file over
-	source, _ := os.Open(path) //no error checking, blockify did this already
-	defer source.Close()
-
-	destpath := filepath.Join(self.datapath, filecid.String())
-	destination, err := os.Create(destpath)
-	if err != nil {
-		return cid.Cid{}, nil, err
-	}
-	defer destination.Close()
-	_, err = io.Copy(destination, source)
-	if err != nil {
-		return cid.Cid{}, nil, err
-	}
-
 	//make the blocks available
 	err = self.service.AddBlocks(blocks)
+
 	return filecid, blocks, err
 }
 
@@ -103,6 +88,9 @@ func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid) (bloc
 	if err != nil {
 		return nil, nil, utils.StackError(err, "Unable to get root node")
 	}
+	if block.Cid() != id {
+		return nil, nil, fmt.Errorf("Received wrong block from exchange service")
+	}
 
 	//check if we need additional blocks (e.g. it's a multifile)
 	p2pblock, err := getP2PBlock(block)
@@ -126,14 +114,16 @@ func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid) (bloc
 	case BlockMultiFile:
 		//get the rest of the blocks (TODO: Check if we have all blocks and simply
 		//load the file)
+		//test if we have all blocks
 		mfileblock := p2pblock.(P2PMultiFileBlock)
+
 		num := len(mfileblock.Blocks)
 		channel := self.service.GetBlocks(ctx, mfileblock.Blocks)
 		for range channel {
 			num--
 		}
 		if num != 0 {
-			return nil, nil, fmt.Errorf("File was only partially received")
+			return nil, nil, fmt.Errorf("File was only partially received: %v blocks missing", num)
 		}
 		path := filepath.Join(self.datapath, block.Cid().String())
 		file, err := os.Open(path)

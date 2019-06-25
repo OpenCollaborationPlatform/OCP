@@ -127,7 +127,7 @@ func TestDataService(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "p2p")
-	defer os.RemoveAll(path)
+	//defer os.RemoveAll(path)
 
 	//generate a testfile
 	block := repeatableBlock(555)
@@ -213,5 +213,145 @@ func TestDataService(t *testing.T) {
 				})
 			})
 		})
+
+		Convey("Creating a large file (which need splitting up)", func() {
+
+			//generate a testfile
+			filesize := int(float32(blocksize) * 4.2)
+			block := repeatableBlock(filesize)
+			p2pblock, _ := getP2PBlock(block)
+			fileblock := p2pblock.(P2PFileBlock)
+			testfilepath := filepath.Join(path, "testfile2")
+			ioutil.WriteFile(testfilepath, fileblock.Data, 0644)
+
+			Convey("Adding data to one host should be possible", func() {
+
+				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+				res, err := h1.Data.AddFile(ctx, testfilepath)
+				So(err, ShouldBeNil)
+
+				reader, err := h1.Data.GetFile(ctx, res)
+				So(err, ShouldBeNil)
+
+				data := make([]byte, filesize)
+				n, err := reader.Read(data)
+				So(err, ShouldBeNil)
+				So(n, ShouldEqual, filesize)
+				So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
+
+				Convey("and retreiving from the other shall be possible too", func() {
+
+					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+					reader, err := h2.Data.GetFile(ctx, res)
+					So(err, ShouldBeNil)
+					io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
+
+					ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
+					reader, err = h2.Data.GetFile(ctx, res)
+					So(err, ShouldBeNil)
+
+					data := make([]byte, filesize)
+					n, err := reader.Read(data)
+					So(err, ShouldBeNil)
+					So(n, ShouldEqual, filesize)
+					So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
+				})
+			})
+		})
 	})
 }
+
+/*
+
+func TestSwarmDataService(t *testing.T) {
+
+	//make temporary folder for the data
+	path, _ := ioutil.TempDir("", "p2p")
+	defer os.RemoveAll(path)
+
+	//generate a testfile
+	block := repeatableBlock(10)
+	p2pblock, _ := getP2PBlock(block)
+	fileblock := p2pblock.(P2PFileBlock)
+	testfilepath := filepath.Join(path, "testfile")
+	ioutil.WriteFile(testfilepath, fileblock.Data, 0644)
+
+	//Setup the hosts
+	h1, _ := temporaryHost(path)
+	defer h1.Stop()
+
+	h2, _ := temporaryHost(path)
+	defer h1.Stop()
+
+	Convey("Setting up two random hosts,", t, func() {
+
+		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
+		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
+
+		Convey("Adding data to one host should be possible", func() {
+
+			ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+			res, err := h1.Data.AddFile(ctx, testfilepath)
+			So(err, ShouldBeNil)
+
+			reader, err := h1.Data.GetFile(ctx, res)
+			So(err, ShouldBeNil)
+
+			data := make([]byte, len(block.RawData()))
+			n, err := reader.Read(data)
+			So(err, ShouldBeNil)
+			So(n, ShouldEqual, 555)
+			So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
+
+			Convey("and retreiving from the other shall be possible too", func() {
+
+				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+				reader, err := h2.Data.GetFile(ctx, res)
+				So(err, ShouldBeNil)
+				io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
+
+				ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
+				reader, err = h2.Data.GetFile(ctx, res)
+				So(err, ShouldBeNil)
+
+				data := make([]byte, len(block.RawData()))
+				n, err := reader.Read(data)
+				So(err, ShouldBeNil)
+				So(n, ShouldEqual, 555)
+				So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
+			})
+
+			Convey("Afterwards droping the file from the first host is possible", func() {
+
+				ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+				err := h1.Data.DropFile(ctx, res)
+				So(err, ShouldBeNil)
+
+				Convey("while it is still accessing from the second host", func() {
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					reader, err := h2.Data.GetFile(ctx, res)
+					So(err, ShouldBeNil)
+					io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
+				})
+			})
+
+			Convey("Dropping it from  both hosts", func() {
+
+				ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+				err := h1.Data.DropFile(ctx, res)
+				So(err, ShouldBeNil)
+				err = h2.Data.DropFile(ctx, res)
+				So(err, ShouldBeNil)
+
+				Convey("it should not be accessible anymore", func() {
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					_, err := h2.Data.GetFile(ctx, res)
+					So(err, ShouldNotBeNil)
+
+					_, err = h1.Data.GetFile(ctx, res)
+					So(err, ShouldNotBeNil)
+				})
+			})
+		})
+	})
+}*/
