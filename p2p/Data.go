@@ -12,6 +12,7 @@ import (
 	bs "github.com/ipfs/go-bitswap"
 	blocks "github.com/ipfs/go-block-format"
 	cid "github.com/ipfs/go-cid"
+	exchange "github.com/ipfs/go-ipfs-exchange-interface"
 )
 
 type DataService interface {
@@ -85,13 +86,13 @@ func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid,
 	return filecid, err
 }
 
-func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid) (blocks.Block, *os.File, error) {
+func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid, fetcher exchange.Fetcher) (blocks.Block, *os.File, error) {
 
 	//get the root block
 	var block blocks.Block
 	if has, _ := self.store.Has(id); !has {
 		var err error
-		block, err = self.bitswap.GetBlock(ctx, id)
+		block, err = fetcher.GetBlock(ctx, id)
 		if err != nil {
 			return nil, nil, utils.StackError(err, "Unable to get root node")
 		}
@@ -134,7 +135,7 @@ func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid) (bloc
 		}
 
 		num := len(needed)
-		channel, err := self.bitswap.GetBlocks(ctx, needed)
+		channel, err := fetcher.GetBlocks(ctx, needed)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -157,7 +158,7 @@ func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid) (bloc
 
 func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File, error) {
 
-	block, file, err := self.basicGetFile(ctx, id)
+	block, file, err := self.basicGetFile(ctx, id, self.bitswap)
 	if err != nil {
 		return nil, err
 	}
@@ -382,15 +383,16 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 }
 
 type swarmDataService struct {
-	data  *hostDataService
-	state *sharedStateService
-	id    SwarmID
+	data    *hostDataService
+	state   *sharedStateService
+	session exchange.Fetcher
+	id      SwarmID
 }
 
 func newSwarmDataService(swarm *Swarm) DataService {
 
 	hostdata := swarm.host.Data.(*hostDataService)
-	return &swarmDataService{hostdata, swarm.State, swarm.ID}
+	return &swarmDataService{hostdata, swarm.State, nil, swarm.ID}
 }
 
 func (self *swarmDataService) AddFile(ctx context.Context, path string) (cid.Cid, error) {
@@ -409,7 +411,11 @@ func (self *swarmDataService) AddFile(ctx context.Context, path string) (cid.Cid
 
 func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File, error) {
 
-	block, file, err := self.data.basicGetFile(ctx, id)
+	if self.session == nil {
+		self.session = self.data.bitswap.NewSession(ctx)
+	}
+
+	block, file, err := self.data.basicGetFile(ctx, id, self.session)
 	if err != nil {
 		return nil, err
 	}
