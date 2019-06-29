@@ -151,7 +151,7 @@ func TestDataService(t *testing.T) {
 		Convey("Adding data to one host should be possible", func() {
 
 			ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-			res, err := h1.Data.AddFile(ctx, testfilepath)
+			res, err := h1.Data.Add(testfilepath)
 			So(err, ShouldBeNil)
 
 			reader, err := h1.Data.GetFile(ctx, res)
@@ -183,8 +183,7 @@ func TestDataService(t *testing.T) {
 
 			Convey("Afterwards droping the file from the first host is possible", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-				err := h1.Data.DropFile(ctx, res)
+				err := h1.Data.Drop(res)
 				So(err, ShouldBeNil)
 
 				Convey("while it is still accessing from the second host", func() {
@@ -197,10 +196,9 @@ func TestDataService(t *testing.T) {
 
 			Convey("Dropping it from  both hosts", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-				err := h1.Data.DropFile(ctx, res)
+				err := h1.Data.Drop(res)
 				So(err, ShouldBeNil)
-				err = h2.Data.DropFile(ctx, res)
+				err = h2.Data.Drop(res)
 				So(err, ShouldBeNil)
 
 				Convey("it should not be accessible anymore", func() {
@@ -227,7 +225,7 @@ func TestDataService(t *testing.T) {
 			Convey("Adding data to one host should be possible", func() {
 
 				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-				res, err := h1.Data.AddFile(ctx, testfilepath)
+				res, err := h1.Data.Add(testfilepath)
 				So(err, ShouldBeNil)
 
 				reader, err := h1.Data.GetFile(ctx, res)
