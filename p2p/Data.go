@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
+	bs "github.com/ipfs/go-bitswap"
 	blocks "github.com/ipfs/go-block-format"
-	bserv "github.com/ipfs/go-blockservice"
 	cid "github.com/ipfs/go-cid"
 )
 
@@ -40,14 +40,13 @@ func NewDataService(host *Host) (DataService, error) {
 	if err != nil {
 		return nil, err
 	}
-	blockservice := bserv.New(bstore, bitswap)
 
-	return &hostDataService{path, blockservice, bstore}, nil
+	return &hostDataService{path, bitswap, bstore}, nil
 }
 
 type hostDataService struct {
 	datapath string
-	service  bserv.BlockService
+	bitswap  *bs.Bitswap
 	store    BitswapStore
 }
 
@@ -61,8 +60,13 @@ func (self *hostDataService) basicAddFile(ctx context.Context, path string) (cid
 		return filecid, nil, err
 	}
 
-	//make the blocks available
-	err = self.service.AddBlocks(blocks)
+	//make the blocks available in the exchange! (no need to add to store before
+	//as bitswap does this anyway)
+	for _, block := range blocks {
+		if has, _ := self.store.Has(block.Cid()); !has {
+			err = self.bitswap.HasBlock(block)
+		}
+	}
 
 	return filecid, blocks, err
 }
@@ -84,9 +88,19 @@ func (self *hostDataService) AddFile(ctx context.Context, path string) (cid.Cid,
 func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid) (blocks.Block, *os.File, error) {
 
 	//get the root block
-	block, err := self.service.GetBlock(ctx, id)
-	if err != nil {
-		return nil, nil, utils.StackError(err, "Unable to get root node")
+	var block blocks.Block
+	if has, _ := self.store.Has(id); !has {
+		var err error
+		block, err = self.bitswap.GetBlock(ctx, id)
+		if err != nil {
+			return nil, nil, utils.StackError(err, "Unable to get root node")
+		}
+	} else {
+		var err error
+		block, err = self.store.Get(id)
+		if err != nil {
+			return nil, nil, utils.StackError(err, "Store has block, but is unable to get it")
+		}
 	}
 	if block.Cid() != id {
 		return nil, nil, fmt.Errorf("Received wrong block from exchange service")
@@ -112,13 +126,18 @@ func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid) (bloc
 		return block, file, err
 
 	case BlockMultiFile:
-		//get the rest of the blocks (TODO: Check if we have all blocks and simply
-		//load the file)
-		//test if we have all blocks
+		//get the rest of the needed blocks
 		mfileblock := p2pblock.(P2PMultiFileBlock)
+		needed, err := self.store.DoesNotHave(mfileblock.Blocks)
+		if err != nil {
+			return nil, nil, err
+		}
 
-		num := len(mfileblock.Blocks)
-		channel := self.service.GetBlocks(ctx, mfileblock.Blocks)
+		num := len(needed)
+		channel, err := self.bitswap.GetBlocks(ctx, needed)
+		if err != nil {
+			return nil, nil, err
+		}
 		for range channel {
 			num--
 		}
@@ -165,14 +184,14 @@ func (self *hostDataService) basicDropFile(block blocks.Block) error {
 		return fmt.Errorf("cid does not belong to a file")
 
 	case BlockFile:
-		self.service.DeleteBlock(block.Cid())
+		self.store.DeleteBlock(block.Cid())
 
 	case BlockMultiFile:
 		//get the rest of the blocks (TODO: Check if we have all blocks and simply
 		//load the file)
 		mfileblock := p2pblock.(P2PMultiFileBlock)
 		for _, block := range mfileblock.Blocks {
-			self.service.DeleteBlock(block)
+			self.store.DeleteBlock(block)
 		}
 
 	default:
@@ -185,27 +204,25 @@ func (self *hostDataService) basicDropFile(block blocks.Block) error {
 func (self *hostDataService) DropFile(ctx context.Context, id cid.Cid) error {
 
 	//get the root block
-	block, err := self.service.GetBlock(ctx, id)
-	if err != nil {
-		return err
-	}
+	if block, err := self.store.Get(id); err == nil {
+		//release ownership
+		last, err := self.store.ReleaseOwnership(block, "global")
+		if err != nil {
+			return err
+		}
 
-	//release ownership
-	last, err := self.store.ReleaseOwnership(block, "global")
-	if err != nil {
-		return err
-	}
-
-	//there maybe someone else that needs this file
-	if last {
-		return self.basicDropFile(block)
+		//there maybe someone else that needs this file
+		if last {
+			return self.basicDropFile(block)
+		}
 	}
 
 	return nil
 }
 
 func (self *hostDataService) Close() {
-	self.service.Close()
+	self.bitswap.Close()
+	self.store.Close()
 }
 
 //SwarmDataService
@@ -341,15 +358,13 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 
 	//drop ownership of all old files
 	for _, file := range self.files {
-		//get the root block
-		block, err := self.service.data.service.GetBlock(self.ctx, file)
-		if err != nil {
-			return err
-		}
 		//release ownership
-		_, err = self.service.data.store.ReleaseOwnership(block, string(self.service.id))
-		if err != nil {
-			return err
+		if block, err := self.service.data.store.Get(file); err != nil {
+
+			_, err = self.service.data.store.ReleaseOwnership(block, string(self.service.id))
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -408,20 +423,17 @@ func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File
 func (self *swarmDataService) DropFile(ctx context.Context, id cid.Cid) error {
 
 	//get the root block
-	block, err := self.data.service.GetBlock(ctx, id)
-	if err != nil {
-		return err
-	}
+	if block, err := self.data.store.Get(id); err == nil {
+		//release ownership
+		last, err := self.data.store.ReleaseOwnership(block, string(self.id))
+		if err != nil {
+			return err
+		}
 
-	//release ownership
-	last, err := self.data.store.ReleaseOwnership(block, string(self.id))
-	if err != nil {
-		return err
-	}
-
-	//check if we can delete
-	if last {
-		return self.data.basicDropFile(block)
+		//there maybe someone else that needs this file
+		if last {
+			return self.data.basicDropFile(block)
+		}
 	}
 
 	return nil

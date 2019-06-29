@@ -376,13 +376,8 @@ func (self BitswapStore) DeleteBlock(key cid.Cid) error {
 	return nil
 }
 
-func (self BitswapStore) Has(key cid.Cid) (bool, error) {
-
-	tx, err := self.db.Begin(false)
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback()
+//basic version of Has without opening a transaction
+func (self BitswapStore) has(key cid.Cid, tx *bolt.Tx) (bool, error) {
 
 	//check if it is a directory
 	bucket := tx.Bucket(DirKey)
@@ -422,6 +417,41 @@ func (self BitswapStore) Has(key cid.Cid) (bool, error) {
 	}
 
 	return false, nil
+}
+
+func (self BitswapStore) Has(key cid.Cid) (bool, error) {
+
+	tx, err := self.db.Begin(false)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+
+	return self.has(key, tx)
+}
+
+//returnes a list of keys the stoer does not have
+func (self BitswapStore) DoesNotHave(keys []cid.Cid) ([]cid.Cid, error) {
+
+	tx, err := self.db.Begin(false)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	result := make([]cid.Cid, 0, len(keys))
+	for _, key := range keys {
+
+		has, err := self.has(key, tx)
+		if err != nil {
+			return nil, err
+		}
+		if !has {
+			result = append(result, key)
+		}
+	}
+
+	return result, nil
 }
 
 func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
