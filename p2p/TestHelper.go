@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"CollaborationNode/p2p/replica"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -120,11 +121,82 @@ func randomBlock(size int) blocks.Block {
 
 func repeatableBlock(size int) blocks.Block {
 
+	data := repeatableData(size)
+	block := P2PFileBlock{"RepeatableBlock", data}
+	return block.ToBlock()
+}
+
+func repeatableData(size int) []byte {
+
 	data := make([]byte, size)
 	for i := 0; i < size; i++ {
 		data[i] = byte(i)
 	}
 
-	block := P2PFileBlock{"RepeatableBlock", data}
-	return block.ToBlock()
+	return data
+}
+
+//compares two directories if they are equal
+func compareDirectories(path1, path2 string) bool {
+
+	files1, err := ioutil.ReadDir(path1)
+	if err != nil {
+		return false
+	}
+
+	files2, err := ioutil.ReadDir(path2)
+	if err != nil {
+		return false
+	}
+
+	if len(files1) != len(files2) {
+		return false
+	}
+
+	for i, file := range files1 {
+
+		other := files2[i]
+
+		if file.Name() != other.Name() {
+			return false
+		}
+		if file.Size() != other.Size() {
+			return false
+		}
+		if file.IsDir() != other.IsDir() {
+			return false
+		}
+
+		//compare the file content
+		subpath1 := filepath.Join(path1, file.Name())
+		subpath2 := filepath.Join(path2, other.Name())
+		if !file.IsDir() {
+			f1, err := os.Open(subpath1)
+			if err != nil {
+				return false
+			}
+
+			f2, err := os.Open(subpath2)
+			if err != nil {
+				return false
+			}
+
+			data1 := make([]byte, file.Size())
+			f1.Read(data1)
+
+			data2 := make([]byte, other.Size())
+			f2.Read(data2)
+
+			if !bytes.Equal(data1, data2) {
+				return false
+			}
+		} else {
+			res := compareDirectories(subpath1, subpath2)
+			if !res {
+				return false
+			}
+		}
+	}
+
+	return true
 }

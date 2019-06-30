@@ -21,5 +21,5 @@ func StackError(err error, args ...interface{}) error {
 		msg = args[0].(string)
 	}
 
-	return fmt.Errorf("%v: %v\n%v", frame.Function, msg, err)
+	return fmt.Errorf("%v (Line %v): %v\n%v", frame.Function, frame.Line, msg, err)
 }

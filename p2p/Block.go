@@ -46,6 +46,12 @@ type P2PDataBlock interface {
 	ToBlock() blocks.Block
 }
 
+//Block with naming information attached to it
+type P2PNamedBlock interface {
+	P2PDataBlock
+	FileName() string
+}
+
 //A block describing a raw data part
 type P2PRawBlock struct {
 	Offset int64
@@ -94,6 +100,11 @@ func (self P2PFileBlock) ToBlock() blocks.Block {
 	return blocks.NewBlock(self.ToData())
 }
 
+func (self P2PFileBlock) FileName() string {
+
+	return self.Name
+}
+
 //a block descibing a file which is too large for a single block
 type P2PMultiFileBlock struct {
 	Size   int64
@@ -123,6 +134,11 @@ func (self P2PMultiFileBlock) Sort() {
 	sort.Slice(self.Blocks, func(i, j int) bool { return self.Blocks[i].String() < self.Blocks[j].String() })
 }
 
+func (self P2PMultiFileBlock) FileName() string {
+
+	return self.Name
+}
+
 //a block descibing a directory
 type P2PDirectoryBlock struct {
 	Name   string
@@ -149,6 +165,11 @@ func (self P2PDirectoryBlock) ToBlock() blocks.Block {
 
 func (self P2PDirectoryBlock) Sort() {
 	sort.Slice(self.Blocks, func(i, j int) bool { return self.Blocks[i].String() < self.Blocks[j].String() })
+}
+
+func (self P2PDirectoryBlock) FileName() string {
+
+	return self.Name
 }
 
 func getP2PBlock(block blocks.Block) (P2PDataBlock, error) {

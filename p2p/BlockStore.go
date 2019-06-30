@@ -97,7 +97,10 @@ type BitswapStore struct {
 DB [
 	directories [
 		cid [
-			data: bytes
+			name: string
+			blocks [
+				cid: int64
+			]
 			owners [
 				string:string
 			]
@@ -106,11 +109,11 @@ DB [
 		cid [
 			name: string
 			size: int64
-			owners [
-				string:string
-			]
 			blocks [
 				cid: int64
+			]
+			owners [
+				string:string
 			]
 		]
 	]
@@ -128,16 +131,16 @@ DB [
 /******************************************************************************
 							Custom functions
 ******************************************************************************/
-func (self BitswapStore) GetOwnership(block blocks.Block, owner string) error {
+func (self BitswapStore) SetOwnership(block blocks.Block, owner string) error {
 
 	p2pblock, err := getP2PBlock(block)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to set ownership")
 	}
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to set ownership")
 	}
 	defer tx.Commit()
 
@@ -154,8 +157,6 @@ func (self BitswapStore) GetOwnership(block blocks.Block, owner string) error {
 		tx.Rollback()
 		return fmt.Errorf("Can only set owner for Directory, MFile and File")
 	}
-
-	//TODO: Directory ownership should mark the files of that dorectory owned too
 
 	//we add ourself to the owner list of that block!
 	bucket := tx.Bucket(key)
@@ -183,18 +184,17 @@ func (self BitswapStore) GetOwnership(block blocks.Block, owner string) error {
 	return bucket.Put([]byte(owner), []byte(owner))
 }
 
-//Removes the owner, returns true if it was the last owner and the block is
-//ownerless
+//Removes the owner, returns true if it was the last owner and the block is now ownerless
 func (self BitswapStore) ReleaseOwnership(block blocks.Block, owner string) (bool, error) {
 
 	p2pblock, err := getP2PBlock(block)
 	if err != nil {
-		return false, err
+		return false, utils.StackError(err, "Unable to release ownership")
 	}
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
-		return false, err
+		return false, utils.StackError(err, "Unable to release ownership")
 	}
 	defer tx.Commit()
 
@@ -212,7 +212,7 @@ func (self BitswapStore) ReleaseOwnership(block blocks.Block, owner string) (boo
 		return false, fmt.Errorf("Can only set owner for Directory, MFile and File")
 	}
 
-	//we add ourself to the owner list of that block!
+	//we remove ourself to the owner list of that block!
 	bucket := tx.Bucket(key)
 	bucket = bucket.Bucket(block.Cid().Bytes())
 	if bucket == nil {
@@ -230,10 +230,62 @@ func (self BitswapStore) ReleaseOwnership(block blocks.Block, owner string) (boo
 
 	//check if there are more or if we have been the last one
 	c := bucket.Cursor()
-	if k, _ := c.Next(); k == nil {
-		return true, nil
+	if k, _ := c.Next(); k != nil {
+		return false, nil
 	}
-	return false, nil
+
+	//we have been the last one! check if there is a higher level owner
+	has, err := self.hasParentDirectoryWithOwner(block.Cid().Bytes(), tx)
+	if err != nil {
+		return false, utils.StackError(err, "Unable to release ownership")
+	}
+
+	return !has, nil
+}
+
+func (self BitswapStore) GetOwner(block blocks.Block) ([]string, error) {
+
+	p2pblock, err := getP2PBlock(block)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to get owner")
+	}
+
+	tx, err := self.db.Begin(false)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to get owner")
+	}
+	defer tx.Rollback()
+
+	var key []byte
+	switch p2pblock.Type() {
+
+	case BlockDirectory:
+		key = DirKey
+	case BlockFile:
+		key = FileKey
+	case BlockMultiFile:
+		key = MfileKey
+	default:
+		return nil, fmt.Errorf("Can only set owner for Directory, MFile and File")
+	}
+
+	//collect all owners!
+	bucket := tx.Bucket(key)
+	bucket = bucket.Bucket(block.Cid().Bytes())
+	if bucket == nil {
+		return nil, fmt.Errorf("Block does not exist")
+	}
+	bucket = bucket.Bucket(OwnerKey)
+	if bucket == nil {
+		return nil, fmt.Errorf("Block is not setup correctly in the blockstore")
+	}
+
+	owners := make([]string, 0)
+	c := bucket.Cursor()
+	if k, _ := c.Next(); k == nil {
+		owners = append(owners, string(copyKey(k)))
+	}
+	return owners, nil
 }
 
 //Returns all blocks without a owner
@@ -241,7 +293,7 @@ func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 
 	tx, err := self.db.Begin(false)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to collect garbage")
 	}
 	defer tx.Rollback()
 
@@ -250,26 +302,28 @@ func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 
 	for _, key := range keys {
 
-		//we add ourself to the owner list of that block!
 		bucket := tx.Bucket(key)
-
 		c := bucket.Cursor()
-		if k, _ := c.Next(); k == nil {
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
 
-			bucket = bucket.Bucket(k)
-			bucket = bucket.Bucket(OwnerKey)
+			ownerbucket := bucket.Bucket(k).Bucket(OwnerKey)
 			if bucket == nil {
 				tx.Rollback()
 				return nil, fmt.Errorf("Block is not setup correctly in the blockstore")
 			}
 			//check if owners are empty
-			c2 := bucket.Cursor()
+			c2 := ownerbucket.Cursor()
 			if k2, _ := c2.Next(); k2 == nil {
-				key, err := cid.Cast(copyKey(k))
-				if err != nil {
-					return nil, err
+
+				//no owners! The only reason not to delete it would be if it is part of a directory!
+				if has, _ := self.hasParentDirectoryWithOwner(k, tx); !has {
+
+					key, err := cid.Cast(copyKey(k))
+					if err != nil {
+						return nil, utils.StackError(err, "Unable to collect garbage")
+					}
+					result = append(result, key)
 				}
-				result = append(result, key)
 			}
 		}
 	}
@@ -277,6 +331,47 @@ func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 	//we don't need to go over raw blocks as they are deleted together with the multifile
 
 	return result, nil
+}
+
+//checks if the given cid is part of a directory with a owner
+func (self BitswapStore) hasParentDirectoryWithOwner(key []byte, tx *bolt.Tx) (bool, error) {
+
+	bucket := tx.Bucket(DirKey)
+	if bucket == nil {
+		return false, fmt.Errorf("Store not correctly setup!")
+	}
+
+	//we go through all directories and check if the cid is part of any!
+	c := bucket.Cursor()
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
+
+		dirbucket := bucket.Bucket(k)
+		blocks := dirbucket.Bucket(BlockKey)
+		if blocks == nil {
+			return false, fmt.Errorf("Directory not set up correctly: no blocks bucket!")
+		}
+		result := blocks.Get(key)
+		if result != nil {
+
+			//we found a directory that owns the key. let's check if it has a owner!
+			owners := dirbucket.Bucket(OwnerKey)
+			if owners == nil {
+				return false, fmt.Errorf("Directory not set up correctly: no owners bucket!")
+			}
+
+			c2 := owners.Cursor()
+			if k2, _ := c2.First(); k2 == nil {
+				//the direct parent does not have a owner! But we still need to check if the parent
+				//may have a directory parent with a owner. Let's go recursive!
+				return self.hasParentDirectoryWithOwner(k, tx)
+
+			} else {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }
 
 /******************************************************************************
@@ -288,18 +383,18 @@ func (self BitswapStore) Put(block blocks.Block) error {
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put block")
 	}
 	defer tx.Commit()
 
 	p2pblock, err := getP2PBlock(block)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put block")
 	}
 	err = self.put(tx, block.Cid(), p2pblock)
 	if err != nil {
 		tx.Rollback()
-		return err
+		return utils.StackError(err, "Unable to put block")
 	}
 	return nil
 }
@@ -308,7 +403,7 @@ func (self BitswapStore) PutMany(blocklist []blocks.Block) error {
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put many blocks")
 	}
 	defer tx.Commit()
 
@@ -316,13 +411,13 @@ func (self BitswapStore) PutMany(blocklist []blocks.Block) error {
 
 		p2pblock, err := getP2PBlock(block)
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to put many blocks")
 		}
 		err = self.put(tx, block.Cid(), p2pblock)
 
 		if err != nil {
 			tx.Rollback()
-			return err
+			return utils.StackError(err, "Unable to put many blocks")
 		}
 	}
 	return nil
@@ -332,9 +427,28 @@ func (self BitswapStore) DeleteBlock(key cid.Cid) error {
 
 	tx, err := self.db.Begin(true)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to delete block")
 	}
 	defer tx.Commit()
+
+	return self.basicDelete(key, tx)
+}
+
+func (self BitswapStore) DeleteBlocks(keys []cid.Cid) error {
+
+	tx, err := self.db.Begin(true)
+	if err != nil {
+		return utils.StackError(err, "Unable to delete blocks")
+	}
+	defer tx.Commit()
+
+	for _, key := range keys {
+		self.basicDelete(key, tx)
+	}
+	return nil
+}
+
+func (self BitswapStore) basicDelete(key cid.Cid, tx *bolt.Tx) error {
 
 	//check if it is a directory
 	bucket := tx.Bucket(DirKey)
@@ -350,7 +464,7 @@ func (self BitswapStore) DeleteBlock(key cid.Cid) error {
 		bucket.DeleteBucket(key.Bytes())
 		//delete the file
 		path := filepath.Join(self.path, key.String())
-		os.Remove(path)
+		return os.Remove(path)
 	}
 
 	//or a normal file
@@ -360,7 +474,7 @@ func (self BitswapStore) DeleteBlock(key cid.Cid) error {
 		bucket.DeleteBucket(key.Bytes())
 		//delete the file
 		path := filepath.Join(self.path, key.String())
-		os.Remove(path)
+		return os.Remove(path)
 	}
 
 	//seems to be a raw data block. this one we do not delete but set -1
@@ -423,19 +537,19 @@ func (self BitswapStore) Has(key cid.Cid) (bool, error) {
 
 	tx, err := self.db.Begin(false)
 	if err != nil {
-		return false, err
+		return false, utils.StackError(err, "Unable to check for existance of block")
 	}
 	defer tx.Rollback()
 
 	return self.has(key, tx)
 }
 
-//returnes a list of keys the stoer does not have
+//returnes a list of keys the store does not have
 func (self BitswapStore) DoesNotHave(keys []cid.Cid) ([]cid.Cid, error) {
 
 	tx, err := self.db.Begin(false)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to check for block existance")
 	}
 	defer tx.Rollback()
 
@@ -444,7 +558,7 @@ func (self BitswapStore) DoesNotHave(keys []cid.Cid) ([]cid.Cid, error) {
 
 		has, err := self.has(key, tx)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to check for block existance")
 		}
 		if !has {
 			result = append(result, key)
@@ -458,7 +572,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 
 	tx, err := self.db.Begin(false)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to get block")
 	}
 	defer tx.Rollback()
 
@@ -466,12 +580,24 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 	bucket := tx.Bucket(DirKey)
 	bucket = bucket.Bucket(key.Bytes())
 	if bucket != nil {
-		//rebuild the block from raw data
-		res := bucket.Get([]byte("data"))
-		if res == nil {
-			return nil, fmt.Errorf("Data not correctly setup")
+		//rebuild the block!
+		name := string(bucket.Get([]byte("name")))
+		//get all blocks!
+		blocks := make([]cid.Cid, 0)
+		blockbucket := bucket.Bucket(BlockKey)
+		err := blockbucket.ForEach(func(k, v []byte) error {
+			blockcid, err := cid.Cast(copyKey(k))
+			if err != nil {
+				return utils.StackError(err, "Unable to get block")
+			}
+			blocks = append(blocks, blockcid)
+			return nil
+		})
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to get block")
 		}
-		return blocks.NewBlock(res), nil
+		dirblock := P2PDirectoryBlock{name, blocks}
+		return dirblock.ToBlock(), nil
 	}
 
 	//maybe a multifile
@@ -487,13 +613,13 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		err := blockbucket.ForEach(func(k, v []byte) error {
 			blockcid, err := cid.Cast(copyKey(k))
 			if err != nil {
-				return err
+				return utils.StackError(err, "Unable to get block")
 			}
 			blocks = append(blocks, blockcid)
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to get block")
 		}
 
 		block := P2PMultiFileBlock{size, name, blocks}
@@ -510,13 +636,13 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		path := filepath.Join(self.path, key.String())
 		fi, err := os.Open(path)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to get block")
 		}
 		defer fi.Close()
 		data := make([]byte, blocksize)
 		n, err := fi.Read(data)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to get block")
 		}
 		block := P2PFileBlock{name, data[:n]}
 		return block.ToBlock(), nil
@@ -543,13 +669,13 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		path := filepath.Join(self.path, mfile.String())
 		fi, err := os.Open(path)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to get block")
 		}
 		defer fi.Close()
 		data := make([]byte, blocksize)
 		n, err := fi.ReadAt(data, offset)
 		if err != nil && err != io.EOF {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to get block")
 		}
 		if n == 0 {
 			return nil, fmt.Errorf("Unable to read any data")
@@ -569,7 +695,7 @@ func (self BitswapStore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error
 
 	tx, err := self.db.Begin(false)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to collect keys for channel")
 	}
 	defer tx.Rollback()
 
@@ -584,14 +710,14 @@ func (self BitswapStore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error
 	err = bucket.ForEach(func(k, v []byte) error {
 		c, err := cid.Cast(copyKey(k))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to collect keys for channel")
 		}
 		keys = append(keys, c)
 		return nil
 	})
 	if err != nil {
 		close(res)
-		return nil, err
+		return nil, utils.StackError(err, "Unable to collect keys for channel")
 	}
 
 	//collect all files
@@ -599,14 +725,14 @@ func (self BitswapStore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error
 	err = bucket.ForEach(func(k, v []byte) error {
 		c, err := cid.Cast(copyKey(k))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to collect keys for channel")
 		}
 		keys = append(keys, c)
 		return nil
 	})
 	if err != nil {
 		close(res)
-		return nil, err
+		return nil, utils.StackError(err, "Unable to collect keys for channel")
 	}
 
 	//collect all Mfiles and raw blocks
@@ -614,7 +740,7 @@ func (self BitswapStore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error
 	err = bucket.ForEach(func(k, v []byte) error {
 		c, err := cid.Cast(copyKey(k))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to collect keys for channel")
 		}
 		keys = append(keys, c)
 
@@ -623,20 +749,20 @@ func (self BitswapStore) AllKeysChan(ctx context.Context) (<-chan cid.Cid, error
 		err = blocks.ForEach(func(k2, v2 []byte) error {
 			c, err := cid.Cast(copyKey(k2))
 			if err != nil {
-				return err
+				return utils.StackError(err, "Unable to collect keys for channel")
 			}
 			keys = append(keys, c)
 			return nil
 		})
 		if err != nil {
 			close(res)
-			return err
+			return utils.StackError(err, "Unable to collect keys for channel")
 		}
 		return nil
 	})
 	if err != nil {
 		close(res)
-		return nil, err
+		return nil, utils.StackError(err, "Unable to collect keys for channel")
 	}
 
 	//start a gorutine which serves the channel and respects the context
@@ -663,7 +789,7 @@ func (self BitswapStore) GetSize(key cid.Cid) (int, error) {
 
 	block, err := self.Get(key)
 	if err != nil {
-		return 0, nil
+		return 0, utils.StackError(err, "Unable to cget size for key")
 	}
 
 	return len(block.RawData()), nil
@@ -702,17 +828,41 @@ func (self BitswapStore) putDirectory(tx *bolt.Tx, c cid.Cid, block P2PDirectory
 	}
 	directory, err := directories.CreateBucketIfNotExists(c.Bytes())
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put directory")
 	}
 
 	//make sure the owner bucket exists
 	_, err = directory.CreateBucketIfNotExists(OwnerKey)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put directory")
 	}
 
 	//write the data
-	return directory.Put([]byte("data"), block.ToData())
+	directory.Put([]byte("name"), []byte(block.Name))
+
+	//create a empty blocks bucket
+	blockBucket := directory.Bucket(BlockKey)
+	if blockBucket != nil {
+		//we delete the bucket to make sure we do not have any old blocks in it
+		err := directory.DeleteBucket(BlockKey)
+		if err != nil {
+			return utils.StackError(err, "Unable to put directory")
+		}
+	}
+	blockBucket, err = directory.CreateBucket(BlockKey)
+	if err != nil {
+		return utils.StackError(err, "Unable to put directory")
+	}
+
+	//set all sub blocks
+	for _, blockcid := range block.Blocks {
+		err := blockBucket.Put(blockcid.Bytes(), blockcid.Bytes())
+		if err != nil {
+			return utils.StackError(err, "Unable to put directory")
+		}
+	}
+
+	return nil
 }
 
 //we store the raw blocks individual
@@ -738,25 +888,28 @@ func (self BitswapStore) putMultiFile(tx *bolt.Tx, c cid.Cid, block P2PMultiFile
 		//we delete the bucket to make sure we do not have any old blocks in it
 		err := mfile.DeleteBucket(BlockKey)
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to put multifile")
 		}
 	}
 	blocks, err = mfile.CreateBucket(BlockKey)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put multifile")
 	}
 
 	//set all blocks to unset
 	for _, blockcid := range block.Blocks {
 		err := blocks.Put(blockcid.Bytes(), intToByte(-1))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to put multifile")
 		}
 	}
 
 	//make sure the owner bucket exists
 	_, err = mfile.CreateBucketIfNotExists(OwnerKey)
-	return err
+	if err != nil {
+		return utils.StackError(err, "Unable to put multifile")
+	}
+	return nil
 }
 
 func findMfileForRawBlock(tx *bolt.Tx, rawCid cid.Cid) (cid.Cid, error) {
@@ -810,7 +963,7 @@ func (self BitswapStore) putRaw(tx *bolt.Tx, c cid.Cid, block P2PRawBlock) error
 
 	blockfilecid, err := findMfileForRawBlock(tx, c)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put raw block")
 	}
 
 	//write the block data
@@ -819,20 +972,20 @@ func (self BitswapStore) putRaw(tx *bolt.Tx, c cid.Cid, block P2PRawBlock) error
 	blocks := mfile.Bucket(BlockKey)
 	err = blocks.Put(c.Bytes(), intToByte(block.Offset))
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put raw block")
 	}
 
 	//we found the multifile! lets put the data into the file
 	path := filepath.Join(self.path, blockfilecid.String())
 	fi, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put raw block")
 	}
 	defer fi.Close()
 
 	n, err := fi.WriteAt(block.Data, block.Offset)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put raw block")
 	}
 	if n != len(block.Data) {
 		return fmt.Errorf("Could not write all data into file")
@@ -851,27 +1004,27 @@ func (self BitswapStore) putFile(tx *bolt.Tx, c cid.Cid, block P2PFileBlock) err
 	//store the block
 	file, err := files.CreateBucketIfNotExists(c.Bytes())
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put file block")
 	}
 	file.Put([]byte("name"), []byte(block.Name))
 
 	//make sure the owner bucket exists
 	_, err = file.CreateBucketIfNotExists(OwnerKey)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put file block")
 	}
 
 	//write the file
 	path := filepath.Join(self.path, c.String())
 	fi, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, os.ModePerm)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put file block")
 	}
 	defer fi.Close()
 
 	n, err := fi.Write(block.Data)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to put file block")
 	}
 	if n != len(block.Data) {
 		return fmt.Errorf("Could not write all data into file")

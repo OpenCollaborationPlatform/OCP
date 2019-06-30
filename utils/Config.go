@@ -282,7 +282,7 @@ func CreateConfigFile(name string) (string, error) {
 
 	//now we can fiinally create it
 	if _, err := ConfigDir.Create(parts[0] + ".json"); err != nil {
-		return "", fmt.Errorf("Couldn't create the config file: ", err)
+		return "", fmt.Errorf("Couldn't create the config file: %v", err)
 	}
 
 	//setup a readable dummy
