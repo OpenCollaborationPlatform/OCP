@@ -333,7 +333,9 @@ func TestDataService(t *testing.T) {
 
 					Convey("Dropping the subdirectory should keep all files", func() {
 
-						err := h2.Data.Drop(res2)
+						err := h1.Data.Drop(res2)
+						So(err, ShouldBeNil)
+						err = h2.Data.Drop(res2)
 						So(err, ShouldBeNil)
 
 						exchange := filepath.Join(h2.path, "DataExchange")
@@ -356,6 +358,8 @@ func TestDataService(t *testing.T) {
 
 					Convey("Dropping parent dir", func() {
 
+						err = h1.Data.Drop(res2)
+						So(err, ShouldBeNil)
 						err = h2.Data.Drop(res1)
 						So(err, ShouldBeNil)
 
