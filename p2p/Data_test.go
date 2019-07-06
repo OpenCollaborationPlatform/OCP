@@ -182,7 +182,7 @@ func TestDataService(t *testing.T) {
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
 			ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-			res, err := h1.Data.Add(testfilepath)
+			res, err := h1.Data.Add(ctx, testfilepath)
 			So(err, ShouldBeNil)
 
 			reader, err := h1.Data.GetFile(ctx, res)
@@ -213,7 +213,7 @@ func TestDataService(t *testing.T) {
 
 				Convey("Afterwards droping the file from the first host is possible", func() {
 
-					err := h1.Data.Drop(res)
+					err := h1.Data.Drop(ctx, res)
 					So(err, ShouldBeNil)
 
 					Convey("while it is still accessing from the second host", func() {
@@ -226,7 +226,7 @@ func TestDataService(t *testing.T) {
 
 			Convey("Droping the file from the first host is possible", func() {
 
-				err := h1.Data.Drop(res)
+				err := h1.Data.Drop(ctx, res)
 				So(err, ShouldBeNil)
 
 				Convey("it is not accessible in any host", func() {
@@ -250,7 +250,7 @@ func TestDataService(t *testing.T) {
 			Convey("Adding data to one host should be possible", func() {
 
 				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-				res, err := h1.Data.Add(testfilepath)
+				res, err := h1.Data.Add(ctx, testfilepath)
 				So(err, ShouldBeNil)
 
 				reader, err := h1.Data.GetFile(ctx, res)
@@ -281,7 +281,7 @@ func TestDataService(t *testing.T) {
 
 					Convey("Afterwards droping the file from the first host is possible", func() {
 
-						err := h1.Data.Drop(res)
+						err := h1.Data.Drop(ctx, res)
 						So(err, ShouldBeNil)
 
 						Convey("while it is still accessing from the second host", func() {
@@ -294,7 +294,7 @@ func TestDataService(t *testing.T) {
 
 				Convey("Droping the file from the first host is possible", func() {
 
-					err := h1.Data.Drop(res)
+					err := h1.Data.Drop(ctx, res)
 					So(err, ShouldBeNil)
 
 					Convey("it is not accessible in any host", func() {
@@ -338,7 +338,7 @@ func TestDataService(t *testing.T) {
 			Convey("Adding a directory with files only should work", func() {
 
 				ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-				res2, err := h1.Data.Add(dirpath2)
+				res2, err := h1.Data.Add(ctx, dirpath2)
 				So(err, ShouldBeNil)
 
 				//check if the files were added to the exchange folder
@@ -371,7 +371,7 @@ func TestDataService(t *testing.T) {
 
 				Convey("Afterwards adding the parent directory from the other node", func() {
 
-					res1, err := h2.Data.Add(dirpath1)
+					res1, err := h2.Data.Add(ctx, dirpath1)
 					So(err, ShouldBeNil)
 
 					Convey("There should still be only 2 datafiles in the exchange folder", func() {
@@ -384,9 +384,9 @@ func TestDataService(t *testing.T) {
 
 					Convey("Dropping the subdirectory should keep all files", func() {
 
-						err := h1.Data.Drop(res2)
+						err := h1.Data.Drop(ctx, res2)
 						So(err, ShouldBeNil)
-						err = h2.Data.Drop(res2)
+						err = h2.Data.Drop(ctx, res2)
 						So(err, ShouldBeNil)
 
 						exchange := filepath.Join(h2.path, "DataExchange")
@@ -403,15 +403,15 @@ func TestDataService(t *testing.T) {
 							So(err, ShouldBeNil)
 							So(compareDirectories(res1path, dirpath1), ShouldBeNil)
 
-							h1.Data.Drop(res1)
+							h1.Data.Drop(ctx, res1)
 						})
 					})
 
 					Convey("Dropping parent dir", func() {
 
-						err = h1.Data.Drop(res2)
+						err = h1.Data.Drop(ctx, res2)
 						So(err, ShouldBeNil)
-						err = h2.Data.Drop(res1)
+						err = h2.Data.Drop(ctx, res1)
 						So(err, ShouldBeNil)
 
 						Convey("There should be no datafiles in the exchange folder", func() {

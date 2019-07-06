@@ -2,12 +2,15 @@ package p2p
 
 import (
 	"CollaborationNode/utils"
+	"bytes"
 	"context"
+	"encoding/gob"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	bs "github.com/ipfs/go-bitswap"
@@ -17,8 +20,8 @@ import (
 )
 
 type DataService interface {
-	Add(path string) (cid.Cid, error)                                   //adds a file or directory
-	Drop(id cid.Cid) error                                              //removes a file or directory
+	Add(ctx context.Context, path string) (cid.Cid, error)              //adds a file or directory
+	Drop(ctx context.Context, id cid.Cid) error                         //removes a file or directory
 	Fetch(ctx context.Context, id cid.Cid) error                        //Fetches the given data
 	FetchAsync(id cid.Cid) error                                        //Fetches the given data async
 	GetFile(ctx context.Context, id cid.Cid) (*os.File, error)          //gets the file described by the id (fetches if needed)
@@ -55,7 +58,7 @@ type hostDataService struct {
 	store    BitswapStore
 }
 
-func (self *hostDataService) Add(path string) (cid.Cid, error) {
+func (self *hostDataService) Add(ctx context.Context, path string) (cid.Cid, error) {
 
 	filecid, _, err := self.basicAdd(path, "global")
 	if err != nil {
@@ -66,7 +69,7 @@ func (self *hostDataService) Add(path string) (cid.Cid, error) {
 	return filecid, err
 }
 
-func (self *hostDataService) Drop(id cid.Cid) error {
+func (self *hostDataService) Drop(ctx context.Context, id cid.Cid) error {
 
 	err := self.basicDrop(id, "global")
 	if err != nil {
@@ -134,7 +137,6 @@ func (self *hostDataService) basicAddFile(path string) (cid.Cid, []blocks.Block,
 		if has, _ := self.store.Has(block.Cid()); !has {
 			err = self.bitswap.HasBlock(block)
 			if err != nil {
-				self.Drop(filecid)
 				return cid.Undef, nil, utils.StackError(err, "Unable to add file")
 			}
 		}
@@ -201,6 +203,7 @@ func (self *hostDataService) basicAdd(path string, owner string) (cid.Cid, []blo
 	}
 
 	if err != nil {
+		self.basicDrop(resCid, owner)
 		return resCid, nil, utils.StackError(err, "Unable to add path")
 	}
 
@@ -441,7 +444,7 @@ func (self *hostDataService) basicDrop(id cid.Cid, owner string) error {
 /******************************************************************************
 							SwarmDataService
 *******************************************************************************/
-/*
+
 //This dataservice behaves sligthly different than the normal one:
 // - Adding/Dropping a file automatically distributes it within the swarm
 
@@ -471,6 +474,7 @@ type dataState struct {
 	service *swarmDataService
 	ctx     context.Context
 	cancel  context.CancelFunc
+	mutex   sync.RWMutex //mutex needed as we access the state from outside the sharedStateService
 }
 
 func newDataState(service *swarmDataService) *dataState {
@@ -485,6 +489,9 @@ func newDataState(service *swarmDataService) *dataState {
 }
 
 func (self *dataState) Apply(data []byte) error {
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
 
 	cmd, err := dataStateCommandFromByte(data)
 	if err != nil {
@@ -513,9 +520,12 @@ func (self *dataState) Apply(data []byte) error {
 
 func (self *dataState) Reset() error {
 
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
 	//drop all files we currently have
 	for _, file := range self.files {
-		err := self.service.DropFile(context.Background(), file)
+		err := self.service.Drop(context.Background(), file)
 		if err != nil {
 			return err
 		}
@@ -527,6 +537,9 @@ func (self *dataState) Reset() error {
 
 func (self *dataState) Snapshot() ([]byte, error) {
 
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
 	buf := new(bytes.Buffer)
 	err := gob.NewEncoder(buf).Encode(&self.files)
 	if err != nil {
@@ -536,6 +549,9 @@ func (self *dataState) Snapshot() ([]byte, error) {
 }
 
 func (self *dataState) EnsureSnapshot(snap []byte) error {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
 
 	buf := bytes.NewBuffer(snap)
 	var list []cid.Cid
@@ -558,6 +574,9 @@ func (self *dataState) EnsureSnapshot(snap []byte) error {
 }
 
 func (self *dataState) LoadSnapshot(snap []byte) error {
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
 
 	//we make it simple: remove all, add the new ones and than garbage collect
 	buf := bytes.NewBuffer(snap)
@@ -590,15 +609,31 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 	}
 	self.files = list
 	return nil
-}*/
+}
+
+func (self *dataState) HasFile(id cid.Cid) bool {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	for _, file := range self.files {
+		if file == id {
+			return true
+		}
+	}
+
+	return false
+}
 
 type swarmDataService struct {
-	data    *hostDataService
-	state   *sharedStateService
-	session exchange.Fetcher
-	id      SwarmID
-	ctx     context.Context
-	cancel  context.CancelFunc
+	data         *hostDataService
+	stateService *sharedStateService
+	state        *dataState
+	statenum     uint8
+	session      exchange.Fetcher
+	id           SwarmID
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 func newSwarmDataService(swarm *Swarm) DataService {
@@ -606,38 +641,48 @@ func newSwarmDataService(swarm *Swarm) DataService {
 	ctx, cncl := context.WithCancel(context.Background())
 
 	data := swarm.host.Data.(*hostDataService)
-	state := swarm.State
 	session := data.bitswap.NewSession(ctx)
-	id := swarm.ID
 
-	return &swarmDataService{data, state, session, id, ctx, cncl}
+	service := &swarmDataService{data, swarm.State, nil, 0, session, swarm.ID, ctx, cncl}
+	service.state = newDataState(service)
+	service.statenum = swarm.State.Share(service.state)
+
+	return service
 }
 
-func (self *swarmDataService) Add(path string) (cid.Cid, error) {
+func (self *swarmDataService) Add(ctx context.Context, path string) (cid.Cid, error) {
 
+	//add the file
 	filecid, _, err := self.data.basicAdd(path, string(self.id))
 	if err != nil {
-		return cid.Cid{}, err
+		return cid.Undef, err
+	}
+
+	//store in shared state
+	cmd, err := dataStateCommand{filecid, false}.toByte()
+	if err != nil {
+		return cid.Undef, utils.StackError(err, "Unable to create command")
+	}
+	err = self.stateService.AddCommand(ctx, self.statenum, cmd)
+	if err != nil {
+		self.data.Drop(ctx, filecid)
+		return cid.Undef, utils.StackError(err, "Unable to share file with swarm members")
 	}
 
 	//return
-	return filecid, err
+	return filecid, nil
 }
 
-func (self *swarmDataService) Drop(id cid.Cid) error {
+func (self *swarmDataService) Drop(ctx context.Context, id cid.Cid) error {
 
-	//get the root block
-	if block, err := self.data.store.Get(id); err == nil {
-		//release ownership
-		last, err := self.data.store.ReleaseOwnership(block, string(self.id))
-		if err != nil {
-			return err
-		}
-
-		//there maybe someone else that needs this file
-		if last {
-			return self.data.basicDrop(id, string(self.id))
-		}
+	//drop the file in the swarm.
+	cmd, err := dataStateCommand{id, true}.toByte()
+	if err != nil {
+		return utils.StackError(err, "Unable to create drop command")
+	}
+	err = self.stateService.AddCommand(ctx, self.statenum, cmd)
+	if err != nil {
+		utils.StackError(err, "Unable to drop file within swarm")
 	}
 
 	return nil
@@ -645,19 +690,32 @@ func (self *swarmDataService) Drop(id cid.Cid) error {
 
 func (self *swarmDataService) Fetch(ctx context.Context, id cid.Cid) error {
 
+	//check if we have the file, if not fetching makes no sense in swarm context
+	if !self.state.HasFile(id) {
+		return fmt.Errorf("The file is not part of swarm, cannot be fetched")
+	}
+	//even if we have it in the state list, we fetch it anyway to make sure all blocks are received after the fetch call
+	//(we could be in fetching phase)
 	return self.data.basicFetch(ctx, id, self.session, string(self.id))
 }
 
 func (self *swarmDataService) FetchAsync(id cid.Cid) error {
 
-	go func() {
-		self.data.basicFetch(self.ctx, id, self.session, string(self.id))
-	}()
+	//check if we have the file, if not fetching makes no sense in swarm context
+	if !self.state.HasFile(id) {
+		return fmt.Errorf("The file is not part of swarm, cannot be fetched")
+	}
 
+	//we don't need to start a fetch, as it is to be expected that after this call the data may not be fully fetched yet
 	return nil
 }
 
 func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File, error) {
+
+	//check if we have the file, if not getting makes no sense in swarm context
+	if !self.state.HasFile(id) {
+		return nil, fmt.Errorf("The file is not part of swarm, cannot be given")
+	}
 
 	_, file, err := self.data.basicGetFile(ctx, id, self.session, string(self.id))
 	if err != nil {
@@ -668,6 +726,11 @@ func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File
 }
 
 func (self *swarmDataService) Write(ctx context.Context, id cid.Cid, path string) (string, error) {
+
+	//check if we have the file, if not writing makes no sense in swarm context
+	if !self.state.HasFile(id) {
+		return "", fmt.Errorf("The file is not part of swarm, cannot be written")
+	}
 
 	//make sure we have the data!
 	return self.data.basicWrite(ctx, id, path, self.session, string(self.id))
