@@ -170,8 +170,8 @@ func (self *hostDataService) basicAddDirectory(path string) (cid.Cid, []blocks.B
 	dirblock.Sort()
 	block := dirblock.ToBlock()
 
-	//Store the block
-	err = self.store.Put(block)
+	//Make the block available
+	err = self.bitswap.HasBlock(block)
 	if err != nil {
 		return cid.Undef, nil, utils.StackError(err, "Unable to add directory")
 	}
@@ -317,7 +317,11 @@ func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid, fetch
 	case BlockFile, BlockMultiFile:
 		path := filepath.Join(self.datapath, block.Cid().String())
 		file, err := os.Open(path)
-		return block, file, utils.StackError(err, "Unable to get file %v", id.String())
+
+		if err != nil {
+			return nil, nil, utils.StackError(err, "Unable to get file %v", id.String())
+		}
+		return block, file, nil
 
 	default:
 		return nil, nil, fmt.Errorf("Unknown block type")
@@ -356,7 +360,10 @@ func (self *hostDataService) basicWrite(ctx context.Context, id cid.Cid, path st
 		os.MkdirAll(newpath, os.ModePerm)
 		//we write every subfile to the directory!
 		for _, sub := range dirblock.Blocks {
-			self.basicWrite(ctx, sub, newpath, fetcher, owner)
+			_, err := self.basicWrite(ctx, sub, newpath, fetcher, owner)
+			if err != nil {
+				return "", utils.StackError(err, "Cannot write directory entry %v", sub.String())
+			}
 		}
 
 		return newpath, nil
@@ -366,7 +373,7 @@ func (self *hostDataService) basicWrite(ctx context.Context, id cid.Cid, path st
 		fpath := filepath.Join(self.datapath, block.Cid().String())
 		file, err := os.Open(fpath)
 		if err != nil {
-			return "", utils.StackError(err, "Unable to get write %v", id.String())
+			return "", utils.StackError(err, "Unable to write %v", id.String())
 		}
 		defer file.Close()
 
@@ -374,7 +381,7 @@ func (self *hostDataService) basicWrite(ctx context.Context, id cid.Cid, path st
 		newpath := filepath.Join(path, namedblock.FileName())
 		destination, err := os.Create(newpath)
 		if err != nil {
-			return "", utils.StackError(err, "Unable to get write %v", id.String())
+			return "", utils.StackError(err, "Unable to write %v", id.String())
 		}
 		defer destination.Close()
 		io.Copy(destination, file)

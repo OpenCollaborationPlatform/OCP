@@ -31,7 +31,7 @@ func init() {
 
 var cmdP2P = &cobra.Command{
 	Use:   "p2p",
-	Short: "Access information about the p2p network",
+	Short: "Access the p2p network",
 
 	Run: onlineCommand("p2p", func(args []string, flags map[string]interface{}) string {
 

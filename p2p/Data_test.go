@@ -3,15 +3,14 @@ package p2p
 import (
 	"bytes"
 	"context"
-
+	"io"
 	"io/ioutil"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
-
-	"net/http"
-	_ "net/http/pprof"
 
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	. "github.com/smartystreets/goconvey/convey"
@@ -27,13 +26,17 @@ func TestBlockStore(t *testing.T) {
 		http.ListenAndServe("localhost:6060", nil)
 	}()
 
-	Convey("Setting up a blockstore,", t, func() {
+	count := 0
+	Convey("Setting up the store.", t, func() {
 
+		//each time we want a new store to use convey correctly
+		count++
 		bstore, err := NewBitswapStore(path)
 		So(err, ShouldBeNil)
 		defer bstore.Close()
+		defer os.RemoveAll(path) //delete it after each execution to get a new empty store for multiple runs
 
-		Convey("Adding data should work", func() {
+		Convey("Adding single block data should work", func() {
 
 			data := repeatableBlock(512)
 			has, err := bstore.Has(data.Cid())
@@ -46,26 +49,50 @@ func TestBlockStore(t *testing.T) {
 			has, err = bstore.Has(data.Cid())
 			So(err, ShouldBeNil)
 			So(has, ShouldBeTrue)
-		})
 
-		Convey("Data should be correctly read", func() {
+			Convey("and creates a file for storage.", func() {
 
-			data := repeatableBlock(512)
-			/*	size, err := bstore.GetSize(data.Cid())
+				//check if the files were added to the exchange folder
+				files, err := ioutil.ReadDir(path)
 				So(err, ShouldBeNil)
-				So(size, ShouldEqual, 512)
-			*/
-			stored, err := bstore.Get(data.Cid())
-			So(err, ShouldBeNil)
-			So(bytes.Equal(data.RawData(), stored.RawData()), ShouldBeTrue)
-		})
+				So(len(files), ShouldEqual, 2) //1 file + 1 db = 2
+			})
 
-		Convey("and correct errors shall be returned", func() {
+			Convey("Data should be correctly read", func() {
 
-			data := randomBlock(10)
-			_, err := bstore.Get(data.Cid())
-			So(err, ShouldNotBeNil)
-			So(err, ShouldEqual, blockstore.ErrNotFound)
+				stored, err := bstore.Get(data.Cid())
+				So(err, ShouldBeNil)
+				So(bytes.Equal(data.RawData(), stored.RawData()), ShouldBeTrue)
+			})
+
+			Convey("and correct errors shall be returned", func() {
+
+				random := randomBlock(10)
+				_, err := bstore.Get(random.Cid())
+				So(err, ShouldNotBeNil)
+				So(err, ShouldEqual, blockstore.ErrNotFound)
+			})
+
+			Convey("Removing the block", func() {
+
+				err := bstore.DeleteBlock(data.Cid())
+				So(err, ShouldBeNil)
+
+				Convey("removes the file", func() {
+
+					//check if the files were added to the exchange folder
+					files, err := ioutil.ReadDir(path)
+					So(err, ShouldBeNil)
+					So(len(files), ShouldEqual, 1) //0 file + 1 db = 1
+				})
+
+				Convey("As well as the entry in the DB", func() {
+
+					has, err := bstore.Has(data.Cid())
+					So(err, ShouldBeNil)
+					So(has, ShouldBeFalse)
+				})
+			})
 		})
 	})
 }
@@ -73,81 +100,153 @@ func TestBlockStore(t *testing.T) {
 func TestBitswap(t *testing.T) {
 
 	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "p2p")
-	defer os.RemoveAll(path)
+	tmppath, _ := ioutil.TempDir("", "p2p")
+	defer os.RemoveAll(tmppath)
 
-	//build blockstore
-	store1, err := NewBitswapStore(filepath.Join(path, "store1"))
-	if err != nil {
-		return
-	}
+	Convey("Creating two blockstores,", t, func() {
 
-	store2, err := NewBitswapStore(filepath.Join(path, "store2"))
-	if err != nil {
-		return
-	}
+		path := filepath.Join(tmppath, "current")
+		defer os.RemoveAll(path) //make sure to get empty blockstores each run
 
-	Convey("Setting up Bitswaps for two random hosts,", t, func() {
-
-		h1, err := randomHostWithoutDataSerivce()
+		//build blockstore
+		store1, err := NewBitswapStore(filepath.Join(path, "store1"))
 		So(err, ShouldBeNil)
-		bs1, err := NewBitswap(store1, h1)
+
+		store2, err := NewBitswapStore(filepath.Join(path, "store2"))
 		So(err, ShouldBeNil)
-		defer bs1.Close()
-		defer h1.Stop()
 
-		h2, err := randomHostWithoutDataSerivce()
-		So(err, ShouldBeNil)
-		bs2, err := NewBitswap(store2, h2)
-		So(err, ShouldBeNil)
-		defer bs2.Close()
-		defer h2.Stop()
+		Convey("Setting up Bitswaps for two random hosts,", func() {
 
-		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
-		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-
-		Convey("Adding/retreiving blocks shall be possible", func() {
-
-			block := randomBlock(187)
-
-			err = bs1.HasBlock(block)
+			h1, err := randomHostWithoutDataSerivce()
 			So(err, ShouldBeNil)
-			ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-
-			//get block from other host
-			retblock, err := bs2.GetBlock(ctx, block.Cid())
+			bs1, err := NewBitswap(store1, h1)
 			So(err, ShouldBeNil)
-			So(block.Cid().Equals(retblock.Cid()), ShouldBeTrue)
-			So(bytes.Equal(block.RawData(), retblock.RawData()), ShouldBeTrue)
+			defer bs1.Close()
+			defer h1.Stop()
+
+			h2, err := randomHostWithoutDataSerivce()
+			So(err, ShouldBeNil)
+			bs2, err := NewBitswap(store2, h2)
+			So(err, ShouldBeNil)
+			defer bs2.Close()
+			defer h2.Stop()
+
+			h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
+			h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
+
+			Convey("Adding/retreiving blocks shall be possible", func() {
+
+				block := randomBlock(187)
+
+				err = bs1.HasBlock(block)
+				So(err, ShouldBeNil)
+				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+
+				//get block from other host
+				retblock, err := bs2.GetBlock(ctx, block.Cid())
+				So(err, ShouldBeNil)
+				So(block.Cid().Equals(retblock.Cid()), ShouldBeTrue)
+				So(bytes.Equal(block.RawData(), retblock.RawData()), ShouldBeTrue)
+			})
 		})
 	})
+
 }
 
 func TestDataService(t *testing.T) {
 
 	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "p2p")
-	//defer os.RemoveAll(path)
-
-	//generate a testfile
-	block := repeatableBlock(555)
-	p2pblock, _ := getP2PBlock(block)
-	fileblock := p2pblock.(P2PFileBlock)
-	testfilepath := filepath.Join(path, "testfile")
-	ioutil.WriteFile(testfilepath, fileblock.Data, 0644)
-
-	//Setup the hosts
-	h1, _ := temporaryHost(path)
-	defer h1.Stop()
-
-	h2, _ := temporaryHost(path)
-	defer h1.Stop()
+	tmppath, _ := ioutil.TempDir("", "p2p")
+	defer os.RemoveAll(tmppath)
 
 	Convey("Setting up two random hosts,", t, func() {
 
+		path := filepath.Join(tmppath, "current")
+		defer os.RemoveAll(path) //ake sure empty bitswaps are created each run
+
+		//Setup the hosts
+		h1, _ := temporaryHost(path)
+		defer h1.Stop()
+
+		h2, _ := temporaryHost(path)
+		defer h1.Stop()
+
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-		/*
+
+		Convey("Adding small data to one host should be possible", func() {
+
+			//generate a testfile
+			filedata := repeatableData(555)
+			testfilepath := filepath.Join(path, "testfile")
+			ioutil.WriteFile(testfilepath, filedata, 0644)
+
+			ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+			res, err := h1.Data.Add(testfilepath)
+			So(err, ShouldBeNil)
+
+			reader, err := h1.Data.GetFile(ctx, res)
+			So(err, ShouldBeNil)
+
+			data := make([]byte, len(filedata))
+			n, err := reader.Read(data)
+			So(err, ShouldBeNil)
+			So(n, ShouldEqual, 555)
+			So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
+
+			Convey("and retreiving from the other shall be possible too.", func() {
+
+				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+				reader, err := h2.Data.GetFile(ctx, res)
+				So(err, ShouldBeNil)
+				io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
+
+				ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
+				reader, err = h2.Data.GetFile(ctx, res)
+				So(err, ShouldBeNil)
+
+				data := make([]byte, len(filedata))
+				n, err := reader.Read(data)
+				So(err, ShouldBeNil)
+				So(n, ShouldEqual, 555)
+				So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
+
+				Convey("Afterwards droping the file from the first host is possible", func() {
+
+					err := h1.Data.Drop(res)
+					So(err, ShouldBeNil)
+
+					Convey("while it is still accessing from the second host", func() {
+						ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+						err := h2.Data.Fetch(ctx, res)
+						So(err, ShouldBeNil)
+					})
+				})
+			})
+
+			Convey("Droping the file from the first host is possible", func() {
+
+				err := h1.Data.Drop(res)
+				So(err, ShouldBeNil)
+
+				Convey("it is not accessible in any host", func() {
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := h1.Data.Fetch(ctx, res)
+					So(err, ShouldNotBeNil)
+					err = h2.Data.Fetch(ctx, res)
+					So(err, ShouldNotBeNil)
+				})
+			})
+		})
+
+		Convey("Creating a large file (which need splitting up)", func() {
+
+			//generate a testfile
+			filesize := int(float32(blocksize) * 4.2)
+			filedata := repeatableData(filesize)
+			testfilepath := filepath.Join(path, "testfile2")
+			ioutil.WriteFile(testfilepath, filedata, 0644)
+
 			Convey("Adding data to one host should be possible", func() {
 
 				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
@@ -157,13 +256,13 @@ func TestDataService(t *testing.T) {
 				reader, err := h1.Data.GetFile(ctx, res)
 				So(err, ShouldBeNil)
 
-				data := make([]byte, len(block.RawData()))
+				data := make([]byte, filesize)
 				n, err := reader.Read(data)
 				So(err, ShouldBeNil)
-				So(n, ShouldEqual, 555)
-				So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
+				So(n, ShouldEqual, filesize)
+				So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 
-				Convey("and retreiving from the other shall be possible too", func() {
+				Convey("and retreiving from the other shall be possible too.", func() {
 
 					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 					reader, err := h2.Data.GetFile(ctx, res)
@@ -174,88 +273,40 @@ func TestDataService(t *testing.T) {
 					reader, err = h2.Data.GetFile(ctx, res)
 					So(err, ShouldBeNil)
 
-					data := make([]byte, len(block.RawData()))
-					n, err := reader.Read(data)
-					So(err, ShouldBeNil)
-					So(n, ShouldEqual, 555)
-					So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
-				})
-
-				Convey("Afterwards droping the file from the first host is possible", func() {
-
-					err := h1.Data.Drop(res)
-					So(err, ShouldBeNil)
-
-					Convey("while it is still accessing from the second host", func() {
-						ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-						reader, err := h2.Data.GetFile(ctx, res)
-						So(err, ShouldBeNil)
-						io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
-					})
-				})
-
-				Convey("Dropping it from  both hosts", func() {
-
-					err := h1.Data.Drop(res)
-					So(err, ShouldBeNil)
-					err = h2.Data.Drop(res)
-					So(err, ShouldBeNil)
-
-					Convey("it should not be accessible anymore", func() {
-						ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-						_, err := h2.Data.GetFile(ctx, res)
-						So(err, ShouldNotBeNil)
-
-						_, err = h1.Data.GetFile(ctx, res)
-						So(err, ShouldNotBeNil)
-					})
-				})
-			})
-
-			Convey("Creating a large file (which need splitting up)", func() {
-
-				//generate a testfile
-				filesize := int(float32(blocksize) * 4.2)
-				block := repeatableBlock(filesize)
-				p2pblock, _ := getP2PBlock(block)
-				fileblock := p2pblock.(P2PFileBlock)
-				testfilepath := filepath.Join(path, "testfile2")
-				ioutil.WriteFile(testfilepath, fileblock.Data, 0644)
-
-				Convey("Adding data to one host should be possible", func() {
-
-					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-					res, err := h1.Data.Add(testfilepath)
-					So(err, ShouldBeNil)
-
-					reader, err := h1.Data.GetFile(ctx, res)
-					So(err, ShouldBeNil)
-
 					data := make([]byte, filesize)
 					n, err := reader.Read(data)
 					So(err, ShouldBeNil)
 					So(n, ShouldEqual, filesize)
-					So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
+					So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 
-					Convey("and retreiving from the other shall be possible too", func() {
+					Convey("Afterwards droping the file from the first host is possible", func() {
 
-						ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-						reader, err := h2.Data.GetFile(ctx, res)
-						So(err, ShouldBeNil)
-						io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
-
-						ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
-						reader, err = h2.Data.GetFile(ctx, res)
+						err := h1.Data.Drop(res)
 						So(err, ShouldBeNil)
 
-						data := make([]byte, filesize)
-						n, err := reader.Read(data)
-						So(err, ShouldBeNil)
-						So(n, ShouldEqual, filesize)
-						So(bytes.Equal(data[:n], fileblock.Data), ShouldBeTrue)
+						Convey("while it is still accessing from the second host", func() {
+							ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+							err := h2.Data.Fetch(ctx, res)
+							So(err, ShouldBeNil)
+						})
 					})
 				})
-			})*/
+
+				Convey("Droping the file from the first host is possible", func() {
+
+					err := h1.Data.Drop(res)
+					So(err, ShouldBeNil)
+
+					Convey("it is not accessible in any host", func() {
+						ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+						err := h1.Data.Fetch(ctx, res)
+						So(err, ShouldNotBeNil)
+						err = h2.Data.Fetch(ctx, res)
+						So(err, ShouldNotBeNil)
+					})
+				})
+			})
+		})
 
 		Convey("Creating a directory structure with large and small files", func() {
 
@@ -302,7 +353,7 @@ func TestDataService(t *testing.T) {
 					defer os.RemoveAll(newpath)
 
 					So(err, ShouldBeNil)
-					So(compareDirectories(res2path, dirpath2), ShouldBeTrue)
+					So(compareDirectories(res2path, dirpath2), ShouldBeNil)
 				})
 
 				Convey("and retreiving from the other shall be possible too", func() {
@@ -315,7 +366,7 @@ func TestDataService(t *testing.T) {
 					defer os.RemoveAll(newpath)
 
 					So(err, ShouldBeNil)
-					So(compareDirectories(res2path, dirpath2), ShouldBeTrue)
+					So(compareDirectories(res2path, dirpath2), ShouldBeNil)
 				})
 
 				Convey("Afterwards adding the parent directory from the other node", func() {
@@ -350,7 +401,7 @@ func TestDataService(t *testing.T) {
 							defer os.RemoveAll(newpath)
 
 							So(err, ShouldBeNil)
-							So(compareDirectories(res1path, dirpath1), ShouldBeTrue)
+							So(compareDirectories(res1path, dirpath1), ShouldBeNil)
 
 							h1.Data.Drop(res1)
 						})

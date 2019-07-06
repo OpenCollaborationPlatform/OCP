@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"CollaborationNode/p2p/replica"
+	"CollaborationNode/utils"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -13,6 +14,7 @@ import (
 	blocks "github.com/ipfs/go-block-format"
 
 	ipfslog "github.com/ipfs/go-log"
+	ipfswriter "github.com/ipfs/go-log/writer"
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	uuid "github.com/satori/go.uuid"
@@ -29,8 +31,8 @@ func init() {
 	//use a test overlord
 	overlord = replica.NewTestOverlord()
 
-	//ipfslog.Configure(ipfslog.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
-	ipfslog.GetSubsystems()
+	ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
+	ipfslog.GetSubsystems()                                 //just to not need to remove import
 	//ipfslog.SetDebugLogging()
 
 }
@@ -137,20 +139,20 @@ func repeatableData(size int) []byte {
 }
 
 //compares two directories if they are equal
-func compareDirectories(path1, path2 string) bool {
+func compareDirectories(path1, path2 string) error {
 
 	files1, err := ioutil.ReadDir(path1)
 	if err != nil {
-		return false
+		return utils.StackError(err, "Unable to read dir %v", path1)
 	}
 
 	files2, err := ioutil.ReadDir(path2)
 	if err != nil {
-		return false
+		return utils.StackError(err, "Unable to read dir %v", path2)
 	}
 
 	if len(files1) != len(files2) {
-		return false
+		return fmt.Errorf("\nNumber of files not equal")
 	}
 
 	for i, file := range files1 {
@@ -158,13 +160,13 @@ func compareDirectories(path1, path2 string) bool {
 		other := files2[i]
 
 		if file.Name() != other.Name() {
-			return false
+			return fmt.Errorf("\nNames not equal")
 		}
 		if file.Size() != other.Size() {
-			return false
+			return fmt.Errorf("\nSize not equal")
 		}
 		if file.IsDir() != other.IsDir() {
-			return false
+			return fmt.Errorf("\nType not equal")
 		}
 
 		//compare the file content
@@ -173,12 +175,12 @@ func compareDirectories(path1, path2 string) bool {
 		if !file.IsDir() {
 			f1, err := os.Open(subpath1)
 			if err != nil {
-				return false
+				return fmt.Errorf("\nCannot open file 1")
 			}
 
 			f2, err := os.Open(subpath2)
 			if err != nil {
-				return false
+				return fmt.Errorf("\nCannot open file 2")
 			}
 
 			data1 := make([]byte, file.Size())
@@ -188,15 +190,15 @@ func compareDirectories(path1, path2 string) bool {
 			f2.Read(data2)
 
 			if !bytes.Equal(data1, data2) {
-				return false
+				return fmt.Errorf("\nData for file %v not equal", i)
 			}
 		} else {
 			res := compareDirectories(subpath1, subpath2)
-			if !res {
-				return false
+			if res != nil {
+				return fmt.Errorf("\nSubdir not equal: %v", res)
 			}
 		}
 	}
 
-	return true
+	return nil
 }
