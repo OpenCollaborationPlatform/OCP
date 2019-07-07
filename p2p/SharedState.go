@@ -18,7 +18,7 @@ import (
 *******************************************************************************/
 
 type RpcEvent struct {
-	api *replica.ReadAPI
+	api *replica.ReadEventAPI
 }
 
 func (self *RpcEvent) InvalidLogReceived(ctx context.Context, arg uint64, result *struct{}) error {
@@ -66,16 +66,16 @@ func (self *p2pTransport) setupEvent(name string, auth AUTH_STATE, fnc func(data
 //with return value, used for "Call" and "CallAny": 	fnc(ctx context.Context, arg Type1, result *Type2) error
 //without return value, used for "Send": 				fnc(arg Type1)
 //The register function should handle all API functions according to their structure for the call or send.
-func (self *p2pTransport) RegisterReadAPI(api *replica.ReadAPI) error {
+func (self *p2pTransport) RegisterReadAPI(rpc *replica.ReadRPCAPI, event *replica.ReadEventAPI) error {
 
 	//registering rpc functions is easy!
-	err := self.swarm.Rpc.Register(api, AUTH_READONLY)
+	err := self.swarm.Rpc.Register(rpc, AUTH_READONLY)
 	if err != nil {
 		return err
 	}
 
 	//we implement this send function also via RPC as event is overkill: should only go to one address
-	err = self.swarm.Rpc.Register(&RpcEvent{api}, AUTH_READONLY)
+	err = self.swarm.Rpc.Register(&RpcEvent{event}, AUTH_READONLY)
 	if err != nil {
 		return err
 	}
@@ -83,13 +83,13 @@ func (self *p2pTransport) RegisterReadAPI(api *replica.ReadAPI) error {
 	return nil
 }
 
-func (self *p2pTransport) RegisterWriteAPI(api *replica.WriteAPI) error {
+func (self *p2pTransport) RegisterWriteAPI(rpc *replica.WriteRPCAPI, event *replica.WriteEventAPI) error {
 
 	//registering rpc functions is easy!
-	self.swarm.Rpc.Register(api, AUTH_READWRITE)
+	self.swarm.Rpc.Register(rpc, AUTH_READWRITE)
 
 	//now go over all event functions. We don't use reflect to keep it simple
-	err := self.setupEvent("WriteAPI/NewLog", AUTH_READWRITE, func(dec *gob.Decoder) {
+	err := self.setupEvent("WriteEventAPI/NewLog", AUTH_READWRITE, func(dec *gob.Decoder) {
 
 		var log replica.Log
 		err := dec.Decode(&log)
@@ -97,20 +97,20 @@ func (self *p2pTransport) RegisterWriteAPI(api *replica.WriteAPI) error {
 			fmt.Printf("\nError decoding log %v!\n", err)
 			return
 		}
-		api.NewLog(log)
+		event.NewLog(log)
 	})
 	if err != nil {
 		return err
 	}
 
-	err = self.setupEvent("WriteAPI/NewBeacon", AUTH_READWRITE, func(dec *gob.Decoder) {
+	err = self.setupEvent("WriteEventAPI/NewBeacon", AUTH_READWRITE, func(dec *gob.Decoder) {
 
 		var beacon replica.Beacon
 		err := dec.Decode(&beacon)
 		if err != nil {
 			return
 		}
-		api.NewBeacon(beacon)
+		event.NewBeacon(beacon)
 	})
 	if err != nil {
 		return err

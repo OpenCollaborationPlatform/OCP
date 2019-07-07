@@ -1,6 +1,5 @@
 package p2p
 
-/*
 import (
 	"context"
 	"encoding/binary"
@@ -83,9 +82,6 @@ func TestBasicSharedState(t *testing.T) {
 	h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 	h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
 
-	fmt.Printf("\n\nHost 1: %v\n", h1.ID().String())
-	fmt.Printf("Host 2: %v\n", h2.ID().String())
-
 	Convey("Giving the swarm write rigths,", t, func() {
 
 		ctx := context.Background()
@@ -96,11 +92,11 @@ func TestBasicSharedState(t *testing.T) {
 
 			st1 := &testState{0}
 			sst1 := sw1.State.Share(st1)
-			So(sst1, ShouldEqual, 0)
+			So(sst1, ShouldEqual, 1)
 
 			st2 := &testState{0}
 			sst2 := sw2.State.Share(st2)
-			So(sst2, ShouldEqual, 0)
+			So(sst2, ShouldEqual, 1)
 
 			Convey("adding command works from both swarms", func() {
 
@@ -117,4 +113,3 @@ func TestBasicSharedState(t *testing.T) {
 		})
 	})
 }
-*/

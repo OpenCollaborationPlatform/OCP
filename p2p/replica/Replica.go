@@ -150,10 +150,10 @@ func NewReplica(name string, addr Address, trans Transport, ol Overlord,
 	}
 
 	//setup transport correctly
-	if err := trans.RegisterReadAPI(&ReadAPI{replica}); err != nil {
+	if err := trans.RegisterReadAPI(&ReadRPCAPI{replica}, &ReadEventAPI{replica}); err != nil {
 		replica.logger.Errorf("Unable to register ReadAPI: %v", err)
 	}
-	if err := trans.RegisterWriteAPI(&WriteAPI{replica}); err != nil {
+	if err := trans.RegisterWriteAPI(&WriteRPCAPI{replica}, &WriteEventAPI{replica}); err != nil {
 		replica.logger.Errorf("Unable to register ReadAPI: %v", err)
 	}
 	if err := ol.RegisterOverloardAPI(&OverloardAPI{replica}); err != nil {
@@ -512,7 +512,7 @@ func (self *Replica) startRequestWorkers(num int) {
 				default:
 					reply := Log{}
 					reqCtx, _ := context.WithTimeout(request.ctx, 700*time.Millisecond) //we give ourself 500 milliseconds, not more
-					addr, err := self.transport.CallAny(reqCtx, `ReadAPI`, `GetLog`, request.index, &reply)
+					addr, err := self.transport.CallAny(reqCtx, `ReadRPCAPI`, `GetLog`, request.index, &reply)
 
 					//handle the commit if we received it
 					if err == nil {
@@ -537,7 +537,7 @@ func (self *Replica) startRequestWorkers(num int) {
 
 						if err != nil {
 							//inform the replica that it send us bogus!
-							s_err := self.transport.Send(addr, `ReadAPI`, `InvalidLogReceived`, reply.Index)
+							s_err := self.transport.Send(addr, `ReadRPCAPI`, `InvalidLogReceived`, reply.Index)
 							if s_err != nil {
 								self.logger.Errorf("Cannot inform replica about problematic log: %v", s_err)
 							}
@@ -549,7 +549,7 @@ func (self *Replica) startRequestWorkers(num int) {
 						}
 
 					} else {
-						self.logger.Debugf("Call of function GetLog in ReadAPI failed, try again: %v", err.Error())
+						self.logger.Debugf("Call of function GetLog in ReadRPCAPI failed, try again: %v", err.Error())
 						//push it in again for the next try
 						self.requestChan <- request
 					}
@@ -614,7 +614,7 @@ func (self *Replica) newCommand(ctx context.Context, cmd []byte, state uint8) er
 		}
 
 		self.logger.Debugf("Request command from leader %v", leader)
-		err := self.transport.Call(ctx, leader, `WriteAPI`, `RequestCommand`, args, &ret)
+		err := self.transport.Call(ctx, leader, `WriteRPCAPI`, `RequestCommand`, args, &ret)
 
 		//if it failed because of wrong leader data we need to check what is the correct one
 		//(or elect a new leader)
@@ -801,7 +801,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 	}
 
 	self.logger.Debugf("Send out new log %v", log)
-	err = self.transport.SendAll(`WriteAPI`, `NewLog`, log)
+	err = self.transport.SendAll(`WriteEventAPI`, `NewLog`, log)
 	if err != nil {
 		self.logger.Errorf("Unable to send out commited log: %v", err)
 		return err
@@ -841,7 +841,7 @@ func (self *Replica) requestCommand(cmd []byte, state uint8) error {
 		}
 
 		self.logger.Debugf("Send out snapshopt log")
-		err = self.transport.SendAll(`WriteAPI`, `NewLog`, log)
+		err = self.transport.SendAll(`WriteEventAPI`, `NewLog`, log)
 		if err != nil {
 			self.logger.Errorf("Unable to send out snapshot log: %v", err)
 			return err
@@ -966,7 +966,7 @@ func (self *Replica) sendBeacon() {
 
 	last, _ := self.store.LastIndex()
 	arg := Beacon{self.address, self.leaders.GetEpoch(), last}
-	self.transport.SendAll("WriteAPI", "NewBeacon", arg)
+	self.transport.SendAll("WriteEventAPI", "NewBeacon", arg)
 }
 
 func (self *Replica) processBeacon(ctx context.Context, beacon Beacon) {

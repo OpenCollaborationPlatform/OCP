@@ -4,29 +4,22 @@ import (
 	"bytes"
 	"context"
 
-	//	"io"
+	"io"
 	"io/ioutil"
-	//	"net/http"
-	//	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	//	blockstore "github.com/ipfs/go-ipfs-blockstore"
+	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-/*
 func TestBlockStore(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "p2p")
 	defer os.RemoveAll(path)
-
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
 
 	count := 0
 	Convey("Setting up the store.", t, func() {
@@ -437,7 +430,7 @@ func TestDataService(t *testing.T) {
 			})
 		})
 	})
-}*/
+}
 
 func TestSwarmDataService(t *testing.T) {
 
@@ -518,20 +511,21 @@ func TestSwarmDataService(t *testing.T) {
 					})
 				})
 			})
-			/*
-				Convey("Droping the file from the first host is possible", func() {
 
-					err := h1.Data.Drop(ctx, res)
-					So(err, ShouldBeNil)
+			Convey("Droping the file from the first host is possible", func() {
 
-					Convey("it is not accessible in any host", func() {
-						ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-						err := h1.Data.Fetch(ctx, res)
-						So(err, ShouldNotBeNil)
-						err = h2.Data.Fetch(ctx, res)
-						So(err, ShouldNotBeNil)
-					})
-				})*/
+				err := sw1.Data.Drop(ctx, res)
+				So(err, ShouldBeNil)
+				time.Sleep(50 * time.Millisecond)
+
+				Convey("it is not accessible in any host", func() {
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := sw1.Data.Fetch(ctx, res)
+					So(err, ShouldNotBeNil)
+					err = sw2.Data.Fetch(ctx, res)
+					So(err, ShouldNotBeNil)
+				})
+			})
 		})
 		/*
 			Convey("Creating a large file (which need splitting up)", func() {

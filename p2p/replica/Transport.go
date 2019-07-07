@@ -22,8 +22,8 @@ type Transport interface {
 	//with return value, used for "Call" and "CallAny": 	fnc(ctx context.Context, arg Type1, result *Type2) error
 	//without return value, used for "Send": 				fnc(arg Type1)
 	//The register function should handle all API functions according to their structure for the call or send.
-	RegisterReadAPI(api *ReadAPI) error
-	RegisterWriteAPI(api *WriteAPI) error
+	RegisterReadAPI(rpc *ReadRPCAPI, event *ReadEventAPI) error
+	RegisterWriteAPI(rpc *WriteRPCAPI, event *WriteEventAPI) error
 
 	//call a replica with the given adress. Usally used for the leader. If an error occurs during the call
 	//it will be returned
@@ -43,21 +43,25 @@ type Transport interface {
 
 //A simple test transport for local replica communication. Allows randomized delay
 type testTransport struct {
-	rndDelay     time.Duration
-	timeoutDelay time.Duration
-	readAPIs     []*ReadAPI
-	writeAPIs    []*WriteAPI
-	unreachable  []int
-	mutex        sync.RWMutex //for unreachable
+	rndDelay       time.Duration
+	timeoutDelay   time.Duration
+	readRPCAPIs    []*ReadRPCAPI
+	readEventAPIs  []*ReadEventAPI
+	writeRPCAPIs   []*WriteRPCAPI
+	writeEventAPIs []*WriteEventAPI
+	unreachable    []int
+	mutex          sync.RWMutex //for unreachable
 }
 
 func newTestTransport() *testTransport {
 
 	return &testTransport{
-		rndDelay:     0 * time.Millisecond,
-		timeoutDelay: 0 * time.Millisecond,
-		readAPIs:     make([]*ReadAPI, 0),
-		writeAPIs:    make([]*WriteAPI, 0),
+		rndDelay:       0 * time.Millisecond,
+		timeoutDelay:   0 * time.Millisecond,
+		readRPCAPIs:    make([]*ReadRPCAPI, 0),
+		readEventAPIs:  make([]*ReadEventAPI, 0),
+		writeRPCAPIs:   make([]*WriteRPCAPI, 0),
+		writeEventAPIs: make([]*WriteEventAPI, 0),
 	}
 }
 
@@ -73,14 +77,16 @@ func (self *testTransport) isReachable(idx int) bool {
 	return true
 }
 
-func (self *testTransport) RegisterReadAPI(api *ReadAPI) error {
-	self.readAPIs = append(self.readAPIs, api)
+func (self *testTransport) RegisterReadAPI(rpc *ReadRPCAPI, event *ReadEventAPI) error {
+	self.readRPCAPIs = append(self.readRPCAPIs, rpc)
+	self.readEventAPIs = append(self.readEventAPIs, event)
 	return nil
 }
 
-func (self *testTransport) RegisterWriteAPI(api *WriteAPI) error {
+func (self *testTransport) RegisterWriteAPI(rpc *WriteRPCAPI, event *WriteEventAPI) error {
 
-	self.writeAPIs = append(self.writeAPIs, api)
+	self.writeEventAPIs = append(self.writeEventAPIs, event)
+	self.writeRPCAPIs = append(self.writeRPCAPIs, rpc)
 	return nil
 }
 
@@ -91,7 +97,7 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 	if err != nil {
 		return err
 	}
-	if idx >= len(self.readAPIs) {
+	if idx >= len(self.readRPCAPIs) {
 		return fmt.Errorf("Invalid address (%v): no such replica known", idx)
 	}
 
@@ -104,10 +110,10 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 	//get the correct API to use
 	var apiObj interface{}
 	switch api {
-	case "ReadAPI":
-		apiObj = self.readAPIs[idx]
-	case "WriteAPI":
-		apiObj = self.writeAPIs[idx]
+	case "ReadRPCAPI":
+		apiObj = self.readRPCAPIs[idx]
+	case "WriteRPCAPI":
+		apiObj = self.writeRPCAPIs[idx]
 	default:
 		return fmt.Errorf("Unknown API: don't know what to do")
 	}
@@ -124,7 +130,7 @@ func (self *testTransport) Call(ctx context.Context, target Address, api string,
 func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, argument interface{}, reply interface{}) (Address, error) {
 
 	//try each replica in random order
-	idxs := rand.Perm(len(self.readAPIs))
+	idxs := rand.Perm(len(self.readRPCAPIs))
 	for _, idx := range idxs {
 
 		//see if it is reachable. If not we pretend to wait for the timeout 100ms
@@ -136,10 +142,10 @@ func (self *testTransport) CallAny(ctx context.Context, api string, fnc string, 
 		//get the correct API to use
 		var apiObj interface{}
 		switch api {
-		case `ReadAPI`:
-			apiObj = self.readAPIs[idx]
-		case `WriteAPI`:
-			apiObj = self.writeAPIs[idx]
+		case `ReadRPCAPI`:
+			apiObj = self.readRPCAPIs[idx]
+		case `WriteRPCAPI`:
+			apiObj = self.writeRPCAPIs[idx]
 		default:
 			return Address(""), fmt.Errorf("Unknown API: don't know what to do")
 		}
@@ -161,7 +167,7 @@ func (self *testTransport) Send(addr Address, api string, fnc string, arguments 
 	if err != nil {
 		return err
 	}
-	if idx >= len(self.readAPIs) {
+	if idx >= len(self.readEventAPIs) {
 		return fmt.Errorf("Invalid address (%v): no such replica known", idx)
 	}
 
@@ -173,10 +179,10 @@ func (self *testTransport) Send(addr Address, api string, fnc string, arguments 
 	//get the correct API to use
 	var apiObj interface{}
 	switch api {
-	case "ReadAPI":
-		apiObj = self.readAPIs[idx]
-	case "WriteAPI":
-		apiObj = self.writeAPIs[idx]
+	case "ReadEventAPI":
+		apiObj = self.readEventAPIs[idx]
+	case "WriteEventAPI":
+		apiObj = self.writeEventAPIs[idx]
 	default:
 		return fmt.Errorf("Unknown API: don't know what to do")
 
@@ -193,7 +199,7 @@ func (self *testTransport) Send(addr Address, api string, fnc string, arguments 
 
 func (self *testTransport) SendAll(api string, fnc string, argument interface{}) error {
 
-	idxs := rand.Perm(len(self.readAPIs))
+	idxs := rand.Perm(len(self.readEventAPIs))
 	for _, idx := range idxs {
 
 		//see if it is reachable
@@ -204,10 +210,10 @@ func (self *testTransport) SendAll(api string, fnc string, argument interface{})
 		//get the correct API to use
 		var apiObj interface{}
 		switch api {
-		case `ReadAPI`:
-			apiObj = self.readAPIs[idx]
-		case `WriteAPI`:
-			apiObj = self.writeAPIs[idx]
+		case `ReadEventAPI`:
+			apiObj = self.readEventAPIs[idx]
+		case `WriteEventAPI`:
+			apiObj = self.writeEventAPIs[idx]
 		default:
 			return fmt.Errorf("Unknown API: don't know what to do")
 		}

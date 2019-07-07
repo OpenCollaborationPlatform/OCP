@@ -12,17 +12,25 @@ import (
 */
 
 //p2p rpc api for read only auth: can be called by anyone with readonly authorisation
-type ReadAPI struct {
+type ReadRPCAPI struct {
+	replica *Replica
+}
+
+type ReadEventAPI struct {
 	replica *Replica
 }
 
 //p2p rpc api for read/write auth: can be called by anyone with write auth
-type WriteAPI struct {
+type WriteRPCAPI struct {
+	replica *Replica
+}
+
+type WriteEventAPI struct {
 	replica *Replica
 }
 
 //returns what we think have as log for the given idx, or a snapshot that superseeds this log index
-func (self *ReadAPI) GetLog(ctx context.Context, idx uint64, result *Log) error {
+func (self *ReadRPCAPI) GetLog(ctx context.Context, idx uint64, result *Log) error {
 
 	self.replica.logger.Debugf("Asked for log %v", idx)
 
@@ -52,7 +60,7 @@ func (self *ReadAPI) GetLog(ctx context.Context, idx uint64, result *Log) error 
 }
 
 //returns what we think have as log for the given idx
-func (self *ReadAPI) GetNewestLog(ctx context.Context, empty struct{}, result *Log) error {
+func (self *ReadRPCAPI) GetNewestLog(ctx context.Context, empty struct{}, result *Log) error {
 
 	self.replica.logger.Debugf("Asked for newest log")
 
@@ -71,7 +79,7 @@ func (self *ReadAPI) GetNewestLog(ctx context.Context, empty struct{}, result *L
 	return nil
 }
 
-func (self *ReadAPI) InvalidLogReceived(index uint64) {
+func (self *ReadEventAPI) InvalidLogReceived(index uint64) {
 
 	//someone informed us that one of our log is invalid. thats bad! we need to check if we need
 	//to recover!
@@ -82,7 +90,7 @@ func (self *ReadAPI) InvalidLogReceived(index uint64) {
 	self.replica.recoverChan <- arg
 }
 
-func (self *WriteAPI) RequestCommand(ctx context.Context,
+func (self *WriteRPCAPI) RequestCommand(ctx context.Context,
 	args struct {
 		State uint8
 		Cmd   []byte
@@ -117,13 +125,13 @@ func (self *WriteAPI) RequestCommand(ctx context.Context,
 }
 
 //receives a new log created by the leader
-func (self *WriteAPI) NewLog(log Log) {
+func (self *WriteEventAPI) NewLog(log Log) {
 
 	self.replica.commitChan <- commitStruct{log, nil}
 }
 
 //receives a beacon from the leader
-func (self *WriteAPI) NewBeacon(beacon Beacon) {
+func (self *WriteEventAPI) NewBeacon(beacon Beacon) {
 
 	self.replica.beaconChan <- beacon
 }
