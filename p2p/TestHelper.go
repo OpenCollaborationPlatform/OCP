@@ -32,7 +32,8 @@ func init() {
 	overlord = replica.NewTestOverlord()
 
 	ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
-	ipfslog.GetSubsystems()                                 //just to not need to remove import
+	ipfswriter.LevelInfo()
+	ipfslog.GetSubsystems() //just to not need to remove import
 	//ipfslog.SetDebugLogging()
 
 }

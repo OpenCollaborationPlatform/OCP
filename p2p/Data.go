@@ -449,8 +449,8 @@ func (self *hostDataService) basicDrop(id cid.Cid, owner string) error {
 // - Adding/Dropping a file automatically distributes it within the swarm
 
 type dataStateCommand struct {
-	file   cid.Cid //the cid to add or remove from the list
-	remove bool    //if true is removed from list, if false it is added
+	File   cid.Cid //the cid to add or remove from the list
+	Remove bool    //if true is removed from list, if false it is added
 }
 
 func (self dataStateCommand) toByte() ([]byte, error) {
@@ -498,21 +498,21 @@ func (self *dataState) Apply(data []byte) error {
 		return err
 	}
 
-	if cmd.remove {
+	if cmd.Remove {
 
 		for i, val := range self.files {
-			if val == cmd.file {
+			if val == cmd.File {
 				self.files = append(self.files[:i], self.files[i+1:]...)
 				break
 			}
 		}
-		self.service.Drop(context.Background(), cmd.file)
+		self.service.internalDrop(cmd.File)
 
 	} else {
 
-		self.files = append(self.files, cmd.file)
+		self.files = append(self.files, cmd.File)
 		//this could take a while... let's do it async
-		self.service.FetchAsync(cmd.file)
+		self.service.internalFetchAsync(cmd.File)
 	}
 
 	return nil
@@ -525,7 +525,7 @@ func (self *dataState) Reset() error {
 
 	//drop all files we currently have
 	for _, file := range self.files {
-		err := self.service.Drop(context.Background(), file)
+		err := self.service.internalDrop(file)
 		if err != nil {
 			return err
 		}
@@ -600,14 +600,19 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 
 	//grab ownership of new files
 	for _, file := range list {
-		go func(file cid.Cid) {
-			f, err := self.service.GetFile(self.ctx, file)
-			if err != nil && f != nil {
-				f.Close()
-			}
-		}(file)
+		self.service.internalFetchAsync(file)
 	}
 	self.files = list
+
+	//garbage collect
+	files, err := self.service.data.store.GarbageCollect()
+	if err != nil {
+		return utils.StackError(err, "Unable to collect ownerless files during snapshot loading")
+	}
+	for _, file := range files {
+		self.service.internalDrop(file)
+	}
+
 	return nil
 }
 
@@ -738,4 +743,35 @@ func (self *swarmDataService) Write(ctx context.Context, id cid.Cid, path string
 
 func (self *swarmDataService) Close() {
 
+}
+
+//internal data service functions to be called by state
+
+func (self *swarmDataService) internalFetch(ctx context.Context, id cid.Cid) error {
+
+	err := self.data.basicFetch(ctx, id, self.session, string(self.id))
+	if err != nil {
+		return utils.StackError(err, "Unable to fetch id %v", id.String())
+	}
+
+	return nil
+}
+
+func (self *swarmDataService) internalFetchAsync(id cid.Cid) error {
+
+	go func() {
+		ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
+		self.data.basicFetch(ctx, id, self.session, string(self.id))
+	}()
+	return nil
+}
+
+func (self *swarmDataService) internalDrop(id cid.Cid) error {
+
+	err := self.data.basicDrop(id, string(self.id))
+	if err != nil {
+		return utils.StackError(err, "Unable to drop id %v", id.String())
+	}
+
+	return nil
 }
