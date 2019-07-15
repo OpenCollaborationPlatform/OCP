@@ -744,14 +744,19 @@ func (self *swarmDataService) FetchAsync(id cid.Cid) error {
 
 func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File, error) {
 
-	//check if we have the file, if not getting makes no sense in swarm context
-	if !self.state.HasFile(id) {
-		return nil, fmt.Errorf("The file is not part of swarm, cannot be given")
-	}
-
 	_, file, err := self.data.basicGetFile(ctx, id, self.session, string(self.id))
 	if err != nil {
 		return nil, err
+	}
+
+	//check if it is in the state already, if not we need to add
+	if !self.state.HasFile(id) {
+		go func() {
+			//store in shared state
+			cmd, _ := dataStateCommand{id, false}.toByte()
+			ctx, _ := context.WithTimeout(ctx, 10*time.Hour)
+			self.stateService.AddCommand(ctx, self.statenum, cmd)
+		}()
 	}
 
 	return file, err
@@ -759,20 +764,30 @@ func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File
 
 func (self *swarmDataService) Write(ctx context.Context, id cid.Cid, path string) (string, error) {
 
-	//check if we have the file, if not writing makes no sense in swarm context
-	if !self.state.HasFile(id) {
-		return "", fmt.Errorf("The file is not part of swarm, cannot be written")
+	//see if we can get the data
+	path, err := self.data.basicWrite(ctx, id, path, self.session, string(self.id))
+	if err != nil {
+		return "", err
 	}
 
-	//make sure we have the data!
-	return self.data.basicWrite(ctx, id, path, self.session, string(self.id))
+	//check if it is in the state already, if not we need to add
+	if !self.state.HasFile(id) {
+		go func() {
+			//store in shared state
+			cmd, _ := dataStateCommand{id, false}.toByte()
+			ctx, _ := context.WithTimeout(ctx, 10*time.Hour)
+			self.stateService.AddCommand(ctx, self.statenum, cmd)
+		}()
+	}
+
+	return path, nil
 }
 
 func (self *swarmDataService) Close() {
 
 }
 
-//internal data service functions to be called by state
+//internal data service functions to be called by data state
 
 func (self *swarmDataService) internalFetch(ctx context.Context, id cid.Cid) error {
 
