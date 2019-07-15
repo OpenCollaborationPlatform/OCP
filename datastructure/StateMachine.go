@@ -1,19 +1,20 @@
 package datastructure
 
 import (
-	"fmt"
 	"CollaborationNode/datastores"
 	"CollaborationNode/dml"
 	"CollaborationNode/p2p"
 	"CollaborationNode/utils"
 	"bytes"
 	"context"
-	"io"
+	"encoding/gob"
+	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/hashicorp/raft"
+	cid "github.com/ipfs/go-cid"
 )
 
 //shared state data structure
@@ -26,7 +27,7 @@ type state struct {
 
 	//runtime data
 	dml             *dml.Runtime
-	store           *datastores.Datastore
+	store           *datastore.Datastore
 	operationNumber uint64
 	mutex           sync.Mutex
 }
@@ -69,9 +70,9 @@ func newState(path string, data p2p.DataService) (state, error) {
 
 	//create the datastore (autocreates the folder)
 	//path/Datastore
-	store, err := datastores.NewDatastore(path)
+	store, err := datastore.NewDatastore(path)
 	if err != nil {
-		return nil, utils.StackError(err, "Cannot create datastore for datastructure")
+		return state{}, utils.StackError(err, "Cannot create datastore for datastructure")
 	}
 
 	//read in the file and create the runtime
@@ -80,28 +81,29 @@ func newState(path string, data p2p.DataService) (state, error) {
 	file := filepath.Join(path, "Dml", "main.dml")
 	filereader, err := os.Open(file)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to load dml file")
+		return state{}, utils.StackError(err, "Unable to load dml file")
 	}
 	err = rntm.Parse(filereader)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to parse dml file")
+		return state{}, utils.StackError(err, "Unable to parse dml file")
 	}
 
-	return &stateMachine{path, data, rntm, store, sync.Mutex{}}
+	return state{path, data, rntm, store, 0, sync.Mutex{}}, nil
 }
 
-func (self *state) Apply([]byte) error {
+func (self *state) Apply(data []byte) error {
 
 	//lock the state
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 
 	//get the operation from the log entry
-	op := operationFromData(log.Data)
+	op := operationFromData(data)
 	self.operationNumber++
 
 	//apply to runtime
-	return op.applyTo(self.dml)
+	op.ApplyTo(self.dml)
+	return nil
 
 }
 
@@ -110,18 +112,21 @@ func (self *state) Reset() error {
 	self.operationNumber = 0
 
 	//clear the datastore and build a new one
-	err := self.store.Delete
+	err := self.store.Delete()
 	if err != nil {
 		return utils.StackError(err, "Unable to reset state, cannot delete datastore")
 	}
-	self.store = datastores.NewDatastore(self.path)
+	self.store, err = datastore.NewDatastore(self.path)
+	if err != nil {
+		return utils.StackError(err, "Unable to reset state")
+	}
 
 	//reparse the dml file
 	self.dml = dml.NewRuntime(self.store)
-	file := filepath.Join(path, "Dml", "main.dml")
+	file := filepath.Join(self.path, "Dml", "main.dml")
 	filereader, err := os.Open(file)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to load dml file")
+		return utils.StackError(err, "Unable to load dml file")
 	}
 	return self.dml.Parse(filereader)
 }
@@ -131,24 +136,18 @@ func (self *state) Snapshot() ([]byte, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 
-	//make sure the folder exists
-	dir := filepath.Join(self.path, "Snapshot")
-	err := os.MkdirAll(dir, os.ModePerm)
-
 	//make the backup
-	err := self.store.Backup(dir)
+	err := self.store.PrepareFileBackup()
+	defer self.store.FinishFileBackup()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create snapshot from state-machine")
 	}
 
 	//generate the p2p descriptor
-	id, err := self.data.AddAsync(dir)
+	id, err := self.data.AddAsync(self.store.Path())
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to make snapshot: cannot distribute file")
 	}
-
-	//delete the snapshot directory!
-	err = os.RemoveAll(dir)
 
 	return stateSnapshot{id, self.operationNumber}.toByte(), err
 }
@@ -163,20 +162,24 @@ func (self *state) LoadSnapshot(data []byte) error {
 	//fetch the file
 	dir := self.store.Path()
 	self.store.Delete()
-	
-	self.data.Write(ctxm snap.file, dir)
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Hour)
+	_, err = self.data.Write(ctx, snap.file, dir)
+	if err != nil {
+		return utils.StackError(err, "Unable to fetch snapshot data")
+	}
+	return nil
 }
 
-func (self *state) EnsureSnapshot([]byte) error {
+func (self *state) EnsureSnapshot(data []byte) error {
 
 	snap, err := snapshotFromBytes(data)
 	if err != nil {
 		return utils.StackError(err, "Provided data is not a snapshot, cannot load!")
 	}
-	
+
 	if snap.operationNumber != self.operationNumber {
 		return fmt.Errorf("Operation numbers not equal: snapshot does not represent current state")
 	}
-	
+
 	return nil
 }

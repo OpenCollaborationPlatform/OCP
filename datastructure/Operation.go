@@ -6,7 +6,7 @@ import (
 )
 
 type Operation interface {
-	ApplyTo(*dml.Runtime) interface{}
+	ApplyTo(*dml.Runtime) error
 	ActingUser() dml.User
 }
 
@@ -17,19 +17,24 @@ type operation struct {
 
 func newOperation() Operation {
 
+	return nil
 }
 
 func operationFromData(data []byte) Operation {
 
 	//for now return default empty op
-	return operation{"user1", "empty"}
+	return &operation{"user1", "empty"}
 }
 
-func (self *Operation) toData() []byte {
+func (self *operation) ActingUser() dml.User {
+	return self.user
+}
+
+func (self *operation) toData() []byte {
 	return nil
 }
 
-func (self *Operation) apply(rntm *dml.Runtime) error {
+func (self *operation) ApplyTo(rntm *dml.Runtime) error {
 	fmt.Println("Apply empty op to runtime")
 	return nil
 }

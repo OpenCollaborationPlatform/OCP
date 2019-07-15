@@ -1,6 +1,7 @@
 package datastructure
 
 import (
+	"CollaborationNode/datastores"
 	"CollaborationNode/dml"
 	"sync"
 )
@@ -9,7 +10,7 @@ import (
 //It works operation based: All operations are carried out ordered
 type Datastructure struct {
 	dml   *dml.Runtime
-	store *datastores.Datastore
+	store *datastore.Datastore
 	mutex sync.Mutex
 }
 
@@ -17,4 +18,5 @@ type Datastructure struct {
 //operations
 func (self *Datastructure) NextOperation() Operation {
 
+	return nil
 }

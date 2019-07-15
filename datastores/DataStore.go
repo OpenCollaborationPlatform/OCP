@@ -198,32 +198,30 @@ func (self *Datastore) Delete() error {
 
 	//we fully remove the datastore!
 	self.Close()
-	return os.RemoveAll(self.dir)
+	return os.RemoveAll(self.path)
 }
 
 func (self *Datastore) Path() string {
-	self.path
+	return self.path
 }
 
-//creates a backup of the datastore in the given folder. If it does not exist it
-//will be created
-func (self *Datastore) Backup(path string) error {
+//prepares for a backup: afterwards the directory can simply be copied!
+func (self *Datastore) PrepareFileBackup() error {
 
-	//check if we can make a backup
-	if self.boltdb.CanAccess() {
-		return fmt.Errorf("Transaction open: cannot backup")
+	//close boltdb!
+	return self.boltdb.db.Close()
+}
+
+//finishes backup: normal operation is restored afterwards
+func (self *Datastore) FinishFileBackup() error {
+
+	//reopen the db
+	path := filepath.Join(self.path, "bolt.db")
+	db_, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
+	if err != nil {
+		return utils.StackError(err, "Unable to open bolt db: %s", path)
 	}
-
-	//ensure folder exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		os.Mkdir(path, 0600)
-	}
-
-	//copy over boltdb
-	boltdbpath := filepath.Join(path, "bolt.db")
-	err := self.boltdb.db.View(func(tx *bolt.Tx) error {
-		return tx.CopyFile(boltdbpath, 0600)
-	})
+	self.boltdb.db = db_
 
 	return err
 }
