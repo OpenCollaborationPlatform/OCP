@@ -1,40 +1,82 @@
 package datastructure
 
 import (
+	"fmt"
+	"CollaborationNode/datastores"
 	"CollaborationNode/dml"
-	"CollaborationNode/utils"
 	"CollaborationNode/p2p"
+	"CollaborationNode/utils"
 	"bytes"
+	"context"
 	"io"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/hashicorp/raft"
 )
 
-//RAFT finite state machine
-type stateMachine struct {
+//shared state data structure
+type state struct {
 	//path which holds the datastores and dml files
-	path  string
-	
-	//inmutable data
-	swarm *p2p.Swarm
-	
-	//mutable runtime data
-	dml   *dml.Runtime
-	store *datastores.Datastore
-	mutex sync.Mutex
+	path string
+
+	//store snapshots
+	data p2p.DataService
+
+	//runtime data
+	dml             *dml.Runtime
+	store           *datastores.Datastore
+	operationNumber uint64
+	mutex           sync.Mutex
 }
 
-func newStateMachine(path string, swarm *p2p.Swarm) (raft.FSM, error) {
+type stateSnapshot struct {
+	file            cid.Cid
+	operationNumber uint64
+}
+
+func (self stateSnapshot) toByte() []byte {
+	b := new(bytes.Buffer)
+	err := gob.NewEncoder(b).Encode(self)
+	if err != nil {
+		return nil
+	}
+	return b.Bytes()
+}
+
+func snapshotFromBytes(data []byte) (stateSnapshot, error) {
+	var snap stateSnapshot
+	b := bytes.NewBuffer(data)
+	err := gob.NewDecoder(b).Decode(&snap)
+	return snap, err
+}
+
+/*
+type State interface {
+
+	//manipulation
+	Apply([]byte) error //apply a command to change the state
+	Reset() error       //reset state to initial value without any apply
+
+	//snapshoting
+	Snapshot() ([]byte, error)   //crete a snapshot from current state
+	LoadSnapshot([]byte) error   //setup state according to snapshot
+	EnsureSnapshot([]byte) error //make sure this snapshot represents the current state
+}*/
+
+func newState(path string, data p2p.DataService) (state, error) {
 
 	//create the datastore (autocreates the folder)
-	store, err := datastores.NewDatastore(dir)
+	//path/Datastore
+	store, err := datastores.NewDatastore(path)
 	if err != nil {
-		return nil, utils.StackError(err, "Cannot create datastore in statemaching")
+		return nil, utils.StackError(err, "Cannot create datastore for datastructure")
 	}
 
 	//read in the file and create the runtime
-	rntm := NewRuntime(store)
+	//path/Dml/main.dml
+	rntm := dml.NewRuntime(store)
 	file := filepath.Join(path, "Dml", "main.dml")
 	filereader, err := os.Open(file)
 	if err != nil {
@@ -44,15 +86,11 @@ func newStateMachine(path string, swarm *p2p.Swarm) (raft.FSM, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to parse dml file")
 	}
-	
-	return &stateMachine{path, swarm, rntm, store, sync.Mutex{}}
+
+	return &stateMachine{path, data, rntm, store, sync.Mutex{}}
 }
 
-// Apply log is invoked once a log entry is committed.
-// It returns a value which will be made available in the
-// ApplyFuture returned by Raft.Apply method if that
-// method was called on the same Raft node as the raft.FSM.
-func (self *stateMachine) Apply(log *raft.Log) interface{} {
+func (self *state) Apply([]byte) error {
 
 	//lock the state
 	self.mutex.Lock()
@@ -60,19 +98,35 @@ func (self *stateMachine) Apply(log *raft.Log) interface{} {
 
 	//get the operation from the log entry
 	op := operationFromData(log.Data)
+	self.operationNumber++
 
 	//apply to runtime
 	return op.applyTo(self.dml)
 
 }
 
-// Snapshot is used to support log compaction. This call should
-// return an raft.FSMSnapshot which can be used to save a point-in-time
-// snapshot of the raft.FSM. Apply and Snapshot are not called in multiple
-// threads, but Apply will be called concurrently with Persist. This means
-// the raft.FSM should be implemented in a fashion that allows for concurrent
-// updates while a snapshot is happening.
-func (self *stateMachine) Snapshot() (raft.FSMSnapshot, error) {
+func (self *state) Reset() error {
+
+	self.operationNumber = 0
+
+	//clear the datastore and build a new one
+	err := self.store.Delete
+	if err != nil {
+		return utils.StackError(err, "Unable to reset state, cannot delete datastore")
+	}
+	self.store = datastores.NewDatastore(self.path)
+
+	//reparse the dml file
+	self.dml = dml.NewRuntime(self.store)
+	file := filepath.Join(path, "Dml", "main.dml")
+	filereader, err := os.Open(file)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to load dml file")
+	}
+	return self.dml.Parse(filereader)
+}
+
+func (self *state) Snapshot() ([]byte, error) {
 
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
@@ -86,60 +140,43 @@ func (self *stateMachine) Snapshot() (raft.FSMSnapshot, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create snapshot from state-machine")
 	}
-	
+
 	//generate the p2p descriptor
-	file := filepath.Join(dir, "bolt.db")
-	id, err := self.swarm.DistributeFile(file)
+	id, err := self.data.AddAsync(dir)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to make snapshot: cannot distribute file")
 	}
-	
-	return stateSnapshot{id}, err
+
+	//delete the snapshot directory!
+	err = os.RemoveAll(dir)
+
+	return stateSnapshot{id, self.operationNumber}.toByte(), err
 }
 
-// Restore is used to restore an raft.FSM from a snapshot. It is not called
-// concurrently with any other command. The raft.FSM must discard all previous
-// state.
-func (self *stateMachine) Restore(reader io.ReadCloser) error {
+func (self *state) LoadSnapshot(data []byte) error {
 
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
-	
-	//load the data
-	var buffer bytes.Buffer
-	_, err := buffer.ReadFrom(reader)
-	reader.Close()
-
+	snap, err := snapshotFromBytes(data)
 	if err != nil {
-		return utils.StackError(err, "Uable to restore state: cannot read data")
+		return utils.StackError(err, "Provided data is not a snapshot, cannot load!")
 	}
 
-	//shutdown the runtime
-	self.dml.
-
-	//restore the state
+	//fetch the file
+	dir := self.store.Path()
+	self.store.Delete()
 	
+	self.data.Write(ctxm snap.file, dir)
 }
 
-type stateSnapshot struct {
-	fileid id
-}
+func (self *state) EnsureSnapshot([]byte) error {
 
-// FSMSnapshot is returned by an FSM in response to a Snapshot
-// It must be safe to invoke FSMSnapshot methods with concurrent
-// calls to Apply.
-func (self *stateSnapshot) Persist(sink raft.SnapshotSink) error {
-
-	_, err := self.buffer.WriteTo(sink)
-
+	snap, err := snapshotFromBytes(data)
 	if err != nil {
-		sink.Cancel()
-		return utils.StackError(err, "unable to persist snapshot")
+		return utils.StackError(err, "Provided data is not a snapshot, cannot load!")
 	}
-	return sink.Close()
-}
-
-// Release is invoked when we are finished with the snapshot.
-func (self *stateSnapshot) Release() {
-	self.buffer.Reset()
+	
+	if snap.operationNumber != self.operationNumber {
+		return fmt.Errorf("Operation numbers not equal: snapshot does not represent current state")
+	}
+	
+	return nil
 }

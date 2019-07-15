@@ -2,6 +2,7 @@ package document
 
 import (
 	"CollaborationNode/connection"
+	"CollaborationNode/p2p"
 	"context"
 	"fmt"
 	"sync"
@@ -12,10 +13,17 @@ import (
 )
 
 type Document struct {
+
+	//wamp connection
 	owner        *connection.Client               //the document owner
 	clients      map[*connection.Client][]wamp.ID //client can have multiple sessions, but not all must have the doc open
 	routerClient *nxclient.Client                 //the client with which this doc is represented on the router
 	mutex        *sync.RWMutex                    //slices must be protected
+
+	//P2P connections
+	swarm *p2p.Swarm
+
+	//DML
 
 	ID string
 }

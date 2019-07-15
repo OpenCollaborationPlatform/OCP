@@ -29,7 +29,7 @@ func (self *Operation) toData() []byte {
 	return nil
 }
 
-func (self *Operation) apply(rntm *dml.Runtime) interface{} {
+func (self *Operation) apply(rntm *dml.Runtime) error {
 	fmt.Println("Apply empty op to runtime")
 	return nil
 }

@@ -21,6 +21,7 @@ import (
 
 type DataService interface {
 	Add(ctx context.Context, path string) (cid.Cid, error)              //adds a file or directory
+	AddAsync(path string) (cid.Cid, error)                              //adds a file or directory, but returns when the local operation is done
 	Drop(ctx context.Context, id cid.Cid) error                         //removes a file or directory
 	Fetch(ctx context.Context, id cid.Cid) error                        //Fetches the given data
 	FetchAsync(id cid.Cid) error                                        //Fetches the given data async
@@ -67,6 +68,13 @@ func (self *hostDataService) Add(ctx context.Context, path string) (cid.Cid, err
 
 	//return
 	return filecid, err
+}
+
+func (self *hostDataService) AddAsync(path string) (cid.Cid, error) {
+
+	//we don't do any network operation...
+	ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
+	return self.Add(ctx, path)
 }
 
 func (self *hostDataService) Drop(ctx context.Context, id cid.Cid) error {
@@ -673,6 +681,25 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (cid.Cid, er
 		self.data.Drop(ctx, filecid)
 		return cid.Undef, utils.StackError(err, "Unable to share file with swarm members")
 	}
+
+	//return
+	return filecid, nil
+}
+
+func (self *swarmDataService) AddAsync(path string) (cid.Cid, error) {
+
+	//add the file
+	filecid, _, err := self.data.basicAdd(path, string(self.id))
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	go func() {
+		//store in shared state
+		cmd, _ := dataStateCommand{filecid, false}.toByte()
+		ctx, _ := context.WithTimeout(self.ctx, 10*time.Hour)
+		self.stateService.AddCommand(ctx, self.statenum, cmd)
+	}()
 
 	//return
 	return filecid, nil

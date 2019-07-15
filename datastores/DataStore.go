@@ -78,7 +78,7 @@ func NewDatastore(path string) (*Datastore, error) {
 	vdbs := make(map[StorageType]DataBase, 0)
 
 	//build the default blt db
-	path = filepath.Join(path, "bolt.db")
+	path = filepath.Join(dir, "bolt.db")
 	db_, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to open bolt db: %s", path)
@@ -131,11 +131,12 @@ func NewDatastore(path string) (*Datastore, error) {
 	}
 	vdbs[ListType] = listVersioned
 
-	return &Datastore{&bolt, dbs, vdbs}, nil
+	return &Datastore{&bolt, dir, dbs, vdbs}, nil
 }
 
 type Datastore struct {
 	boltdb *boltWrapper
+	path   string
 	dbs    map[StorageType]DataBase
 	vDbs   map[StorageType]DataBase
 }
@@ -191,6 +192,17 @@ func (self *Datastore) Close() {
 
 	//close the boltdb
 	self.boltdb.db.Close()
+}
+
+func (self *Datastore) Delete() error {
+
+	//we fully remove the datastore!
+	self.Close()
+	return os.RemoveAll(self.dir)
+}
+
+func (self *Datastore) Path() string {
+	self.path
 }
 
 //creates a backup of the datastore in the given folder. If it does not exist it
