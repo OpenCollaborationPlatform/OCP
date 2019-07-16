@@ -53,19 +53,6 @@ func snapshotFromBytes(data []byte) (stateSnapshot, error) {
 	return snap, err
 }
 
-/*
-type State interface {
-
-	//manipulation
-	Apply([]byte) error //apply a command to change the state
-	Reset() error       //reset state to initial value without any apply
-
-	//snapshoting
-	Snapshot() ([]byte, error)   //crete a snapshot from current state
-	LoadSnapshot([]byte) error   //setup state according to snapshot
-	EnsureSnapshot([]byte) error //make sure this snapshot represents the current state
-}*/
-
 func newState(path string, data p2p.DataService) (state, error) {
 
 	//create the datastore (autocreates the folder)

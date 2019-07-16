@@ -751,12 +751,9 @@ func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File
 
 	//check if it is in the state already, if not we need to add
 	if !self.state.HasFile(id) {
-		go func() {
-			//store in shared state
-			cmd, _ := dataStateCommand{id, false}.toByte()
-			ctx, _ := context.WithTimeout(ctx, 10*time.Hour)
-			self.stateService.AddCommand(ctx, self.statenum, cmd)
-		}()
+		//store in shared state
+		cmd, _ := dataStateCommand{id, false}.toByte()
+		self.stateService.AddCommand(ctx, self.statenum, cmd)
 	}
 
 	return file, err
@@ -772,12 +769,9 @@ func (self *swarmDataService) Write(ctx context.Context, id cid.Cid, path string
 
 	//check if it is in the state already, if not we need to add
 	if !self.state.HasFile(id) {
-		go func() {
-			//store in shared state
-			cmd, _ := dataStateCommand{id, false}.toByte()
-			ctx, _ := context.WithTimeout(ctx, 10*time.Hour)
-			self.stateService.AddCommand(ctx, self.statenum, cmd)
-		}()
+		//store in shared state
+		cmd, _ := dataStateCommand{id, false}.toByte()
+		self.stateService.AddCommand(ctx, self.statenum, cmd)
 	}
 
 	return path, nil
