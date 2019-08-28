@@ -1,8 +1,6 @@
 package p2p
 
 import (
-	"CollaborationNode/p2p/replica"
-	"CollaborationNode/utils"
 	"bytes"
 	"context"
 	"crypto/rand"
@@ -10,6 +8,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+
+	"github.com/ickby/CollaborationNode/utils"
 
 	blocks "github.com/ipfs/go-block-format"
 
@@ -22,14 +22,10 @@ import (
 )
 
 var testport int = 9015
-var overlord *replica.TestOverlord
 
 func init() {
 	//disable logging for this tests
 	//log.SetOutput(ioutil.Discard)
-
-	//use a test overlord
-	overlord = replica.NewTestOverlord()
 
 	ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
 	ipfswriter.LevelInfo()
@@ -83,15 +79,11 @@ func temporaryHost(dir string) (*Host, error) {
 	testport = testport + 1
 
 	//start the host
-	h := NewHost(overlord)
+	h := NewHost()
 	err = h.Start()
 	if err != nil {
 		return nil, err
 	}
-
-	//inform the overlord about new data
-	rsaPubKey := pub.(*crypto.RsaPublicKey)
-	overlord.SetApiData(h.ID().String(), *rsaPubKey)
 
 	return h, nil
 }

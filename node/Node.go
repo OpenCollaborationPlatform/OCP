@@ -2,16 +2,17 @@
 package node
 
 import (
-	"CollaborationNode/connection"
-	"CollaborationNode/document"
-	"CollaborationNode/p2p"
-	"CollaborationNode/utils"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+
+	"github.com/ickby/CollaborationNode/connection"
+	"github.com/ickby/CollaborationNode/document"
+	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/spf13/viper"
 )

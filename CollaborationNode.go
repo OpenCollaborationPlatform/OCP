@@ -1,6 +1,6 @@
 package main
 
-import "CollaborationNode/commands"
+import "github.com/ickby/CollaborationNode/commands"
 
 func main() {
 

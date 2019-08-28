@@ -1,9 +1,10 @@
 package p2p
 
 import (
-	"CollaborationNode/utils"
 	"context"
 	"reflect"
+
+	"github.com/ickby/CollaborationNode/utils"
 
 	gorpc "github.com/libp2p/go-libp2p-gorpc"
 	peer "github.com/libp2p/go-libp2p-peer"

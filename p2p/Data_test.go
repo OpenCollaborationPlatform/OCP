@@ -1,5 +1,6 @@
 package p2p
 
+/*
 import (
 	"bytes"
 	"context"
@@ -443,9 +444,6 @@ func TestSwarmDataService(t *testing.T) {
 		path := filepath.Join(tmppath, "current")
 		defer os.RemoveAll(path) //ake sure empty bitswaps are created each run
 
-		//clear all registered replicas in the overlord
-		overlord.Clear()
-
 		//Setup the hosts
 		h1, _ := temporaryHost(path)
 		defer h1.Stop()
@@ -527,201 +525,202 @@ func TestSwarmDataService(t *testing.T) {
 				})
 			})
 		})
-		/*
-			Convey("Creating a large file (which need splitting up)", func() {
 
-				//generate a testfile
-				filesize := int(float32(blocksize) * 4.2)
-				filedata := repeatableData(filesize)
-				testfilepath := filepath.Join(path, "testfile2")
-				ioutil.WriteFile(testfilepath, filedata, 0644)
+			// Convey("Creating a large file (which need splitting up)", func() {
 
-				Convey("Adding data to one host should be possible", func() {
+			// 	//generate a testfile
+			// 	filesize := int(float32(blocksize) * 4.2)
+			// 	filedata := repeatableData(filesize)
+			// 	testfilepath := filepath.Join(path, "testfile2")
+			// 	ioutil.WriteFile(testfilepath, filedata, 0644)
 
-					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-					res, err := h1.Data.Add(ctx, testfilepath)
-					So(err, ShouldBeNil)
+			// 	Convey("Adding data to one host should be possible", func() {
 
-					reader, err := h1.Data.GetFile(ctx, res)
-					So(err, ShouldBeNil)
+			// 		ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+			// 		res, err := h1.Data.Add(ctx, testfilepath)
+			// 		So(err, ShouldBeNil)
 
-					data := make([]byte, filesize)
-					n, err := reader.Read(data)
-					So(err, ShouldBeNil)
-					So(n, ShouldEqual, filesize)
-					So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
+			// 		reader, err := h1.Data.GetFile(ctx, res)
+			// 		So(err, ShouldBeNil)
 
-					Convey("and retreiving from the other shall be possible too.", func() {
+			// 		data := make([]byte, filesize)
+			// 		n, err := reader.Read(data)
+			// 		So(err, ShouldBeNil)
+			// 		So(n, ShouldEqual, filesize)
+			// 		So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 
-						ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
-						reader, err := h2.Data.GetFile(ctx, res)
-						So(err, ShouldBeNil)
-						io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
+			// 		Convey("and retreiving from the other shall be possible too.", func() {
 
-						ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
-						reader, err = h2.Data.GetFile(ctx, res)
-						So(err, ShouldBeNil)
+			// 			ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+			// 			reader, err := h2.Data.GetFile(ctx, res)
+			// 			So(err, ShouldBeNil)
+			// 			io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
 
-						data := make([]byte, filesize)
-						n, err := reader.Read(data)
-						So(err, ShouldBeNil)
-						So(n, ShouldEqual, filesize)
-						So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
+			// 			ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
+			// 			reader, err = h2.Data.GetFile(ctx, res)
+			// 			So(err, ShouldBeNil)
 
-						Convey("Afterwards droping the file from the first host is possible", func() {
+			// 			data := make([]byte, filesize)
+			// 			n, err := reader.Read(data)
+			// 			So(err, ShouldBeNil)
+			// 			So(n, ShouldEqual, filesize)
+			// 			So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 
-							err := h1.Data.Drop(ctx, res)
-							So(err, ShouldBeNil)
+			// 			Convey("Afterwards droping the file from the first host is possible", func() {
 
-							Convey("while it is still accessing from the second host", func() {
-								ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-								err := h2.Data.Fetch(ctx, res)
-								So(err, ShouldBeNil)
-							})
-						})
-					})
+			// 				err := h1.Data.Drop(ctx, res)
+			// 				So(err, ShouldBeNil)
 
-					Convey("Droping the file from the first host is possible", func() {
+			// 				Convey("while it is still accessing from the second host", func() {
+			// 					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+			// 					err := h2.Data.Fetch(ctx, res)
+			// 					So(err, ShouldBeNil)
+			// 				})
+			// 			})
+			// 		})
 
-						err := h1.Data.Drop(ctx, res)
-						So(err, ShouldBeNil)
+			// 		Convey("Droping the file from the first host is possible", func() {
 
-						Convey("it is not accessible in any host", func() {
-							ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-							err := h1.Data.Fetch(ctx, res)
-							So(err, ShouldNotBeNil)
-							err = h2.Data.Fetch(ctx, res)
-							So(err, ShouldNotBeNil)
-						})
-					})
-				})
-			})
+			// 			err := h1.Data.Drop(ctx, res)
+			// 			So(err, ShouldBeNil)
 
-			Convey("Creating a directory structure with large and small files", func() {
+			// 			Convey("it is not accessible in any host", func() {
+			// 				ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+			// 				err := h1.Data.Fetch(ctx, res)
+			// 				So(err, ShouldNotBeNil)
+			// 				err = h2.Data.Fetch(ctx, res)
+			// 				So(err, ShouldNotBeNil)
+			// 			})
+			// 		})
+			// 	})
+			// })
 
-				//make the first directory
-				dirpath1 := filepath.Join(path, "testdir1")
-				os.MkdirAll(dirpath1, os.ModePerm)
+			// Convey("Creating a directory structure with large and small files", func() {
 
-				//generate testfiles
-				largedata := repeatableData(int(float32(blocksize) * 4.2))
-				smalldata := repeatableData(int(float32(blocksize) * 0.5))
+			// 	//make the first directory
+			// 	dirpath1 := filepath.Join(path, "testdir1")
+			// 	os.MkdirAll(dirpath1, os.ModePerm)
 
-				testfilepath := filepath.Join(dirpath1, "testfile1")
-				ioutil.WriteFile(testfilepath, largedata, os.ModePerm)
+			// 	//generate testfiles
+			// 	largedata := repeatableData(int(float32(blocksize) * 4.2))
+			// 	smalldata := repeatableData(int(float32(blocksize) * 0.5))
 
-				testfilepath = filepath.Join(dirpath1, "testfile2")
-				ioutil.WriteFile(testfilepath, smalldata, os.ModePerm)
+			// 	testfilepath := filepath.Join(dirpath1, "testfile1")
+			// 	ioutil.WriteFile(testfilepath, largedata, os.ModePerm)
 
-				//make the subdir
-				dirpath2 := filepath.Join(dirpath1, "testdir2")
-				os.MkdirAll(dirpath2, os.ModePerm)
+			// 	testfilepath = filepath.Join(dirpath1, "testfile2")
+			// 	ioutil.WriteFile(testfilepath, smalldata, os.ModePerm)
 
-				//and write the testfiles
-				testfilepath = filepath.Join(dirpath2, "testfile1")
-				ioutil.WriteFile(testfilepath, largedata, os.ModePerm)
+			// 	//make the subdir
+			// 	dirpath2 := filepath.Join(dirpath1, "testdir2")
+			// 	os.MkdirAll(dirpath2, os.ModePerm)
 
-				testfilepath = filepath.Join(dirpath2, "testfile2")
-				ioutil.WriteFile(testfilepath, smalldata, os.ModePerm)
+			// 	//and write the testfiles
+			// 	testfilepath = filepath.Join(dirpath2, "testfile1")
+			// 	ioutil.WriteFile(testfilepath, largedata, os.ModePerm)
 
-				Convey("Adding a directory with files only should work", func() {
+			// 	testfilepath = filepath.Join(dirpath2, "testfile2")
+			// 	ioutil.WriteFile(testfilepath, smalldata, os.ModePerm)
 
-					ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-					res2, err := h1.Data.Add(ctx, dirpath2)
-					So(err, ShouldBeNil)
+			// 	Convey("Adding a directory with files only should work", func() {
 
-					//check if the files were added to the exchange folder
-					exchange := filepath.Join(h1.path, "DataExchange")
-					files, err := ioutil.ReadDir(exchange)
-					So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
+			// 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+			// 		res2, err := h1.Data.Add(ctx, dirpath2)
+			// 		So(err, ShouldBeNil)
 
-					Convey("as well as accessing it from ourself", func() {
-						//try write it to the original path
-						newpath := filepath.Join(path, "results")
-						res2path, err := h1.Data.Write(ctx, res2, newpath)
-						defer os.RemoveAll(newpath)
+			// 		//check if the files were added to the exchange folder
+			// 		exchange := filepath.Join(h1.path, "DataExchange")
+			// 		files, err := ioutil.ReadDir(exchange)
+			// 		So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
 
-						So(err, ShouldBeNil)
-						So(compareDirectories(res2path, dirpath2), ShouldBeNil)
-					})
+			// 		Convey("as well as accessing it from ourself", func() {
+			// 			//try write it to the original path
+			// 			newpath := filepath.Join(path, "results")
+			// 			res2path, err := h1.Data.Write(ctx, res2, newpath)
+			// 			defer os.RemoveAll(newpath)
 
-					Convey("and retreiving from the other shall be possible too", func() {
+			// 			So(err, ShouldBeNil)
+			// 			So(compareDirectories(res2path, dirpath2), ShouldBeNil)
+			// 		})
 
-						err := h2.Data.Fetch(ctx, res2)
-						So(err, ShouldBeNil)
+			// 		Convey("and retreiving from the other shall be possible too", func() {
 
-						newpath := filepath.Join(path, "results2")
-						res2path, err := h2.Data.Write(ctx, res2, newpath)
-						defer os.RemoveAll(newpath)
+			// 			err := h2.Data.Fetch(ctx, res2)
+			// 			So(err, ShouldBeNil)
 
-						So(err, ShouldBeNil)
-						So(compareDirectories(res2path, dirpath2), ShouldBeNil)
-					})
+			// 			newpath := filepath.Join(path, "results2")
+			// 			res2path, err := h2.Data.Write(ctx, res2, newpath)
+			// 			defer os.RemoveAll(newpath)
 
-					Convey("Afterwards adding the parent directory from the other node", func() {
+			// 			So(err, ShouldBeNil)
+			// 			So(compareDirectories(res2path, dirpath2), ShouldBeNil)
+			// 		})
 
-						res1, err := h2.Data.Add(ctx, dirpath1)
-						So(err, ShouldBeNil)
+			// 		Convey("Afterwards adding the parent directory from the other node", func() {
 
-						Convey("There should still be only 2 datafiles in the exchange folder", func() {
+			// 			res1, err := h2.Data.Add(ctx, dirpath1)
+			// 			So(err, ShouldBeNil)
 
-							exchange := filepath.Join(h2.path, "DataExchange")
-							files, err := ioutil.ReadDir(exchange)
-							So(err, ShouldBeNil)
-							So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
-						})
+			// 			Convey("There should still be only 2 datafiles in the exchange folder", func() {
 
-						Convey("Dropping the subdirectory should keep all files", func() {
+			// 				exchange := filepath.Join(h2.path, "DataExchange")
+			// 				files, err := ioutil.ReadDir(exchange)
+			// 				So(err, ShouldBeNil)
+			// 				So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
+			// 			})
 
-							err := h1.Data.Drop(ctx, res2)
-							So(err, ShouldBeNil)
-							err = h2.Data.Drop(ctx, res2)
-							So(err, ShouldBeNil)
+			// 			Convey("Dropping the subdirectory should keep all files", func() {
 
-							exchange := filepath.Join(h2.path, "DataExchange")
-							files, err := ioutil.ReadDir(exchange)
-							So(err, ShouldBeNil)
-							So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
+			// 				err := h1.Data.Drop(ctx, res2)
+			// 				So(err, ShouldBeNil)
+			// 				err = h2.Data.Drop(ctx, res2)
+			// 				So(err, ShouldBeNil)
 
-							Convey("and keep the whole directory accassible from the other node", func() {
+			// 				exchange := filepath.Join(h2.path, "DataExchange")
+			// 				files, err := ioutil.ReadDir(exchange)
+			// 				So(err, ShouldBeNil)
+			// 				So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
 
-								newpath := filepath.Join(path, "results3")
-								res1path, err := h1.Data.Write(ctx, res1, newpath)
-								defer os.RemoveAll(newpath)
+			// 				Convey("and keep the whole directory accassible from the other node", func() {
 
-								So(err, ShouldBeNil)
-								So(compareDirectories(res1path, dirpath1), ShouldBeNil)
+			// 					newpath := filepath.Join(path, "results3")
+			// 					res1path, err := h1.Data.Write(ctx, res1, newpath)
+			// 					defer os.RemoveAll(newpath)
 
-								h1.Data.Drop(ctx, res1)
-							})
-						})
+			// 					So(err, ShouldBeNil)
+			// 					So(compareDirectories(res1path, dirpath1), ShouldBeNil)
 
-						Convey("Dropping parent dir", func() {
+			// 					h1.Data.Drop(ctx, res1)
+			// 				})
+			// 			})
 
-							err = h1.Data.Drop(ctx, res2)
-							So(err, ShouldBeNil)
-							err = h2.Data.Drop(ctx, res1)
-							So(err, ShouldBeNil)
+			// 			Convey("Dropping parent dir", func() {
 
-							Convey("There should be no datafiles in the exchange folder", func() {
+			// 				err = h1.Data.Drop(ctx, res2)
+			// 				So(err, ShouldBeNil)
+			// 				err = h2.Data.Drop(ctx, res1)
+			// 				So(err, ShouldBeNil)
 
-								exchange := filepath.Join(h2.path, "DataExchange")
-								files, err := ioutil.ReadDir(exchange)
-								So(err, ShouldBeNil)
-								So(len(files), ShouldEqual, 1) //0 files + 1 db = 1
-							})
+			// 				Convey("There should be no datafiles in the exchange folder", func() {
 
-							Convey("and neither directory should be accessible", func() {
+			// 					exchange := filepath.Join(h2.path, "DataExchange")
+			// 					files, err := ioutil.ReadDir(exchange)
+			// 					So(err, ShouldBeNil)
+			// 					So(len(files), ShouldEqual, 1) //0 files + 1 db = 1
+			// 				})
 
-								So(h1.Data.Fetch(ctx, res1), ShouldNotBeNil)
-								So(h1.Data.Fetch(ctx, res2), ShouldNotBeNil)
+			// 				Convey("and neither directory should be accessible", func() {
 
-								So(h2.Data.Fetch(ctx, res1), ShouldNotBeNil)
-								So(h2.Data.Fetch(ctx, res2), ShouldNotBeNil)
-							})
-						})
-					})
-				})
-			})*/
+			// 					So(h1.Data.Fetch(ctx, res1), ShouldNotBeNil)
+			// 					So(h1.Data.Fetch(ctx, res2), ShouldNotBeNil)
+
+			// 					So(h2.Data.Fetch(ctx, res1), ShouldNotBeNil)
+			// 					So(h2.Data.Fetch(ctx, res2), ShouldNotBeNil)
+			// 				})
+			// 			})
+			// 		})
+			// 	})
+			// })
 	})
 }
+*/

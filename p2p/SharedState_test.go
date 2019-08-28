@@ -3,11 +3,14 @@ package p2p
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"testing"
-	"time"
+
+	//"time"
+
+	"github.com/ickby/CollaborationNode/p2p/replica"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -17,41 +20,37 @@ type testState struct {
 	value int64
 }
 
-func (self *testState) Apply(data []byte) error {
+func (self *testState) Apply(log *replica.Log) interface{} {
 
-	vl, _ := binary.Varint(data)
+	vl, _ := binary.Varint(log.Data)
 	self.value = self.value + vl
-	return nil
+	return self.value
 }
 
-func (self *testState) Reset() error {
-	self.value = 0
-	return nil
+func (self *testState) Snapshot() (replica.Snapshot, error) {
+	return testSnapshot{self.value}, nil
 }
 
-func (self *testState) Snapshot() ([]byte, error) {
+func (self *testState) Restore(reader io.ReadCloser) error {
 
 	buf := make([]byte, binary.MaxVarintLen64)
-	binary.PutVarint(buf, self.value)
-	return buf, nil
-}
-
-func (self *testState) LoadSnapshot(data []byte) error {
-	val, _ := binary.Varint(data)
-	self.value = val
-
+	reader.Read(buf)
+	vl, _ := binary.Varint(buf)
+	self.value = vl
 	return nil
 }
 
-func (self *testState) EnsureSnapshot(data []byte) error {
-
-	val, _ := binary.Varint(data)
-	if self.value != val {
-		return fmt.Errorf("Snapshots does not represent current state")
-	}
-
-	return nil
+//simple snapshot to work with testState
+type testSnapshot struct {
+	value int64
 }
+
+func (self testSnapshot) Persist(sink replica.SnapshotSink) error {
+	sink.Write(toByte(self.value))
+	return sink.Close()
+}
+
+func (self testSnapshot) Release() {}
 
 func toByte(val int64) []byte {
 	buf := make([]byte, binary.MaxVarintLen64)
@@ -59,10 +58,42 @@ func toByte(val int64) []byte {
 	return buf
 }
 
-func TestBasicSharedState(t *testing.T) {
+func TestSingleNodeSharedState(t *testing.T) {
 
-	//clear all registered replicas in the overlord
-	overlord.Clear()
+	//make temporary folder for the data
+	path, _ := ioutil.TempDir("", "p2p")
+	defer os.RemoveAll(path)
+
+	swid := SwarmID("myswarm")
+
+	h1, _ := temporaryHost(path)
+	defer h1.Stop()
+	//create the swarm rigth away so that they get the correct directory to us
+	sw1 := h1.CreateSwarm(swid)
+
+	Convey("Sharing services shall be possible for a single node", t, func() {
+
+		st1 := &testState{0}
+		err := sw1.State.Share(st1)
+		So(err, ShouldBeNil)
+		//time.Sleep(5000 * time.Millisecond)
+
+		Convey("adding command works", func() {
+
+			ctx := context.Background()
+			res, err := sw1.State.AddCommand(ctx, toByte(1))
+			So(err, ShouldBeNil)
+			So(res, ShouldEqual, 1)
+
+			Convey("and the state is updated", func() {
+
+				So(st1.value, ShouldEqual, 1)
+			})
+		})
+	})
+}
+
+func TestBasicSharedState(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "p2p")
@@ -91,21 +122,24 @@ func TestBasicSharedState(t *testing.T) {
 		Convey("sharing services shall be possible", func() {
 
 			st1 := &testState{0}
-			sst1 := sw1.State.Share(st1)
-			So(sst1, ShouldEqual, 1)
+			err := sw1.State.Share(st1)
+			So(err, ShouldBeNil)
 
 			st2 := &testState{0}
-			sst2 := sw2.State.Share(st2)
-			So(sst2, ShouldEqual, 1)
+			err = sw2.State.Share(st2)
+			So(err, ShouldBeNil)
 
 			Convey("adding command works from both swarms", func() {
 
-				So(sw1.State.AddCommand(ctx, sst1, toByte(1)), ShouldBeNil)
-				So(sw2.State.AddCommand(ctx, sst2, toByte(1)), ShouldBeNil)
+				res, err := sw1.State.AddCommand(ctx, toByte(1))
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, 1)
+				res, err = sw2.State.AddCommand(ctx, toByte(1))
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, 2)
 
 				Convey("and the states are updated", func() {
 
-					time.Sleep(500 * time.Millisecond)
 					So(st1.value, ShouldEqual, 2)
 					So(st2.value, ShouldEqual, 2)
 				})

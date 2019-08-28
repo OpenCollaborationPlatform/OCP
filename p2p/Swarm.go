@@ -61,7 +61,7 @@ func (id SwarmID) Pretty() string {
 }
 
 //not accassible outside the package: should be used via Host only
-func newSwarm(host *Host, id SwarmID, overlord Overlord) *Swarm {
+func newSwarm(host *Host, id SwarmID) *Swarm {
 
 	//the context to use for all goroutines
 	ctx, cancel := context.WithCancel(context.Background())
@@ -77,7 +77,7 @@ func newSwarm(host *Host, id SwarmID, overlord Overlord) *Swarm {
 	//build the services
 	swarm.Rpc = newSwarmRpcService(swarm)
 	swarm.Event = newSwarmEventService(swarm)
-	swarm.State = newSharedStateService(swarm, overlord)
+	swarm.State = newSharedStateService(swarm)
 	swarm.Data = newSwarmDataService(swarm)
 
 	//ensure our folder exist

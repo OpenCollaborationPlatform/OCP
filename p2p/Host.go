@@ -2,7 +2,6 @@
 package p2p
 
 import (
-	"CollaborationNode/utils"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -11,10 +10,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ickby/CollaborationNode/utils"
+
 	libp2p "github.com/libp2p/go-libp2p"
+	p2phost "github.com/libp2p/go-libp2p-core/host"
+	peer "github.com/libp2p/go-libp2p-core/peer"
+	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
 	crypto "github.com/libp2p/go-libp2p-crypto"
-	p2phost "github.com/libp2p/go-libp2p-host"
-	peerstore "github.com/libp2p/go-libp2p-peerstore"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/spf13/viper"
 )
@@ -24,9 +26,8 @@ type Host struct {
 	swarmMutex sync.RWMutex
 	swarms     []*Swarm
 
-	privKey  crypto.PrivKey
-	pubKey   crypto.PubKey
-	overlord Overlord
+	privKey crypto.PrivKey
+	pubKey  crypto.PubKey
 
 	//serivces the host provides
 	Rpc   *hostRpcService
@@ -38,9 +39,9 @@ type Host struct {
 }
 
 //Host creates p2p host which manages all peer connections
-func NewHost(overlord Overlord) *Host {
+func NewHost() *Host {
 
-	return &Host{swarms: make([]*Swarm, 0), overlord: overlord}
+	return &Host{swarms: make([]*Swarm, 0)}
 }
 
 // Starts the listening for connections and the bootstrap prozess
@@ -93,7 +94,7 @@ func (h *Host) Start() error {
 		if err != nil {
 			log.Printf("Not a valid bootstrap node: %s", err)
 		}
-		info, err := peerstore.InfoFromP2pAddr(addr)
+		info, err := peer.AddrInfoFromP2pAddr(addr)
 		if err != nil {
 			log.Printf("Invalid multiadress: %v", value)
 			continue
@@ -242,7 +243,7 @@ func (h *Host) CreateSwarm(id SwarmID) *Swarm {
 
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	swarm := newSwarm(h, id, h.overlord)
+	swarm := newSwarm(h, id)
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
 	}

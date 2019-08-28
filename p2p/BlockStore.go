@@ -8,7 +8,6 @@ package p2p
 //		interfaces to allow s3/mongo implementation
 
 import (
-	"CollaborationNode/utils"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -17,6 +16,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
 
