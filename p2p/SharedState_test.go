@@ -1,6 +1,8 @@
 package p2p
 
 import (
+	"fmt"
+	"time"
 	"context"
 	"encoding/binary"
 	"io"
@@ -99,51 +101,52 @@ func TestBasicSharedState(t *testing.T) {
 	path, _ := ioutil.TempDir("", "p2p")
 	defer os.RemoveAll(path)
 
+	ctx := context.Background()
 	swid := SwarmID("myswarm")
 
 	h1, _ := temporaryHost(path)
 	defer h1.Stop()
-	//create the swarm rigth away so that they get the correct directory to us
-	sw1 := h1.CreateSwarm(swid)
-
 	h2, _ := temporaryHost(path)
 	defer h2.Stop()
-	sw2 := h2.CreateSwarm(swid)
-
 	h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 	h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
+	
+	//create the swarm rigth away so that they get the correct directory to us
+	sw1 := h1.CreateSwarm(swid)
+	sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
+	
+	time.Sleep(3*time.Second)
+	fmt.Println("start swarm 2")
+	
+	sw2 := h2.CreateSwarm(swid, WithSwarmPeers(h1.ID(), AUTH_READWRITE))
+
+
 
 	Convey("Giving the swarm write rigths,", t, func() {
 
-		ctx := context.Background()
-		sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
-		sw2.AddPeer(ctx, h1.ID(), AUTH_READWRITE)
+		st1 := &testState{0}
+		err := sw1.State.Share(st1)
+		So(err, ShouldBeNil)
 
-		Convey("sharing services shall be possible", func() {
+		st2 := &testState{0}
+		err = sw2.State.Share(st2)
+		So(err, ShouldBeNil)
 
-			st1 := &testState{0}
-			err := sw1.State.Share(st1)
+		Convey("adding command works from both swarms", func() {
+
+			res, err := sw1.State.AddCommand(ctx, toByte(1))
 			So(err, ShouldBeNil)
-
-			st2 := &testState{0}
-			err = sw2.State.Share(st2)
+			So(res, ShouldEqual, 1)
+			res, err = sw2.State.AddCommand(ctx, toByte(1))
 			So(err, ShouldBeNil)
+			So(res, ShouldEqual, 2)
 
-			Convey("adding command works from both swarms", func() {
+			Convey("and the states are updated", func() {
 
-				res, err := sw1.State.AddCommand(ctx, toByte(1))
-				So(err, ShouldBeNil)
-				So(res, ShouldEqual, 1)
-				res, err = sw2.State.AddCommand(ctx, toByte(1))
-				So(err, ShouldBeNil)
-				So(res, ShouldEqual, 2)
-
-				Convey("and the states are updated", func() {
-
-					So(st1.value, ShouldEqual, 2)
-					So(st2.value, ShouldEqual, 2)
-				})
+				So(st1.value, ShouldEqual, 2)
+				So(st2.value, ShouldEqual, 2)
 			})
 		})
+
 	})
 }

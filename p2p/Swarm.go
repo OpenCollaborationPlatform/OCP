@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/spf13/viper"
+	"github.com/ickby/CollaborationNode/utils"
 )
 
 // Type that represents a collection if peers which are connected together and form
@@ -60,8 +61,25 @@ func (id SwarmID) Pretty() string {
 	return string(id)
 }
 
+//create some default peers like WithSwarmPeers(PeerID1, AUTH, PeerID2, Auth)
+func WithSwarmPeers(peers ...interface{}) map[PeerID]AUTH_STATE {
+
+	peerMap := make(map[PeerID]AUTH_STATE, len(peers)/2)
+	for i := 0; i < len(peers)/2; i++ {
+		peerMap[peers[i*2].(PeerID)] = peers[i*2+1].(AUTH_STATE)
+	}
+	return peerMap
+}
+
 //not accassible outside the package: should be used via Host only
-func newSwarm(host *Host, id SwarmID) *Swarm {
+func newSwarm(host *Host, id SwarmID, peers ...map[PeerID]AUTH_STATE) *Swarm {
+
+	var peerMap map[PeerID]AUTH_STATE
+	if len(peers) == 0 {
+		peerMap = make(map[PeerID]AUTH_STATE, 0)
+	} else {
+		peerMap = peers[0]
+	}
 
 	//the context to use for all goroutines
 	ctx, cancel := context.WithCancel(context.Background())
@@ -69,7 +87,7 @@ func newSwarm(host *Host, id SwarmID) *Swarm {
 	swarm := &Swarm{
 		host:   host,
 		ID:     id,
-		peers:  make(map[PeerID]AUTH_STATE),
+		peers:  peerMap,
 		ctx:    ctx,
 		cancel: cancel,
 		path:   filepath.Join(viper.GetString("directory"), id.Pretty())}
@@ -82,6 +100,13 @@ func newSwarm(host *Host, id SwarmID) *Swarm {
 
 	//ensure our folder exist
 	os.MkdirAll(swarm.GetPath(), os.ModePerm)
+
+	//connect to the peers
+	for pid, _ := range peerMap {
+		if !host.IsConnected(pid) {
+			host.Connect(ctx, pid)
+		}
+	}
 
 	return swarm
 }
@@ -104,14 +129,25 @@ func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error
 	if !s.host.IsConnected(pid) {
 		s.host.Connect(ctx, pid)
 	}
+	
+	//shared state needs the info
+	s.State.AddPeer(ctx, pid, state)
+	
 	return nil
 }
 
-func (s *Swarm) RemovePeer(peer PeerID) error {
+func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
 
+	//shared state needs the info
+	err := s.State.RemovePeer(ctx, peer)	
+	if err != nil {
+		return utils.StackError(err, "Unable to remove peer from replica")
+	}
+	
 	s.peerLock.Lock()
 	defer s.peerLock.Unlock()
 	delete(s.peers, peer)
+	
 	return nil
 }
 

@@ -239,11 +239,11 @@ func (h *Host) Swarms() []*Swarm {
 	return h.swarms
 }
 
-func (h *Host) CreateSwarm(id SwarmID) *Swarm {
+func (h *Host) CreateSwarm(id SwarmID, peers ...map[PeerID]AUTH_STATE) *Swarm {
 
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	swarm := newSwarm(h, id)
+	swarm := newSwarm(h, id, peers...)
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
 	}
