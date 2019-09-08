@@ -11,6 +11,7 @@ import (
 
 	"github.com/hashicorp/raft"
 	raftbolt "github.com/hashicorp/raft-boltdb"
+	"github.com/ickby/CollaborationNode/utils"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
 )
@@ -24,21 +25,18 @@ type PeerProvider interface {
 	GetWritePeers() []peer.ID
 }
 
-//States are just raft states in a new name
-type State = raft.FSM
-type Snapshot = raft.FSMSnapshot
-type SnapshotSink = raft.SnapshotSink
-type Log = raft.Log
-
 type Replica struct {
+	host      p2phost.Host
+	state     multiState
 	rep       *raft.Raft
 	logs      raft.LogStore
 	confs     raft.StableStore
 	snaps     raft.SnapshotStore
 	pprovider PeerProvider
+	name      string
 }
 
-func NewReplica(name string, path string, host p2phost.Host, state State, provider PeerProvider) (*Replica, error) {
+func NewReplica(name string, path string, host p2phost.Host, provider PeerProvider) (*Replica, error) {
 
 	// Create the snapshot store. This allows the Raft to truncate the log.
 	snapshots, err := raft.NewFileSnapshotStore(path, 3, os.Stderr)
@@ -54,43 +52,71 @@ func NewReplica(name string, path string, host p2phost.Host, state State, provid
 	logStore := raft.LogStore(boltDB)
 	stableStore := raft.StableStore(boltDB)
 
-	// -- Create LibP2P transports Raft
-	transport, err := NewLibp2pTransport(host, 2*time.Second, name)
+	//setup the state
+	state := newMultiState()
+
+	return &Replica{host, state, nil, logStore, stableStore, snapshots, provider, name}, nil
+}
+
+//starts the replica and waits to get added by the leader
+//(to be done after all states are added)
+func (self *Replica) Join() error {
+
+	if self.rep != nil {
+		return fmt.Errorf("Replica already initialized")
+	}
+
+	// Create LibP2P transports Raft
+	transport, err := NewLibp2pTransport(self.host, 2*time.Second, self.name)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	//build up the config
 	config := raft.DefaultConfig()
+	config.LocalID = raft.ServerID(self.host.ID().Pretty())
 	//config.LogOutput = ioutil.Discard
 	//config.Logger = nil
-	config.LocalID = raft.ServerID(host.ID().Pretty())
 
 	// Instantiate the Raft systems.
-	ra, err := raft.NewRaft(config, state, logStore, stableStore, snapshots, transport)
+	ra, err := raft.NewRaft(config, self.state, self.logs, self.confs, self.snaps, transport)
 	if err != nil {
-		return nil, err
+		return utils.StackError(err, "Unable to initialize replica")
 	}
 
-	return &Replica{ra, logStore, stableStore, snapshots, provider}, nil
+	self.rep = ra
+	return nil
 }
 
-func (self *Replica) Bootstrap(host p2phost.Host) {
+//setup the replica completely new (to be done after all states are added)
+func (self *Replica) Bootstrap() error {
+
+	//build the raft instance
+	err := self.Join()
+	if err != nil {
+		return err
+	}
 	serverconf := raft.Configuration{
 		Servers: []raft.Server{
 			{
 				Suffrage: raft.Voter,
-				ID:       raft.ServerID(host.ID().Pretty()),
-				Address:  raft.ServerAddress(host.ID().Pretty()),
+				ID:       raft.ServerID(self.host.ID().Pretty()),
+				Address:  raft.ServerAddress(self.host.ID().Pretty()),
 			},
 		},
 	}
-	self.rep.BootstrapCluster(serverconf)
+	future := self.rep.BootstrapCluster(serverconf)
+	return future.Error()
 }
 
+//warning: only close after removing from the cluster!
 func (self *Replica) Close() error {
-	future := self.rep.Shutdown()
-	return future.Error()
+
+	if self.rep != nil {
+		future := self.rep.Shutdown()
+		return future.Error()
+	}
+	return nil
 }
 
 func (self *Replica) GetLeader(ctx context.Context) (peer.ID, error) {
@@ -197,7 +223,7 @@ func (self *Replica) EnsureParticipation(ctx context.Context, id peer.ID) error 
 		} else {
 			future = self.rep.AddNonvoter(raft.ServerID(id.Pretty()), raft.ServerAddress(id.Pretty()), 0, duration)
 		}
-		
+
 		err := future.Error()
 		if err == nil {
 			return nil
@@ -241,6 +267,15 @@ func (self *Replica) AddCommand(ctx context.Context, cmd []byte) (interface{}, e
 	}
 
 	return nil, fmt.Errorf("Something bad happend")
+}
+
+func (self *Replica) AddState(name string, state State) error {
+
+	if self.rep != nil {
+		return fmt.Errorf("Replica already initialized, cannot add state")
+	}
+
+	return self.state.Add(name, state)
 }
 
 /****************************************************************************

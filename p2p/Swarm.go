@@ -61,8 +61,12 @@ func (id SwarmID) Pretty() string {
 	return string(id)
 }
 
+/*******************************************************************************
+							Swarm options
+*******************************************************************************/
+
 //create some default peers like WithSwarmPeers(PeerID1, AUTH, PeerID2, Auth)
-func WithSwarmPeers(peers ...interface{}) map[PeerID]AUTH_STATE {
+func SwarmPeers(peers ...interface{}) map[PeerID]AUTH_STATE {
 
 	peerMap := make(map[PeerID]AUTH_STATE, len(peers)/2)
 	for i := 0; i < len(peers)/2; i++ {
@@ -71,23 +75,31 @@ func WithSwarmPeers(peers ...interface{}) map[PeerID]AUTH_STATE {
 	return peerMap
 }
 
+//setup some states to shre with the swarm
+func SwarmStates(states ...State) []States {
+	return states
+}
+
+
+
+/*******************************************************************************
+								Swarm
+*******************************************************************************/
+
+
 //not accassible outside the package: should be used via Host only
-func newSwarm(host *Host, id SwarmID, peers ...map[PeerID]AUTH_STATE) *Swarm {
+func newSwarm(host *Host, id SwarmID, peers map[PeerID]AUTH_STATE, states []State) *Swarm {
 
-	var peerMap map[PeerID]AUTH_STATE
-	if len(peers) == 0 {
-		peerMap = make(map[PeerID]AUTH_STATE, 0)
-	} else {
-		peerMap = peers[0]
-	}
-
+	//ensure our folder exist
+	os.MkdirAll(swarm.GetPath(), os.ModePerm)
+	
 	//the context to use for all goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
 	swarm := &Swarm{
 		host:   host,
 		ID:     id,
-		peers:  peerMap,
+		peers:  peers,
 		ctx:    ctx,
 		cancel: cancel,
 		path:   filepath.Join(viper.GetString("directory"), id.Pretty())}
@@ -97,9 +109,9 @@ func newSwarm(host *Host, id SwarmID, peers ...map[PeerID]AUTH_STATE) *Swarm {
 	swarm.Event = newSwarmEventService(swarm)
 	swarm.State = newSharedStateService(swarm)
 	swarm.Data = newSwarmDataService(swarm)
-
-	//ensure our folder exist
-	os.MkdirAll(swarm.GetPath(), os.ModePerm)
+	
+	//setup the shared states, own and user ones
+	
 
 	//connect to the peers
 	for pid, _ := range peerMap {
@@ -131,9 +143,7 @@ func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error
 	}
 	
 	//shared state needs the info
-	s.State.AddPeer(ctx, pid, state)
-	
-	return nil
+	return s.State.AddPeer(ctx, pid, state)
 }
 
 func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {

@@ -12,6 +12,8 @@ import (
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
+type State = replica.State
+
 /******************************************************************************
 							RPC API for replica
 *******************************************************************************/
@@ -91,15 +93,6 @@ type sharedStateService struct {
 
 func newSharedStateService(swarm *Swarm) *sharedStateService {
 
-	return &sharedStateService{swarm, nil, ReplicaAPI{}, ReplicaReadAPI{}}
-}
-
-func (self *sharedStateService) Share(state replica.State) error {
-
-	if self.rep != nil {
-		return fmt.Errorf("State already shared")
-	}
-
 	//setup replica
 	path := filepath.Join(self.swarm.GetPath())
 	rep, err := replica.NewReplica(string(self.swarm.ID), path, self.swarm.host.host, state, swarmPeerProvider{self.swarm})
@@ -108,11 +101,40 @@ func (self *sharedStateService) Share(state replica.State) error {
 	}
 	self.rep = rep
 
+
+	return &sharedStateService{swarm, rep, ReplicaAPI{}, ReplicaReadAPI{}}
+}
+
+func (self *sharedStateService) Share(state replica.State) error {
+
+	//get the name
+	var name string
+	if t := reflect.TypeOf(myvar); t.Kind() == reflect.Ptr {
+        name = t.Elem().Name()
+    } else {
+        name = t.Name()
+    }
+    
+    //add to replica
+    self.rep.AddState(name, state)
+}
+
+func (self *sharedStateService) Startup() error {
+	
 	//check if we need to bootstrap or join
 	peers := self.swarm.GetPeers(AUTH_READWRITE)
 	if len(peers) == 0 {
-		self.rep.Bootstrap(self.swarm.host.host)
+		err := self.rep.Bootstrap(self.swarm.host.host 
+		if err != nil {
+			return utils.StackError(err, "Unable to bootstrap replica")
+		}
+
 	} else {
+		err := self.rep.Join()
+		if err != nil {
+			return utils.StackError(err, "Unable to startup replica")
+		}
+		
 		peers = self.swarm.GetPeers(AUTH_NONE)
 		go func() {
 			//get leader and inform him that we want to participate
@@ -217,5 +239,7 @@ func (self *sharedStateService) RemovePeer(ctx context.Context, id PeerID) (erro
 
 func (self *sharedStateService) Close() {
 
-	self.rep.Close()
+	if self.rep != nil {
+		self.rep.Close()
+	}
 }
