@@ -17,7 +17,7 @@ type Operation struct {
 	Op    []byte
 }
 
-func newOperation(state string, cmd []byte) Operation {
+func NewOperation(state string, cmd []byte) Operation {
 	return Operation{state, cmd}
 }
 

@@ -109,6 +109,11 @@ func (self *Replica) Bootstrap() error {
 	return future.Error()
 }
 
+func (self *Replica) IsRunning() bool {
+
+	return self.rep != nil
+}
+
 //warning: only close after removing from the cluster!
 func (self *Replica) Close() error {
 
@@ -243,13 +248,13 @@ func (self *Replica) EnsureParticipation(ctx context.Context, id peer.ID) error 
 	return nil
 }
 
-func (self *Replica) AddCommand(ctx context.Context, cmd []byte) (interface{}, error) {
+func (self *Replica) AddCommand(ctx context.Context, op Operation) (interface{}, error) {
 
 	duration := durationFromContext(ctx)
 
 	//run till success or cancelation
 	for {
-		future := self.rep.Apply(cmd, duration)
+		future := self.rep.Apply(op.ToBytes(), duration)
 		err := future.Error()
 		if err == nil {
 			return future.Response(), nil

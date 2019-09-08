@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/spf13/viper"
 	"github.com/ickby/CollaborationNode/utils"
@@ -44,12 +43,11 @@ type Swarm struct {
 	State *sharedStateService
 
 	//general stuff
-	host     *Host
-	ID       SwarmID
-	peers    map[PeerID]AUTH_STATE
-	peerLock sync.RWMutex
-	ctx      context.Context
-	cancel   context.CancelFunc
+	host   *Host
+	ID     SwarmID
+	conf   SwarmConfigutarion
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	//some internal data
 	path string
@@ -61,173 +59,121 @@ func (id SwarmID) Pretty() string {
 	return string(id)
 }
 
-/*******************************************************************************
-							Swarm options
-*******************************************************************************/
-
-//create some default peers like WithSwarmPeers(PeerID1, AUTH, PeerID2, Auth)
-func SwarmPeers(peers ...interface{}) map[PeerID]AUTH_STATE {
-
-	peerMap := make(map[PeerID]AUTH_STATE, len(peers)/2)
-	for i := 0; i < len(peers)/2; i++ {
-		peerMap[peers[i*2].(PeerID)] = peers[i*2+1].(AUTH_STATE)
-	}
-	return peerMap
-}
-
-//setup some states to shre with the swarm
-func SwarmStates(states ...State) []States {
+//little helper to add swarms to the states
+func SwarmStates(states ...State) []State {
 	return states
 }
-
-
 
 /*******************************************************************************
 								Swarm
 *******************************************************************************/
 
-
 //not accassible outside the package: should be used via Host only
-func newSwarm(host *Host, id SwarmID, peers map[PeerID]AUTH_STATE, states []State) *Swarm {
+func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool) (*Swarm, error) {
 
-	//ensure our folder exist
-	os.MkdirAll(swarm.GetPath(), os.ModePerm)
-	
 	//the context to use for all goroutines
 	ctx, cancel := context.WithCancel(context.Background())
 
 	swarm := &Swarm{
 		host:   host,
 		ID:     id,
-		peers:  peers,
+		conf:   newSwarmConfiguration(),
 		ctx:    ctx,
 		cancel: cancel,
 		path:   filepath.Join(viper.GetString("directory"), id.Pretty())}
+
+	//ensure our folder exist
+	os.MkdirAll(swarm.GetPath(), os.ModePerm)
 
 	//build the services
 	swarm.Rpc = newSwarmRpcService(swarm)
 	swarm.Event = newSwarmEventService(swarm)
 	swarm.State = newSharedStateService(swarm)
 	swarm.Data = newSwarmDataService(swarm)
-	
-	//setup the shared states, own and user ones
-	
 
-	//connect to the peers
-	for pid, _ := range peerMap {
-		if !host.IsConnected(pid) {
-			host.Connect(ctx, pid)
+	//setup the shared states, own and user ones
+	swarm.State.share(&swarm.conf)
+	for _, state := range states {
+		err := swarm.State.share(state)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to setup swarm")
 		}
 	}
+	
+	//startup state sharing
+	swarm.State.startup(bootstrap)
 
-	return swarm
+	return swarm, nil
 }
 
 /* Peer handling
  *************  */
 
-//Peer is added and hence allowed to use all swarm functionality. If not connected
-//already this will connect to the peer (hence the context)
+//Peer is added and hence allowed to use all swarm functionality.
 func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error {
 
-	s.peerLock.Lock()
-	defer s.peerLock.Unlock()
-	_, ok := s.peers[pid]
-	if ok {
-		return fmt.Errorf("Peer already added")
+	if !s.State.IsRunning() {
+		return fmt.Errorf("Swarm not fully setup: cannot add peer")
 	}
-	s.peers[pid] = state
 
-	if !s.host.IsConnected(pid) {
-		s.host.Connect(ctx, pid)
+	//build the operation
+	op := SwarmConfOp{
+		Remove: false,
+		Peer:   pid,
+		Auth:   state,
 	}
-	
-	//shared state needs the info
-	return s.State.AddPeer(ctx, pid, state)
+
+	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
+	return err
 }
 
 func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
 
-	//shared state needs the info
-	err := s.State.RemovePeer(ctx, peer)	
-	if err != nil {
-		return utils.StackError(err, "Unable to remove peer from replica")
+	if !s.State.IsRunning() {
+		return fmt.Errorf("Swarm not fully setup: cannot remove peer")
 	}
-	
-	s.peerLock.Lock()
-	defer s.peerLock.Unlock()
-	delete(s.peers, peer)
-	
-	return nil
+
+	//build the operation
+	op := SwarmConfOp{
+		Remove: true,
+		Peer:   peer,
+		Auth:   AUTH_NONE,
+	}
+
+	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
+	return err
 }
 
-func (s *Swarm) ChangePeer(peer PeerID, auth AUTH_STATE) error {
+func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) error {
 
-	s.peerLock.Lock()
-	defer s.peerLock.Unlock()
-
-	_, ok := s.peers[peer]
-	if !ok {
-		return fmt.Errorf("Peer not available, cannot be changed")
+	if !s.State.IsRunning() {
+		return fmt.Errorf("Swarm not fully setup: cannot add peer")
 	}
-	s.peers[peer] = auth
-	return nil
+
+	//build the operation
+	op := SwarmConfOp{
+		Remove: false,
+		Peer:   peer,
+		Auth:   auth,
+	}
+
+	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
+	return err
 }
 
 func (s *Swarm) HasPeer(peer PeerID) bool {
-
-	s.peerLock.RLock()
-	defer s.peerLock.RUnlock()
-	_, has := s.peers[peer]
-	return has
+	return s.conf.HasPeer(peer)
 }
 
 //returns all peers with the given or higher auth state.
 //E.g. AUTH_READONLY returns all peers with read only as well as read write auth
 //If you want all peers use AUTH_NONE
 func (s *Swarm) GetPeers(state AUTH_STATE) []PeerID {
-
-	s.peerLock.RLock()
-	defer s.peerLock.RUnlock()
-
-	result := make([]PeerID, 0)
-	for peer, auth := range s.peers {
-
-		switch state {
-
-		case AUTH_NONE:
-			result = append(result, peer)
-
-		case AUTH_READONLY:
-			if auth != AUTH_NONE {
-				result = append(result, peer)
-			}
-
-		case AUTH_READWRITE:
-			if auth == AUTH_READWRITE {
-				result = append(result, peer)
-			}
-		}
-	}
-
-	return result
+	return s.conf.GetPeers(state)
 }
 
 func (self *Swarm) PeerAuth(peer PeerID) AUTH_STATE {
-
-	//the swarm itself is always readwrite
-	//TODO: Makes this sense or should it be correct state?
-	if peer == self.host.ID() {
-		return AUTH_READWRITE
-	}
-
-	self.peerLock.RLock()
-	defer self.peerLock.RUnlock()
-	state, ok := self.peers[peer]
-	if !ok {
-		return AUTH_NONE
-	}
-	return state
+	return self.conf.PeerAuth(peer)
 }
 
 /* General functions

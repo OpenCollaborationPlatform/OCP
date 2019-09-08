@@ -18,6 +18,7 @@ import (
 	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	ma "github.com/multiformats/go-multiaddr"
+	uuid "github.com/satori/go.uuid"
 	"github.com/spf13/viper"
 )
 
@@ -239,15 +240,34 @@ func (h *Host) Swarms() []*Swarm {
 	return h.swarms
 }
 
-func (h *Host) CreateSwarm(id SwarmID, peers ...map[PeerID]AUTH_STATE) *Swarm {
+func (h *Host) CreateSwarm(states []State) (*Swarm, error) {
 
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	swarm := newSwarm(h, id, peers...)
+
+	id := SwarmID(uuid.NewV4().String())
+	swarm, err := newSwarm(h, id, states, true)
+	if err != nil {
+		return nil, err
+	}
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
 	}
-	return swarm
+	return swarm, nil
+}
+
+func (h *Host) JoinSwarm(id SwarmID, states []State) *Swarm {
+	
+	h.swarmMutex.Lock()
+	defer h.swarmMutex.Unlock()
+	swarm := newSwarm(h, id, states, false)
+	if err != nil {
+		return nil, err
+	}
+	if swarm != nil {
+		h.swarms = append(h.swarms, swarm)
+	}
+	return nil
 }
 
 func (h *Host) GetSwarm(id SwarmID) (*Swarm, error) {
