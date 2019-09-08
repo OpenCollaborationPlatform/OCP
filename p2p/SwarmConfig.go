@@ -32,17 +32,17 @@ func swarmConfOpFromBytes(data []byte) (SwarmConfOp, error) {
 }
 
 //this is a replica state
-type SwarmConfigutarion struct {
+type SwarmConfiguration struct {
 	Peer  map[PeerID]AUTH_STATE
 	mutex sync.RWMutex
 }
 
-func newSwarmConfiguration() SwarmConfigutarion {
-	return SwarmConfigutarion{make(map[PeerID]AUTH_STATE), sync.RWMutex{}}
+func newSwarmConfiguration() SwarmConfiguration {
+	return SwarmConfiguration{make(map[PeerID]AUTH_STATE), sync.RWMutex{}}
 }
 
 //state interface
-func (self *SwarmConfigutarion) Apply(data []byte) interface{} {
+func (self *SwarmConfiguration) Apply(data []byte) interface{} {
 
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
@@ -63,7 +63,7 @@ func (self *SwarmConfigutarion) Apply(data []byte) interface{} {
 }
 
 //state interface
-func (self *SwarmConfigutarion) Snapshot() ([]byte, error) {
+func (self *SwarmConfiguration) Snapshot() ([]byte, error) {
 
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
@@ -77,7 +77,7 @@ func (self *SwarmConfigutarion) Snapshot() ([]byte, error) {
 }
 
 //state interface
-func (self *SwarmConfigutarion) LoadSnapshot(data []byte) error {
+func (self *SwarmConfiguration) LoadSnapshot(data []byte) error {
 
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
@@ -89,7 +89,7 @@ func (self *SwarmConfigutarion) LoadSnapshot(data []byte) error {
 
 //Custom functions
 
-func (self *SwarmConfigutarion) HasPeer(peer PeerID) bool {
+func (self *SwarmConfiguration) HasPeer(peer PeerID) bool {
 
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
@@ -97,7 +97,7 @@ func (self *SwarmConfigutarion) HasPeer(peer PeerID) bool {
 	return has
 }
 
-func (self *SwarmConfigutarion) GetPeers(state AUTH_STATE) []PeerID {
+func (self *SwarmConfiguration) GetPeers(state AUTH_STATE) []PeerID {
 
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
@@ -125,7 +125,7 @@ func (self *SwarmConfigutarion) GetPeers(state AUTH_STATE) []PeerID {
 	return result
 }
 
-func (self *SwarmConfigutarion) PeerAuth(peer PeerID) AUTH_STATE {
+func (self *SwarmConfiguration) PeerAuth(peer PeerID) AUTH_STATE {
 
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()

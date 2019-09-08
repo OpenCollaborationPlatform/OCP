@@ -256,18 +256,18 @@ func (h *Host) CreateSwarm(states []State) (*Swarm, error) {
 	return swarm, nil
 }
 
-func (h *Host) JoinSwarm(id SwarmID, states []State) *Swarm {
+func (h *Host) JoinSwarm(id SwarmID, states []State) (*Swarm, error) {
 	
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	swarm := newSwarm(h, id, states, false)
+	swarm, err := newSwarm(h, id, states, false)
 	if err != nil {
 		return nil, err
 	}
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
 	}
-	return nil
+	return swarm, nil
 }
 
 func (h *Host) GetSwarm(id SwarmID) (*Swarm, error) {

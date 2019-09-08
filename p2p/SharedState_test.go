@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"time"
 	"context"
 	"encoding/binary"
 	"io/ioutil"
@@ -57,6 +58,8 @@ func TestSingleNodeSharedState(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(sw1, ShouldNotBeNil)
 
+		So(sw1.HasPeer(h1.ID()), ShouldBeTrue)
+
 		Convey("adding command works", func() {
 
 			ctx := context.Background()
@@ -71,7 +74,7 @@ func TestSingleNodeSharedState(t *testing.T) {
 		})
 	})
 }
-/*
+
 func TestBasicSharedState(t *testing.T) {
 
 	//make temporary folder for the data
@@ -79,40 +82,47 @@ func TestBasicSharedState(t *testing.T) {
 	defer os.RemoveAll(path)
 
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-	swid := SwarmID("myswarm")
 
 	Convey("Setup swarms on two different hosts,", t, func() {
 
 		h1, _ := temporaryHost(path)
 		defer h1.Stop()
-		sw1 := h1.CreateSwarm(swid)
+		st1 := &testState{0}
+		sw1, err := h1.CreateSwarm(SwarmStates(st1))
+		So(err, ShouldBeNil)
 
 		h2, _ := temporaryHost(path)
 		defer h2.Stop()
-		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
-		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-
-		err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
+		st2 := &testState{0}
+		sw2, err := h2.JoinSwarm(sw1.ID, SwarmStates(st2))
 		So(err, ShouldBeNil)
+		
+		//for now make sure they know each other
+		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
+		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())	
 
-		sw2 := h2.CreateSwarm(swid, WithSwarmPeers(h1.ID(), AUTH_READWRITE))
+		Convey("Adding a peer to the joind swarm should fail", func() {
+			
+			err := sw2.AddPeer(ctx, h1.ID(), AUTH_READWRITE)
+			So(err, ShouldNotBeNil)
+		})
+		
+		Convey("but adding it to the initial swarm should work", func() {
 
-		Convey("Sharing the swarms", func() {
-
-			st1 := &testState{0}
-			err := sw1.State.Share(st1)
+			err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
 			So(err, ShouldBeNil)
 
-			st2 := &testState{0}
-			err = sw2.State.Share(st2)
-			So(err, ShouldBeNil)
+			So(sw1.HasPeer(h1.ID()), ShouldBeTrue)
+			So(sw1.HasPeer(h2.ID()), ShouldBeTrue)
+			So(sw2.HasPeer(h1.ID()), ShouldBeTrue)
+			So(sw2.HasPeer(h2.ID()), ShouldBeTrue)
 
 			Convey("adding command works from both swarms", func() {
 
-				res, err := sw1.State.AddCommand(ctx, toByte(1))
+				res, err := sw1.State.AddCommand(ctx, "testState", toByte(1))
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 1)
-				res, err = sw2.State.AddCommand(ctx, toByte(1))
+				res, err = sw2.State.AddCommand(ctx, "testState", toByte(1))
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 2)
 
@@ -122,7 +132,6 @@ func TestBasicSharedState(t *testing.T) {
 					So(st2.value, ShouldEqual, 2)
 				})
 			})
-
 		})
 	})
-}*/
+}

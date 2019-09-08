@@ -22,7 +22,7 @@ type ReplicaAPI struct {
 	rep *replica.Replica
 }
 
-func (self *ReplicaAPI) AddCommand(ctx context.Context,op replica.Operation, ret *interface{}) error {
+func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, ret *interface{}) error {
 
 	value, err := self.rep.AddCommand(ctx, op)
 	*ret = value
@@ -130,7 +130,6 @@ func (self *sharedStateService) startup(bootstrap bool) error {
 		if err != nil {
 			return utils.StackError(err, "Unable to bootstrap replica")
 		}
-
 	}
 
 	//setup API

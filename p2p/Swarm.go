@@ -2,6 +2,7 @@
 package p2p
 
 import (
+	"time"
 	"context"
 	"fmt"
 	"os"
@@ -45,7 +46,7 @@ type Swarm struct {
 	//general stuff
 	host   *Host
 	ID     SwarmID
-	conf   SwarmConfigutarion
+	conf   SwarmConfiguration
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -100,8 +101,16 @@ func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool) (*Swarm, e
 		}
 	}
 	
-	//startup state sharing
+	//startup state sharing. If bootstrap we add ourself to the config
 	swarm.State.startup(bootstrap)
+	if bootstrap {
+		op := SwarmConfOp{false, host.ID(), AUTH_READWRITE}
+		addctx, _ := context.WithTimeout(ctx, 2*time.Second)
+		_, err := swarm.State.AddCommand(addctx, "SwarmConfiguration", op.ToBytes())
+		if err != nil{
+			return nil, utils.StackError(err, "Unable to setup swarm")
+		}
+	}
 
 	return swarm, nil
 }
