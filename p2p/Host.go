@@ -246,7 +246,7 @@ func (h *Host) CreateSwarm(states []State) (*Swarm, error) {
 	defer h.swarmMutex.Unlock()
 
 	id := SwarmID(uuid.NewV4().String())
-	swarm, err := newSwarm(h, id, states, true)
+	swarm, err := newSwarm(h, id, states, true, make([]PeerID, 0))
 	if err != nil {
 		return nil, err
 	}
@@ -256,13 +256,13 @@ func (h *Host) CreateSwarm(states []State) (*Swarm, error) {
 	return swarm, nil
 }
 
-func (h *Host) JoinSwarm(id SwarmID, states []State) (*Swarm, error) {
+func (h *Host) JoinSwarm(id SwarmID, states []State, knownPeers []PeerID) (*Swarm, error) {
 	
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	swarm, err := newSwarm(h, id, states, false)
+	swarm, err := newSwarm(h, id, states, false, knownPeers)
 	if err != nil {
-		return nil, err
+		return swarm, err
 	}
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)

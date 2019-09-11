@@ -81,8 +81,6 @@ func TestBasicSharedState(t *testing.T) {
 	path, _ := ioutil.TempDir("", "p2p")
 	defer os.RemoveAll(path)
 
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-
 	Convey("Setup swarms on two different hosts,", t, func() {
 
 		h1, _ := temporaryHost(path)
@@ -93,43 +91,55 @@ func TestBasicSharedState(t *testing.T) {
 
 		h2, _ := temporaryHost(path)
 		defer h2.Stop()
-		st2 := &testState{0}
-		sw2, err := h2.JoinSwarm(sw1.ID, SwarmStates(st2))
-		So(err, ShouldBeNil)
-		
-		//for now make sure they know each other
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())	
-
-		Convey("Adding a peer to the joind swarm should fail", func() {
+		st2 := &testState{0}
+		
+		
+		Convey("Joining from different hist without adding it as peer before should fail", func() {
 			
-			err := sw2.AddPeer(ctx, h1.ID(), AUTH_READWRITE)
+			sw2, err := h2.JoinSwarm(sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
 			So(err, ShouldNotBeNil)
+			So(sw2, ShouldNotBeNil)
+			
+			Convey("And  adding a peer to the joind swarm should fail", func() {
+				ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+				err := sw2.AddPeer(ctx, h1.ID(), AUTH_READWRITE)
+				So(err, ShouldNotBeNil)
+			})
 		})
 		
-		Convey("but adding it to the initial swarm should work", func() {
+		Convey("Adding the new to the initial swarm", func() {
 
+			ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
 			err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
 			So(err, ShouldBeNil)
-
 			So(sw1.HasPeer(h1.ID()), ShouldBeTrue)
 			So(sw1.HasPeer(h2.ID()), ShouldBeTrue)
-			So(sw2.HasPeer(h1.ID()), ShouldBeTrue)
-			So(sw2.HasPeer(h2.ID()), ShouldBeTrue)
 
-			Convey("adding command works from both swarms", func() {
+			Convey("Joining of the new swarm should work", func() {
+				
+				sw2, err := h2.JoinSwarm(sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
+				time.Sleep(500*time.Millisecond)  //wait till replication finished
+				So(err, ShouldBeNil)				
+				So(sw2.HasPeer(h1.ID()), ShouldBeTrue)
+				So(sw2.HasPeer(h2.ID()), ShouldBeTrue)
 
-				res, err := sw1.State.AddCommand(ctx, "testState", toByte(1))
-				So(err, ShouldBeNil)
-				So(res, ShouldEqual, 1)
-				res, err = sw2.State.AddCommand(ctx, "testState", toByte(1))
-				So(err, ShouldBeNil)
-				So(res, ShouldEqual, 2)
-
-				Convey("and the states are updated", func() {
-
-					So(st1.value, ShouldEqual, 2)
-					So(st2.value, ShouldEqual, 2)
+				Convey("and adding command works from both swarms", func() {
+	
+					res, err := sw1.State.AddCommand(ctx, "testState", toByte(1))
+					So(err, ShouldBeNil)
+					So(res, ShouldEqual, 1)
+					res, err = sw2.State.AddCommand(ctx, "testState", toByte(1))
+					time.Sleep(500*time.Millisecond)  //wait till replication finished
+					So(err, ShouldBeNil)
+					So(res, ShouldEqual, 2)
+	
+					Convey("which updates the states correctly", func() {
+	
+						So(st1.value, ShouldEqual, 2)
+						So(st2.value, ShouldEqual, 2)
+					})
 				})
 			})
 		})

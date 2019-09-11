@@ -3,7 +3,6 @@ package replica
 import (
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"time"
 
@@ -15,33 +14,33 @@ import (
 	gostream "github.com/libp2p/go-libp2p-gostream"
 )
 
-const raftBaseProtocol string = "/raft/1.0.0/"
+const raftBaseProtocol string = "/ocpraft/1.0.0/"
 
 // This provides a custom logger for the network transport
 // which intercepts messages and rewrites them to our own logger
 type logForwarder struct{}
 
-var logLogger = log.New(&logForwarder{}, "", 0)
+//var logLogger = log.New(&logForwarder{}, "", 0)
 
 // Write forwards to our go-log logger.
 // According to https://golang.org/pkg/log/#Logger.Output
 // it is called per line.
-func (fw *logForwarder) Write(p []byte) (n int, err error) {
-	// t := strings.TrimSuffix(string(p), "\n")
-	// switch {
-	// case strings.Contains(t, "[DEBUG]"):
-	// 	logger.Debug(strings.TrimPrefix(t, "[DEBUG] raft-net: "))
-	// case strings.Contains(t, "[WARN]"):
-	// 	logger.Warning(strings.TrimPrefix(t, "[WARN]  raft-net: "))
-	// case strings.Contains(t, "[ERR]"):
-	// 	logger.Error(strings.TrimPrefix(t, "[ERR] raft-net: "))
-	// case strings.Contains(t, "[INFO]"):
-	// 	logger.Info(strings.TrimPrefix(t, "[INFO] raft-net: "))
-	// default:
-	// 	logger.Debug(t)
-	// }
+/*func (fw *logForwarder) Write(p []byte) (n int, err error) {
+	 t := strings.TrimSuffix(string(p), "\n")
+	 switch {
+	 case strings.Contains(t, "[DEBUG]"):
+	 	log.Println(strings.TrimPrefix(t, "[DEBUG] raft-net: "))
+	 case strings.Contains(t, "[WARN]"):
+	 	log.Println(strings.TrimPrefix(t, "[WARN]  raft-net: "))
+	 case strings.Contains(t, "[ERR]"):
+	 	log.Println(strings.TrimPrefix(t, "[ERR] raft-net: "))
+	 case strings.Contains(t, "[INFO]"):
+	 	log.Println(strings.TrimPrefix(t, "[INFO] raft-net: "))
+	 default:
+	 	log.Println(t)
+	 }
 	return len(p), nil
-}
+}*/
 
 // streamLayer an implementation of raft.StreamLayer for use
 // with raft.NetworkTransportConfig.
@@ -76,7 +75,7 @@ func (sl *streamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (
 		return nil, err
 	}
 
-	return gostream.Dial(sl.host, pid, sl.id)
+	return  gostream.Dial(sl.host, pid, sl.id)
 }
 
 func (sl *streamLayer) Accept() (net.Conn, error) {
@@ -104,7 +103,7 @@ func (ap *addrProvider) ServerAddr(id raft.ServerID) (raft.ServerAddress, error)
 		return "", fmt.Errorf("bad peer ID: %s", id)
 	}
 	addrs := ap.h.Peerstore().Addrs(pid)
-	if len(addrs) == 0 {
+	if len(addrs) == 0 && pid != ap.h.ID() {
 		return "", fmt.Errorf("libp2p host does not know peer %s", id)
 	}
 	return raft.ServerAddress(id), nil
@@ -128,7 +127,7 @@ func NewLibp2pTransport(h host.Host, timeout time.Duration, name string) (*raft.
 	// streams.
 	cfg := &raft.NetworkTransportConfig{
 		ServerAddressProvider: provider,
-		Logger:                logLogger,
+		Logger:                nil,
 		Stream:                stream,
 		MaxPool:               0,
 		Timeout:               timeout,

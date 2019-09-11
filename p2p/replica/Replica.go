@@ -1,6 +1,7 @@
 package replica
 
 import (
+	"io/ioutil"
 	"context"
 	"fmt"
 
@@ -13,7 +14,7 @@ import (
 	raftbolt "github.com/hashicorp/raft-boltdb"
 	"github.com/ickby/CollaborationNode/utils"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
-	"github.com/libp2p/go-libp2p-core/peer"
+	peer "github.com/libp2p/go-libp2p-core/peer"
 )
 
 //a interface that allows to query all available peers
@@ -75,8 +76,8 @@ func (self *Replica) Join() error {
 	//build up the config
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(self.host.ID().Pretty())
-	//config.LogOutput = ioutil.Discard
-	//config.Logger = nil
+	config.LogOutput = ioutil.Discard
+	config.Logger = nil
 
 	// Instantiate the Raft systems.
 	ra, err := raft.NewRaft(config, self.state, self.logs, self.confs, self.snaps, transport)
@@ -96,12 +97,13 @@ func (self *Replica) Bootstrap() error {
 	if err != nil {
 		return err
 	}
+	peerDec :=  peer.IDB58Encode(self.host.ID())
 	serverconf := raft.Configuration{
 		Servers: []raft.Server{
 			{
 				Suffrage: raft.Voter,
-				ID:       raft.ServerID(self.host.ID().Pretty()),
-				Address:  raft.ServerAddress(self.host.ID().Pretty()),
+				ID:       raft.ServerID(peerDec),
+				Address:  raft.ServerAddress(peerDec),
 			},
 		},
 	}
@@ -156,17 +158,18 @@ func (self *Replica) GetLeader(ctx context.Context) (peer.ID, error) {
 	return pid, nil
 }
 
-func (self *Replica) AddPeer(ctx context.Context, peer peer.ID, writer bool) error {
+func (self *Replica) ConnectPeer(ctx context.Context, pid peer.ID, writer bool) error {
 
 	duration := durationFromContext(ctx)
+	peerDec := peer.IDB58Encode(pid)
 
 	//run till success or cancelation
 	for {
 		var future raft.IndexFuture
 		if writer {
-			future = self.rep.AddVoter(raft.ServerID(peer.Pretty()), raft.ServerAddress(peer.Pretty()), 0, duration)
+			future = self.rep.AddVoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
 		} else {
-			future = self.rep.AddVoter(raft.ServerID(peer.Pretty()), raft.ServerAddress(peer.Pretty()), 0, duration)
+			future = self.rep.AddVoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
 		}
 		err := future.Error()
 		if err == nil {
@@ -187,13 +190,14 @@ func (self *Replica) AddPeer(ctx context.Context, peer peer.ID, writer bool) err
 	return fmt.Errorf("Something bad happend")
 }
 
-func (self *Replica) RemovePeer(ctx context.Context, peer peer.ID) error {
+func (self *Replica) DisconnectPeer(ctx context.Context, pid peer.ID) error {
 
 	duration := durationFromContext(ctx)
+	peerDec := peer.IDB58Encode(pid)
 
 	//run till success or cancelation
 	for {
-		future := self.rep.RemoveServer(raft.ServerID(peer.Pretty()), 0, duration)
+		future := self.rep.RemoveServer(raft.ServerID(peerDec), 0, duration)
 		err := future.Error()
 		if err == nil {
 			return nil
@@ -211,41 +215,6 @@ func (self *Replica) RemovePeer(ctx context.Context, peer peer.ID) error {
 	}
 
 	return fmt.Errorf("Something bad happend")
-}
-
-func (self *Replica) EnsureParticipation(ctx context.Context, id peer.ID) error {
-
-	duration := durationFromContext(ctx)
-
-	if !self.pprovider.HasPeer(id) {
-		return fmt.Errorf("Peer is not allowed to participate")
-	}
-
-	for {
-		var future raft.IndexFuture
-		if res, _ := self.pprovider.CanWrite(id); res {
-			future = self.rep.AddVoter(raft.ServerID(id.Pretty()), raft.ServerAddress(id.Pretty()), 0, duration)
-		} else {
-			future = self.rep.AddNonvoter(raft.ServerID(id.Pretty()), raft.ServerAddress(id.Pretty()), 0, duration)
-		}
-
-		err := future.Error()
-		if err == nil {
-			return nil
-		}
-		if err != raft.ErrEnqueueTimeout {
-			return err
-		}
-
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("Timeout on ensuring peer")
-		default:
-			break
-		}
-	}
-
-	return nil
 }
 
 func (self *Replica) AddCommand(ctx context.Context, op Operation) (interface{}, error) {
@@ -283,86 +252,6 @@ func (self *Replica) AddState(name string, state State) error {
 	return self.state.Add(name, state)
 }
 
-/****************************************************************************
-						internal
-****************************************************************************/
-
-func (self *Replica) runConfLoop() {
-
-	select {
-	case isLeader := <-self.rep.LeaderCh():
-		if isLeader {
-			self.resolveConfDifferences()
-		}
-	}
-}
-
-//check if the configuration matches the PeerProvider and update if not
-//must only be run when the replica is leader!
-func (self *Replica) resolveConfDifferences() {
-
-	//get the configuration
-	future := self.rep.GetConfiguration()
-	if future.Error() != nil {
-		return
-	}
-	conf := future.Configuration()
-
-	//create a map of peers: bool states if they are write or read
-	serverMap := make(map[peer.ID]bool, len(conf.Servers))
-	for _, server := range conf.Servers {
-
-		pid, err := peer.IDB58Decode(string(server.Address))
-		if err != nil {
-			continue
-		}
-		write := server.Suffrage == raft.Voter
-		serverMap[pid] = write
-	}
-
-	//check if we have all write and read peers in the conf and connect if not
-	for _, writer := range self.pprovider.GetWritePeers() {
-
-		auth, has := serverMap[writer]
-		if !has || !auth {
-			self.rep.AddVoter(raft.ServerID(writer.Pretty()), raft.ServerAddress(writer.Pretty()), 0, 0)
-		}
-	}
-	for _, reader := range self.pprovider.GetReadPeers() {
-
-		auth, has := serverMap[reader]
-		if !has {
-			self.rep.AddNonvoter(raft.ServerID(reader.Pretty()), raft.ServerAddress(reader.Pretty()), 0, 0)
-			continue
-		}
-		if auth {
-			self.rep.DemoteVoter(raft.ServerID(reader.Pretty()), 0, 0)
-		}
-	}
-
-	//check if the conv has more entries than the peers
-	allpeers := make([]peer.ID, len(self.pprovider.GetWritePeers()))
-	copy(allpeers, self.pprovider.GetWritePeers())
-	allpeers = append(allpeers, self.pprovider.GetReadPeers()...)
-	if len(allpeers) != len(serverMap) {
-
-		for server, _ := range serverMap {
-
-			remove := true
-			for _, peer := range allpeers {
-				if peer == server {
-					remove = false
-					break
-				}
-			}
-
-			if remove {
-				self.rep.RemoveServer(raft.ServerID(server.Pretty()), 0, 0)
-			}
-		}
-	}
-}
-
 func durationFromContext(ctx context.Context) time.Duration {
 
 	deadline, hasDeadline := ctx.Deadline()
@@ -371,7 +260,7 @@ func durationFromContext(ctx context.Context) time.Duration {
 		duration = deadline.Sub(time.Now())
 
 	} else {
-		duration = 500 * time.Millisecond
+		duration = 1000 * time.Millisecond
 	}
 	return duration
 }

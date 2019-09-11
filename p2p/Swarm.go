@@ -65,12 +65,21 @@ func SwarmStates(states ...State) []State {
 	return states
 }
 
+func SwarmPeers(peers ...PeerID) []PeerID {
+	return peers
+}
+
 /*******************************************************************************
 								Swarm
 *******************************************************************************/
 
 //not accassible outside the package: should be used via Host only
-func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool) (*Swarm, error) {
+//host: 			The p2p Host the swarm is build upon
+//id:			A swarm ID uniquely identifying the swam
+//states:		All states that shall be shared by the swarm
+//bootstrap:		True if this is a new swarm and should be startup, false if we join an existing swarm
+//knownPeers:	A list of known peers that are in the swarm (only relevant if bootstrap=false)
+func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool, knownPeers []PeerID) (*Swarm, error) {
 
 	//the context to use for all goroutines
 	ctx, cancel := context.WithCancel(context.Background())
@@ -109,6 +118,15 @@ func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool) (*Swarm, e
 		_, err := swarm.State.AddCommand(addctx, "SwarmConfiguration", op.ToBytes())
 		if err != nil{
 			return nil, utils.StackError(err, "Unable to setup swarm")
+		}
+	
+	} else {
+		if len(knownPeers) != 0 {
+			cnnctx, _ := context.WithTimeout(ctx, 5*time.Second)
+			err := swarm.State.connect(cnnctx, knownPeers)
+			if err != nil {
+				return swarm, utils.StackError(err, "Unable to connect to swarm via provided peers")
+			}
 		}
 	}
 

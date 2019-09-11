@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"time"
 	"context"
 	"fmt"
 	"path/filepath"
@@ -30,7 +31,8 @@ func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, re
 }
 
 type ReplicaReadAPI struct {
-	rep *replica.Replica
+	rep  *replica.Replica
+	conf *SwarmConfiguration
 }
 
 func (self *ReplicaReadAPI) GetLeader(ctx context.Context, inp struct{}, ret *peer.ID) error {
@@ -40,11 +42,20 @@ func (self *ReplicaReadAPI) GetLeader(ctx context.Context, inp struct{}, ret *pe
 	return err
 }
 
-func (self *ReplicaReadAPI) EnsureParticipation(ctx context.Context, id peer.ID, ret *struct{}) error {
+//join is ReadAPI as also read only peers need to call it for themself. If joining is allowed will be 
+//checked in this function
+func (self *ReplicaReadAPI) Join(ctx context.Context, peer PeerID, ret *AUTH_STATE) error {
 
-	err := self.rep.EnsureParticipation(ctx, id)
+	if !self.conf.HasPeer(peer) {
+		*ret = AUTH_NONE
+		return fmt.Errorf("Peer is not allowed to join the state sharing")
+	}
+	auth := self.conf.PeerAuth(peer)
+	err := self.rep.ConnectPeer(ctx, peer.pid(), auth==AUTH_READWRITE)
+	*ret = auth
 	return err
 }
+
 
 /******************************************************************************
 							shared state service
@@ -122,31 +133,6 @@ func (self *sharedStateService) share(state replica.State) error {
 	return self.rep.AddState(name, state)
 }
 
-func (self *sharedStateService) startup(bootstrap bool) error {
-
-	//check if we need to bootstrap or join
-	if bootstrap {
-		err := self.rep.Bootstrap()
-		if err != nil {
-			return utils.StackError(err, "Unable to bootstrap replica")
-		}
-	}
-
-	//setup API
-	self.api = ReplicaAPI{self.rep}
-	err := self.swarm.Rpc.Register(&self.api, AUTH_READWRITE)
-	if err != nil {
-		return utils.StackError(err, "Unable to register Replica API")
-	}
-	self.rApi = ReplicaReadAPI{self.rep}
-	err = self.swarm.Rpc.Register(&self.rApi, AUTH_READONLY)
-	if err != nil {
-		return utils.StackError(err, "Unable to register Replica Read API")
-	}
-
-	return nil
-}
-
 func (self *sharedStateService) AddCommand(ctx context.Context, state string, cmd []byte) (interface{}, error) {
 
 	if !self.IsRunning() {
@@ -167,55 +153,76 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 	return ret, err
 }
 
-//only callable by leader!
-func (self *sharedStateService) AddPeer(ctx context.Context, id PeerID, auth AUTH_STATE) error {
-
-	if self.rep == nil {
-		return fmt.Errorf("No state available")
-	}
-
-	//fetch leader and check if we are
-	leader, err := self.rep.GetLeader(ctx)
-	if err != nil {
-		return utils.StackError(err, "Unable to get leader for state")
-	}
-	if leader != self.swarm.host.ID().pid() {
-		return fmt.Errorf("No is not leader, cannot add")
-	}
-
-	err = self.rep.AddPeer(ctx, id.pid(), auth == AUTH_READWRITE)
-	if err != nil {
-		return utils.StackError(err, "Unable to add peer to replica")
-	}
-	return nil
-}
-
-//only callable by leader!
-func (self *sharedStateService) RemovePeer(ctx context.Context, id PeerID) error {
-
-	if self.rep == nil {
-		return fmt.Errorf("No state available")
-	}
-
-	//fetch leader and check if we are
-	leader, err := self.rep.GetLeader(ctx)
-	if err != nil {
-		return utils.StackError(err, "Unable to get leader for state")
-	}
-	if leader != self.swarm.host.ID().pid() {
-		return fmt.Errorf("No is not leader, cannot add")
-	}
-
-	err = self.rep.RemovePeer(ctx, id.pid())
-	if err != nil {
-		return utils.StackError(err, "Unable to remove peer from replica")
-	}
-	return nil
-}
-
 func (self *sharedStateService) Close() {
 
 	if self.rep != nil {
 		self.rep.Close()
 	}
+}
+
+
+
+func (self *sharedStateService) startup(bootstrap bool) error {
+
+	//check if we need to bootstrap or join
+	if bootstrap {
+		err := self.rep.Bootstrap()
+		if err != nil {
+			return utils.StackError(err, "Unable to bootstrap replica")
+		}
+	
+	} else {
+		err := self.rep.Join()
+		if err != nil {
+			return utils.StackError(err, "Unable to join replica")
+		}
+	}
+
+	//setup API
+	self.api = ReplicaAPI{self.rep}
+	err := self.swarm.Rpc.Register(&self.api, AUTH_READWRITE)
+	if err != nil {
+		return utils.StackError(err, "Unable to register Replica API")
+	}
+	self.rApi = ReplicaReadAPI{self.rep, &self.swarm.conf}
+	err = self.swarm.Rpc.Register(&self.rApi, AUTH_READONLY)
+	if err != nil {
+		return utils.StackError(err, "Unable to register Replica Read API")
+	}
+
+	return nil
+}
+
+//try to connect to peers sharing the same states
+func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) error {
+
+	//we go over all peers to fetch the leader of the current state
+	callctx := ctx
+	if len(peers) > 1 {
+		callctx,_ = context.WithTimeout(ctx, 1*time.Second)	
+	}
+	var err error = nil
+	var leader peer.ID
+	for _, peer := range peers {
+		
+		err = self.swarm.Rpc.CallContext(callctx, peer.pid(), "ReplicaReadAPI", "GetLeader", struct{}{}, &leader)
+		if err == nil {
+			break
+		}
+		//check if the context is still alive
+		select {
+			case <-ctx.Done():
+				return fmt.Errorf("Connect timed out")
+			default:
+				break
+		}
+	}
+	
+	if err != nil {
+		return utils.StackError(err, "Unable to find leader of swarm")
+	}
+
+	//call the leader to let us join
+	var auth AUTH_STATE
+	return self.swarm.Rpc.CallContext(callctx, leader, "ReplicaReadAPI", "Join", self.swarm.host.ID(), &auth)
 }
