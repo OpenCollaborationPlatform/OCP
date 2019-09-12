@@ -33,11 +33,10 @@ type Replica struct {
 	logs      raft.LogStore
 	confs     raft.StableStore
 	snaps     raft.SnapshotStore
-	pprovider PeerProvider
 	name      string
 }
 
-func NewReplica(name string, path string, host p2phost.Host, provider PeerProvider) (*Replica, error) {
+func NewReplica(name string, path string, host p2phost.Host) (*Replica, error) {
 
 	// Create the snapshot store. This allows the Raft to truncate the log.
 	snapshots, err := raft.NewFileSnapshotStore(path, 3, os.Stderr)
@@ -56,7 +55,7 @@ func NewReplica(name string, path string, host p2phost.Host, provider PeerProvid
 	//setup the state
 	state := newMultiState()
 
-	return &Replica{host, state, nil, logStore, stableStore, snapshots, provider, name}, nil
+	return &Replica{host, state, nil, logStore, stableStore, snapshots, name}, nil
 }
 
 //starts the replica and waits to get added by the leader

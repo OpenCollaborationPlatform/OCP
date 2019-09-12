@@ -61,40 +61,6 @@ func (self *ReplicaReadAPI) Join(ctx context.Context, peer PeerID, ret *AUTH_STA
 							shared state service
 *******************************************************************************/
 
-//implements peerprovider interface of replica
-type swarmPeerProvider struct {
-	swarm *Swarm
-}
-
-func (self swarmPeerProvider) HasPeer(id peer.ID) bool {
-	return self.swarm.HasPeer(PeerID(id))
-}
-
-func (self swarmPeerProvider) CanWrite(id peer.ID) (bool, error) {
-	if !self.swarm.HasPeer(PeerID(id)) {
-		return false, fmt.Errorf("No such peer available")
-	}
-	auth := self.swarm.PeerAuth(PeerID(id))
-	return auth == AUTH_READWRITE, nil
-}
-
-func (self swarmPeerProvider) GetReadPeers() []peer.ID {
-	peers := self.swarm.GetPeers(AUTH_READONLY)
-	ret := make([]peer.ID, len(peers))
-	for i, p := range peers {
-		ret[i] = p.pid()
-	}
-	return ret
-}
-func (self swarmPeerProvider) GetWritePeers() []peer.ID {
-	peers := self.swarm.GetPeers(AUTH_READWRITE)
-	ret := make([]peer.ID, len(peers))
-	for i, p := range peers {
-		ret[i] = p.pid()
-	}
-	return ret
-}
-
 type sharedStateService struct {
 	swarm *Swarm
 	rep   *replica.Replica
@@ -106,7 +72,7 @@ func newSharedStateService(swarm *Swarm) *sharedStateService {
 
 	//setup replica
 	path := filepath.Join(swarm.GetPath())
-	rep, err := replica.NewReplica(string(swarm.ID), path, swarm.host.host, swarmPeerProvider{swarm})
+	rep, err := replica.NewReplica(string(swarm.ID), path, swarm.host.host)
 	if err != nil {
 		return nil
 	}
