@@ -25,6 +25,10 @@ type ReplicaAPI struct {
 
 func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, ret *interface{}) error {
 
+	if !self.rep.IsRunning() {
+		return fmt.Errorf("Node not running: can't be the leader")
+	}
+	
 	value, err := self.rep.AddCommand(ctx, op)
 	*ret = value
 	return err
@@ -37,6 +41,10 @@ type ReplicaReadAPI struct {
 
 func (self *ReplicaReadAPI) GetLeader(ctx context.Context, inp struct{}, ret *peer.ID) error {
 
+	if !self.rep.IsRunning() {
+		return fmt.Errorf("Node not running: can't be the leader")
+	}
+
 	value, err := self.rep.GetLeader(ctx)
 	*ret = value
 	return err
@@ -46,6 +54,10 @@ func (self *ReplicaReadAPI) GetLeader(ctx context.Context, inp struct{}, ret *pe
 //checked in this function
 func (self *ReplicaReadAPI) Join(ctx context.Context, peer PeerID, ret *AUTH_STATE) error {
 
+	if !self.rep.IsRunning() {
+		return fmt.Errorf("Node not running: can't be the leader")
+	}
+	
 	if !self.conf.HasPeer(peer) {
 		*ret = AUTH_NONE
 		return fmt.Errorf("Peer is not allowed to join the state sharing")
@@ -53,6 +65,20 @@ func (self *ReplicaReadAPI) Join(ctx context.Context, peer PeerID, ret *AUTH_STA
 	auth := self.conf.PeerAuth(peer)
 	err := self.rep.ConnectPeer(ctx, peer.pid(), auth==AUTH_READWRITE)
 	*ret = auth
+	return err
+}
+
+//leav is ReadAPI as also read only peers need to call it for themself.
+func (self *ReplicaReadAPI) Leave(ctx context.Context, peer PeerID, ret *struct{}) error {
+
+	if !self.rep.IsRunning() {
+		return fmt.Errorf("Node not running: can't be the leader")
+	}
+	
+	if !self.conf.HasPeer(peer) {
+		return fmt.Errorf("Peer is not part of the state sharing: can't leave")
+	}
+	err := self.rep.DisconnectPeer(ctx, peer.pid())
 	return err
 }
 
@@ -102,27 +128,48 @@ func (self *sharedStateService) share(state replica.State) error {
 func (self *sharedStateService) AddCommand(ctx context.Context, state string, cmd []byte) (interface{}, error) {
 
 	if !self.IsRunning() {
-		return nil, fmt.Errorf("State service not correctly setup: cannot add command")
+		return nil, fmt.Errorf("Not running: cannot add command")
 	}
 	
 	//build the operation
 	op := replica.NewOperation(state, cmd)
 
-	//fetch leader and call him
-	leader, err := self.rep.GetLeader(ctx)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to get leader for state")
+	//fetch leader and call
+	for {
+		leader, err := self.rep.GetLeader(ctx)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to get leader for state")
+		}
+	
+		var ret interface{}
+		err = self.swarm.Rpc.CallContext(ctx, leader, "ReplicaAPI", "AddCommand", op, &ret)
+		if err == nil {
+			return ret, nil
+		}
+		
+		select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("Add command timed out")
+			default: 
+				time.Sleep(100*time.Millisecond)
+		}
 	}
-
-	var ret interface{}
-	err = self.swarm.Rpc.CallContext(ctx, leader, "ReplicaAPI", "AddCommand", op, &ret)
-	return ret, err
+	return nil, fmt.Errorf("Not able to add command: failed")
 }
 
-func (self *sharedStateService) Close() {
+func (self *sharedStateService) Close(ctx context.Context) {
 
-	if self.rep != nil {
-		self.rep.Close()
+	//if we are connecteed we need to change that: remove our self from the cluster
+	//if we are the last peer in the cluster we simply shut down
+	isLast, err := self.rep.IsLastPeer(self.swarm.host.ID().pid())
+	if self.IsRunning() && !isLast && err == nil {
+		
+		//fetch leader and call him to leave
+		leader, err := self.rep.GetLeader(ctx)	
+		if err == nil {
+			var ret interface{}
+			self.swarm.Rpc.CallContext(ctx, leader, "ReplicaReadAPI", "Leave", self.swarm.host.ID(), &ret)
+		}
 	}
 }
 

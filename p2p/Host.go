@@ -125,13 +125,11 @@ func (h *Host) Start() error {
 	return nil
 }
 
-func (h *Host) Stop() error {
+func (h *Host) Stop(ctx context.Context) error {
 
 	//stop swarms
-	h.swarmMutex.RLock()
-	defer h.swarmMutex.RUnlock()
-	for _, swarm := range h.swarms {
-		swarm.Close()
+	for _, swarm := range h.Swarms() {
+		swarm.Close(ctx)
 	}
 
 	//stop services
@@ -237,7 +235,13 @@ func (h *Host) Keys() (crypto.PrivKey, crypto.PubKey) {
 func (h *Host) Swarms() []*Swarm {
 	h.swarmMutex.RLock()
 	defer h.swarmMutex.RUnlock()
-	return h.swarms
+	
+	//return new list to make sure the returned value can be manipulated
+	//without chaning the host slice
+	newList := make([]*Swarm, len(h.swarms))
+	copy(newList, h.swarms)
+	
+	return newList
 }
 
 func (h *Host) CreateSwarm(states []State) (*Swarm, error) {
@@ -260,6 +264,7 @@ func (h *Host) JoinSwarm(id SwarmID, states []State, knownPeers []PeerID) (*Swar
 	
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
+	
 	swarm, err := newSwarm(h, id, states, false, knownPeers)
 	if err != nil {
 		return swarm, err
@@ -280,4 +285,17 @@ func (h *Host) GetSwarm(id SwarmID) (*Swarm, error) {
 		}
 	}
 	return nil, fmt.Errorf("No such swarm exists")
+}
+
+//remove swarm from list: only called from Swarm itself in Close()
+func (h *Host) removeSwarm(id SwarmID) {
+	
+	h.swarmMutex.Lock()
+	defer h.swarmMutex.Unlock()
+	for i, swarm := range h.swarms {
+		if swarm.ID == id {
+			h.swarms = append(h.swarms[:i], h.swarms[i+1:]...)
+			return
+		}
+	}
 }

@@ -48,7 +48,8 @@ func TestSingleNodeSharedState(t *testing.T) {
 	defer os.RemoveAll(path)
 
 	h1, _ := temporaryHost(path)
-	defer h1.Stop()
+	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+	defer h1.Stop(ctx)
 
 	Convey("Creating swarms and sharing services shall be possible", t, func() {
 
@@ -84,13 +85,13 @@ func TestBasicSharedState(t *testing.T) {
 	Convey("Setup swarms on two different hosts,", t, func() {
 
 		h1, _ := temporaryHost(path)
-		defer h1.Stop()
+		defer h1.Stop(context.Background())
 		st1 := &testState{0}
 		sw1, err := h1.CreateSwarm(SwarmStates(st1))
 		So(err, ShouldBeNil)
 
 		h2, _ := temporaryHost(path)
-		defer h2.Stop()
+		defer h2.Stop(context.Background())
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())	
 		st2 := &testState{0}
@@ -111,7 +112,7 @@ func TestBasicSharedState(t *testing.T) {
 		
 		Convey("Adding the new to the initial swarm", func() {
 
-			ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 			err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
 			So(err, ShouldBeNil)
 			So(sw1.HasPeer(h1.ID()), ShouldBeTrue)
@@ -131,14 +132,26 @@ func TestBasicSharedState(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, 1)
 					res, err = sw2.State.AddCommand(ctx, "testState", toByte(1))
-					time.Sleep(500*time.Millisecond)  //wait till replication finished
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, 2)
+					time.Sleep(500*time.Millisecond)  //wait till replication finished
 	
 					Convey("which updates the states correctly", func() {
 	
 						So(st1.value, ShouldEqual, 2)
 						So(st2.value, ShouldEqual, 2)
+					})
+				})
+
+				Convey("Closing one swarm", func() {
+
+					sw1.State.rep.PrintConf()
+					sw1.Close(ctx)					
+					
+					Convey("Should keep the other one alive", func() {
+	
+						_, err := sw2.State.AddCommand(ctx, "testState", toByte(1))
+						So(err, ShouldBeNil)
 					})
 				})
 			})

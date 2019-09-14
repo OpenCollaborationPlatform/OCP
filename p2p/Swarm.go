@@ -210,10 +210,12 @@ func (self *Swarm) GetPath() string {
 	return self.path
 }
 
-func (s *Swarm) Close() {
+func (s *Swarm) Close(ctx context.Context) {
 
 	s.Event.Stop()
 	s.Data.Close()
-	s.State.Close()
+	s.State.Close(ctx)
 	s.cancel()
+	
+	s.host.removeSwarm(s.ID)
 }

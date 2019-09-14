@@ -1,11 +1,9 @@
 package replica
 
 import (
-	"io/ioutil"
 	"context"
 	"fmt"
 
-	//"io/ioutil"
 	"os"
 	"path/filepath"
 	"time"
@@ -75,7 +73,7 @@ func (self *Replica) Join() error {
 	//build up the config
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(self.host.ID().Pretty())
-	config.LogOutput = ioutil.Discard
+	//config.LogOutput = ioutil.Discard
 	config.Logger = nil
 
 	// Instantiate the Raft systems.
@@ -112,16 +110,50 @@ func (self *Replica) Bootstrap() error {
 
 func (self *Replica) IsRunning() bool {
 
-	return self.rep != nil
+	if self.rep == nil {
+		return false
+	}
+	
+	return self.rep.State() != raft.Shutdown
 }
 
 //warning: only close after removing from the cluster!
-func (self *Replica) Close() error {
+func (self *Replica) Close(ctx context.Context) error {
 
 	if self.rep != nil {
-		future := self.rep.Shutdown()
-		return future.Error()
+		
+		//We shut down automatically when we get removed from conf (due to default conf option)
+		//all this function does is to wait till we are shutdown to make sure we are
+		//stil lavailable for the remove conf change
+				
+		obsCh := make(chan raft.Observation, 1)
+		observer := raft.NewObserver(obsCh, false, nil)
+		self.rep.RegisterObserver(observer)
+		defer self.rep.DeregisterObserver(observer)
+
+		//check after register observer just to make sure we do not miss a change
+		if self.rep.State() == raft.Shutdown {
+			return nil
+		}
+		
+		for {
+			select {
+			case obs := <-obsCh:
+				switch obs.Data.(type) {
+				case raft.RaftState:
+					state := obs.Data.(raft.RaftState)
+					if state == raft.Shutdown {
+						return nil
+					}
+				}
+			case <-ctx.Done():
+				//We need to force the shutdown!
+				self.rep.Shutdown()
+				return fmt.Errorf("Needed to force shutdown: timeout")
+			}
+		}
 	}
+
 	return nil
 }
 
@@ -216,6 +248,29 @@ func (self *Replica) DisconnectPeer(ctx context.Context, pid peer.ID) error {
 	return fmt.Errorf("Something bad happend")
 }
 
+func (self *Replica) IsLastPeer(pid peer.ID) (bool, error) {
+	
+	future := self.rep.GetConfiguration()
+	err := future.Error()
+	if err != nil {
+		return false, utils.StackError(err, "Unable to query peer configuration")
+	}
+	
+	conf := future.Configuration()
+	
+	if len(conf.Servers) != 1 {
+		return false, nil
+	}
+	
+	server := conf.Servers[0].ID
+	serverpid, err := peer.IDB58Decode(string(server))
+	if err != nil {
+		return false, utils.StackError(err, "Unable to access running peers")
+	}
+	
+	return pid == serverpid, nil
+}
+
 func (self *Replica) AddCommand(ctx context.Context, op Operation) (interface{}, error) {
 
 	duration := durationFromContext(ctx)
@@ -249,6 +304,33 @@ func (self *Replica) AddState(name string, state State) error {
 	}
 
 	return self.state.Add(name, state)
+}
+
+func (self *Replica) PrintConf() {
+
+	if self.rep == nil {
+		fmt.Println("Replica not startet up")
+		return 
+	}
+
+	future := self.rep.GetConfiguration()
+	err := future.Error()
+	if err != nil {
+		fmt.Println("Error in configuration")
+		return 
+	}
+	
+	conf := future.Configuration()
+	fmt.Printf("Configuration of node %v: \n", self.host.ID().Pretty())
+	for _, server := range conf.Servers {
+		str := string(server.ID)
+		if server.Suffrage == raft.Voter {
+			str = str + ": Voter"
+		
+		} else {
+			str = str + ": Nonvoter"
+		}		
+	}
 }
 
 func durationFromContext(ctx context.Context) time.Duration {
