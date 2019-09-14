@@ -19,6 +19,7 @@ import (
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	ma "github.com/multiformats/go-multiaddr"
 	uuid "github.com/satori/go.uuid"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/spf13/viper"
 )
 
@@ -29,6 +30,9 @@ type Host struct {
 
 	privKey crypto.PrivKey
 	pubKey  crypto.PubKey
+	
+	//find service
+	dht *kaddht.IpfsDHT
 
 	//serivces the host provides
 	Rpc   *hostRpcService
@@ -108,6 +112,18 @@ func (h *Host) Start() error {
 			continue
 		}
 	}
+	
+	//setup the dht 
+	kadctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	h.dht, err = kaddht.New(kadctx, h.host)
+	if err != nil {
+		return utils.StackError(err, "Unable to setup distributed hash table")
+	}
+	conf := kaddht.BootstrapConfig{
+    				Queries: 3,           // how many queries to run per period
+    				Period: 5*time.Minute, // how often to run periodic bootstrap.
+    				Timeout: 10*time.Second} // how long to wait for a bootstrap query to run
+	h.dht.BootstrapWithConfig(kadctx, conf)
 
 	//add the services
 	h.Rpc = newRpcService(h)
@@ -158,6 +174,14 @@ func (self *Host) SetMultipleAdress(peer PeerID, addrs []ma.Multiaddr) error {
 func (h *Host) Connect(ctx context.Context, peer PeerID) error {
 
 	info := h.host.Peerstore().PeerInfo(peer.pid())
+	if len(info.Addrs)==0 {
+		//go find it!
+		var err error
+		info, err = h.dht.FindPeer(ctx, peer.pid())
+		if err != nil {
+			return utils.StackError(err, "Unable to find adress of peer, cannot connect")
+		}
+	}
 	return h.host.Connect(ctx, info)
 }
 

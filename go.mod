@@ -27,7 +27,6 @@ require (
 	github.com/go-delve/delve v1.3.0 // indirect
 	github.com/go-kit/kit v0.9.0 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.2+incompatible // indirect
-	github.com/golang/groupcache v0.0.0-20190702054246-869f871628b6 // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/pprof v0.0.0-20190723021845-34ac40c74b70 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20190812055157-5d271430af9f // indirect
@@ -36,7 +35,6 @@ require (
 	github.com/hashicorp/go-immutable-radix v1.1.0 // indirect
 	github.com/hashicorp/go-retryablehttp v0.6.2 // indirect
 	github.com/hashicorp/go-uuid v1.0.1 // indirect
-	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/hashicorp/raft v1.1.1
 	github.com/hashicorp/raft-boltdb v0.0.0-20190605210249-ef2e128ed477
 	github.com/ipfs/go-bitswap v0.1.6
@@ -46,7 +44,6 @@ require (
 	github.com/ipfs/go-ipfs-blockstore v0.1.0
 	github.com/ipfs/go-ipfs-exchange-interface v0.0.1
 	github.com/ipfs/go-log v0.0.1
-	github.com/kisielk/errcheck v1.2.0 // indirect
 	github.com/kkdai/bstream v1.0.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pty v1.1.8 // indirect
@@ -57,11 +54,11 @@ require (
 	github.com/libp2p/go-libp2p-gorpc v0.1.0
 	github.com/libp2p/go-libp2p-gostream v0.1.2
 	github.com/libp2p/go-libp2p-host v0.1.0
+	github.com/libp2p/go-libp2p-kad-dht v0.2.1
 	github.com/libp2p/go-libp2p-peer v0.2.0
 	github.com/libp2p/go-libp2p-peerstore v0.1.3
 	github.com/libp2p/go-libp2p-protocol v0.1.0
 	github.com/libp2p/go-libp2p-pubsub v0.1.1
-	github.com/libp2p/go-libp2p-record v0.1.1 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/mailru/easyjson v0.0.0-20190626092158-b2ccc519800e // indirect
 	github.com/mattn/go-isatty v0.0.9 // indirect
@@ -70,7 +67,6 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/mr-tron/base58 v1.1.2
 	github.com/multiformats/go-multiaddr v0.0.4
-	github.com/multiformats/go-multiaddr-dns v0.0.3 // indirect
 	github.com/multiformats/go-multihash v0.0.7 // indirect
 	github.com/mwitkow/go-conntrack v0.0.0-20190716064945-2f068394615f // indirect
 	github.com/onsi/ginkgo v1.9.0 // indirect

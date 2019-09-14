@@ -145,12 +145,22 @@ func TestBasicSharedState(t *testing.T) {
 
 				Convey("Closing one swarm", func() {
 
-					sw1.State.rep.PrintConf()
 					sw1.Close(ctx)					
 					
 					Convey("Should keep the other one alive", func() {
 	
 						_, err := sw2.State.AddCommand(ctx, "testState", toByte(1))
+						So(err, ShouldBeNil)
+					})
+				})
+
+				Convey("The other way around works too", func() {
+
+					sw2.Close(ctx)					
+					
+					Convey("Should keep the other one alive", func() {
+	
+						_, err := sw1.State.AddCommand(ctx, "testState", toByte(1))
 						So(err, ShouldBeNil)
 					})
 				})
