@@ -20,6 +20,11 @@ func (self PeerID) String() string {
 	return peer.IDB58Encode(self.pid())
 }
 
+func (self PeerID) ShortName() string {
+	str := self.String()
+	return string(str[len(str)-4:])
+}
+
 func PeerIDFromString(id string) (PeerID, error) {
 
 	peerid, err := peer.IDB58Decode(id)

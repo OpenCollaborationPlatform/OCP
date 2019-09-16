@@ -1,6 +1,7 @@
 package replica
 
 import (
+	"io/ioutil"
 	"context"
 	"fmt"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	peer "github.com/libp2p/go-libp2p-core/peer"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
 //a interface that allows to query all available peers
@@ -25,16 +27,17 @@ type PeerProvider interface {
 }
 
 type Replica struct {
-	host      p2phost.Host
-	state     multiState
-	rep       *raft.Raft
-	logs      raft.LogStore
-	confs     raft.StableStore
-	snaps     raft.SnapshotStore
-	name      string
+	host  p2phost.Host
+	dht   *kaddht.IpfsDHT
+	state multiState
+	rep   *raft.Raft
+	logs  raft.LogStore
+	confs raft.StableStore
+	snaps raft.SnapshotStore
+	name  string
 }
 
-func NewReplica(name string, path string, host p2phost.Host) (*Replica, error) {
+func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT) (*Replica, error) {
 
 	// Create the snapshot store. This allows the Raft to truncate the log.
 	snapshots, err := raft.NewFileSnapshotStore(path, 3, os.Stderr)
@@ -52,8 +55,8 @@ func NewReplica(name string, path string, host p2phost.Host) (*Replica, error) {
 
 	//setup the state
 	state := newMultiState()
-
-	return &Replica{host, state, nil, logStore, stableStore, snapshots, name}, nil
+	
+	return &Replica{host, dht, state, nil, logStore, stableStore, snapshots, name}, nil
 }
 
 //starts the replica and waits to get added by the leader
@@ -65,7 +68,7 @@ func (self *Replica) Join() error {
 	}
 
 	// Create LibP2P transports Raft
-	transport, err := NewLibp2pTransport(self.host, 2*time.Second, self.name)
+	transport, err := NewLibp2pTransport(self.host, self.dht, 2*time.Second, self.name)
 	if err != nil {
 		return err
 	}
@@ -73,7 +76,7 @@ func (self *Replica) Join() error {
 	//build up the config
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(self.host.ID().Pretty())
-	//config.LogOutput = ioutil.Discard
+	config.LogOutput = ioutil.Discard
 	config.Logger = nil
 
 	// Instantiate the Raft systems.
@@ -94,7 +97,7 @@ func (self *Replica) Bootstrap() error {
 	if err != nil {
 		return err
 	}
-	peerDec :=  peer.IDB58Encode(self.host.ID())
+	peerDec := peer.IDB58Encode(self.host.ID())
 	serverconf := raft.Configuration{
 		Servers: []raft.Server{
 			{
@@ -113,7 +116,7 @@ func (self *Replica) IsRunning() bool {
 	if self.rep == nil {
 		return false
 	}
-	
+
 	return self.rep.State() != raft.Shutdown
 }
 
@@ -121,11 +124,11 @@ func (self *Replica) IsRunning() bool {
 func (self *Replica) Close(ctx context.Context) error {
 
 	if self.rep != nil {
-		
+
 		//We shut down automatically when we get removed from conf (due to default conf option)
 		//all this function does is to wait till we are shutdown to make sure we are
 		//stil lavailable for the remove conf change
-				
+
 		obsCh := make(chan raft.Observation, 1)
 		observer := raft.NewObserver(obsCh, false, nil)
 		self.rep.RegisterObserver(observer)
@@ -135,7 +138,7 @@ func (self *Replica) Close(ctx context.Context) error {
 		if self.rep.State() == raft.Shutdown {
 			return nil
 		}
-		
+
 		for {
 			select {
 			case obs := <-obsCh:
@@ -249,25 +252,25 @@ func (self *Replica) DisconnectPeer(ctx context.Context, pid peer.ID) error {
 }
 
 func (self *Replica) IsLastPeer(pid peer.ID) (bool, error) {
-	
+
 	future := self.rep.GetConfiguration()
 	err := future.Error()
 	if err != nil {
 		return false, utils.StackError(err, "Unable to query peer configuration")
 	}
-	
+
 	conf := future.Configuration()
-	
+
 	if len(conf.Servers) != 1 {
 		return false, nil
 	}
-	
+
 	server := conf.Servers[0].ID
 	serverpid, err := peer.IDB58Decode(string(server))
 	if err != nil {
 		return false, utils.StackError(err, "Unable to access running peers")
 	}
-	
+
 	return pid == serverpid, nil
 }
 
@@ -310,26 +313,34 @@ func (self *Replica) PrintConf() {
 
 	if self.rep == nil {
 		fmt.Println("Replica not startet up")
-		return 
+		return
 	}
 
 	future := self.rep.GetConfiguration()
 	err := future.Error()
 	if err != nil {
 		fmt.Println("Error in configuration")
-		return 
+		return
 	}
-	
+
+	l := self.rep.Leader()
+	if l != "" {
+		l = l[len(l)-4:]
+	}
+
 	conf := future.Configuration()
-	fmt.Printf("Configuration of node %v: \n", self.host.ID().Pretty())
+	n := self.host.ID().Pretty()
+	n = string(n[len(n)-4:])
+	fmt.Printf("Configuration of node %v with leader %v: \n", n, l)
 	for _, server := range conf.Servers {
 		str := string(server.ID)
 		if server.Suffrage == raft.Voter {
 			str = str + ": Voter"
-		
+
 		} else {
 			str = str + ": Nonvoter"
-		}		
+		}
+		fmt.Println(str)
 	}
 }
 
@@ -341,7 +352,7 @@ func durationFromContext(ctx context.Context) time.Duration {
 		duration = deadline.Sub(time.Now())
 
 	} else {
-		duration = 1000 * time.Millisecond
+		duration = 2000 * time.Millisecond
 	}
 	return duration
 }

@@ -1,6 +1,8 @@
 package replica
 
 import (
+	"context"
+	"log"
 	"errors"
 	"fmt"
 	"net"
@@ -11,7 +13,10 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 
 	"github.com/hashicorp/raft"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	gostream "github.com/libp2p/go-libp2p-gostream"
+	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
+
 )
 
 const raftBaseProtocol string = "/ocpraft/1.0.0/"
@@ -20,13 +25,13 @@ const raftBaseProtocol string = "/ocpraft/1.0.0/"
 // which intercepts messages and rewrites them to our own logger
 type logForwarder struct{}
 
-//var logLogger = log.New(&logForwarder{}, "", 0)
+var logLogger = log.New(&logForwarder{}, "", 0)
 
 // Write forwards to our go-log logger.
 // According to https://golang.org/pkg/log/#Logger.Output
 // it is called per line.
-/*func (fw *logForwarder) Write(p []byte) (n int, err error) {
-	 t := strings.TrimSuffix(string(p), "\n")
+func (fw *logForwarder) Write(p []byte) (n int, err error) {
+/*	 t := strings.TrimSuffix(string(p), "\n")
 	 switch {
 	 case strings.Contains(t, "[DEBUG]"):
 	 	log.Println(strings.TrimPrefix(t, "[DEBUG] raft-net: "))
@@ -38,19 +43,20 @@ type logForwarder struct{}
 	 	log.Println(strings.TrimPrefix(t, "[INFO] raft-net: "))
 	 default:
 	 	log.Println(t)
-	 }
+	 }*/
 	return len(p), nil
-}*/
+}
 
 // streamLayer an implementation of raft.StreamLayer for use
 // with raft.NetworkTransportConfig.
 type streamLayer struct {
 	host host.Host
+	dht  *kaddht.IpfsDHT
 	l    net.Listener
 	id   protocol.ID
 }
 
-func newStreamLayer(h host.Host, name string) (*streamLayer, error) {
+func newStreamLayer(h host.Host, dht *kaddht.IpfsDHT, name string) (*streamLayer, error) {
 
 	protocol := protocol.ID(raftBaseProtocol + name)
 	listener, err := gostream.Listen(h, protocol)
@@ -60,6 +66,7 @@ func newStreamLayer(h host.Host, name string) (*streamLayer, error) {
 
 	return &streamLayer{
 		host: h,
+		dht:  dht,
 		l:    listener,
 		id:   protocol,
 	}, nil
@@ -74,8 +81,22 @@ func (sl *streamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (
 	if err != nil {
 		return nil, err
 	}
+	
+	//check if we know the peer, or find it otherwise
+	addrs := sl.host.Peerstore().Addrs(pid)
+	if len(addrs) == 0 && pid != sl.host.ID() {
+		ctx, _ := context.WithTimeout(context.Background(), timeout)
+		info, err := sl.dht.FindPeer(ctx, pid)
+		if err != nil {
+			return nil, err
+		}
+		if info.ID == "" || len(info.Addrs)==0 {
+			return nil, fmt.Errorf("Peer not found, no connection possible")
+		}
+		sl.host.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.PermanentAddrTTL)
+	}
 
-	return  gostream.Dial(sl.host, pid, sl.id)
+	return gostream.Dial(sl.host, pid, sl.id)
 }
 
 func (sl *streamLayer) Accept() (net.Conn, error) {
@@ -94,25 +115,19 @@ type addrProvider struct {
 	h host.Host
 }
 
-// ServerAddr takes a raft.ServerID and checks that it is a valid PeerID and
-// that our libp2p host has at least one address to contact it. It then returns
-// the ServerID as ServerAddress. On all other cases it will throw an error.
+// ServerAddr takes a raft.ServerID and checks that it is a valid PeerID
 func (ap *addrProvider) ServerAddr(id raft.ServerID) (raft.ServerAddress, error) {
-	pid, err := peer.IDB58Decode(string(id))
+	_, err := peer.IDB58Decode(string(id))
 	if err != nil {
 		return "", fmt.Errorf("bad peer ID: %s", id)
 	}
-	addrs := ap.h.Peerstore().Addrs(pid)
-	if len(addrs) == 0 && pid != ap.h.ID() {
-		return "", fmt.Errorf("libp2p host does not know peer %s", id)
-	}
-	return raft.ServerAddress(id), nil
 
+	return raft.ServerAddress(id), nil
 }
 
-func NewLibp2pTransport(h host.Host, timeout time.Duration, name string) (*raft.NetworkTransport, error) {
+func NewLibp2pTransport(h host.Host, dht *kaddht.IpfsDHT, timeout time.Duration, name string) (*raft.NetworkTransport, error) {
 	provider := &addrProvider{h}
-	stream, err := newStreamLayer(h, name)
+	stream, err := newStreamLayer(h, dht, name)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +142,7 @@ func NewLibp2pTransport(h host.Host, timeout time.Duration, name string) (*raft.
 	// streams.
 	cfg := &raft.NetworkTransportConfig{
 		ServerAddressProvider: provider,
-		Logger:                nil,
+		Logger:                logLogger,
 		Stream:                stream,
 		MaxPool:               0,
 		Timeout:               timeout,

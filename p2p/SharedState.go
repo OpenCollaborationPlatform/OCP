@@ -1,11 +1,11 @@
 package p2p
 
 import (
-	"time"
 	"context"
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"time"
 
 	"github.com/ickby/CollaborationNode/p2p/replica"
 	"github.com/ickby/CollaborationNode/utils"
@@ -28,7 +28,7 @@ func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, re
 	if !self.rep.IsRunning() {
 		return fmt.Errorf("Node not running: can't be the leader")
 	}
-	
+
 	value, err := self.rep.AddCommand(ctx, op)
 	*ret = value
 	return err
@@ -50,20 +50,20 @@ func (self *ReplicaReadAPI) GetLeader(ctx context.Context, inp struct{}, ret *pe
 	return err
 }
 
-//join is ReadAPI as also read only peers need to call it for themself. If joining is allowed will be 
+//join is ReadAPI as also read only peers need to call it for themself. If joining is allowed will be
 //checked in this function
 func (self *ReplicaReadAPI) Join(ctx context.Context, peer PeerID, ret *AUTH_STATE) error {
 
 	if !self.rep.IsRunning() {
 		return fmt.Errorf("Node not running: can't be the leader")
 	}
-	
+
 	if !self.conf.HasPeer(peer) {
 		*ret = AUTH_NONE
 		return fmt.Errorf("Peer is not allowed to join the state sharing")
 	}
 	auth := self.conf.PeerAuth(peer)
-	err := self.rep.ConnectPeer(ctx, peer.pid(), auth==AUTH_READWRITE)
+	err := self.rep.ConnectPeer(ctx, peer.pid(), auth == AUTH_READWRITE)
 	*ret = auth
 	return err
 }
@@ -74,14 +74,13 @@ func (self *ReplicaReadAPI) Leave(ctx context.Context, peer PeerID, ret *struct{
 	if !self.rep.IsRunning() {
 		return fmt.Errorf("Node not running: can't be the leader")
 	}
-	
+
 	if !self.conf.HasPeer(peer) {
 		return fmt.Errorf("Peer is not part of the state sharing: can't leave")
 	}
 	err := self.rep.DisconnectPeer(ctx, peer.pid())
 	return err
 }
-
 
 /******************************************************************************
 							shared state service
@@ -98,7 +97,7 @@ func newSharedStateService(swarm *Swarm) *sharedStateService {
 
 	//setup replica
 	path := filepath.Join(swarm.GetPath())
-	rep, err := replica.NewReplica(string(swarm.ID), path, swarm.host.host)
+	rep, err := replica.NewReplica(string(swarm.ID), path, swarm.host.host, swarm.host.dht)
 	if err != nil {
 		return nil
 	}
@@ -130,7 +129,7 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 	if !self.IsRunning() {
 		return nil, fmt.Errorf("Not running: cannot add command")
 	}
-	
+
 	//build the operation
 	op := replica.NewOperation(state, cmd)
 
@@ -140,18 +139,26 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to get leader for state")
 		}
-	
+
+		err = self.swarm.host.EnsureConnection(ctx, PeerID(leader))
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to connect to leader")
+		}
+
 		var ret interface{}
 		err = self.swarm.Rpc.CallContext(ctx, leader, "ReplicaAPI", "AddCommand", op, &ret)
 		if err == nil {
 			return ret, nil
 		}
-		
+
 		select {
-			case <-ctx.Done():
-				return nil, fmt.Errorf("Add command timed out")
-			default: 
-				time.Sleep(100*time.Millisecond)
+		case <-ctx.Done():
+			if err != nil {
+				return nil, utils.StackError(err, "Timout, no futher try on add command")
+			}
+			return nil, fmt.Errorf("Add command timed out")
+		default:
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 	return nil, fmt.Errorf("Not able to add command: failed")
@@ -163,17 +170,20 @@ func (self *sharedStateService) Close(ctx context.Context) {
 	//if we are the last peer in the cluster we simply shut down
 	isLast, err := self.rep.IsLastPeer(self.swarm.host.ID().pid())
 	if self.IsRunning() && !isLast && err == nil {
-		
+
 		//fetch leader and call him to leave
-		leader, err := self.rep.GetLeader(ctx)	
+		leader, err := self.rep.GetLeader(ctx)
 		if err == nil {
+			err = self.swarm.host.EnsureConnection(ctx, PeerID(leader))
+			if err != nil {
+				return
+			}
+
 			var ret interface{}
 			self.swarm.Rpc.CallContext(ctx, leader, "ReplicaReadAPI", "Leave", self.swarm.host.ID(), &ret)
 		}
 	}
 }
-
-
 
 func (self *sharedStateService) startup(bootstrap bool) error {
 
@@ -183,7 +193,7 @@ func (self *sharedStateService) startup(bootstrap bool) error {
 		if err != nil {
 			return utils.StackError(err, "Unable to bootstrap replica")
 		}
-	
+
 	} else {
 		err := self.rep.Join()
 		if err != nil {
@@ -212,25 +222,30 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 	//we go over all peers to fetch the leader of the current state
 	callctx := ctx
 	if len(peers) > 1 {
-		callctx,_ = context.WithTimeout(ctx, 1*time.Second)	
+		callctx, _ = context.WithTimeout(ctx, 1*time.Second)
 	}
 	var err error = nil
 	var leader peer.ID
 	for _, peer := range peers {
-		
+
+		err = self.swarm.host.EnsureConnection(callctx, peer)
+		if err != nil {
+			return utils.StackError(err, "Unable to connect to leader")
+		}
+
 		err = self.swarm.Rpc.CallContext(callctx, peer.pid(), "ReplicaReadAPI", "GetLeader", struct{}{}, &leader)
 		if err == nil {
 			break
 		}
 		//check if the context is still alive
 		select {
-			case <-ctx.Done():
-				return fmt.Errorf("Connect timed out")
-			default:
-				break
+		case <-ctx.Done():
+			return fmt.Errorf("Connect timed out")
+		default:
+			break
 		}
 	}
-	
+
 	if err != nil {
 		return utils.StackError(err, "Unable to find leader of swarm")
 	}

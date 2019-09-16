@@ -17,9 +17,9 @@ import (
 	peer "github.com/libp2p/go-libp2p-core/peer"
 	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
 	crypto "github.com/libp2p/go-libp2p-crypto"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	ma "github.com/multiformats/go-multiaddr"
 	uuid "github.com/satori/go.uuid"
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/spf13/viper"
 )
 
@@ -30,7 +30,7 @@ type Host struct {
 
 	privKey crypto.PrivKey
 	pubKey  crypto.PubKey
-	
+
 	//find service
 	dht *kaddht.IpfsDHT
 
@@ -112,17 +112,17 @@ func (h *Host) Start() error {
 			continue
 		}
 	}
-	
-	//setup the dht 
+
+	//setup the dht
 	kadctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
 	h.dht, err = kaddht.New(kadctx, h.host)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup distributed hash table")
 	}
 	conf := kaddht.BootstrapConfig{
-    				Queries: 3,           // how many queries to run per period
-    				Period: 5*time.Minute, // how often to run periodic bootstrap.
-    				Timeout: 10*time.Second} // how long to wait for a bootstrap query to run
+		Queries: 3,                // how many queries to run per period
+		Period:  5 * time.Minute,  // how often to run periodic bootstrap.
+		Timeout: 10 * time.Second} // how long to wait for a bootstrap query to run
 	h.dht.BootstrapWithConfig(kadctx, conf)
 
 	//add the services
@@ -156,6 +156,9 @@ func (h *Host) Stop(ctx context.Context) error {
 		h.Data.Close()
 	}
 
+	//stop dht
+	h.dht.Close()
+
 	return h.host.Close()
 }
 
@@ -174,7 +177,7 @@ func (self *Host) SetMultipleAdress(peer PeerID, addrs []ma.Multiaddr) error {
 func (h *Host) Connect(ctx context.Context, peer PeerID) error {
 
 	info := h.host.Peerstore().PeerInfo(peer.pid())
-	if len(info.Addrs)==0 {
+	if len(info.Addrs) == 0 {
 		//go find it!
 		var err error
 		info, err = h.dht.FindPeer(ctx, peer.pid())
@@ -191,15 +194,19 @@ func (h *Host) CloseConnection(peer PeerID) error {
 
 func (h *Host) IsConnected(peer PeerID) bool {
 
-	for _, p := range h.host.Network().Peers() {
-		if peer.pid() == p {
-			if len(h.host.Network().ConnsToPeer(peer.pid())) > 0 {
-				return true
-			}
-			return false
-		}
+	return len(h.host.Network().ConnsToPeer(peer.pid())) > 0
+}
+
+func (h *Host) EnsureConnection(ctx context.Context, peer PeerID) error {
+
+	if peer == h.ID() {
+		return nil
 	}
-	return false
+
+	if h.IsConnected(peer) {
+		return nil
+	}
+	return h.Connect(ctx, peer)
 }
 
 //returns all known peers
@@ -259,12 +266,12 @@ func (h *Host) Keys() (crypto.PrivKey, crypto.PubKey) {
 func (h *Host) Swarms() []*Swarm {
 	h.swarmMutex.RLock()
 	defer h.swarmMutex.RUnlock()
-	
+
 	//return new list to make sure the returned value can be manipulated
 	//without chaning the host slice
 	newList := make([]*Swarm, len(h.swarms))
 	copy(newList, h.swarms)
-	
+
 	return newList
 }
 
@@ -274,9 +281,9 @@ func (h *Host) CreateSwarm(states []State) (*Swarm, error) {
 	defer h.swarmMutex.Unlock()
 
 	id := SwarmID(uuid.NewV4().String())
-	swarm, err := newSwarm(h, id, states, true, make([]PeerID, 0))
+	swarm, err := newSwarm(h, id, states, true, NoPeers())
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to create swarm")
 	}
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
@@ -285,10 +292,10 @@ func (h *Host) CreateSwarm(states []State) (*Swarm, error) {
 }
 
 func (h *Host) JoinSwarm(id SwarmID, states []State, knownPeers []PeerID) (*Swarm, error) {
-	
+
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	
+
 	swarm, err := newSwarm(h, id, states, false, knownPeers)
 	if err != nil {
 		return swarm, err
@@ -313,7 +320,7 @@ func (h *Host) GetSwarm(id SwarmID) (*Swarm, error) {
 
 //remove swarm from list: only called from Swarm itself in Close()
 func (h *Host) removeSwarm(id SwarmID) {
-	
+
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
 	for i, swarm := range h.swarms {

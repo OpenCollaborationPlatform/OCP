@@ -2,14 +2,14 @@
 package p2p
 
 import (
-	"time"
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
+	"time"
 
-	"github.com/spf13/viper"
 	"github.com/ickby/CollaborationNode/utils"
+	cid "github.com/ipfs/go-cid"
+	mh "github.com/multiformats/go-multihash"
 )
 
 // Type that represents a collection if peers which are connected together and form
@@ -60,6 +60,18 @@ func (id SwarmID) Pretty() string {
 	return string(id)
 }
 
+//create a cid from the swarm ID to be used in the dht
+func (id SwarmID) Cid() cid.Cid {
+	pref := cid.Prefix{
+		Version:  1,
+		Codec:    cid.Raw,
+		MhType:   mh.SHA2_256,
+		MhLength: -1}
+
+	c, _ := pref.Sum([]byte(id))
+	return c
+}
+
 //little helper to add swarms to the states
 func SwarmStates(states ...State) []State {
 	return states
@@ -67,6 +79,10 @@ func SwarmStates(states ...State) []State {
 
 func SwarmPeers(peers ...PeerID) []PeerID {
 	return peers
+}
+
+func NoPeers() []PeerID {
+	return make([]PeerID, 0)
 }
 
 /*******************************************************************************
@@ -90,7 +106,7 @@ func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool, knownPeers
 		conf:   newSwarmConfiguration(),
 		ctx:    ctx,
 		cancel: cancel,
-		path:   filepath.Join(viper.GetString("directory"), id.Pretty())}
+		path:   host.path}
 
 	//ensure our folder exist
 	os.MkdirAll(swarm.GetPath(), os.ModePerm)
@@ -109,27 +125,61 @@ func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool, knownPeers
 			return nil, utils.StackError(err, "Unable to setup swarm")
 		}
 	}
-	
+
 	//startup state sharing. If bootstrap we add ourself to the config
 	swarm.State.startup(bootstrap)
 	if bootstrap {
 		op := SwarmConfOp{false, host.ID(), AUTH_READWRITE}
 		addctx, _ := context.WithTimeout(ctx, 2*time.Second)
 		_, err := swarm.State.AddCommand(addctx, "SwarmConfiguration", op.ToBytes())
-		if err != nil{
+		if err != nil {
 			return nil, utils.StackError(err, "Unable to setup swarm")
 		}
-	
+
 	} else {
 		if len(knownPeers) != 0 {
 			cnnctx, _ := context.WithTimeout(ctx, 5*time.Second)
 			err := swarm.State.connect(cnnctx, knownPeers)
 			if err != nil {
-				return swarm, utils.StackError(err, "Unable to connect to swarm via provided peers")
+				return nil, utils.StackError(err, "Unable to connect to swarm via provided peers")
+			}
+
+		} else {
+			//let's go and search a swarm member!
+			findctx, cncl := context.WithTimeout(ctx, 60*time.Second)
+			addrChan := host.dht.FindProvidersAsync(findctx, id.Cid(), 5)
+	loop:
+		for {
+			select {
+				case info := <-addrChan:
+					if (info.ID.Validate()==nil && len(info.Addrs) != 0) {
+						err := host.SetMultipleAdress(PeerID(info.ID), info.Addrs)
+						if err != nil {
+							fmt.Printf("Unable to set adress: %v\n", err)
+						}
+						err = host.Connect(findctx, PeerID(info.ID))
+						if err != nil {
+							fmt.Printf("Unable to connect adress: %v\n", err)
+						}
+						swarm.State.connect(findctx, []PeerID{PeerID(info.ID)})
+						cncl()
+						break loop
+					}
+										
+				case <-findctx.Done():
+					//we need to go forward to announce, so no return yet
+					break loop
+				}
 			}
 		}
 	}
-
+	
+	//make our self known!
+	prvdctx, _ := context.WithTimeout(ctx, 1*time.Second)
+	err := host.dht.Provide(prvdctx, id.Cid(), true)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to announce swarm")
+	}
 	return swarm, nil
 }
 
@@ -216,6 +266,6 @@ func (s *Swarm) Close(ctx context.Context) {
 	s.Data.Close()
 	s.State.Close(ctx)
 	s.cancel()
-	
+
 	s.host.removeSwarm(s.ID)
 }
