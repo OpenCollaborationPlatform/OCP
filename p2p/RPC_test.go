@@ -1,7 +1,8 @@
 package p2p
 
-/*
+
 import (
+	"time"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -35,10 +36,10 @@ func TestBasicRPC(t *testing.T) {
 
 		h1, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h1.Stop()
+		defer h1.Stop(context.Background())
 		h2, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h2.Stop()
+		defer h2.Stop(context.Background())
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
@@ -94,51 +95,51 @@ func TestSwarmRPC(t *testing.T) {
 
 		h1, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h1.Stop()
+		defer h1.Stop(context.Background())
 		h2, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h2.Stop()
+		defer h2.Stop(context.Background())
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
+		h1.Connect(context.Background(), h2.ID())
 
-		Convey("Setting up the swarms without any peers", func() {
+		Convey("Setting up a swarm without any peers", func() {
 
-			swid := SwarmID("mytestswarm")
-			sw1 := h1.CreateSwarm(swid)
-			sw2 := h2.CreateSwarm(swid)
+			sw1, err := h1.CreateSwarm(NoStates())
+			So(err, ShouldBeNil)
 
-			Convey("registering a read only reguirement service in one swarm must work", func() {
+			Convey("registering a read only reguirement service must work", func() {
+				
 				service := Service{0}
 				err := sw1.Rpc.Register(&service, AUTH_READONLY)
 				So(err, ShouldBeNil)
 
-				Convey("but it must not be callable from the other swarm without registration", func() {
+				
+				Convey("With default ReadOnly peer added this should be callable", func() {
 
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
+					So(err, ShouldBeNil)
+					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					So(err, ShouldBeNil)
+			
 					var res int
-					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
-					So(err, ShouldNotBeNil)
-					So(res, ShouldEqual, 0)
-
-					err = h2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
-					So(err, ShouldNotBeNil)
-					So(res, ShouldEqual, 0)
-				})
-
-				Convey("With default ReadOnly peer added this should work", func() {
-
-					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READONLY)
-					var res int
-					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, 3)
 				})
 
 				Convey("as well as with ReadWrite peer", func() {
 
-					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READWRITE)
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
+					So(err, ShouldBeNil)
+					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					So(err, ShouldBeNil)
+					
 					var res int
-					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, 3)
 				})
@@ -149,35 +150,31 @@ func TestSwarmRPC(t *testing.T) {
 				service := Service{0}
 				err := sw1.Rpc.Register(&service, AUTH_READWRITE)
 				So(err, ShouldBeNil)
-				err = sw2.Rpc.Register(&service, AUTH_READONLY)
-				So(err, ShouldBeNil)
 
-				Convey("and it also must not be callable from the other swarm without registration", func() {
+				Convey("With default ReadOnly peer added this should not be callable", func() {
 
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
+					So(err, ShouldBeNil)
+					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					So(err, ShouldBeNil)
+					
 					var res int
-					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
-					So(err, ShouldNotBeNil)
-					So(res, ShouldEqual, 0)
-
-					err = h2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
-					So(err, ShouldNotBeNil)
-					So(res, ShouldEqual, 0)
-				})
-
-				Convey("With default ReadOnly peer added this should still not work", func() {
-
-					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READONLY)
-					var res int
-					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldNotBeNil)
 					So(res, ShouldEqual, 0)
 				})
 
 				Convey("but finally with ReadWrite peer it shall succeed", func() {
 
-					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READWRITE)
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
+					So(err, ShouldBeNil)
+					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					So(err, ShouldBeNil)
+
 					var res int
-					err := sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, 3)
 				})
@@ -187,4 +184,4 @@ func TestSwarmRPC(t *testing.T) {
 
 	})
 }
-*/
+

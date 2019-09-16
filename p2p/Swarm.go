@@ -77,6 +77,10 @@ func SwarmStates(states ...State) []State {
 	return states
 }
 
+func NoStates() []State {
+	return make([]State, 0)
+}
+
 func SwarmPeers(peers ...PeerID) []PeerID {
 	return peers
 }
