@@ -2,6 +2,7 @@
 package p2p
 
 import (
+	"time"
 	"context"
 	"fmt"
 	"os"
@@ -147,40 +148,24 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 
 		} else {
 			//let's go and search a swarm member!
-			findctx, cncl := context.WithCancel(ctx)
-			addrChan := host.dht.FindProvidersAsync(findctx, id.Cid(), 5)
-			
-		loop:
-			for {
-				var err error
-				select {
-				case info := <-addrChan:
-					if info.ID.Validate() == nil && len(info.Addrs) != 0 {
-					
-						err = host.SetMultipleAdress(PeerID(info.ID), info.Addrs)
-						if err != nil {
-							//we are unable to set the adresst: try the next one we find
-							break
-						}
-						err = host.Connect(ctx, PeerID(info.ID))
-						if err != nil {
-							//we are unable to connect: try the next one we find
-							break
-						}
-						//if we reached here it must be possible to connect to the swarm member... cancel search!
-						cncl()
-						err = swarm.State.connect(ctx, []PeerID{PeerID(info.ID)})
-						if err != nil {
-							//we are not able to join the swarm... that is bad!
-							return nil, utils.StackError(err, "Unable to connect to swarm states")
-						}
-						break loop
-					}
+			peerChan := swarm.findSwarmPeersAsync(ctx, 1)
 
-				case <-findctx.Done():
-					//we did not find any swarm member... return with error
-					return nil, utils.StackError(err, "Did not find any swarm member before timeout")
+			select {
+			case peer, more := <-peerChan:
+				if !more {
+					//we are not able to find any peers... that is bad!
+					return nil, fmt.Errorf("Unable to find peers to join swarm")
 				}
+				err := swarm.State.connect(ctx, []PeerID{peer})
+				if err != nil {
+					//we are not able to join the swarm... that is bad!
+					return nil, utils.StackError(err, "Unable to connect to swarm states")
+				}
+				break
+				
+			case <-ctx.Done():
+				//we did not find any swarm member... return with error
+				return nil, fmt.Errorf("Did not find any swarm members before timeout")
 			}
 		}
 	}
@@ -190,7 +175,84 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to announce swarm")
 	}
+	
+	//and make sure we stay known!
+	ticker := time.NewTicker(10 * time.Hour)
+	go func() {
+	    for {
+	       select {
+	        case <- ticker.C:
+				providectx, _ := context.WithTimeout(swarmctx, 60*time.Minute)
+	            host.dht.Provide(providectx, id.Cid(), true)
+
+	        case <- swarmctx.Done():
+	            ticker.Stop()
+	            return
+	        }
+	    }
+	 }()
+	
 	return swarm, nil
+}
+
+//finds and connects other peers in the swarm
+func (self *Swarm) findSwarmPeersAsync(ctx context.Context, num int) <-chan PeerID {
+	
+	//we look for hosts that provide the swarm CID. However, cids are always provided
+	//for min. 24h. That means we afterwards need to check if the host still has the 
+	//swarm active by querying the host API
+	ret := make(chan PeerID, num)
+
+	go func() {
+	
+		dhtCtx, cncl := context.WithCancel(ctx)
+		input := self.host.dht.FindProvidersAsync(dhtCtx, self.ID.Cid(), num*5)		
+		found := 0
+		for {
+			select {
+			
+			case info, more := <-input:
+				if !more {
+					close(ret)
+					cncl()
+					return
+				}
+				if (info.ID.Validate()==nil && len(info.Addrs)!= 0 && info.ID != self.host.ID().pid()) {
+					
+					self.host.SetMultipleAdress(PeerID(info.ID), info.Addrs)
+					self.host.EnsureConnection(ctx, PeerID(info.ID))
+					
+					//check host api!
+					var has bool
+					err := self.host.Rpc.CallContext(ctx, info.ID, "HostRPCApi", "HasSwarm", self.ID, &has)
+					if err != nil {
+						break //wait for next peer if contacting failed for whatever reason
+					}
+					if !has {
+						break //wait for next peer if this one does not have the swarm anymore
+					}
+					
+					//found a peer! return it
+					ret <- PeerID(info.ID)
+					
+					//check if we have enough!
+					found = found + 1
+					if found >= num {
+						close(ret)
+						cncl()
+						return
+					}
+				}
+				
+			case <-ctx.Done():
+				close (ret)
+				cncl()
+				return
+			}
+		}
+	}()
+	
+	return ret
 }
 
 /* Peer handling

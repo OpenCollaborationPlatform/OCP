@@ -23,6 +23,17 @@ import (
 	"github.com/spf13/viper"
 )
 
+//RPC Api of the host
+type HostRPCApi struct {
+	host *Host
+}
+
+func (self HostRPCApi) HasSwarm(ctx context.Context, id SwarmID, has *bool) error {
+	_, err := self.host.GetSwarm(id)
+	*has = (err == nil)
+	return nil
+}
+
 type Host struct {
 	host       p2phost.Host
 	swarmMutex sync.RWMutex
@@ -127,6 +138,10 @@ func (h *Host) Start() error {
 
 	//add the services
 	h.Rpc = newRpcService(h)
+	err = h.Rpc.Register(&HostRPCApi{h})
+	if err != nil {
+		return utils.StackError(err, "Unable to register Host API")
+	}
 	h.Data, err = NewDataService(h)
 	if err != nil {
 		return utils.StackError(err, "Unable to startup data service")
