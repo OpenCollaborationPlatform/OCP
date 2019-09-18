@@ -152,32 +152,38 @@ func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool, knownPeers
 			//let's go and search a swarm member!
 			findctx, cncl := context.WithTimeout(ctx, 60*time.Second)
 			addrChan := host.dht.FindProvidersAsync(findctx, id.Cid(), 5)
-	loop:
-		for {
-			select {
+		loop:
+			for {
+				select {
 				case info := <-addrChan:
-					if (info.ID.Validate()==nil && len(info.Addrs) != 0) {
+					if info.ID.Validate() == nil && len(info.Addrs) != 0 {
+						cncl()
 						err := host.SetMultipleAdress(PeerID(info.ID), info.Addrs)
 						if err != nil {
-							fmt.Printf("Unable to set adress: %v\n", err)
+							//we are unable to set the adresst: try the next one we find
+							break
 						}
 						err = host.Connect(findctx, PeerID(info.ID))
 						if err != nil {
-							fmt.Printf("Unable to connect adress: %v\n", err)
+							//we are unable to connect: try the next one we find
+							break
 						}
-						swarm.State.connect(findctx, []PeerID{PeerID(info.ID)})
-						cncl()
+						err = swarm.State.connect(findctx, []PeerID{PeerID(info.ID)})
+						if err != nil {
+							//we are not able to join the swarm... that is bad!
+							return nil, utils.StackError(err, "Unable to connect to swarm states")
+						}
 						break loop
 					}
-										
+
 				case <-findctx.Done():
-					//we need to go forward to announce, so no return yet
-					break loop
+					//we did not find any swarm member... return with error
+					return nil, fmt.Errorf("Did not find any swarm member before timeout")
 				}
 			}
 		}
 	}
-	
+
 	//make our self known!
 	prvdctx, _ := context.WithTimeout(ctx, 1*time.Second)
 	err := host.dht.Provide(prvdctx, id.Cid(), true)

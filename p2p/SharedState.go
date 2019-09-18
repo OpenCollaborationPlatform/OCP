@@ -230,17 +230,21 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 
 		err = self.swarm.host.EnsureConnection(callctx, peer)
 		if err != nil {
-			return utils.StackError(err, "Unable to connect to leader")
+			continue
 		}
 
 		err = self.swarm.Rpc.CallContext(callctx, peer.pid(), "ReplicaReadAPI", "GetLeader", struct{}{}, &leader)
 		if err == nil {
 			break
 		}
+		
 		//check if the context is still alive
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("Connect timed out")
+			if err != nil {
+				return utils.StackError(err, "Unable to inquery leader")
+			}
+			return fmt.Errorf("Connect timed out: unable to find leader")
 		default:
 			break
 		}

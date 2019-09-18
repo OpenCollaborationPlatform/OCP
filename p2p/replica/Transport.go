@@ -2,9 +2,9 @@ package replica
 
 import (
 	"context"
-	"log"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"time"
 
@@ -13,10 +13,9 @@ import (
 	"github.com/libp2p/go-libp2p-core/protocol"
 
 	"github.com/hashicorp/raft"
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-	gostream "github.com/libp2p/go-libp2p-gostream"
 	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
-
+	gostream "github.com/libp2p/go-libp2p-gostream"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
 const raftBaseProtocol string = "/ocpraft/1.0.0/"
@@ -31,19 +30,19 @@ var logLogger = log.New(&logForwarder{}, "", 0)
 // According to https://golang.org/pkg/log/#Logger.Output
 // it is called per line.
 func (fw *logForwarder) Write(p []byte) (n int, err error) {
-/*	 t := strings.TrimSuffix(string(p), "\n")
-	 switch {
-	 case strings.Contains(t, "[DEBUG]"):
-	 	log.Println(strings.TrimPrefix(t, "[DEBUG] raft-net: "))
-	 case strings.Contains(t, "[WARN]"):
-	 	log.Println(strings.TrimPrefix(t, "[WARN]  raft-net: "))
-	 case strings.Contains(t, "[ERR]"):
-	 	log.Println(strings.TrimPrefix(t, "[ERR] raft-net: "))
-	 case strings.Contains(t, "[INFO]"):
-	 	log.Println(strings.TrimPrefix(t, "[INFO] raft-net: "))
-	 default:
-	 	log.Println(t)
-	 }*/
+	/*	 t := strings.TrimSuffix(string(p), "\n")
+		 switch {
+		 case strings.Contains(t, "[DEBUG]"):
+		 	log.Println(strings.TrimPrefix(t, "[DEBUG] raft-net: "))
+		 case strings.Contains(t, "[WARN]"):
+		 	log.Println(strings.TrimPrefix(t, "[WARN]  raft-net: "))
+		 case strings.Contains(t, "[ERR]"):
+		 	log.Println(strings.TrimPrefix(t, "[ERR] raft-net: "))
+		 case strings.Contains(t, "[INFO]"):
+		 	log.Println(strings.TrimPrefix(t, "[INFO] raft-net: "))
+		 default:
+		 	log.Println(t)
+		 }*/
 	return len(p), nil
 }
 
@@ -81,7 +80,7 @@ func (sl *streamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (
 	if err != nil {
 		return nil, err
 	}
-	
+
 	//check if we know the peer, or find it otherwise
 	addrs := sl.host.Peerstore().Addrs(pid)
 	if len(addrs) == 0 && pid != sl.host.ID() {
@@ -90,7 +89,7 @@ func (sl *streamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (
 		if err != nil {
 			return nil, err
 		}
-		if info.ID == "" || len(info.Addrs)==0 {
+		if info.ID == "" || len(info.Addrs) == 0 {
 			return nil, fmt.Errorf("Peer not found, no connection possible")
 		}
 		sl.host.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.PermanentAddrTTL)

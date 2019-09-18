@@ -41,22 +41,21 @@ func toByte(val int64) []byte {
 	return buf
 }
 
-
 func TestSingleNodeSharedState(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "p2p")
 	defer os.RemoveAll(path)
-	
+
 	h0, _ := temporaryHost(path)
 	defer h0.Stop(context.Background())
-		
+
 	h1, _ := temporaryHost(path)
 	ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 	defer h1.Stop(ctx)
-	
+
 	h1.SetMultipleAdress(h0.ID(), h0.OwnAddresses())
-	h1.Connect(context.Background(), h0.ID())	
+	h1.Connect(context.Background(), h0.ID())
 
 	Convey("Creating swarms and sharing services shall be possible", t, func() {
 
@@ -65,6 +64,7 @@ func TestSingleNodeSharedState(t *testing.T) {
 		sw1, err := h1.CreateSwarm(SwarmStates(st1))
 		So(err, ShouldBeNil)
 		So(sw1, ShouldNotBeNil)
+		time.Sleep(50*time.Millisecond)
 
 		So(sw1.HasPeer(h1.ID()), ShouldBeTrue)
 
@@ -93,7 +93,7 @@ func TestBasicSharedState(t *testing.T) {
 
 		h1, _ := temporaryHost(path)
 		defer h1.Stop(context.Background())
-		
+
 		h2, _ := temporaryHost(path)
 		defer h2.Stop(context.Background())
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
@@ -103,7 +103,8 @@ func TestBasicSharedState(t *testing.T) {
 		st1 := &testState{0}
 		sw1, err := h1.CreateSwarm(SwarmStates(st1))
 		So(err, ShouldBeNil)
-		
+		time.Sleep(50*time.Millisecond)
+
 		st2 := &testState{0}
 
 		Convey("Joining from different host without adding it as peer before should fail", func() {
@@ -201,6 +202,8 @@ func TestConnectionStrategy(t *testing.T) {
 			sw2, err := h2.CreateSwarm(SwarmStates(st2))
 			So(err, ShouldBeNil)
 			So(sw2, ShouldNotBeNil)
+			time.Sleep(50*time.Millisecond)
+			
 			err = sw2.AddPeer(closeCtx, h3.ID(), AUTH_READWRITE)
 			So(err, ShouldBeNil)
 			//we wait till provide is done!

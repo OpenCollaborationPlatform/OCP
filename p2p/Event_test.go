@@ -1,6 +1,5 @@
 package p2p
 
-/*
 import (
 	"bytes"
 	"context"
@@ -46,10 +45,10 @@ func TestBasicEvent(t *testing.T) {
 
 		h1, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h1.Stop()
+		defer h1.Stop(context.Background())
 		h2, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h2.Stop()
+		defer h2.Stop(context.Background())
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
@@ -119,69 +118,61 @@ func TestSwarmEvent(t *testing.T) {
 
 		h1, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h1.Stop()
+		defer h1.Stop(context.Background())
 		h2, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h2.Stop()
+		defer h2.Stop(context.Background())
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
 		h2.Connect(context.Background(), h1.ID())
 
-		Convey("Having a swarm for each host", func() {
+		Convey("Creating a swarm on the first host", func() {
 
-			swid := SwarmID("myswarm")
-			sw1 := h1.CreateSwarm(swid)
-			sw2 := h2.CreateSwarm(swid)
+			sw1, err := h1.CreateSwarm(NoStates())
+			So(err, ShouldBeNil)
+			time.Sleep(50*time.Millisecond)
 
-			Convey("registering with ReadOnly requirement should work", func() {
+			Convey("Registering with ReadOnly requirement should work", func() {
 
 				sub1, err := sw1.Event.Subscribe("testtopic", AUTH_READONLY)
 				So(err, ShouldBeNil)
-				sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READONLY)
-				So(err, ShouldBeNil)
 
-				Convey("Calling wthout adding the peers will fail (except for itself)", func() {
+				Convey("as well as publishing without adding a peers to the swarm", func() {
 					num1 := 0
 					data1 := make([][]byte, 0)
 					closed1 := false
 					m1 := asyncCatchEvents(sub1, &num1, &data1, &closed1)
-
-					num2 := 0
-					data2 := make([][]byte, 0)
-					closed2 := false
-					m2 := asyncCatchEvents(sub2, &num2, &data2, &closed2)
 
 					h1.Event.Publish("testtopic", []byte("data"))
 					sw1.Event.Publish("testtopic", []byte("data"))
 					time.Sleep(100 * time.Millisecond)
 
 					m1.Lock()
-					m2.Lock()
 					So(num1, ShouldEqual, 1)
-					So(num2, ShouldEqual, 0)
 					m1.Unlock()
-					m2.Unlock()
 
-					h2.Event.Publish("testtopic", []byte("data"))
-					sw2.Event.Publish("testtopic", []byte("data"))
-					time.Sleep(100 * time.Millisecond)
 					sub1.Cancel()
-					sub2.Cancel()
 					time.Sleep(100 * time.Millisecond)
 
 					m1.Lock()
-					m2.Lock()
 					So(num1, ShouldEqual, 1)
-					So(num2, ShouldEqual, 1)
 					So(closed1, ShouldBeTrue)
-					So(closed2, ShouldBeTrue)
 					m1.Unlock()
-					m2.Unlock()
 				})
 
-				Convey("Adding one peer to the other swarm shall allow this one to publish", func() {
-
+				Convey("Adding one ReadOnly peer to the swarm shall allow this one to publish", func() {
+					
+					ctx,_ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
+					So(err, ShouldBeNil)
+					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					So(err, ShouldBeNil)
+					time.Sleep(50*time.Millisecond)
+					
+					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READONLY)
+					So(err, ShouldBeNil)
+			
 					num1 := 0
 					data1 := make([][]byte, 0)
 					closed1 := false
@@ -192,15 +183,13 @@ func TestSwarmEvent(t *testing.T) {
 					closed2 := false
 					m2 := asyncCatchEvents(sub2, &num2, &data2, &closed2)
 
-					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READONLY)
-
 					sw1.Event.Publish("testtopic", []byte("data"))
 					time.Sleep(100 * time.Millisecond)
 
 					m1.Lock()
 					m2.Lock()
 					So(num1, ShouldEqual, 1)
-					So(num2, ShouldEqual, 0)
+					So(num2, ShouldEqual, 1)
 					m1.Unlock()
 					m2.Unlock()
 
@@ -213,7 +202,7 @@ func TestSwarmEvent(t *testing.T) {
 					m1.Lock()
 					m2.Lock()
 					So(num1, ShouldEqual, 2)
-					So(num2, ShouldEqual, 1)
+					So(num2, ShouldEqual, 2)
 					So(closed1, ShouldBeTrue)
 					So(closed2, ShouldBeTrue)
 					m1.Unlock()
@@ -226,48 +215,38 @@ func TestSwarmEvent(t *testing.T) {
 
 				sub1, err := sw1.Event.Subscribe("testtopic", AUTH_READWRITE)
 				So(err, ShouldBeNil)
-				sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READWRITE)
-				So(err, ShouldBeNil)
 
-				Convey("and unadded as well as unauthorized peers shall not be to publish", func() {
-
-					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READONLY)
+				Convey("and the peer itself shall be able to publish", func() {
 
 					num1 := 0
 					data1 := make([][]byte, 0)
 					closed1 := false
 					m1 := asyncCatchEvents(sub1, &num1, &data1, &closed1)
 
-					num2 := 0
-					data2 := make([][]byte, 0)
-					closed2 := false
-					m2 := asyncCatchEvents(sub2, &num2, &data2, &closed2)
-
 					sw1.Event.Publish("testtopic", []byte("data"))
-					sw2.Event.Publish("testtopic", []byte("data"))
 					time.Sleep(100 * time.Millisecond)
 
 					sub1.Cancel()
-					sub2.Cancel()
 					time.Sleep(100 * time.Millisecond)
 
 					m1.Lock()
-					m2.Lock()
 					So(num1, ShouldEqual, 1) //you can always call yourself
-					So(num2, ShouldEqual, 1) //you can always call yourself
 					So(closed1, ShouldBeTrue)
-					So(closed2, ShouldBeTrue)
 					m1.Unlock()
-					m2.Unlock()
 				})
 
-				Convey("If a authorisation exists, events for ReadWrite shall pass", func() {
+				Convey("If a second peer witth correct authorisation exists, events for ReadWrite shall pass", func() {
 
-					//h2 is allowed to post ReadWrite events to swarm 1, but not the other
-					//way around
-					sw1.AddPeer(context.Background(), h2.ID(), AUTH_READWRITE)
-					sw2.AddPeer(context.Background(), h1.ID(), AUTH_READONLY)
-
+					ctx,_ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
+					So(err, ShouldBeNil)
+					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					So(err, ShouldBeNil)
+					time.Sleep(50*time.Millisecond)
+					
+					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READWRITE)
+					So(err, ShouldBeNil)
+				
 					num1 := 0
 					data1 := make([][]byte, 0)
 					closed1 := false
@@ -288,10 +267,44 @@ func TestSwarmEvent(t *testing.T) {
 					So(closed1, ShouldBeTrue)
 					So(num1, ShouldEqual, 2)
 					So(closed2, ShouldBeTrue)
+					So(num2, ShouldEqual, 2)
+				})
+				
+				Convey("If a second peer with read only authorisation exists, events from this peer shall not pass", func() {
+
+					ctx,_ := context.WithTimeout(context.Background(), 1*time.Second)
+					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
+					So(err, ShouldBeNil)
+					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					So(err, ShouldBeNil)
+					time.Sleep(50*time.Millisecond)
+					
+					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READWRITE)
+					So(err, ShouldBeNil)
+				
+					num1 := 0
+					data1 := make([][]byte, 0)
+					closed1 := false
+					asyncCatchEvents(sub1, &num1, &data1, &closed1)
+
+					num2 := 0
+					data2 := make([][]byte, 0)
+					closed2 := false
+					asyncCatchEvents(sub2, &num2, &data2, &closed2)
+
+					sw1.Event.Publish("testtopic", []byte("data"))
+					sw2.Event.Publish("testtopic", []byte("data"))
+					time.Sleep(100 * time.Millisecond)
+					sub1.Cancel()
+					sub2.Cancel()
+					time.Sleep(100 * time.Millisecond)
+
+					So(closed1, ShouldBeTrue)
+					So(num1, ShouldEqual, 1)
+					So(closed2, ShouldBeTrue)
 					So(num2, ShouldEqual, 1)
 				})
 			})
 		})
 	})
 }
-*/

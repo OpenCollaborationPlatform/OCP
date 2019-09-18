@@ -1,13 +1,12 @@
 package p2p
 
-
 import (
-	"time"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -108,14 +107,14 @@ func TestSwarmRPC(t *testing.T) {
 
 			sw1, err := h1.CreateSwarm(NoStates())
 			So(err, ShouldBeNil)
+			time.Sleep(50*time.Millisecond)
 
 			Convey("registering a read only reguirement service must work", func() {
-				
+
 				service := Service{0}
 				err := sw1.Rpc.Register(&service, AUTH_READONLY)
 				So(err, ShouldBeNil)
 
-				
 				Convey("With default ReadOnly peer added this should be callable", func() {
 
 					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
@@ -123,7 +122,7 @@ func TestSwarmRPC(t *testing.T) {
 					So(err, ShouldBeNil)
 					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
-			
+
 					var res int
 					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
@@ -137,7 +136,7 @@ func TestSwarmRPC(t *testing.T) {
 					So(err, ShouldBeNil)
 					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
-					
+
 					var res int
 					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
@@ -158,7 +157,7 @@ func TestSwarmRPC(t *testing.T) {
 					So(err, ShouldBeNil)
 					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
-					
+
 					var res int
 					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
 					So(err, ShouldNotBeNil)
@@ -179,9 +178,6 @@ func TestSwarmRPC(t *testing.T) {
 					So(res, ShouldEqual, 3)
 				})
 			})
-
 		})
-
 	})
 }
-

@@ -1,9 +1,9 @@
 package replica
 
 import (
-	"io/ioutil"
 	"context"
 	"fmt"
+	"io/ioutil"
 
 	"os"
 	"path/filepath"
@@ -55,7 +55,7 @@ func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT
 
 	//setup the state
 	state := newMultiState()
-	
+
 	return &Replica{host, dht, state, nil, logStore, stableStore, snapshots, name}, nil
 }
 
