@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
 	cid "github.com/ipfs/go-cid"
@@ -99,16 +98,16 @@ func NoPeers() []PeerID {
 //states:		All states that shall be shared by the swarm
 //bootstrap:		True if this is a new swarm and should be startup, false if we join an existing swarm
 //knownPeers:	A list of known peers that are in the swarm (only relevant if bootstrap=false)
-func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool, knownPeers []PeerID) (*Swarm, error) {
+func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, bootstrap bool, knownPeers []PeerID) (*Swarm, error) {
 
 	//the context to use for all goroutines
-	ctx, cancel := context.WithCancel(context.Background())
+	swarmctx, cancel := context.WithCancel(context.Background())
 
 	swarm := &Swarm{
 		host:   host,
 		ID:     id,
 		conf:   newSwarmConfiguration(),
-		ctx:    ctx,
+		ctx:    swarmctx,
 		cancel: cancel,
 		path:   host.path}
 
@@ -134,41 +133,43 @@ func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool, knownPeers
 	swarm.State.startup(bootstrap)
 	if bootstrap {
 		op := SwarmConfOp{false, host.ID(), AUTH_READWRITE}
-		addctx, _ := context.WithTimeout(ctx, 2*time.Second)
-		_, err := swarm.State.AddCommand(addctx, "SwarmConfiguration", op.ToBytes())
+		_, err := swarm.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to setup swarm")
 		}
 
 	} else {
 		if len(knownPeers) != 0 {
-			cnnctx, _ := context.WithTimeout(ctx, 5*time.Second)
-			err := swarm.State.connect(cnnctx, knownPeers)
+			err := swarm.State.connect(ctx, knownPeers)
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to connect to swarm via provided peers")
 			}
 
 		} else {
 			//let's go and search a swarm member!
-			findctx, cncl := context.WithTimeout(ctx, 60*time.Second)
+			findctx, cncl := context.WithCancel(ctx)
 			addrChan := host.dht.FindProvidersAsync(findctx, id.Cid(), 5)
+			
 		loop:
 			for {
+				var err error
 				select {
 				case info := <-addrChan:
 					if info.ID.Validate() == nil && len(info.Addrs) != 0 {
-						cncl()
-						err := host.SetMultipleAdress(PeerID(info.ID), info.Addrs)
+					
+						err = host.SetMultipleAdress(PeerID(info.ID), info.Addrs)
 						if err != nil {
 							//we are unable to set the adresst: try the next one we find
 							break
 						}
-						err = host.Connect(findctx, PeerID(info.ID))
+						err = host.Connect(ctx, PeerID(info.ID))
 						if err != nil {
 							//we are unable to connect: try the next one we find
 							break
 						}
-						err = swarm.State.connect(findctx, []PeerID{PeerID(info.ID)})
+						//if we reached here it must be possible to connect to the swarm member... cancel search!
+						cncl()
+						err = swarm.State.connect(ctx, []PeerID{PeerID(info.ID)})
 						if err != nil {
 							//we are not able to join the swarm... that is bad!
 							return nil, utils.StackError(err, "Unable to connect to swarm states")
@@ -178,15 +179,14 @@ func newSwarm(host *Host, id SwarmID, states []State, bootstrap bool, knownPeers
 
 				case <-findctx.Done():
 					//we did not find any swarm member... return with error
-					return nil, fmt.Errorf("Did not find any swarm member before timeout")
+					return nil, utils.StackError(err, "Did not find any swarm member before timeout")
 				}
 			}
 		}
 	}
 
 	//make our self known!
-	prvdctx, _ := context.WithTimeout(ctx, 1*time.Second)
-	err := host.dht.Provide(prvdctx, id.Cid(), true)
+	err := host.dht.Provide(ctx, id.Cid(), true)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to announce swarm")
 	}

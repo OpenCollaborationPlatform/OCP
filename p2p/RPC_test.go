@@ -105,7 +105,7 @@ func TestSwarmRPC(t *testing.T) {
 
 		Convey("Setting up a swarm without any peers", func() {
 
-			sw1, err := h1.CreateSwarm(NoStates())
+			sw1, err := h1.CreateSwarm(context.Background(), NoStates())
 			So(err, ShouldBeNil)
 			time.Sleep(50*time.Millisecond)
 
@@ -120,7 +120,7 @@ func TestSwarmRPC(t *testing.T) {
 					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
 					So(err, ShouldBeNil)
-					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
 
 					var res int
@@ -134,7 +134,7 @@ func TestSwarmRPC(t *testing.T) {
 					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
 					So(err, ShouldBeNil)
-					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
 
 					var res int
@@ -155,7 +155,7 @@ func TestSwarmRPC(t *testing.T) {
 					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
 					So(err, ShouldBeNil)
-					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
 
 					var res int
@@ -169,7 +169,7 @@ func TestSwarmRPC(t *testing.T) {
 					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
 					So(err, ShouldBeNil)
-					sw2, err := h2.JoinSwarm(sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
 
 					var res int

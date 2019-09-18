@@ -61,7 +61,7 @@ func TestSingleNodeSharedState(t *testing.T) {
 
 		//create the swarm rigth away so that they get the correct directory to us
 		st1 := &testState{0}
-		sw1, err := h1.CreateSwarm(SwarmStates(st1))
+		sw1, err := h1.CreateSwarm(context.Background(), SwarmStates(st1))
 		So(err, ShouldBeNil)
 		So(sw1, ShouldNotBeNil)
 		time.Sleep(50*time.Millisecond)
@@ -101,7 +101,7 @@ func TestBasicSharedState(t *testing.T) {
 		h1.Connect(context.Background(), h2.ID())
 
 		st1 := &testState{0}
-		sw1, err := h1.CreateSwarm(SwarmStates(st1))
+		sw1, err := h1.CreateSwarm(context.Background(), SwarmStates(st1))
 		So(err, ShouldBeNil)
 		time.Sleep(50*time.Millisecond)
 
@@ -109,7 +109,7 @@ func TestBasicSharedState(t *testing.T) {
 
 		Convey("Joining from different host without adding it as peer before should fail", func() {
 
-			sw2, err := h2.JoinSwarm(sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
+			sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
 			So(err, ShouldNotBeNil)
 			So(sw2, ShouldBeNil)
 		})
@@ -124,7 +124,7 @@ func TestBasicSharedState(t *testing.T) {
 
 			Convey("Joining of the new swarm should work", func() {
 
-				sw2, err := h2.JoinSwarm(sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
+				sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
 				time.Sleep(500 * time.Millisecond) //wait till replication finished
 				So(err, ShouldBeNil)
 				So(sw2.HasPeer(h1.ID()), ShouldBeTrue)
@@ -199,7 +199,7 @@ func TestConnectionStrategy(t *testing.T) {
 		Convey("Creating a swarm on host 2 (with host 3 as peer)", func() {
 
 			st2 := &testState{0}
-			sw2, err := h2.CreateSwarm(SwarmStates(st2))
+			sw2, err := h2.CreateSwarm(context.Background(), SwarmStates(st2))
 			So(err, ShouldBeNil)
 			So(sw2, ShouldNotBeNil)
 			time.Sleep(50*time.Millisecond)
@@ -207,15 +207,15 @@ func TestConnectionStrategy(t *testing.T) {
 			err = sw2.AddPeer(closeCtx, h3.ID(), AUTH_READWRITE)
 			So(err, ShouldBeNil)
 			//we wait till provide is done!
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 
 			Convey("Host 3 should be able to join without knowing host 2", func() {
 
 				st3 := &testState{0}
-				sw3, err := h3.JoinSwarm(sw2.ID, SwarmStates(st3), NoPeers())
+				sw3, err := h3.JoinSwarm(context.Background(), sw2.ID, SwarmStates(st3), NoPeers())
 				So(err, ShouldBeNil)
 				So(sw3, ShouldNotBeNil)
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
 
 				Convey("And states work as expected", func() {
 					ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
@@ -241,7 +241,9 @@ func TestConnectionStrategy(t *testing.T) {
 					st4 := &testState{0}
 					err = sw2.AddPeer(ctx, h4.ID(), AUTH_READWRITE)
 					So(err, ShouldBeNil)
-					sw4, err := h4.JoinSwarm(sw2.ID, SwarmStates(st4), NoPeers())
+					time.Sleep(50*time.Millisecond)
+					
+					sw4, err := h4.JoinSwarm(context.Background(), sw2.ID, SwarmStates(st4), NoPeers())
 					So(err, ShouldBeNil)
 
 					Convey("should also connect everything together well", func() {

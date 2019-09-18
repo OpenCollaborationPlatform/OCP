@@ -242,7 +242,7 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 		select {
 		case <-ctx.Done():
 			if err != nil {
-				return utils.StackError(err, "Unable to inquery leader")
+				return utils.StackError(err, "Unable to inquery leader (asking peer %v)", peer)
 			}
 			return fmt.Errorf("Connect timed out: unable to find leader")
 		default:
