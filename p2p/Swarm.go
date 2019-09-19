@@ -2,10 +2,10 @@
 package p2p
 
 import (
-	"time"
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
 	cid "github.com/ipfs/go-cid"
@@ -162,7 +162,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 					return nil, utils.StackError(err, "Unable to connect to swarm states")
 				}
 				break
-				
+
 			case <-ctx.Done():
 				//we did not find any swarm member... return with error
 				return nil, fmt.Errorf("Did not find any swarm members before timeout")
@@ -175,53 +175,53 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to announce swarm")
 	}
-	
+
 	//and make sure we stay known!
 	ticker := time.NewTicker(10 * time.Hour)
 	go func() {
-	    for {
-	       select {
-	        case <- ticker.C:
+		for {
+			select {
+			case <-ticker.C:
 				providectx, _ := context.WithTimeout(swarmctx, 60*time.Minute)
-	            host.dht.Provide(providectx, id.Cid(), true)
+				host.dht.Provide(providectx, id.Cid(), true)
 
-	        case <- swarmctx.Done():
-	            ticker.Stop()
-	            return
-	        }
-	    }
-	 }()
-	
+			case <-swarmctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+
 	return swarm, nil
 }
 
 //finds and connects other peers in the swarm
 func (self *Swarm) findSwarmPeersAsync(ctx context.Context, num int) <-chan PeerID {
-	
+
 	//we look for hosts that provide the swarm CID. However, cids are always provided
-	//for min. 24h. That means we afterwards need to check if the host still has the 
+	//for min. 24h. That means we afterwards need to check if the host still has the
 	//swarm active by querying the host API
 	ret := make(chan PeerID, num)
 
 	go func() {
-	
+
 		dhtCtx, cncl := context.WithCancel(ctx)
-		input := self.host.dht.FindProvidersAsync(dhtCtx, self.ID.Cid(), num*5)		
+		input := self.host.dht.FindProvidersAsync(dhtCtx, self.ID.Cid(), num*5)
 		found := 0
 		for {
 			select {
-			
+
 			case info, more := <-input:
 				if !more {
 					close(ret)
 					cncl()
 					return
 				}
-				if (info.ID.Validate()==nil && len(info.Addrs)!= 0 && info.ID != self.host.ID().pid()) {
-					
+				if info.ID.Validate() == nil && len(info.Addrs) != 0 && info.ID != self.host.ID().pid() {
+
 					self.host.SetMultipleAdress(PeerID(info.ID), info.Addrs)
 					self.host.EnsureConnection(ctx, PeerID(info.ID))
-					
+
 					//check host api!
 					var has bool
 					err := self.host.Rpc.CallContext(ctx, info.ID, "HostRPCApi", "HasSwarm", self.ID, &has)
@@ -231,10 +231,10 @@ func (self *Swarm) findSwarmPeersAsync(ctx context.Context, num int) <-chan Peer
 					if !has {
 						break //wait for next peer if this one does not have the swarm anymore
 					}
-					
+
 					//found a peer! return it
 					ret <- PeerID(info.ID)
-					
+
 					//check if we have enough!
 					found = found + 1
 					if found >= num {
@@ -243,15 +243,15 @@ func (self *Swarm) findSwarmPeersAsync(ctx context.Context, num int) <-chan Peer
 						return
 					}
 				}
-				
+
 			case <-ctx.Done():
-				close (ret)
+				close(ret)
 				cncl()
 				return
 			}
 		}
 	}()
-	
+
 	return ret
 }
 

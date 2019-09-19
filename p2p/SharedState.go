@@ -237,7 +237,7 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 		if err == nil {
 			break
 		}
-		
+
 		//check if the context is still alive
 		select {
 		case <-ctx.Done():

@@ -64,7 +64,7 @@ func TestSingleNodeSharedState(t *testing.T) {
 		sw1, err := h1.CreateSwarm(context.Background(), SwarmStates(st1))
 		So(err, ShouldBeNil)
 		So(sw1, ShouldNotBeNil)
-		time.Sleep(50*time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 
 		So(sw1.HasPeer(h1.ID()), ShouldBeTrue)
 
@@ -103,7 +103,7 @@ func TestBasicSharedState(t *testing.T) {
 		st1 := &testState{0}
 		sw1, err := h1.CreateSwarm(context.Background(), SwarmStates(st1))
 		So(err, ShouldBeNil)
-		time.Sleep(50*time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 
 		st2 := &testState{0}
 
@@ -202,8 +202,8 @@ func TestConnectionStrategy(t *testing.T) {
 			sw2, err := h2.CreateSwarm(context.Background(), SwarmStates(st2))
 			So(err, ShouldBeNil)
 			So(sw2, ShouldNotBeNil)
-			time.Sleep(50*time.Millisecond)
-			
+			time.Sleep(50 * time.Millisecond)
+
 			err = sw2.AddPeer(closeCtx, h3.ID(), AUTH_READWRITE)
 			So(err, ShouldBeNil)
 			//we wait till provide is done!
@@ -241,8 +241,8 @@ func TestConnectionStrategy(t *testing.T) {
 					st4 := &testState{0}
 					err = sw2.AddPeer(ctx, h4.ID(), AUTH_READWRITE)
 					So(err, ShouldBeNil)
-					time.Sleep(50*time.Millisecond)
-					
+					time.Sleep(50 * time.Millisecond)
+
 					sw4, err := h4.JoinSwarm(context.Background(), sw2.ID, SwarmStates(st4), NoPeers())
 					So(err, ShouldBeNil)
 

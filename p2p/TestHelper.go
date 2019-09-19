@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -17,7 +18,9 @@ import (
 	ipfswriter "github.com/ipfs/go-log/writer"
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	uuid "github.com/satori/go.uuid"
+
 	"github.com/spf13/viper"
 )
 
@@ -101,6 +104,17 @@ func randomHostWithoutDataSerivce() (*Host, error) {
 
 	host := &Host{host: p2phost, swarms: make([]*Swarm, 0)}
 	host.Rpc = newRpcService(host)
+
+	kadctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+	host.dht, err = kaddht.New(kadctx, host.host)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to setup distributed hash table")
+	}
+	conf := kaddht.BootstrapConfig{
+		Queries: 3,                // how many queries to run per period
+		Period:  5 * time.Minute,  // how often to run periodic bootstrap.
+		Timeout: 10 * time.Second} // how long to wait for a bootstrap query to run
+	host.dht.BootstrapWithConfig(kadctx, conf)
 
 	return host, nil
 }

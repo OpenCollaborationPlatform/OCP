@@ -497,7 +497,7 @@ func newDataState(service *swarmDataService) *dataState {
 	}
 }
 
-func (self *dataState) Apply(data []byte) error {
+func (self *dataState) Apply(data []byte) interface{} {
 
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
@@ -524,24 +524,7 @@ func (self *dataState) Apply(data []byte) error {
 		self.service.internalFetchAsync(cmd.File)
 	}
 
-	return nil
-}
-
-func (self *dataState) Reset() error {
-
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
-
-	//drop all files we currently have
-	for _, file := range self.files {
-		err := self.service.internalDrop(file)
-		if err != nil {
-			return err
-		}
-	}
-
-	self.files = make([]cid.Cid, 0)
-	return nil
+	return len(self.files)
 }
 
 func (self *dataState) Snapshot() ([]byte, error) {
@@ -555,31 +538,6 @@ func (self *dataState) Snapshot() ([]byte, error) {
 		return nil, err
 	}
 	return buf.Bytes(), nil
-}
-
-func (self *dataState) EnsureSnapshot(snap []byte) error {
-
-	self.mutex.RLock()
-	defer self.mutex.RUnlock()
-
-	buf := bytes.NewBuffer(snap)
-	var list []cid.Cid
-	err := gob.NewEncoder(buf).Encode(&list)
-	if err != nil {
-		return err
-	}
-
-	//compare lists
-	if len(list) != len(self.files) {
-		return fmt.Errorf("Snapshot does not match current state")
-	}
-
-	for i, file := range list {
-		if self.files[i] != file {
-			return fmt.Errorf("Snapshot does not match current state")
-		}
-	}
-	return nil
 }
 
 func (self *dataState) LoadSnapshot(snap []byte) error {
@@ -643,7 +601,6 @@ type swarmDataService struct {
 	data         *hostDataService
 	stateService *sharedStateService
 	state        *dataState
-	statenum     uint8
 	session      exchange.Fetcher
 	id           SwarmID
 	ctx          context.Context
@@ -657,9 +614,9 @@ func newSwarmDataService(swarm *Swarm) DataService {
 	data := swarm.host.Data.(*hostDataService)
 	session := data.bitswap.NewSession(ctx)
 
-	service := &swarmDataService{data, swarm.State, nil, 0, session, swarm.ID, ctx, cncl}
+	service := &swarmDataService{data, swarm.State, nil, session, swarm.ID, ctx, cncl}
 	service.state = newDataState(service)
-	//service.statenum = swarm.State.Share(service.state)
+	swarm.State.share(service.state)
 
 	return service
 }
@@ -671,17 +628,17 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (cid.Cid, er
 	if err != nil {
 		return cid.Undef, err
 	}
-	/*
-		//store in shared state
-		cmd, err := dataStateCommand{filecid, false}.toByte()
-		if err != nil {
-			return cid.Undef, utils.StackError(err, "Unable to create command")
-		}
-		err = self.stateService.AddCommand(ctx, self.statenum, cmd)
-		if err != nil {
-			self.data.Drop(ctx, filecid)
-			return cid.Undef, utils.StackError(err, "Unable to share file with swarm members")
-		}*/
+
+	//store in shared state
+	cmd, err := dataStateCommand{filecid, false}.toByte()
+	if err != nil {
+		return cid.Undef, utils.StackError(err, "Unable to create command")
+	}
+	_, err = self.stateService.AddCommand(ctx, "dataState", cmd)
+	if err != nil {
+		self.data.Drop(ctx, filecid)
+		return cid.Undef, utils.StackError(err, "Unable to share file with swarm members")
+	}
 
 	//return
 	return filecid, nil
@@ -694,30 +651,30 @@ func (self *swarmDataService) AddAsync(path string) (cid.Cid, error) {
 	if err != nil {
 		return cid.Undef, err
 	}
-	/*
-		go func() {
-			//store in shared state
-			cmd, _ := dataStateCommand{filecid, false}.toByte()
-			ctx, _ := context.WithTimeout(self.ctx, 10*time.Hour)
-			self.stateService.AddCommand(ctx, self.statenum, cmd)
-		}()*/
+
+	go func() {
+		//store in shared state
+		cmd, _ := dataStateCommand{filecid, false}.toByte()
+		ctx, _ := context.WithTimeout(self.ctx, 10*time.Hour)
+		self.stateService.AddCommand(ctx, "dataState", cmd)
+	}()
 
 	//return
 	return filecid, nil
 }
 
 func (self *swarmDataService) Drop(ctx context.Context, id cid.Cid) error {
-	/*
-		//drop the file in the swarm.
-		cmd, err := dataStateCommand{id, true}.toByte()
-		if err != nil {
-			return utils.StackError(err, "Unable to create drop command")
-		}
-		err = self.stateService.AddCommand(ctx, self.statenum, cmd)
-		if err != nil {
-			utils.StackError(err, "Unable to drop file within swarm")
-		}
-	*/
+
+	//drop the file in the swarm.
+	cmd, err := dataStateCommand{id, true}.toByte()
+	if err != nil {
+		return utils.StackError(err, "Unable to create drop command")
+	}
+	_, err = self.stateService.AddCommand(ctx, "dataState", cmd)
+	if err != nil {
+		utils.StackError(err, "Unable to drop file within swarm")
+	}
+
 	return nil
 }
 
@@ -749,13 +706,13 @@ func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File
 	if err != nil {
 		return nil, err
 	}
-	/*
-		//check if it is in the state already, if not we need to add
-		if !self.state.HasFile(id) {
-			//store in shared state
-			cmd, _ := dataStateCommand{id, false}.toByte()
-			self.stateService.AddCommand(ctx, self.statenum, cmd)
-		}*/
+
+	//check if it is in the state already, if not we need to add
+	if !self.state.HasFile(id) {
+		//store in shared state
+		cmd, _ := dataStateCommand{id, false}.toByte()
+		self.stateService.AddCommand(ctx, "dataState", cmd)
+	}
 
 	return file, err
 }
@@ -767,14 +724,14 @@ func (self *swarmDataService) Write(ctx context.Context, id cid.Cid, path string
 	if err != nil {
 		return "", err
 	}
-	/*
-		//check if it is in the state already, if not we need to add
-		if !self.state.HasFile(id) {
-			//store in shared state
-			cmd, _ := dataStateCommand{id, false}.toByte()
-			self.stateService.AddCommand(ctx, self.statenum, cmd)
-		}
-	*/
+
+	//check if it is in the state already, if not we need to add
+	if !self.state.HasFile(id) {
+		//store in shared state
+		cmd, _ := dataStateCommand{id, false}.toByte()
+		self.stateService.AddCommand(ctx, "dataState", cmd)
+	}
+
 	return path, nil
 }
 

@@ -131,7 +131,7 @@ func TestSwarmEvent(t *testing.T) {
 
 			sw1, err := h1.CreateSwarm(context.Background(), NoStates())
 			So(err, ShouldBeNil)
-			time.Sleep(50*time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 
 			Convey("Registering with ReadOnly requirement should work", func() {
 
@@ -162,17 +162,17 @@ func TestSwarmEvent(t *testing.T) {
 				})
 
 				Convey("Adding one ReadOnly peer to the swarm shall allow this one to publish", func() {
-					
-					ctx,_ := context.WithTimeout(context.Background(), 1*time.Second)
+
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
 					So(err, ShouldBeNil)
 					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
-					time.Sleep(50*time.Millisecond)
-					
+					time.Sleep(50 * time.Millisecond)
+
 					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READONLY)
 					So(err, ShouldBeNil)
-			
+
 					num1 := 0
 					data1 := make([][]byte, 0)
 					closed1 := false
@@ -237,16 +237,16 @@ func TestSwarmEvent(t *testing.T) {
 
 				Convey("If a second peer witth correct authorisation exists, events for ReadWrite shall pass", func() {
 
-					ctx,_ := context.WithTimeout(context.Background(), 1*time.Second)
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
 					So(err, ShouldBeNil)
 					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
-					time.Sleep(50*time.Millisecond)
-					
+					time.Sleep(50 * time.Millisecond)
+
 					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READWRITE)
 					So(err, ShouldBeNil)
-				
+
 					num1 := 0
 					data1 := make([][]byte, 0)
 					closed1 := false
@@ -269,19 +269,19 @@ func TestSwarmEvent(t *testing.T) {
 					So(closed2, ShouldBeTrue)
 					So(num2, ShouldEqual, 2)
 				})
-				
+
 				Convey("If a second peer with read only authorisation exists, events from this peer shall not pass", func() {
 
-					ctx,_ := context.WithTimeout(context.Background(), 1*time.Second)
+					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
 					So(err, ShouldBeNil)
 					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
-					time.Sleep(50*time.Millisecond)
-					
+					time.Sleep(50 * time.Millisecond)
+
 					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READWRITE)
 					So(err, ShouldBeNil)
-				
+
 					num1 := 0
 					data1 := make([][]byte, 0)
 					closed1 := false

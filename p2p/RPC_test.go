@@ -107,7 +107,7 @@ func TestSwarmRPC(t *testing.T) {
 
 			sw1, err := h1.CreateSwarm(context.Background(), NoStates())
 			So(err, ShouldBeNil)
-			time.Sleep(50*time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 
 			Convey("registering a read only reguirement service must work", func() {
 
