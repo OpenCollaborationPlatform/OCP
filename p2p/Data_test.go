@@ -128,6 +128,7 @@ func TestBitswap(t *testing.T) {
 
 			h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 			h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
+			h1.Connect(context.Background(), h2.ID())
 
 			Convey("Adding/retreiving blocks shall be possible", func() {
 
@@ -168,6 +169,7 @@ func TestDataService(t *testing.T) {
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
+		h1.Connect(context.Background(), h2.ID())
 
 		Convey("Adding small data to one host should be possible", func() {
 
@@ -471,7 +473,7 @@ func TestSwarmDataService(t *testing.T) {
 			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 			res, err := sw1.Data.Add(ctx, testfilepath)
 			So(err, ShouldBeNil)
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 
 			reader, err := sw1.Data.GetFile(ctx, res)
 			So(err, ShouldBeNil)
@@ -484,7 +486,6 @@ func TestSwarmDataService(t *testing.T) {
 
 			Convey("and distribute the file automatically to the other host", func() {
 
-				time.Sleep(100 * time.Millisecond) //time needed for fetching
 				has, _ := sw2.Data.(*swarmDataService).data.store.Has(res)
 				So(has, ShouldBeTrue)
 
@@ -492,7 +493,7 @@ func TestSwarmDataService(t *testing.T) {
 
 					err := sw2.Data.Drop(ctx, res)
 					So(err, ShouldBeNil)
-					time.Sleep(50 * time.Millisecond)
+					time.Sleep(100 * time.Millisecond)
 
 					Convey("and makes it inaccessible by any host", func() {
 
@@ -513,7 +514,7 @@ func TestSwarmDataService(t *testing.T) {
 
 				err := sw1.Data.Drop(ctx, res)
 				So(err, ShouldBeNil)
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 
 				Convey("it is not accessible in any host", func() {
 					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)

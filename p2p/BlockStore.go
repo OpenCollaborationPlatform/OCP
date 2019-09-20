@@ -8,6 +8,7 @@ package p2p
 //		interfaces to allow s3/mongo implementation
 
 import (
+	"sync"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -32,6 +33,7 @@ var (
 	FileKey  = []byte("files")
 	BlockKey = []byte("blocks")
 	OwnerKey = []byte("owners")
+	NameKey  = []byte("name")
 )
 
 func intToByte(val int64) []byte {
@@ -74,8 +76,11 @@ func NewBitswapStore(path string) (BitswapStore, error) {
 		tx.CreateBucketIfNotExists(FileKey)
 		return nil
 	})
+	
+	//build the expected owners struct 
+	expected := expectedOwners{sync.RWMutex{}, make(map[cid.Cid][]string, 0)}
 
-	return BitswapStore{db, path}, err
+	return BitswapStore{db, path, &expected}, err
 }
 
 /*
@@ -88,10 +93,64 @@ type Blockstore interface {
 
 }*/
 
+//A helper struct to manage expected owners
+type expectedOwners struct {
+	mutex  sync.RWMutex
+	data   map[cid.Cid][]string
+}
+
+func (self *expectedOwners) AddExpectedOwner(id cid.Cid, owner string) {
+	
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	
+	//check if we have the cid already, if not create
+	val, has := self.data[id]
+	if !has {
+		self.data[id] = []string{owner} 
+		return
+	}
+	
+	//prevent double entries
+	for _, name := range val {
+		if name == owner {
+			return
+		}
+	} 
+	val = append(val, owner) 
+	self.data[id] = val
+}
+
+func (self *expectedOwners) GetExpectedOwners(id cid.Cid) []string {
+	
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+	
+	owners, has := self.data[id]
+	if !has {
+		return make([]string, 0)
+	}
+	return owners
+}
+
+func (self *expectedOwners) ClearExpectedOwners(id cid.Cid) {
+	
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	
+	_, has := self.data[id]
+	if !has {
+		return
+	}
+	delete(self.data, id)
+}
+
+
 //A store based on boldDB that implements the ipfs Datastore, TxnDatastore and Batching interface
 type BitswapStore struct {
 	db   *bolt.DB
 	path string
+	expected *expectedOwners
 }
 
 /*
@@ -186,6 +245,11 @@ func (self BitswapStore) SetOwnership(block blocks.Block, owner string) error {
 	return bucket.Put([]byte(owner), []byte(owner))
 }
 
+//only call when you are sure there is no such block in the store!
+func (self BitswapStore) SetExpectedOwnership(id cid.Cid, owner string) {
+	self.expected.AddExpectedOwner(id, owner)
+}
+
 //Removes the owner, returns true if it was the last owner and the block is now ownerless
 func (self BitswapStore) ReleaseOwnership(block blocks.Block, owner string) (bool, error) {
 
@@ -245,6 +309,10 @@ func (self BitswapStore) ReleaseOwnership(block blocks.Block, owner string) (boo
 	return !has, nil
 }
 
+func (self BitswapStore) GetExpectedOwner(id cid.Cid) []string {
+	return self.expected.GetExpectedOwners(id)
+}
+
 func (self BitswapStore) GetOwner(block blocks.Block) ([]string, error) {
 
 	p2pblock, err := getP2PBlock(block)
@@ -289,6 +357,12 @@ func (self BitswapStore) GetOwner(block blocks.Block) ([]string, error) {
 	}
 	return owners, nil
 }
+
+
+func (self BitswapStore) ClearExpectedOwner(id cid.Cid) {
+	self.expected.ClearExpectedOwners(id)
+}
+
 
 //Returns all blocks without a owner (multiffile subblocks are not returned)
 func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
@@ -583,7 +657,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 	bucket = bucket.Bucket(key.Bytes())
 	if bucket != nil {
 		//rebuild the block!
-		name := string(bucket.Get([]byte("name")))
+		name := string(bucket.Get(NameKey))
 		//get all blocks!
 		blocks := make([]cid.Cid, 0)
 		blockbucket := bucket.Bucket(BlockKey)
@@ -606,7 +680,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 	bucket = tx.Bucket(MfileKey)
 	bucket = bucket.Bucket(key.Bytes())
 	if bucket != nil {
-		name := string(bucket.Get([]byte("name")))
+		name := string(bucket.Get(NameKey))
 		size := byteToInt(bucket.Get([]byte("size")))
 
 		//get all blocks!
@@ -632,7 +706,7 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 	bucket = tx.Bucket(FileKey)
 	bucket = bucket.Bucket(key.Bytes())
 	if bucket != nil {
-		name := string(bucket.Get([]byte("name")))
+		name := string(bucket.Get(NameKey))
 
 		//read in the data
 		path := filepath.Join(self.path, key.String())
@@ -803,22 +877,27 @@ func (self BitswapStore) Close() {
 
 func (self BitswapStore) put(tx *bolt.Tx, c cid.Cid, block P2PDataBlock) error {
 
+	var err error
 	switch block.Type() {
 
 	case BlockDirectory:
-		return self.putDirectory(tx, c, block.(P2PDirectoryBlock))
+		err = self.putDirectory(tx, c, block.(P2PDirectoryBlock))
 
 	case BlockMultiFile:
-		return self.putMultiFile(tx, c, block.(P2PMultiFileBlock))
+		err =  self.putMultiFile(tx, c, block.(P2PMultiFileBlock))
 
 	case BlockFile:
-		return self.putFile(tx, c, block.(P2PFileBlock))
+		err =  self.putFile(tx, c, block.(P2PFileBlock))
 
 	case BlockRaw:
-		return self.putRaw(tx, c, block.(P2PRawBlock))
+		err =  self.putRaw(tx, c, block.(P2PRawBlock))
+	}
+	
+	if err != nil {
+		self.expected.ClearExpectedOwners(c)
 	}
 
-	return fmt.Errorf("Unknown block type")
+	return err
 }
 
 //directories are simple: just store the raw data.
@@ -840,7 +919,7 @@ func (self BitswapStore) putDirectory(tx *bolt.Tx, c cid.Cid, block P2PDirectory
 	}
 
 	//write the data
-	directory.Put([]byte("name"), []byte(block.Name))
+	directory.Put(NameKey, []byte(block.Name))
 
 	//create a empty blocks bucket
 	blockBucket := directory.Bucket(BlockKey)
@@ -881,7 +960,7 @@ func (self BitswapStore) putMultiFile(tx *bolt.Tx, c cid.Cid, block P2PMultiFile
 	}
 
 	//put the data in
-	mfile.Put([]byte("name"), []byte(block.Name))
+	mfile.Put(NameKey, []byte(block.Name))
 	mfile.Put([]byte("size"), intToByte(block.Size))
 
 	//create a empty blocks bucket
@@ -1008,7 +1087,7 @@ func (self BitswapStore) putFile(tx *bolt.Tx, c cid.Cid, block P2PFileBlock) err
 	if err != nil {
 		return utils.StackError(err, "Unable to put file block")
 	}
-	file.Put([]byte("name"), []byte(block.Name))
+	file.Put(NameKey, []byte(block.Name))
 
 	//make sure the owner bucket exists
 	_, err = file.CreateBucketIfNotExists(OwnerKey)

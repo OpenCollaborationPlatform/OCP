@@ -230,9 +230,12 @@ func (self *hostDataService) basicFetch(ctx context.Context, id cid.Cid, fetcher
 	//get the root block
 	block, err := self.store.Get(id)
 	if err != nil {
+		//set expected owner to make sure bitswap knows where to look
+		self.store.SetExpectedOwnership(id, owner)
 		var err error
 		block, err = fetcher.GetBlock(ctx, id)
 		if err != nil {
+			self.store.ClearExpectedOwner(id)
 			return utils.StackError(err, "Unable to get root node")
 		}
 	}
