@@ -8,7 +8,6 @@ package p2p
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -17,52 +16,132 @@ import (
 	cid "github.com/ipfs/go-cid"
 	blockstore "github.com/ipfs/go-ipfs-blockstore"
 	pstore "github.com/libp2p/go-libp2p-peerstore"
+	gorpc "github.com/libp2p/go-libp2p-gorpc"
 )
 
 /******************************************************************************
 						Routing
 ******************************************************************************/
-
-func NewBitswapRouting(host *Host, store blockstore.Blockstore) (BitswapRouting, error) {
+func NewBitswapRouting(host *Host, store BitswapStore) (BitswapRouting, error) {
 
 	//setup the routing service
 	err := host.Rpc.Register(&RoutingService{store})
 
 	//return the routing
-	return BitswapRouting{host}, err
+	return BitswapRouting{host, store}, err
 }
 
 //the routing type used by bitswap network
 type BitswapRouting struct {
 	host *Host
+	store BitswapStore
 }
 
 // Provide adds the given cid to the content routing system. If 'true' is
 // passed, it also announces it, otherwise it is just kept in the local
 // accounting of which objects are being provided.
-func (self BitswapRouting) Provide(context.Context, cid.Cid, bool) error {
-	//we do not need to advertise
+func (self BitswapRouting) Provide(ctx context.Context, id cid.Cid, announce bool) error {
+	
+	//we do not need to advertise if it is owned by a swarm, however, for global we need to advertise!
+	block, err := self.store.Get(id)
+	if err != nil {
+		return utils.StackError(err, "Cannot get block for cid, hennce cannot announce")
+	}
+	owner, err := self.store.GetOwner(block) 
+	if err != nil{
+		return utils.StackError(err, "Unable to find owner of block, cannot announce")
+	}
+	
+	if len(owner) == 0 {
+		return fmt.Errorf("No owner for cid known: cannot provide!")
+	}
+	
+	//check if global is a owner and provide if so!
+	for _, name := range owner {
+		if name == "global" {
+			return self.host.dht.Provide(ctx, id, announce)
+		}
+	}
+	
 	return nil
 }
 
 // Search for peers who are able to provide a given key
 func (self BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, num int) <-chan pstore.PeerInfo {
 
+	//if global is the owner, we are going to fetch it from the dht. Otherwise we simply 
+	//query the swarm members the file belongs to. As this is a limited set and we are 
+	//already connected to them this is a fast operation
+	
 	result := make(chan pstore.PeerInfo)
 
-	for _, peerid := range self.host.Peers(false) {
-		go func(id PeerID) {
-			var hasCID bool
-			subctx, _ := context.WithCancel(ctx)
-			err := self.host.Rpc.CallContext(subctx, id.pid(), "RoutingService", "HasCID", val, &hasCID)
-			if err != nil {
-				log.Printf("Error in Routing service: %v", err)
-
-			} else if hasCID {
-				result <- self.host.host.Peerstore().PeerInfo(id.pid())
-			}
-		}(peerid)
+	//get the owner. if it is a swarm we only query swarm members
+	block, err := self.store.Get(val)
+	if err != nil {
+		close(result)
+		return result
+	}	
+	owner, err := self.store.GetOwner(block)
+	if err != nil {
+		close(result)
+		return result
 	}
+	
+	//check if it is a global cid and search globally if so
+	swarms := make([]*Swarm, 0)
+	if len(owner) != 0 {
+		
+		for _, name := range owner {
+			if name == "global" {
+				swarms = make([]*Swarm, 0)
+				break
+							
+			} else {
+				s, err := self.host.GetSwarm(SwarmID(name))
+				if err != nil { 
+					continue
+				}
+				swarms = append(swarms, s)
+			}
+		}
+	}	
+	if len(swarms) == 0 {
+		return self.host.dht.FindProvidersAsync(ctx, val, num)
+	}
+	
+	//search all possible peers and ask them!
+	hasValues := make([]bool, 0)
+	ret := make(chan *gorpc.Call,len(swarms)*5)
+	goctx, cncl := context.WithCancel(ctx)
+	for _, swarm := range swarms { 
+		for _, peer := range swarm.GetPeers(AUTH_NONE) {
+			if self.host.IsConnected(peer) {
+				hasValues = append(hasValues, false)
+				self.host.Rpc.GoContext(goctx, peer.pid(), "RoutingService", "HasCID", val, &hasValues[len(hasValues)-1], ret)
+			}
+		}
+	}
+
+	//collect the needed results
+	go func() {
+		defer close(result)
+		defer close(ret)
+		
+		//start the queries
+		found := 0
+		for call := range ret {
+			
+			if call.Reply.(bool) && call.Error == nil {
+				found = found+1
+				result <- self.host.host.Peerstore().PeerInfo(call.Dest)
+				
+				if found >= num {
+					cncl()
+					return
+				}
+			}
+		}		
+	}()
 
 	return result
 }
@@ -89,7 +168,7 @@ func (self *RoutingService) HasCID(ctx context.Context, request cid.Cid, result 
 /******************************************************************************
 						Bitswap
 ******************************************************************************/
-func NewBitswap(bstore blockstore.Blockstore, host *Host) (*bs.Bitswap, error) {
+func NewBitswap(bstore BitswapStore, host *Host) (*bs.Bitswap, error) {
 
 	routing, err := NewBitswapRouting(host, bstore)
 	if err != nil {

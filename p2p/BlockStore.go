@@ -95,6 +95,7 @@ type BitswapStore struct {
 }
 
 /*
+daatbase layout
 DB [
 	directories [
 		cid [
@@ -111,7 +112,7 @@ DB [
 			name: string
 			size: int64
 			blocks [
-				cid: int64
+				cid: int64  //id : offset in file
 			]
 			owners [
 				string:string
@@ -289,7 +290,7 @@ func (self BitswapStore) GetOwner(block blocks.Block) ([]string, error) {
 	return owners, nil
 }
 
-//Returns all blocks without a owner
+//Returns all blocks without a owner (multiffile subblocks are not returned)
 func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 
 	tx, err := self.db.Begin(false)
