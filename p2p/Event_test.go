@@ -85,7 +85,7 @@ func TestBasicEvent(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(sub.sub, ShouldNotBeNil)
 			h2.Connect(context.Background(), h1.ID())
-			time.Sleep(100*time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 
 			Convey("and must be publishable from the other host", func() {
 

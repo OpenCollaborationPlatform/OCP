@@ -51,23 +51,23 @@ func NewDataService(host *Host) (DataService, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	//start the service
-	service := &hostDataService{path, bitswap, bstore, time.NewTicker(20*time.Hour), host.dht}
-	
+	service := &hostDataService{path, bitswap, bstore, time.NewTicker(20 * time.Hour), host.dht}
+
 	//handle announcement: once initially and than periodically
 	service.announceAllGlobal()
 	go func() {
-        for {
-            select {
-            case _, more := <-service.ticker.C:
-            		if !more {
+		for {
+			select {
+			case _, more := <-service.ticker.C:
+				if !more {
 					return
 				}
-                 service.announceAllGlobal()
-            }
-        }
-    }()
+				service.announceAllGlobal()
+			}
+		}
+	}()
 
 	return service, nil
 }
@@ -77,7 +77,7 @@ type hostDataService struct {
 	bitswap  *bs.Bitswap
 	store    BitswapStore
 	ticker   *time.Ticker
-	dht 		*kaddht.IpfsDHT
+	dht      *kaddht.IpfsDHT
 }
 
 func (self *hostDataService) Add(ctx context.Context, path string) (cid.Cid, error) {
@@ -143,19 +143,19 @@ func (self *hostDataService) Write(ctx context.Context, id cid.Cid, path string)
 	return self.basicWrite(ctx, id, path, self.bitswap, "global")
 }
 
-func (self *hostDataService)  announceAllGlobal() {
-	
+func (self *hostDataService) announceAllGlobal() {
+
 	globals, _ := self.store.GetCidsForOwner("global")
 	go func() {
 		for {
 			repeats := make([]cid.Cid, 0)
-			for _, id := range globals{
+			for _, id := range globals {
 				ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
 				err := self.dht.Provide(ctx, id, true)
 				if err != nil {
 					repeats = append(repeats, id)
 				}
-			} 
+			}
 			//check if done
 			if len(repeats) == 0 {
 				return

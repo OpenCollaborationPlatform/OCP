@@ -44,7 +44,7 @@ func TestBlockStore(t *testing.T) {
 			has, err = bstore.Has(data.Cid())
 			So(err, ShouldBeNil)
 			So(has, ShouldBeTrue)
-					
+
 			Convey("and creates a file for storage.", func() {
 
 				//check if the files were added to the exchange folder
@@ -59,23 +59,23 @@ func TestBlockStore(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(bytes.Equal(data.RawData(), stored.RawData()), ShouldBeTrue)
 			})
-			
+
 			Convey("And owner can be set", func() {
-				
+
 				err := bstore.SetOwnership(data, "testowner")
 				So(err, ShouldBeNil)
-				
+
 				owners, err := bstore.GetOwner(data)
 				So(err, ShouldBeNil)
 				So(len(owners), ShouldEqual, 1)
 				So(owners[0], ShouldEqual, "testowner")
-				
+
 				Convey("Garbage Collect should not find the file", func() {
 					files, err := bstore.GarbageCollect()
 					So(err, ShouldBeNil)
 					So(len(files), ShouldEqual, 0)
 				})
-				
+
 				Convey("Once the owner was released", func() {
 					last, err := bstore.ReleaseOwnership(data, "testowner")
 					So(err, ShouldBeNil)
@@ -83,7 +83,7 @@ func TestBlockStore(t *testing.T) {
 					owners, err := bstore.GetOwner(data)
 					So(err, ShouldBeNil)
 					So(len(owners), ShouldEqual, 0)
-					
+
 					Convey("Garbage Collect should find the file", func() {
 						files, err := bstore.GarbageCollect()
 						So(err, ShouldBeNil)
@@ -224,6 +224,13 @@ func TestDataService(t *testing.T) {
 			So(n, ShouldEqual, 555)
 			So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 			
+			Convey("and makes it retreivable by owner", func() {
+				ids, err := h1.Data.(*hostDataService).store.GetCidsForOwner("global")
+				So(err, ShouldBeNil)
+				So(len(ids), ShouldEqual, 1)
+				So(ids[0].Equals(res), ShouldBeTrue)
+			})
+
 			Convey("and retreiving from the other shall be possible too.", func() {
 
 				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
@@ -292,6 +299,12 @@ func TestDataService(t *testing.T) {
 				So(n, ShouldEqual, filesize)
 				So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 
+				Convey("and makes it retreivable by owner", func() {
+					ids, err := h1.Data.(*hostDataService).store.GetCidsForOwner("global")
+					So(err, ShouldBeNil)
+					So(len(ids), ShouldEqual, 6)
+				})
+			
 				Convey("and retreiving from the other shall be possible too.", func() {
 
 					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
@@ -370,7 +383,7 @@ func TestDataService(t *testing.T) {
 				ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 				res2, err := h1.Data.Add(ctx, dirpath2)
 				So(err, ShouldBeNil)
-				
+
 				//check if the files were added to the exchange folder
 				exchange := filepath.Join(h1.path, "DataExchange")
 				files, err := ioutil.ReadDir(exchange)
@@ -384,6 +397,12 @@ func TestDataService(t *testing.T) {
 
 					So(err, ShouldBeNil)
 					So(compareDirectories(res2path, dirpath2), ShouldBeNil)
+				})
+				
+				Convey("and makes it retreivable by owner", func() {
+					ids, err := h1.Data.(*hostDataService).store.GetCidsForOwner("global")
+					So(err, ShouldBeNil)
+					So(len(ids), ShouldEqual, 8)
 				})
 
 				Convey("and retreiving from the other shall be possible too", func() {
@@ -410,6 +429,12 @@ func TestDataService(t *testing.T) {
 						files, err := ioutil.ReadDir(exchange)
 						So(err, ShouldBeNil)
 						So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
+					})
+					
+					Convey("and makes it retreivable by owner", func() {
+						ids, err := h2.Data.(*hostDataService).store.GetCidsForOwner("global")
+						So(err, ShouldBeNil)
+						So(len(ids), ShouldEqual, 9)
 					})
 
 					Convey("Dropping the subdirectory should keep all files", func() {
@@ -467,7 +492,6 @@ func TestDataService(t *testing.T) {
 	})
 }
 
-
 func TestSwarmDataService(t *testing.T) {
 
 	//make temporary folder for the data
@@ -518,6 +542,13 @@ func TestSwarmDataService(t *testing.T) {
 			So(n, ShouldEqual, 555)
 			So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 
+			Convey("and makes it retreivable by owner", func() {
+				ids, err := sw1.Data.(*swarmDataService).data.store.GetCidsForOwner(string(sw1.ID))
+				So(err, ShouldBeNil)
+				So(len(ids), ShouldEqual, 1)
+				So(ids[0].Equals(res), ShouldBeTrue)
+			})
+
 			Convey("and distribute the file automatically to the other host", func() {
 
 				has, _ := sw2.Data.(*swarmDataService).data.store.Has(res)
@@ -567,47 +598,53 @@ func TestSwarmDataService(t *testing.T) {
 			filedata := repeatableData(filesize)
 			testfilepath := filepath.Join(path, "testfile2")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
-	
+
 			Convey("Adding data to one swarm should be possible", func() {
-	
+
 				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 				res, err := sw1.Data.Add(ctx, testfilepath)
 				So(err, ShouldBeNil)
 				time.Sleep(100 * time.Millisecond)
-		
+
 				reader, err := sw1.Data.GetFile(ctx, res)
 				So(err, ShouldBeNil)
-	
+
 				data := make([]byte, filesize)
 				n, err := reader.Read(data)
 				So(err, ShouldBeNil)
 				So(n, ShouldEqual, filesize)
 				So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
-	
+				
+				Convey("and makes it retreivable by owner", func() {
+					ids, err := sw1.Data.(*swarmDataService).data.store.GetCidsForOwner(string(sw1.ID))
+					So(err, ShouldBeNil)
+					So(len(ids), ShouldEqual, 6) //1mb each, hence 5 data blocks for 4.2mb and one mfile block
+					So(ids[0].Equals(res), ShouldBeTrue)
+				})
+
 				Convey("and retreiving from the other shall be possible too.", func() {
-	
+
 					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 					reader, err := sw2.Data.GetFile(ctx, res)
 					So(err, ShouldBeNil)
 					io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
-	
+
 					ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
 					reader, err = sw2.Data.GetFile(ctx, res)
 					So(err, ShouldBeNil)
-	
+
 					data := make([]byte, filesize)
 					n, err := reader.Read(data)
 					So(err, ShouldBeNil)
 					So(n, ShouldEqual, filesize)
 					So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
-	
-	
-			 		Convey("Droping the file from the first host is possible", func() {
-	
+
+					Convey("Droping the file from the first host is possible", func() {
+
 						err := sw1.Data.Drop(ctx, res)
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)
-		
+
 						Convey("it is not accessible in any host", func() {
 							ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 							err := sw1.Data.Fetch(ctx, res)
@@ -616,7 +653,7 @@ func TestSwarmDataService(t *testing.T) {
 							So(err, ShouldNotBeNil)
 						})
 					})
-			 	})
+				})
 			})
 		})
 
@@ -648,17 +685,16 @@ func TestSwarmDataService(t *testing.T) {
 			ioutil.WriteFile(testfilepath, smalldata, os.ModePerm)
 
 			Convey("Adding a directory with files only should work", func() {
-			
+
 				ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 				res2, err := sw1.Data.Add(ctx, dirpath2)
 				So(err, ShouldBeNil)
-				time.Sleep(100*time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 
 				//check if the files were added to the exchange folder
 				exchange := filepath.Join(sw1.path, "DataExchange")
 				files, err := ioutil.ReadDir(exchange)
 				So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
-				
 
 				Convey("as well as accessing it from ourself", func() {
 					//try write it to the original path
@@ -668,6 +704,13 @@ func TestSwarmDataService(t *testing.T) {
 
 					So(err, ShouldBeNil)
 					So(compareDirectories(res2path, dirpath2), ShouldBeNil)
+				})
+				
+				Convey("and makes it retreivable by owner", func() {
+					ids, err := sw1.Data.(*swarmDataService).data.store.GetCidsForOwner(string(sw1.ID))
+					So(err, ShouldBeNil)
+					So(len(ids), ShouldEqual, 8) //6 mfile, 1 file, 1 directory
+					So(ids[0].Equals(res2), ShouldBeTrue)
 				})
 
 				Convey("and retreiving from the other shall be possible too", func() {
@@ -687,7 +730,7 @@ func TestSwarmDataService(t *testing.T) {
 
 					res1, err := sw2.Data.Add(ctx, dirpath1)
 					So(err, ShouldBeNil)
-					time.Sleep(100*time.Millisecond)
+					time.Sleep(100 * time.Millisecond)
 
 					Convey("There should still be only 2 datafiles in the exchange folder", func() {
 
@@ -695,6 +738,13 @@ func TestSwarmDataService(t *testing.T) {
 						files, err := ioutil.ReadDir(exchange)
 						So(err, ShouldBeNil)
 						So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
+					})
+					
+					Convey("and makes it retreivable by owner", func() {
+						ids, err := sw1.Data.(*swarmDataService).data.store.GetCidsForOwner(string(sw1.ID))
+						So(err, ShouldBeNil)
+						So(len(ids), ShouldEqual, 9) //6 mfile, 1 file, 2 directory
+						So(ids[0].Equals(res2), ShouldBeTrue)
 					})
 
 					Convey("Dropping the subdirectory should keep all files", func() {
@@ -746,13 +796,13 @@ func TestSwarmDataService(t *testing.T) {
 							So(sw2.Data.Fetch(ctx, res2), ShouldNotBeNil)
 						})
 					})
-					
+
 					Convey("Dropping prent first and then subdir", func() {
 
 						err = sw2.Data.Drop(ctx, res1)
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)
-						
+
 						err = sw1.Data.Drop(ctx, res2)
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)

@@ -8,7 +8,6 @@ package p2p
 //		interfaces to allow s3/mongo implementation
 
 import (
-	"sync"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -16,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
@@ -76,8 +76,8 @@ func NewBitswapStore(path string) (BitswapStore, error) {
 		tx.CreateBucketIfNotExists(FileKey)
 		return nil
 	})
-	
-	//build the expected owners struct 
+
+	//build the expected owners struct
 	expected := expectedOwners{sync.RWMutex{}, make(map[cid.Cid][]string, 0)}
 
 	return BitswapStore{db, path, &expected}, err
@@ -95,37 +95,37 @@ type Blockstore interface {
 
 //A helper struct to manage expected owners
 type expectedOwners struct {
-	mutex  sync.RWMutex
-	data   map[cid.Cid][]string
+	mutex sync.RWMutex
+	data  map[cid.Cid][]string
 }
 
 func (self *expectedOwners) AddExpectedOwner(id cid.Cid, owner string) {
-	
+
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	
+
 	//check if we have the cid already, if not create
 	val, has := self.data[id]
 	if !has {
-		self.data[id] = []string{owner} 
+		self.data[id] = []string{owner}
 		return
 	}
-	
+
 	//prevent double entries
 	for _, name := range val {
 		if name == owner {
 			return
 		}
-	} 
-	val = append(val, owner) 
+	}
+	val = append(val, owner)
 	self.data[id] = val
 }
 
 func (self *expectedOwners) GetExpectedOwners(id cid.Cid) []string {
-	
+
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
-	
+
 	owners, has := self.data[id]
 	if !has {
 		return make([]string, 0)
@@ -134,10 +134,10 @@ func (self *expectedOwners) GetExpectedOwners(id cid.Cid) []string {
 }
 
 func (self *expectedOwners) ClearExpectedOwners(id cid.Cid) {
-	
+
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	
+
 	_, has := self.data[id]
 	if !has {
 		return
@@ -145,11 +145,10 @@ func (self *expectedOwners) ClearExpectedOwners(id cid.Cid) {
 	delete(self.data, id)
 }
 
-
 //A store based on boldDB that implements the ipfs Datastore, TxnDatastore and Batching interface
 type BitswapStore struct {
-	db   *bolt.DB
-	path string
+	db       *bolt.DB
+	path     string
 	expected *expectedOwners
 }
 
@@ -190,12 +189,12 @@ DB [
 */
 
 func (self BitswapStore) Print() {
-	
+
 	fmt.Printf("\nBitswap store content:\n*********************\n")
 	names := []string{"Directories", "Files", "Multifiles"}
 	keys := [][]byte{DirKey, FileKey, MfileKey}
 
-	tx,_ := self.db.Begin(false)
+	tx, _ := self.db.Begin(false)
 	defer tx.Rollback()
 
 	for i, key := range keys {
@@ -204,40 +203,40 @@ func (self BitswapStore) Print() {
 		bucket := tx.Bucket(key)
 		c := bucket.Cursor()
 		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			
-			c,_ := cid.Cast(copyKey(k))
+
+			c, _ := cid.Cast(copyKey(k))
 			fmt.Printf("\t%v [\n", c)
-			
+
 			subbucket := bucket.Bucket(k)
 			c2 := subbucket.Cursor()
-			for k2, v := c2.First(); k2!=nil; k2,v = c2.Next() {
-				
+			for k2, v := c2.First(); k2 != nil; k2, v = c2.Next() {
+
 				if bytes.Equal(k2, NameKey) {
 					fmt.Printf("\t\tname: %v\n", string(v))
 				}
-				
+
 				if bytes.Equal(k2, OwnerKey) {
 					fmt.Printf("\t\tOwner [\n")
 					ownerbucket := subbucket.Bucket(OwnerKey)
 					c3 := ownerbucket.Cursor()
-					for k3, _ := c3.First(); k3!=nil; k3, _ = c3.Next() {
+					for k3, _ := c3.First(); k3 != nil; k3, _ = c3.Next() {
 						fmt.Printf("\t\t\t%v\n", string(k3))
 					}
 					fmt.Printf("\t\t]\n")
 				}
-				
+
 				if bytes.Equal(k2, BlockKey) {
 					fmt.Printf("\t\tBlocks [\n")
 					ownerbucket := subbucket.Bucket(BlockKey)
 					c3 := ownerbucket.Cursor()
-					for k3, val := c3.First(); k3!=nil; k3, val = c3.Next() {
+					for k3, val := c3.First(); k3 != nil; k3, val = c3.Next() {
 						id, _ := cid.Cast(copyKey(k3))
 						fmt.Printf("\t\t\t%v:%v\n", id, byteToInt(val))
 					}
 					fmt.Printf("\t\t]\n")
 				}
 			}
-			fmt.Printf("\t]\n")			
+			fmt.Printf("\t]\n")
 		}
 		fmt.Printf("]\n")
 	}
@@ -411,11 +410,9 @@ func (self BitswapStore) GetOwner(block blocks.Block) ([]string, error) {
 	return owners, nil
 }
 
-
 func (self BitswapStore) ClearExpectedOwner(id cid.Cid) {
 	self.expected.ClearExpectedOwners(id)
 }
-
 
 //Returns all blocks without a owner (multifile sub-blocks are not returned)
 func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
@@ -443,7 +440,7 @@ func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 			//check if owners are empty
 			c2 := ownerbucket.Cursor()
 			if k2, _ := c2.First(); k2 == nil {
-				
+
 				//no owners! The only reason not to delete it would be if it is part of a directory!
 				if has, _ := self.hasParentDirectoryWithOwner(k, tx); !has {
 
@@ -452,8 +449,8 @@ func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 						return nil, utils.StackError(err, "Unable to collect garbage")
 					}
 					result = append(result, key)
-				
-				} 
+
+				}
 			}
 		}
 	}
@@ -504,7 +501,6 @@ func (self BitswapStore) hasParentDirectoryWithOwner(key []byte, tx *bolt.Tx) (b
 	return false, nil
 }
 
-
 //Returns all blocks with a given owner (multifile sub-blocks are returned)
 func (self BitswapStore) GetCidsForOwner(owner string) ([]cid.Cid, error) {
 
@@ -513,22 +509,30 @@ func (self BitswapStore) GetCidsForOwner(owner string) ([]cid.Cid, error) {
 		return nil, utils.StackError(err, "Unable to collect blocks for owner")
 	}
 	defer tx.Rollback()
-	
+
 	ids := make([]cid.Cid, 0)
-	
+
 	//collect all directory blocks owned
 	bucket := tx.Bucket(DirKey)
 	c := bucket.Cursor()
 	for k, _ := c.First(); k != nil; k, _ = c.Next() {
-		
+
 		//check if owned by "global"
 		sub := bucket.Bucket(k).Bucket(OwnerKey)
 		c2 := sub.Cursor()
-		inner1:
-		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {	
+	inner1:
+		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {
 			if string(k2) == owner {
-				dirid, _ := cid.Cast(copyKey(k))
-				dirids := self.getDirSubblocks(tx, dirid)
+				dirid, err := cid.Cast(copyKey(k))
+				if err != nil {
+					return ids, utils.StackError(err, "Stored ID invalid")
+				}
+				ids = append(ids, dirid)
+				
+				dirids, err := self.getDirSubblocks(tx, dirid)
+				if err != nil {
+					return ids, utils.StackError(err, "Unable to get subblocks for directory")
+				}
 				ids = append(ids, dirids...)
 				break inner1
 			}
@@ -539,88 +543,115 @@ func (self BitswapStore) GetCidsForOwner(owner string) ([]cid.Cid, error) {
 	bucket = tx.Bucket(MfileKey)
 	c = bucket.Cursor()
 	for k, _ := c.First(); k != nil; k, _ = c.Next() {
-		
+
 		//check if owned by "global"
 		sub := bucket.Bucket(k).Bucket(OwnerKey)
 		c2 := sub.Cursor()
-		inner2:
-		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {	
+	inner2:
+		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {
 			if string(k2) == owner {
 				
+				//add the block itself
+				blockid, err := cid.Cast(copyKey(k))
+				if err != nil {
+					return ids, utils.StackError(err, "Stored multiblock ID is faulty")
+				}
+				ids = append(ids, blockid)
+
 				//iterate over all blocks and add them!
 				c3 := bucket.Bucket(k).Bucket(BlockKey).Cursor()
 				for k3, _ := c3.First(); k3 != nil; k3, _ = c3.Next() {
-					id,_ := cid.Cast(copyKey(k3))
+					id, err := cid.Cast(copyKey(k3))
+					if err != nil {
+						return ids, utils.StackError(err, "Stored ID invalid")
+					}
 					ids = append(ids, id)
 				}
 				break inner2
 			}
 		}
 	}
-	
+
 	//collect all normal files
 	bucket = tx.Bucket(FileKey)
 	c = bucket.Cursor()
 	for k, _ := c.First(); k != nil; k, _ = c.Next() {
-		
+
 		//check if owned by "global"
 		sub := bucket.Bucket(k).Bucket(OwnerKey)
 		c2 := sub.Cursor()
-		inner3:
-		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {	
+	inner3:
+		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {
 			if string(k2) == owner {
-				
-				id,_ := cid.Cast(copyKey(k))
+
+				id, err := cid.Cast(copyKey(k))
+				if err != nil {
+					return ids, utils.StackError(err, "Stored ID invalid")
+				}
 				ids = append(ids, id)
 				break inner3
 			}
 		}
 	}
-
-	return ids, nil
+	
+	//remove douplicates
+	seen := make(map[cid.Cid]struct{}, len(ids))
+	j := 0
+	for _, v := range ids {
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		ids[j] = v
+		j++
+	}
+	return ids[:j], nil
 }
 
-func (self BitswapStore) getDirSubblocks(tx *bolt.Tx, dir cid.Cid) []cid.Cid {
-	
+func (self BitswapStore) getDirSubblocks(tx *bolt.Tx, dir cid.Cid) ([]cid.Cid, error) {
+
 	ids := make([]cid.Cid, 0)
-	
+
 	//get the blocks, so that we know what to do with them
 	bucket := tx.Bucket(DirKey).Bucket(dir.Bytes())
 	if bucket == nil {
-		return ids
+		return ids, fmt.Errorf("Database not correctly setup")
 	}
 	blocks := bucket.Bucket(BlockKey)
 	if blocks == nil {
-		return ids
+		return ids, fmt.Errorf("Directory not correctly setup")
 	}
-	
+
 	c := blocks.Cursor()
-	for k, _ := c.First(); k != nil; k,_ = c.Next() {
-		id,_ := cid.Cast(copyKey(k))
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		id, _ := cid.Cast(copyKey(k))
 		ids = append(ids, id)
-		
+
 		block, err := self.get(tx, id)
 		if err != nil {
-			return ids
+			return ids, utils.StackError(err, "Directory references block that is not available")
 		}
 		p2pblock, err := getP2PBlock(block)
 		if err != nil {
-			return ids
+			return ids, utils.StackError(err, "Stored block is invalid")
 		}
-		
+
 		switch p2pblock.Type() {
-			
+
 		case BlockMultiFile:
 			mfblock := p2pblock.(P2PMultiFileBlock)
 			ids = append(ids, mfblock.Blocks...)
-			
-		case BlockDirectory:		
-			dirIds := self.getDirSubblocks(tx, id)
+
+		case BlockDirectory:
+			dirIds, err := self.getDirSubblocks(tx, id)
+			if err != nil {
+				return ids, err
+			}
 			ids = append(ids, dirIds...)
 		}
 	}
-	
-	return ids
+
+	return ids, nil
 }
 
 /******************************************************************************
@@ -824,11 +855,10 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		return nil, utils.StackError(err, "Unable to get block")
 	}
 	defer tx.Rollback()
-	
+
 	return self.get(tx, key)
 }
-	
-	
+
 func (self BitswapStore) get(tx *bolt.Tx, key cid.Cid) (blocks.Block, error) {
 
 	//check if it is a directory
@@ -1063,15 +1093,15 @@ func (self BitswapStore) put(tx *bolt.Tx, c cid.Cid, block P2PDataBlock) error {
 		err = self.putDirectory(tx, c, block.(P2PDirectoryBlock))
 
 	case BlockMultiFile:
-		err =  self.putMultiFile(tx, c, block.(P2PMultiFileBlock))
+		err = self.putMultiFile(tx, c, block.(P2PMultiFileBlock))
 
 	case BlockFile:
-		err =  self.putFile(tx, c, block.(P2PFileBlock))
+		err = self.putFile(tx, c, block.(P2PFileBlock))
 
 	case BlockRaw:
-		err =  self.putRaw(tx, c, block.(P2PRawBlock))
+		err = self.putRaw(tx, c, block.(P2PRawBlock))
 	}
-	
+
 	if err != nil {
 		self.expected.ClearExpectedOwners(c)
 	}

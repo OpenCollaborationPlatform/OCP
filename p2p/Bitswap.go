@@ -84,11 +84,10 @@ func (self BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, 
 			close(result)
 			return result
 		}
-		
+
 	} else {
 		owner = self.store.GetExpectedOwner(val)
 	}
-	
 
 	//check if it is a global cid and search globally if so
 	swarms := make([]*Swarm, 0)
