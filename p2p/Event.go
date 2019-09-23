@@ -7,7 +7,12 @@ package p2p
 import (
 	"context"
 
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p-core/protocol"
+	"github.com/libp2p/go-libp2p-pubsub"
+)
+
+const (
+	eventProtocol = protocol.ID("/ocp/floodsub/1.0.0")
 )
 
 //small custom wrapper for message to expose custom Event type
@@ -66,7 +71,7 @@ func (self Subscription) Topic() string {
 func newHostEventService(host *Host) (*hostEventService, error) {
 
 	ctx, cncl := context.WithCancel(context.Background())
-	ps, err := pubsub.NewFloodSub(ctx, host.host, pubsub.WithMessageSigning(true))
+	ps, err := pubsub.NewFloodsubWithProtocols(ctx, host.host, []protocol.ID{eventProtocol}, pubsub.WithMessageSigning(true))
 
 	return &hostEventService{ps, cncl}, err
 }

@@ -178,7 +178,7 @@ func NewBitswap(bstore BitswapStore, host *Host) (*bs.Bitswap, error) {
 		return nil, err
 	}
 
-	network := bsnetwork.NewFromIpfsHost(host.host, routing)
+	network := bsnetwork.NewFromIpfsHost(host.host, routing, bsnetwork.Prefix("ocp/"))
 
 	ctx := context.Background()
 	exchange := bs.New(ctx, network, bstore)
