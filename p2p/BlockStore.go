@@ -189,6 +189,60 @@ DB [
 ]
 */
 
+func (self BitswapStore) Print() {
+	
+	fmt.Printf("\nBitswap store content:\n*********************\n")
+	names := []string{"Directories", "Files", "Multifiles"}
+	keys := [][]byte{DirKey, FileKey, MfileKey}
+
+	tx,_ := self.db.Begin(false)
+	defer tx.Rollback()
+
+	for i, key := range keys {
+
+		fmt.Printf("%v [ \n", names[i])
+		bucket := tx.Bucket(key)
+		c := bucket.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			
+			c,_ := cid.Cast(copyKey(k))
+			fmt.Printf("\t%v [\n", c)
+			
+			subbucket := bucket.Bucket(k)
+			c2 := subbucket.Cursor()
+			for k2, v := c2.First(); k2!=nil; k2,v = c2.Next() {
+				
+				if bytes.Equal(k2, NameKey) {
+					fmt.Printf("\t\tname: %v\n", string(v))
+				}
+				
+				if bytes.Equal(k2, OwnerKey) {
+					fmt.Printf("\t\tOwner [\n")
+					ownerbucket := subbucket.Bucket(OwnerKey)
+					c3 := ownerbucket.Cursor()
+					for k3, _ := c3.First(); k3!=nil; k3, _ = c3.Next() {
+						fmt.Printf("\t\t\t%v\n", string(k3))
+					}
+					fmt.Printf("\t\t]\n")
+				}
+				
+				if bytes.Equal(k2, BlockKey) {
+					fmt.Printf("\t\tBlocks [\n")
+					ownerbucket := subbucket.Bucket(BlockKey)
+					c3 := ownerbucket.Cursor()
+					for k3, val := c3.First(); k3!=nil; k3, val = c3.Next() {
+						id, _ := cid.Cast(copyKey(k3))
+						fmt.Printf("\t\t\t%v:%v\n", id, byteToInt(val))
+					}
+					fmt.Printf("\t\t]\n")
+				}
+			}
+			fmt.Printf("\t]\n")			
+		}
+		fmt.Printf("]\n")
+	}
+}
+
 /******************************************************************************
 							Custom functions
 ******************************************************************************/
@@ -240,7 +294,6 @@ func (self BitswapStore) SetOwnership(block blocks.Block, owner string) error {
 			return nil
 		}
 	}
-
 	//if we are here the owne was not found: add ourself!
 	return bucket.Put([]byte(owner), []byte(owner))
 }
@@ -296,7 +349,7 @@ func (self BitswapStore) ReleaseOwnership(block blocks.Block, owner string) (boo
 
 	//check if there are more or if we have been the last one
 	c := bucket.Cursor()
-	if k, _ := c.Next(); k != nil {
+	if k, _ := c.First(); k != nil {
 		return false, nil
 	}
 
@@ -352,7 +405,7 @@ func (self BitswapStore) GetOwner(block blocks.Block) ([]string, error) {
 
 	owners := make([]string, 0)
 	c := bucket.Cursor()
-	if k, _ := c.Next(); k == nil {
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
 		owners = append(owners, string(copyKey(k)))
 	}
 	return owners, nil
@@ -364,7 +417,7 @@ func (self BitswapStore) ClearExpectedOwner(id cid.Cid) {
 }
 
 
-//Returns all blocks without a owner (multiffile subblocks are not returned)
+//Returns all blocks without a owner (multifile sub-blocks are not returned)
 func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 
 	tx, err := self.db.Begin(false)
@@ -389,8 +442,8 @@ func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 			}
 			//check if owners are empty
 			c2 := ownerbucket.Cursor()
-			if k2, _ := c2.Next(); k2 == nil {
-
+			if k2, _ := c2.First(); k2 == nil {
+				
 				//no owners! The only reason not to delete it would be if it is part of a directory!
 				if has, _ := self.hasParentDirectoryWithOwner(k, tx); !has {
 
@@ -399,7 +452,8 @@ func (self BitswapStore) GarbageCollect() ([]cid.Cid, error) {
 						return nil, utils.StackError(err, "Unable to collect garbage")
 					}
 					result = append(result, key)
-				}
+				
+				} 
 			}
 		}
 	}

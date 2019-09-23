@@ -262,8 +262,9 @@ func (self *hostDataService) basicFetch(ctx context.Context, id cid.Cid, fetcher
 			return err
 		}
 		//as we do not know which kind of block this cid is we use the normal request
+		//as this are subblocks we do not need to add the owner
 		for _, sub := range needed {
-			err := self.basicFetch(ctx, sub, fetcher, owner)
+			err := self.basicFetch(ctx, sub, fetcher, "")
 			if err != nil {
 				return utils.StackError(err, "Unable to fetch id %v", id.String())
 			}
@@ -298,9 +299,11 @@ func (self *hostDataService) basicFetch(ctx context.Context, id cid.Cid, fetcher
 	}
 
 	//set ownership
-	err = self.store.SetOwnership(block, owner)
-	if err != nil {
-		utils.StackError(err, "Unable to fetch id %v", id.String())
+	if owner != "" {
+		err = self.store.SetOwnership(block, owner)
+		if err != nil {
+			utils.StackError(err, "Unable to set correct owner for id %v", id.String())
+		}
 	}
 
 	return nil

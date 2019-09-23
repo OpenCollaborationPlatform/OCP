@@ -134,7 +134,7 @@ func (self BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, 
 		found := 0
 		for call := range ret {
 
-			if call.Reply.(bool) && call.Error == nil {
+			if *(call.Reply.(*bool)) && call.Error == nil {
 				found = found + 1
 				result <- self.host.host.Peerstore().PeerInfo(call.Dest)
 
