@@ -504,6 +504,125 @@ func (self BitswapStore) hasParentDirectoryWithOwner(key []byte, tx *bolt.Tx) (b
 	return false, nil
 }
 
+
+//Returns all blocks with a given owner (multifile sub-blocks are returned)
+func (self BitswapStore) GetCidsForOwner(owner string) ([]cid.Cid, error) {
+
+	tx, err := self.db.Begin(false)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to collect blocks for owner")
+	}
+	defer tx.Rollback()
+	
+	ids := make([]cid.Cid, 0)
+	
+	//collect all directory blocks owned
+	bucket := tx.Bucket(DirKey)
+	c := bucket.Cursor()
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		
+		//check if owned by "global"
+		sub := bucket.Bucket(k).Bucket(OwnerKey)
+		c2 := sub.Cursor()
+		inner1:
+		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {	
+			if string(k2) == owner {
+				dirid, _ := cid.Cast(copyKey(k))
+				dirids := self.getDirSubblocks(tx, dirid)
+				ids = append(ids, dirids...)
+				break inner1
+			}
+		}
+	}
+
+	//collect all multifiles owned
+	bucket = tx.Bucket(MfileKey)
+	c = bucket.Cursor()
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		
+		//check if owned by "global"
+		sub := bucket.Bucket(k).Bucket(OwnerKey)
+		c2 := sub.Cursor()
+		inner2:
+		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {	
+			if string(k2) == owner {
+				
+				//iterate over all blocks and add them!
+				c3 := bucket.Bucket(k).Bucket(BlockKey).Cursor()
+				for k3, _ := c3.First(); k3 != nil; k3, _ = c3.Next() {
+					id,_ := cid.Cast(copyKey(k3))
+					ids = append(ids, id)
+				}
+				break inner2
+			}
+		}
+	}
+	
+	//collect all normal files
+	bucket = tx.Bucket(FileKey)
+	c = bucket.Cursor()
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		
+		//check if owned by "global"
+		sub := bucket.Bucket(k).Bucket(OwnerKey)
+		c2 := sub.Cursor()
+		inner3:
+		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {	
+			if string(k2) == owner {
+				
+				id,_ := cid.Cast(copyKey(k))
+				ids = append(ids, id)
+				break inner3
+			}
+		}
+	}
+
+	return ids, nil
+}
+
+func (self BitswapStore) getDirSubblocks(tx *bolt.Tx, dir cid.Cid) []cid.Cid {
+	
+	ids := make([]cid.Cid, 0)
+	
+	//get the blocks, so that we know what to do with them
+	bucket := tx.Bucket(DirKey).Bucket(dir.Bytes())
+	if bucket == nil {
+		return ids
+	}
+	blocks := bucket.Bucket(BlockKey)
+	if blocks == nil {
+		return ids
+	}
+	
+	c := blocks.Cursor()
+	for k, _ := c.First(); k != nil; k,_ = c.Next() {
+		id,_ := cid.Cast(copyKey(k))
+		ids = append(ids, id)
+		
+		block, err := self.get(tx, id)
+		if err != nil {
+			return ids
+		}
+		p2pblock, err := getP2PBlock(block)
+		if err != nil {
+			return ids
+		}
+		
+		switch p2pblock.Type() {
+			
+		case BlockMultiFile:
+			mfblock := p2pblock.(P2PMultiFileBlock)
+			ids = append(ids, mfblock.Blocks...)
+			
+		case BlockDirectory:		
+			dirIds := self.getDirSubblocks(tx, id)
+			ids = append(ids, dirIds...)
+		}
+	}
+	
+	return ids
+}
+
 /******************************************************************************
 							Blockstore interface
 ******************************************************************************/
@@ -705,6 +824,12 @@ func (self BitswapStore) Get(key cid.Cid) (blocks.Block, error) {
 		return nil, utils.StackError(err, "Unable to get block")
 	}
 	defer tx.Rollback()
+	
+	return self.get(tx, key)
+}
+	
+	
+func (self BitswapStore) get(tx *bolt.Tx, key cid.Cid) (blocks.Block, error) {
 
 	//check if it is a directory
 	bucket := tx.Bucket(DirKey)

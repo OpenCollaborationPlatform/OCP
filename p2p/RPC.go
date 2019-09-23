@@ -47,6 +47,8 @@ func (self *hostRpcService) Register(rcvr interface{}) error {
 	return self.server.RegisterName(name, rcvr)
 }
 
+func (self *hostRpcService) Close() {}
+
 /*******************************************************************************
 						Swarm RpcService
 *******************************************************************************/

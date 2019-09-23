@@ -151,12 +151,12 @@ func (h *Host) Start() error {
 		return utils.StackError(err, "Unable to startup event service")
 	}
 
-	log.Printf("Host successful stated at %s", addr)
-
 	return nil
 }
 
 func (h *Host) Stop(ctx context.Context) error {
+
+	//stop data replication
 
 	//stop swarms
 	for _, swarm := range h.Swarms() {
@@ -169,6 +169,9 @@ func (h *Host) Stop(ctx context.Context) error {
 	}
 	if h.Data != nil {
 		h.Data.Close()
+	}
+	if h.Rpc != nil {
+		h.Rpc.Close()
 	}
 
 	//stop dht
