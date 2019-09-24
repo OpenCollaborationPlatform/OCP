@@ -1,8 +1,8 @@
 package datastructure
 
 import (
-	"github.com/ickby/CollaborationNode/dml"
 	"fmt"
+	"github.com/ickby/CollaborationNode/dml"
 )
 
 type Operation interface {
