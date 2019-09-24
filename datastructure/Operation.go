@@ -1,12 +1,12 @@
 package datastructure
 
 import (
-	"CollaborationNode/dml"
+	"github.com/ickby/CollaborationNode/dml"
 	"fmt"
 )
 
 type Operation interface {
-	ApplyTo(*dml.Runtime) error
+	ApplyTo(*dml.Runtime) interface{}
 	ActingUser() dml.User
 }
 
@@ -34,7 +34,7 @@ func (self *operation) toData() []byte {
 	return nil
 }
 
-func (self *operation) ApplyTo(rntm *dml.Runtime) error {
+func (self *operation) ApplyTo(rntm *dml.Runtime) interface{} {
 	fmt.Println("Apply empty op to runtime")
 	return nil
 }

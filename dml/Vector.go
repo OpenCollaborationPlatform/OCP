@@ -2,8 +2,8 @@
 package dml
 
 import (
-	datastore "CollaborationNode/datastores"
-	"CollaborationNode/utils"
+	datastore "github.com/ickby/CollaborationNode/datastores"
+	"github.com/ickby/CollaborationNode/utils"
 	"fmt"
 )
 

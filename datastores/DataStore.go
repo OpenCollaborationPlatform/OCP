@@ -29,7 +29,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
 )

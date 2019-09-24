@@ -1,20 +1,16 @@
 package datastructure
 
 import (
-	"CollaborationNode/datastores"
-	"CollaborationNode/dml"
-	"CollaborationNode/p2p"
-	"CollaborationNode/utils"
+	"io"
+	"io/ioutil"
+	"archive/zip"
+	"github.com/ickby/CollaborationNode/datastores"
+	"github.com/ickby/CollaborationNode/dml"
+	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
-	"context"
-	"encoding/gob"
-	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
-	"time"
 
-	cid "github.com/ipfs/go-cid"
 )
 
 //shared state data structure
@@ -22,38 +18,12 @@ type state struct {
 	//path which holds the datastores and dml files
 	path string
 
-	//store snapshots
-	data p2p.DataService
-
 	//runtime data
 	dml             *dml.Runtime
 	store           *datastore.Datastore
-	operationNumber uint64
-	mutex           sync.Mutex
 }
 
-type stateSnapshot struct {
-	file            cid.Cid
-	operationNumber uint64
-}
-
-func (self stateSnapshot) toByte() []byte {
-	b := new(bytes.Buffer)
-	err := gob.NewEncoder(b).Encode(self)
-	if err != nil {
-		return nil
-	}
-	return b.Bytes()
-}
-
-func snapshotFromBytes(data []byte) (stateSnapshot, error) {
-	var snap stateSnapshot
-	b := bytes.NewBuffer(data)
-	err := gob.NewDecoder(b).Decode(&snap)
-	return snap, err
-}
-
-func newState(path string, data p2p.DataService) (state, error) {
+func newState(path string) (state, error) {
 
 	//create the datastore (autocreates the folder)
 	//path/Datastore
@@ -75,98 +45,113 @@ func newState(path string, data p2p.DataService) (state, error) {
 		return state{}, utils.StackError(err, "Unable to parse dml file")
 	}
 
-	return state{path, data, rntm, store, 0, sync.Mutex{}}, nil
+	return state{path, rntm, store}, nil
 }
 
-func (self *state) Apply(data []byte) error {
-
-	//lock the state
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
+func (self *state) Apply(data []byte) interface{} {
 
 	//get the operation from the log entry
 	op := operationFromData(data)
-	self.operationNumber++
 
 	//apply to runtime
-	op.ApplyTo(self.dml)
-	return nil
-
-}
-
-func (self *state) Reset() error {
-
-	self.operationNumber = 0
-
-	//clear the datastore and build a new one
-	err := self.store.Delete()
-	if err != nil {
-		return utils.StackError(err, "Unable to reset state, cannot delete datastore")
-	}
-	self.store, err = datastore.NewDatastore(self.path)
-	if err != nil {
-		return utils.StackError(err, "Unable to reset state")
-	}
-
-	//reparse the dml file
-	self.dml = dml.NewRuntime(self.store)
-	file := filepath.Join(self.path, "Dml", "main.dml")
-	filereader, err := os.Open(file)
-	if err != nil {
-		return utils.StackError(err, "Unable to load dml file")
-	}
-	return self.dml.Parse(filereader)
+	return op.ApplyTo(self.dml)
 }
 
 func (self *state) Snapshot() ([]byte, error) {
 
-	self.mutex.Lock()
-	defer self.mutex.Unlock()
-
-	//make the backup
+	//prepare the datastore for backup
 	err := self.store.PrepareFileBackup()
 	defer self.store.FinishFileBackup()
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to create snapshot from state-machine")
+		return nil, utils.StackError(err, "Unable to prepare the datastore for snapshotting")
 	}
+	
+	//zip the folder to get a a nice byte slice
+	data := make([]byte, 0)
+	buf := bytes.NewBuffer(data)
+	writer := zip.NewWriter(buf)
 
-	//generate the p2p descriptor
-	id, err := self.data.AddAsync(self.store.Path())
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to make snapshot: cannot distribute file")
-	}
+ 	files, err := ioutil.ReadDir(self.store.Path())
+    if err != nil {
+        return data, utils.StackError(err, "Unable to open datastore directory for snapshotting")
+    }
 
-	return stateSnapshot{id, self.operationNumber}.toByte(), err
+    for _, file := range files {
+        if !file.IsDir() {
+        		path := filepath.Join(self.store.Path(), file.Name())
+            dat, err := ioutil.ReadFile(path)
+            if err != nil {
+                return data, utils.StackError(err, "Unable to open file in datastore directory")
+            }
+
+            // Add some files to the archive.
+            f, err := writer.Create(file.Name())
+            if err != nil {
+                return data, utils.StackError(err, "Unable to create file in zip archive")
+            }
+            _, err = f.Write(dat)
+            if err != nil {
+                return data, utils.StackError(err, "Unable to add file data to zip archive")
+            }
+        }
+    }
+    
+    err = writer.Close()
+    if err != nil {
+        return data, utils.StackError(err, "Unable to close zip writer for data generation")
+    }
+
+	return data, nil
 }
 
 func (self *state) LoadSnapshot(data []byte) error {
 
-	snap, err := snapshotFromBytes(data)
+	//prepare the datastore for backup
+	err := self.store.PrepareFileBackup()
+	defer self.store.FinishFileBackup()
 	if err != nil {
-		return utils.StackError(err, "Provided data is not a snapshot, cannot load!")
+		return utils.StackError(err, "Unable to prepare the datastore for snapshot restore")
 	}
-
-	//fetch the file
-	dir := self.store.Path()
-	self.store.Delete()
-	ctx, _ := context.WithTimeout(context.Background(), 5*time.Hour)
-	_, err = self.data.Write(ctx, snap.file, dir)
+	
+	
+	//clear the datastore directory
+	files, err := ioutil.ReadDir(self.store.Path())
+    if err != nil {
+        return utils.StackError(err, "Unable to open datastore directory for snapshot restore")
+    }
+    
+    for _, file := range files {
+    		path := filepath.Join(self.store.Path(), file.Name())
+		err := os.Remove(path)
+		if err != nil {
+			return utils.StackError(err, "Unable to delete old datastore files")
+		}
+	}
+	
+	//load the new files
+	buf := bytes.NewReader(data)
+	reader, err := zip.NewReader(buf, int64(len(data)))
 	if err != nil {
-		return utils.StackError(err, "Unable to fetch snapshot data")
+		return utils.StackError(err, "Unable to load zip archive from snapshot data")
 	}
-	return nil
-}
+	
+	for _, f := range reader.File {
 
-func (self *state) EnsureSnapshot(data []byte) error {
-
-	snap, err := snapshotFromBytes(data)
-	if err != nil {
-		return utils.StackError(err, "Provided data is not a snapshot, cannot load!")
+		rc, err := f.Open()
+		if err != nil {
+			return utils.StackError(err, "Unable to read file in zip archive for snapshot restore")
+		}
+		path := filepath.Join(self.store.Path(), f.Name)
+		file, err := os.Create(path)
+		if err != nil {
+			return utils.StackError(err, "Unable to create file in datastore for snapshot loading")
+		}
+		_, err = io.Copy(file, rc)
+		if err != nil {
+			return utils.StackError(err, "Unable to store snapshot data in datastore file")
+		}
+		rc.Close()
 	}
-
-	if snap.operationNumber != self.operationNumber {
-		return fmt.Errorf("Operation numbers not equal: snapshot does not represent current state")
-	}
-
+	
 	return nil
 }

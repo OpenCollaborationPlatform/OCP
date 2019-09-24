@@ -1,7 +1,7 @@
 package datastore
 
 import (
-	"CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/utils"
 	"fmt"
 	"math"
 

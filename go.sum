@@ -93,6 +93,7 @@ github.com/dlclark/regexp2 v1.2.0 h1:8sAhBGEM0dRWogWqWyQeIJnxjWO6oIjl8FKqREDsGfk
 github.com/dlclark/regexp2 v1.2.0/go.mod h1:2pZnwuY/m+8K6iRw6wQdMtk+rH5tNGR1i55kozfMjCc=
 github.com/dop251/goja v0.0.0-20190814175915-bb8ee191fdd3 h1:sBtkbUP1709jvM8ut/mYH+/ThuYy5IKx80XHg5sUiiA=
 github.com/dop251/goja v0.0.0-20190814175915-bb8ee191fdd3/go.mod h1:Mw6PkjjMXWbTj+nnj4s3QPXq1jaT0s5pC0iFD4+BOAA=
+github.com/dop251/goja v0.0.0-20190912223329-aa89e6a4c733 h1:cyNc40Dx5YNEO94idePU8rhVd3dn+sd04Arh0kDBAaw=
 github.com/dop251/goja v0.0.0-20190912223329-aa89e6a4c733/go.mod h1:Mw6PkjjMXWbTj+nnj4s3QPXq1jaT0s5pC0iFD4+BOAA=
 github.com/dop251/goja_nodejs v0.0.0-20171011081505-adff31b136e6 h1:RrkoB0pT3gnjXhL/t10BSP1mcr/0Ldea2uMyuBr2SWk=
 github.com/dop251/goja_nodejs v0.0.0-20171011081505-adff31b136e6/go.mod h1:hn7BA7c8pLvoGndExHudxTDKZ84Pyvv+90pbBjbTz0Y=

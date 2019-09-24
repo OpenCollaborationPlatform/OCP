@@ -33,7 +33,7 @@ Definitions:
 */
 
 import (
-	"CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"

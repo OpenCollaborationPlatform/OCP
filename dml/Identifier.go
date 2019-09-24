@@ -1,7 +1,7 @@
 package dml
 
 import (
-	"CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"

@@ -12,7 +12,7 @@ bucket(SetKey) [
 */
 
 import (
-	"CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"encoding/json"
 	"fmt"
