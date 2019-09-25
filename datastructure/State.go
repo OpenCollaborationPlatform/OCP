@@ -153,3 +153,8 @@ func (self *state) LoadSnapshot(data []byte) error {
 
 	return nil
 }
+
+func (self *state) Close() {
+	
+	self.store.Close()
+}
