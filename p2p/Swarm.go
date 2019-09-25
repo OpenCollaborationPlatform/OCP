@@ -341,3 +341,7 @@ func (s *Swarm) Close(ctx context.Context) {
 
 	s.host.removeSwarm(s.ID)
 }
+
+func (s *Swarm) GetHost() *Host {
+	return s.host
+}

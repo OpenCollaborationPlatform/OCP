@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 )
 
-//shared state data structure
-type state struct {
+//shared dmlState data structure
+type dmlState struct {
 	//path which holds the datastores and dml files
 	path string
 
@@ -22,13 +22,13 @@ type state struct {
 	store *datastore.Datastore
 }
 
-func newState(path string) (state, error) {
+func newState(path string) (dmlState, error) {
 
 	//create the datastore (autocreates the folder)
 	//path/Datastore
 	store, err := datastore.NewDatastore(path)
 	if err != nil {
-		return state{}, utils.StackError(err, "Cannot create datastore for datastructure")
+		return dmlState{}, utils.StackError(err, "Cannot create datastore for datastructure")
 	}
 
 	//read in the file and create the runtime
@@ -37,17 +37,17 @@ func newState(path string) (state, error) {
 	file := filepath.Join(path, "Dml", "main.dml")
 	filereader, err := os.Open(file)
 	if err != nil {
-		return state{}, utils.StackError(err, "Unable to load dml file")
+		return dmlState{}, utils.StackError(err, "Unable to load dml file")
 	}
 	err = rntm.Parse(filereader)
 	if err != nil {
-		return state{}, utils.StackError(err, "Unable to parse dml file")
+		return dmlState{}, utils.StackError(err, "Unable to parse dml file")
 	}
 
-	return state{path, rntm, store}, nil
+	return dmlState{path, rntm, store}, nil
 }
 
-func (self *state) Apply(data []byte) interface{} {
+func (self *dmlState) Apply(data []byte) interface{} {
 
 	//get the operation from the log entry
 	op := operationFromData(data)
@@ -56,7 +56,7 @@ func (self *state) Apply(data []byte) interface{} {
 	return op.ApplyTo(self.dml)
 }
 
-func (self *state) Snapshot() ([]byte, error) {
+func (self *dmlState) Snapshot() ([]byte, error) {
 
 	//prepare the datastore for backup
 	err := self.store.PrepareFileBackup()
@@ -103,7 +103,7 @@ func (self *state) Snapshot() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (self *state) LoadSnapshot(data []byte) error {
+func (self *dmlState) LoadSnapshot(data []byte) error {
 
 	//prepare the datastore for backup
 	err := self.store.PrepareFileBackup()
@@ -154,7 +154,7 @@ func (self *state) LoadSnapshot(data []byte) error {
 	return nil
 }
 
-func (self *state) Close() {
+func (self *dmlState) Close() {
 	
 	self.store.Close()
 }

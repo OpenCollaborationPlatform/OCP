@@ -164,6 +164,70 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	return err
 }
 
+//calls setup on all Data Objects. The string is the path up to the object, 
+//e.g. for object Toplevel.Sublevel.MyObject path ist Toplevel.Sublevel
+//th epath is empty for the main object as well as all dynamic data, e.g. vector entries
+func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
+	
+	//check if setup is possible
+	if !self.ready {
+		return fmt.Errorf("Unable to setup objects: Runtime not initialized")
+	}
+
+	//iterate all data object in the hirarchy
+	has := make(map[identifier]struct{}, 0)
+	path := "" 
+	err := setupDataChildren(path, self.mainObj, has, setup)
+	if err != nil {
+		return utils.StackError(err, "Unable to setup all objects")
+	}
+
+	//call setup for all dynamic objects (objects in the global list but not yet
+	//reached via the hirarchy)
+	for _, obj := range self.objects {
+		_, ok := has[obj.Id()]
+		if ok {
+			continue
+		}
+		dataobj, ok := obj.(Data)
+		if !ok {
+			continue
+		}
+		err := setup("", dataobj)
+		if err != nil { 
+			return utils.StackError(err, "Unable to setup all dynamic objects")
+		}
+	}
+	
+	return nil
+}
+
+func setupDataChildren(path string, obj Data, has map[identifier]struct{}, setup func(string, Data) error) error {
+	
+	//execute on the object itself!
+	err := setup(path, obj)
+	if err != nil {
+		return err
+	}
+	has[obj.Id()] = struct{}{}
+	
+	//advance path and execute all children
+	path = path + "." + obj.Id().Name
+	for _, child := range obj.GetChildren() {
+		
+		datachild, ok := child.(Data)
+		if ok {
+			err := setupDataChildren(path, datachild, has, setup)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	
+	return nil
+}
+
+
 // 						Accessing / executing Methods
 //*********************************************************************************
 

@@ -127,6 +127,7 @@ type EventHandler interface {
 	HasEvent(name string) bool
 	AddEvent(name string, evt Event) error
 	GetEvent(name string) Event
+	AllEvents() []string
 }
 
 func NewEventHandler() eventHandler {
@@ -156,6 +157,17 @@ func (self *eventHandler) AddEvent(name string, evt Event) error {
 func (self *eventHandler) GetEvent(name string) Event {
 
 	return self.events[name]
+}
+
+func (self *eventHandler) AllEvents() []string {
+	
+	res := make([]string, len(self.events))
+	cnt := 0 
+	for key, _ := range self.events {
+		res[cnt] = key
+		cnt = cnt+1
+	}
+	return res
 }
 
 //little helper to extract the call arguments

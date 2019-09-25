@@ -21,14 +21,17 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
+//condent identifier
+type Cid = cid.Cid
+
 type DataService interface {
-	Add(ctx context.Context, path string) (cid.Cid, error)              //adds a file or directory
-	AddAsync(path string) (cid.Cid, error)                              //adds a file or directory, but returns when the local operation is done
-	Drop(ctx context.Context, id cid.Cid) error                         //removes a file or directory
-	Fetch(ctx context.Context, id cid.Cid) error                        //Fetches the given data
-	FetchAsync(id cid.Cid) error                                        //Fetches the given data async
-	GetFile(ctx context.Context, id cid.Cid) (*os.File, error)          //gets the file described by the id (fetches if needed)
-	Write(ctx context.Context, id cid.Cid, path string) (string, error) //writes the file or directory to the given path (fetches if needed)
+	Add(ctx context.Context, path string) (Cid, error)              //adds a file or directory
+	AddAsync(path string) (Cid, error)                              //adds a file or directory, but returns when the local operation is done
+	Drop(ctx context.Context, id Cid) error                         //removes a file or directory
+	Fetch(ctx context.Context, id Cid) error                        //Fetches the given data
+	FetchAsync(id Cid) error                                        //Fetches the given data async
+	GetFile(ctx context.Context, id Cid) (*os.File, error)          //gets the file described by the id (fetches if needed)
+	Write(ctx context.Context, id Cid, path string) (string, error) //writes the file or directory to the given path (fetches if needed)
 	Close()
 }
 
@@ -80,7 +83,7 @@ type hostDataService struct {
 	dht      *kaddht.IpfsDHT
 }
 
-func (self *hostDataService) Add(ctx context.Context, path string) (cid.Cid, error) {
+func (self *hostDataService) Add(ctx context.Context, path string) (Cid, error) {
 
 	filecid, _, err := self.basicAdd(path, "global")
 	if err != nil {
@@ -91,14 +94,14 @@ func (self *hostDataService) Add(ctx context.Context, path string) (cid.Cid, err
 	return filecid, err
 }
 
-func (self *hostDataService) AddAsync(path string) (cid.Cid, error) {
+func (self *hostDataService) AddAsync(path string) (Cid, error) {
 
 	//we don't do any network operation...
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
 	return self.Add(ctx, path)
 }
 
-func (self *hostDataService) Drop(ctx context.Context, id cid.Cid) error {
+func (self *hostDataService) Drop(ctx context.Context, id Cid) error {
 
 	err := self.basicDrop(id, "global")
 	if err != nil {
@@ -108,7 +111,7 @@ func (self *hostDataService) Drop(ctx context.Context, id cid.Cid) error {
 	return nil
 }
 
-func (self *hostDataService) Fetch(ctx context.Context, id cid.Cid) error {
+func (self *hostDataService) Fetch(ctx context.Context, id Cid) error {
 
 	err := self.basicFetch(ctx, id, self.bitswap, "global")
 	if err != nil {
@@ -118,7 +121,7 @@ func (self *hostDataService) Fetch(ctx context.Context, id cid.Cid) error {
 	return nil
 }
 
-func (self *hostDataService) FetchAsync(id cid.Cid) error {
+func (self *hostDataService) FetchAsync(id Cid) error {
 
 	go func() {
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
@@ -127,7 +130,7 @@ func (self *hostDataService) FetchAsync(id cid.Cid) error {
 	return nil
 }
 
-func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File, error) {
+func (self *hostDataService) GetFile(ctx context.Context, id Cid) (*os.File, error) {
 
 	_, file, err := self.basicGetFile(ctx, id, self.bitswap, "global")
 	if err != nil {
@@ -137,7 +140,7 @@ func (self *hostDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File,
 	return file, err
 }
 
-func (self *hostDataService) Write(ctx context.Context, id cid.Cid, path string) (string, error) {
+func (self *hostDataService) Write(ctx context.Context, id Cid, path string) (string, error) {
 
 	//make sure we have the data!
 	return self.basicWrite(ctx, id, path, self.bitswap, "global")
@@ -672,7 +675,7 @@ func newSwarmDataService(swarm *Swarm) DataService {
 	return service
 }
 
-func (self *swarmDataService) Add(ctx context.Context, path string) (cid.Cid, error) {
+func (self *swarmDataService) Add(ctx context.Context, path string) (Cid, error) {
 
 	//add the file
 	filecid, _, err := self.data.basicAdd(path, string(self.id))
@@ -695,7 +698,7 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (cid.Cid, er
 	return filecid, nil
 }
 
-func (self *swarmDataService) AddAsync(path string) (cid.Cid, error) {
+func (self *swarmDataService) AddAsync(path string) (Cid, error) {
 
 	//add the file
 	filecid, _, err := self.data.basicAdd(path, string(self.id))
@@ -714,7 +717,7 @@ func (self *swarmDataService) AddAsync(path string) (cid.Cid, error) {
 	return filecid, nil
 }
 
-func (self *swarmDataService) Drop(ctx context.Context, id cid.Cid) error {
+func (self *swarmDataService) Drop(ctx context.Context, id Cid) error {
 
 	//drop the file in the swarm.
 	cmd, err := dataStateCommand{id, true}.toByte()
@@ -729,7 +732,7 @@ func (self *swarmDataService) Drop(ctx context.Context, id cid.Cid) error {
 	return nil
 }
 
-func (self *swarmDataService) Fetch(ctx context.Context, id cid.Cid) error {
+func (self *swarmDataService) Fetch(ctx context.Context, id Cid) error {
 
 	//check if we have the file, if not fetching makes no sense in swarm context
 	if !self.state.HasFile(id) {
@@ -740,7 +743,7 @@ func (self *swarmDataService) Fetch(ctx context.Context, id cid.Cid) error {
 	return self.data.basicFetch(ctx, id, self.session, string(self.id))
 }
 
-func (self *swarmDataService) FetchAsync(id cid.Cid) error {
+func (self *swarmDataService) FetchAsync(id Cid) error {
 
 	//check if we have the file, if not fetching makes no sense in swarm context
 	if !self.state.HasFile(id) {
@@ -751,7 +754,7 @@ func (self *swarmDataService) FetchAsync(id cid.Cid) error {
 	return nil
 }
 
-func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File, error) {
+func (self *swarmDataService) GetFile(ctx context.Context, id Cid) (*os.File, error) {
 
 	_, file, err := self.data.basicGetFile(ctx, id, self.session, string(self.id))
 	if err != nil {
@@ -768,7 +771,7 @@ func (self *swarmDataService) GetFile(ctx context.Context, id cid.Cid) (*os.File
 	return file, err
 }
 
-func (self *swarmDataService) Write(ctx context.Context, id cid.Cid, path string) (string, error) {
+func (self *swarmDataService) Write(ctx context.Context, id Cid, path string) (string, error) {
 
 	//see if we can get the data
 	path, err := self.data.basicWrite(ctx, id, path, self.session, string(self.id))
