@@ -2,7 +2,7 @@
 package connection
 
 import (
-	"CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/p2p"
 	"context"
 	"fmt"
 	"log"

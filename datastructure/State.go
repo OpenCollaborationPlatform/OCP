@@ -47,7 +47,7 @@ func newState(path string) (dmlState, error) {
 	return dmlState{path, rntm, store}, nil
 }
 
-func (self *dmlState) Apply(data []byte) interface{} {
+func (self dmlState) Apply(data []byte) interface{} {
 
 	//get the operation from the log entry
 	op := operationFromData(data)
@@ -56,7 +56,7 @@ func (self *dmlState) Apply(data []byte) interface{} {
 	return op.ApplyTo(self.dml)
 }
 
-func (self *dmlState) Snapshot() ([]byte, error) {
+func (self dmlState) Snapshot() ([]byte, error) {
 
 	//prepare the datastore for backup
 	err := self.store.PrepareFileBackup()
@@ -103,7 +103,7 @@ func (self *dmlState) Snapshot() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (self *dmlState) LoadSnapshot(data []byte) error {
+func (self dmlState) LoadSnapshot(data []byte) error {
 
 	//prepare the datastore for backup
 	err := self.store.PrepareFileBackup()
@@ -154,7 +154,7 @@ func (self *dmlState) LoadSnapshot(data []byte) error {
 	return nil
 }
 
-func (self *dmlState) Close() {
+func (self dmlState) Close() {
 	
 	self.store.Close()
 }

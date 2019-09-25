@@ -37,6 +37,11 @@ func init() {
 
 }
 
+//for external modules that need a host for tessting
+func MakeTemporaryTestingHost(path string) (*Host, error) {
+	return temporaryHost(path)
+}
+
 //creates a random host. The used directory will be a sibling of the provided one.
 //note that the returned host is already started!
 func temporaryHost(dir string) (*Host, error) {

@@ -295,10 +295,15 @@ func (h *Host) Swarms() []*Swarm {
 
 func (h *Host) CreateSwarm(ctx context.Context, states []State) (*Swarm, error) {
 
+	id := SwarmID(uuid.NewV4().String())
+	return h.CreateSwarmWithID(ctx, id, states)
+}
+
+func (h *Host) CreateSwarmWithID(ctx context.Context, id SwarmID, states []State) (*Swarm, error) {
+	
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-
-	id := SwarmID(uuid.NewV4().String())
+	
 	swarm, err := newSwarm(ctx, h, id, states, true, NoPeers())
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create swarm")

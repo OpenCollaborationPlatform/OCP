@@ -1,8 +1,10 @@
 package datastructure
 
 import (
+	"context"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/utils"
 	nxclient "github.com/gammazero/nexus/client"
 )
 
@@ -12,7 +14,7 @@ type Datastructure struct {
 
 	//dml state handling
 	dml      *dml.Runtime
-	dmlState *dmlState
+	dmlState dmlState
 	
 	//swarm to be used fo all relevant datastructure operations
 	swarm *p2p.Swarm
@@ -21,16 +23,16 @@ type Datastructure struct {
 	client *nxclient.Client
 }
 
-func NewDatastructure(ctx context.Context, dmlFiles p2p.Cid, host *p2p.Host, client *nxclient.Client) (Datastructure, error) {
+func NewDatastructure(ctx context.Context, dmlFiles p2p.Cid, host *p2p.Host, client *nxclient.Client, path string) (Datastructure, error) {
 	
 	//load the dml file. those are not swarm specific, but global host datas
-	_, err := host.Data.Write(ctx, dmlFiles, swarm.GetPath())
+	_, err := host.Data.Write(ctx, dmlFiles, path)
 	if err != nil {
 		return Datastructure{}, utils.StackError(err, "Unable to find the dml file") 
 	}
 	
 	//create the state
-	self.state, err = newState(swarm.GetPath())
+	state, err := newState(path)
 	if err != nil {
 		return Datastructure{}, utils.StackError(err, "Unable to create state for datastructure")
 	}
@@ -38,13 +40,15 @@ func NewDatastructure(ctx context.Context, dmlFiles p2p.Cid, host *p2p.Host, cli
 	//initiate the client connections for functions and events
 	wamp := wampHelper{client}
 	rntm := state.dml
-	rntm.SetupAllObjects(func(path string, obj dml.Data) error {
+	rntm.SetupAllObjects(func(objpath string, obj dml.Data) error {
 		
 		//build the full path
-		fpath := path + obj.Id().Name
+		fpath := objpath + obj.Id().Name
 		
 		//go over all events and set them up
 		wamp.SetupDmlEvents(obj, fpath)
+		
+		return nil
 	})
 	
 	
@@ -54,7 +58,7 @@ func NewDatastructure(ctx context.Context, dmlFiles p2p.Cid, host *p2p.Host, cli
 		dmlState: state,
 		swarm: nil,
 		client: client,
-	}
+	}, nil
 }
 
 // 							Bookepping functions
