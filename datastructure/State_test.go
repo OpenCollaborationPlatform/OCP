@@ -45,15 +45,20 @@ func TestStateSnapshot(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(len(snap1), ShouldNotEqual, 0)
 			
-			s1, _ := state.dml.ReadProperty(dml.User("test"), "/", "testS")
-			i1, _ := state.dml.ReadProperty(dml.User("test"), "/", "testI")
+			s1, err := state.dml.ReadProperty(dml.User("test"), "Test", "testS")
+			So(err, ShouldBeNil)
+			i1, err := state.dml.ReadProperty(dml.User("test"), "Test", "testI")
+			So(err, ShouldBeNil)
+			
 			
 			Convey("as well as reloadable",func() {
 				err := state.LoadSnapshot(snap1)
 				So(err, ShouldBeNil)
 				
-				s2, _ := state.dml.ReadProperty(dml.User("test"), "/", "testS")
-				i2, _ := state.dml.ReadProperty(dml.User("test"), "/", "testI")
+				s2, err := state.dml.ReadProperty(dml.User("test"), "Test", "testS")
+				So(err, ShouldBeNil)
+				i2, err := state.dml.ReadProperty(dml.User("test"), "Test", "testI")
+				So(err, ShouldBeNil)
 			
 				So(s1, ShouldEqual, s2)
 				So(i1, ShouldEqual, i2)
@@ -61,26 +66,31 @@ func TestStateSnapshot(t *testing.T) {
 			
 			Convey("A snapshot from changed data",func() {
 				
-				state.dml.RunJavaScript(dml.User("test"), "Test.testS = \"yeah\"")
-				state.dml.RunJavaScript(dml.User("test"), "Test.testI = 25")
+				_, err := state.dml.RunJavaScript(dml.User("test"), "Test.testS = \"yeah\"")
+				So(err, ShouldBeNil)
+				_, err = state.dml.RunJavaScript(dml.User("test"), "Test.testI = 25")
+				So(err, ShouldBeNil)
 				
 				snap2, err := state.Snapshot() 
 				So(err, ShouldBeNil)
 				So(len(snap2), ShouldNotEqual, 0)
 				
-				s3, _ := state.dml.ReadProperty(dml.User("test"), "/", "testS")
-				i3, _ := state.dml.ReadProperty(dml.User("test"), "/", "testI")
+				s3, err := state.dml.ReadProperty(dml.User("test"), "Test", "testS")
+				So(err, ShouldBeNil)
+				i3, err := state.dml.ReadProperty(dml.User("test"), "Test", "testI")
+				So(err, ShouldBeNil)
 
 				Convey("is reloadable as well",func() {
 				
 					err := state.LoadSnapshot(snap2)
 					So(err, ShouldBeNil)
 					
-					s4, _ := state.dml.ReadProperty(dml.User("test"), "/", "testS")
-					i4, _ := state.dml.ReadProperty(dml.User("test"), "/", "testI")
+					s4, _ := state.dml.ReadProperty(dml.User("test"), "Test", "testS")
+					i4, _ := state.dml.ReadProperty(dml.User("test"), "Test", "testI")
 				
 					So(s3, ShouldEqual, s4)
 					So(i3, ShouldEqual, i4)
+					So(i3, ShouldEqual, 25)
 				})
 				
 				Convey("but the state can also load snapshots with different data",func() {
@@ -88,8 +98,8 @@ func TestStateSnapshot(t *testing.T) {
 					err := state.LoadSnapshot(snap1)
 					So(err, ShouldBeNil)
 					
-					s5, _ := state.dml.ReadProperty(dml.User("test"), "/", "testS")
-					i5, _ := state.dml.ReadProperty(dml.User("test"), "/", "testI")
+					s5, _ := state.dml.ReadProperty(dml.User("test"), "Test", "testS")
+					i5, _ := state.dml.ReadProperty(dml.User("test"), "Test", "testI")
 				
 					So(s5, ShouldEqual, s1)
 					So(i5, ShouldEqual, i1)
