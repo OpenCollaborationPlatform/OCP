@@ -40,8 +40,8 @@ func NewDatastructure(path string, prefix string, client *nxclient.Client) (Data
 	}
 
 	//make sure the prefix has a "/" as last charachter
-	if prefix[len(prefix)-1] != '/' {
-		prefix = prefix + "/"
+	if prefix[len(prefix)-1] != '.' {
+		prefix = prefix + "."
 	}
 
 	//return the datastructure
@@ -78,11 +78,11 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	options = wamp.SetOption(options, wamp.OptDiscloseCaller, true)
 
 	//register the function handler
-	uri := self.prefix + "methods/"
+	uri := self.prefix + "methods."
 	self.client.Register(uri, wh.createWampInvokeFunction(), options)
 
 	//register property handler
-	uri = self.prefix + "properties/"
+	uri = self.prefix + "properties."
 	self.client.Register(uri, wh.createWampPropertyFunction(), options)
 
 	//register javascript handler
@@ -93,7 +93,7 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 
 func (self Datastructure) Close() {
 	self.dmlState.Close()
-	self.client.Unregister(self.prefix + "/methods/")
+	self.client.Unregister(self.prefix + ".methods.")
 }
 
 func (self Datastructure) GetState() p2p.State {

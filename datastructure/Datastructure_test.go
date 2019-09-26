@@ -70,7 +70,7 @@ func TestDatastructure(t *testing.T) {
 		os.MkdirAll(dmlpath, os.ModePerm)
 		ioutil.WriteFile(filepath.Join(dmlpath, "main.dml"), []byte(dmlDsContent), os.ModePerm)
 
-		ds, err := NewDatastructure(swarmpath, "/ocp/test", dsClient)
+		ds, err := NewDatastructure(swarmpath, "ocp.test", dsClient)
 		So(err, ShouldBeNil)
 		So(ds, ShouldNotBeNil)
 		defer ds.Close()
@@ -96,7 +96,7 @@ func TestDatastructure(t *testing.T) {
 				}
 			}
 
-			testClient.Subscribe("/ocp/test/events/Test/TestEventZeroArgs", handlerZeroArgs, make(wamp.Dict, 0))
+			testClient.Subscribe("ocp.test.events.Test.TestEventZeroArgs", handlerZeroArgs, make(wamp.Dict, 0))
 			_, err = ds.dml.RunJavaScript("TestUser", "Test.TestEventZeroArgs.Emit()")
 			So(err, ShouldBeNil)
 			//wait a bit to be sure it reached us
@@ -119,7 +119,7 @@ func TestDatastructure(t *testing.T) {
 				args[0] = a[0]
 				args[1] = a[1]
 			}
-			testClient.Subscribe("/ocp/test/events/Test/TestEventTwoArgs", handlerTwoArgs, make(wamp.Dict, 0))
+			testClient.Subscribe("ocp.test.events.Test.TestEventTwoArgs", handlerTwoArgs, make(wamp.Dict, 0))
 			_, err = ds.dml.RunJavaScript("TestUser", "Test.TestEventTwoArgs.Emit(\"Hello\", 42)")
 			So(err, ShouldBeNil)
 			//wait a bit to be sure it reached us
@@ -133,7 +133,7 @@ func TestDatastructure(t *testing.T) {
 		Convey("methods are callable by clients,", func() {
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "/ocp/test/methods/Test/TestFncZeroArgs", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			res, err := testClient.Call(ctx, "ocp.test.methods.Test.TestFncZeroArgs", opts, wamp.List{}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -144,7 +144,7 @@ func TestDatastructure(t *testing.T) {
 			val, _ := ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
 			So(val, ShouldEqual, 0)
 
-			_, err = testClient.Call(ctx, "/ocp/test/methods/Test/TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, `kill`)
+			_, err = testClient.Call(ctx, "ocp.test.methods.Test.TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			time.Sleep(100 * time.Millisecond)
 
@@ -157,7 +157,7 @@ func TestDatastructure(t *testing.T) {
 			code := `Test.testI = 120`
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "/ocp/test/execute", opts, wamp.List{code}, wamp.Dict{}, `kill`)
+			res, err := testClient.Call(ctx, "ocp.test.execute", opts, wamp.List{code}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -172,7 +172,7 @@ func TestDatastructure(t *testing.T) {
 		Convey("and properties are read/writable,", func() {
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "/ocp/test/properties/Test/testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			res, err := testClient.Call(ctx, "ocp.test.properties.Test.testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -180,7 +180,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 1)
 
-			res, err = testClient.Call(ctx, "/ocp/test/properties/Test/testI", opts, wamp.List{42}, wamp.Dict{}, `kill`)
+			res, err = testClient.Call(ctx, "ocp.test.properties.Test.testI", opts, wamp.List{42}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok = res.Arguments[0].(error)
@@ -188,7 +188,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 42)
 
-			res, err = testClient.Call(ctx, "/ocp/test/properties/Test/testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			res, err = testClient.Call(ctx, "ocp.test.properties.Test.testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok = res.Arguments[0].(error)

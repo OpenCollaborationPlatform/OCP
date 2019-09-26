@@ -43,15 +43,14 @@ func (self wampHelper) createWampPublishFunction(path string, event string) dml.
 		}
 
 		//connvert the path into wamp style
-		path = self.prefix + "events/" + path + "/" + event
-		wamppath := strings.Replace(path, ".", "/", -1)
+		path = self.prefix + "events." + path + "." + event
 
 		//other arguments we do not need
 		kwargs := make(wamp.Dict, 0)
 		opts := make(wamp.Dict, 0)
 
 		//publish!
-		return self.client.Publish(wamppath, opts, args, kwargs)
+		return self.client.Publish(path, opts, args, kwargs)
 	}
 }
 
@@ -85,8 +84,8 @@ func (self wampHelper) createWampInvokeFunction() nxclient.InvocationHandler {
 		}
 
 		//build dml path and function
-		idx := strings.LastIndex(string(procedure), "/")
-		path := procedure[(len(self.prefix) + 8):idx] // 8 for methods/
+		idx := strings.LastIndex(string(procedure), ".")
+		path := procedure[(len(self.prefix) + 8):idx] // 8 for methods.
 		fnc := procedure[(idx + 1):]
 
 		//build and excecute the operation arguments
@@ -136,8 +135,8 @@ func (self wampHelper) createWampPropertyFunction() nxclient.InvocationHandler {
 
 		//get the paths
 		procedure := wamp.OptionURI(details, "procedure")
-		idx := strings.LastIndex(string(procedure), "/")
-		path := procedure[(len(self.prefix) + 11):idx] //11 for properties/
+		idx := strings.LastIndex(string(procedure), ".")
+		path := procedure[(len(self.prefix) + 11):idx] //11 for properties.
 		prop := procedure[(idx + 1):]
 
 		//get the arguments: if provided it is a write, otherwise read
