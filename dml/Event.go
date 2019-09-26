@@ -127,7 +127,7 @@ type EventHandler interface {
 	HasEvent(name string) bool
 	AddEvent(name string, evt Event) error
 	GetEvent(name string) Event
-	AllEvents() []string
+	Events() []string
 }
 
 func NewEventHandler() eventHandler {
@@ -159,7 +159,7 @@ func (self *eventHandler) GetEvent(name string) Event {
 	return self.events[name]
 }
 
-func (self *eventHandler) AllEvents() []string {
+func (self *eventHandler) Events() []string {
 	
 	res := make([]string, len(self.events))
 	cnt := 0 

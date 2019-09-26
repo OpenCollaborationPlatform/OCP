@@ -1,40 +1,55 @@
 package datastructure
 
 import (
-	"fmt"
+	"bytes"
+	"encoding/gob"
+
 	"github.com/ickby/CollaborationNode/dml"
 )
 
+func init() {
+	gob.Register(functionOperation{})
+}
+
 type Operation interface {
 	ApplyTo(*dml.Runtime) interface{}
-	ActingUser() dml.User
+	ToData() []byte
 }
 
-type operation struct {
-	user   dml.User
-	opType string
+type functionOperation struct {
+	User      dml.User
+	Path      string
+	Function  string
+	Arguments []interface{}
 }
 
-func newOperation() Operation {
+func newFunctionOperation(user dml.User, path string, fnc string, args []interface{}) Operation {
 
-	return nil
+	return functionOperation{user, path, fnc, args}
 }
 
 func operationFromData(data []byte) Operation {
 
-	//for now return default empty op
-	return &operation{"user1", "empty"}
+	var op Operation
+	buf := bytes.NewReader(data)
+	d := gob.NewDecoder(buf)
+	d.Decode(&op)
+	return op
 }
 
-func (self *operation) ActingUser() dml.User {
-	return self.user
+func (self functionOperation) ToData() []byte {
+
+	var b bytes.Buffer
+	e := gob.NewEncoder(&b)
+	e.Encode(self)
+	return b.Bytes()
 }
 
-func (self *operation) toData() []byte {
-	return nil
-}
+func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 
-func (self *operation) ApplyTo(rntm *dml.Runtime) interface{} {
-	fmt.Println("Apply empty op to runtime")
-	return nil
+	val, err := rntm.CallMethod(self.User, self.Path, self.Function, self.Arguments)
+	if err != nil {
+		return err
+	}
+	return val
 }

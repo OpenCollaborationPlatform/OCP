@@ -155,6 +155,6 @@ func (self dmlState) LoadSnapshot(data []byte) error {
 }
 
 func (self dmlState) Close() {
-	
+
 	self.store.Close()
 }
