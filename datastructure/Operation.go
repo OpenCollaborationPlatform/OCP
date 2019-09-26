@@ -10,6 +10,7 @@ import (
 func init() {
 	gob.Register(functionOperation{})
 	gob.Register(jsOperation{})
+	gob.Register(propertyOperation{})
 }
 
 type Operation interface {
@@ -60,8 +61,8 @@ func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 }
 
 type jsOperation struct {
-	User  dml.User
-	Code  string	
+	User dml.User
+	Code string
 }
 
 func newJsOperation(user dml.User, code string) Operation {
@@ -85,4 +86,34 @@ func (self jsOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 		return err
 	}
 	return val
+}
+
+type propertyOperation struct {
+	User     dml.User
+	Path     string
+	Property string
+	Value    interface{}
+}
+
+func newPropertyOperation(user dml.User, path string, prop string, val interface{}) Operation {
+
+	return propertyOperation{user, path, prop, val}
+}
+
+func (self propertyOperation) ToData() []byte {
+
+	var b bytes.Buffer
+	e := gob.NewEncoder(&b)
+	var op Operation = self
+	e.Encode(&op)
+	return b.Bytes()
+}
+
+func (self propertyOperation) ApplyTo(rntm *dml.Runtime) interface{} {
+
+	err := rntm.WriteProperty(self.User, self.Path, self.Property, self.Value)
+	if err != nil {
+		return err
+	}
+	return self.Value
 }

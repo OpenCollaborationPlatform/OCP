@@ -25,8 +25,8 @@ type Datastructure struct {
 	client *nxclient.Client
 }
 
-/* Creates a new shared dml datastructure and exposes it to wamp. 
- * - The dml folder needs to be found in "path", and the datastore will be 
+/* Creates a new shared dml datastructure and exposes it to wamp.
+ * - The dml folder needs to be found in "path", and the datastore will be
  * 	 created there too.
  * - Prefix is the wamp URI prefix the datastructure uses. After this prefix all
  *   datastrucutre events are created in /events/... and all methods in /methods/...
@@ -38,7 +38,7 @@ func NewDatastructure(path string, prefix string, client *nxclient.Client) (Data
 	if err != nil {
 		return Datastructure{}, utils.StackError(err, "Unable to create state for datastructure")
 	}
-	
+
 	//make sure the prefix has a "/" as last charachter
 	if prefix[len(prefix)-1] != '/' {
 		prefix = prefix + "/"
@@ -61,7 +61,7 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	self.swarm = s
 
 	//initiate the client connections for events
-	wh := wampHelper{self.client, s, self.prefix}
+	wh := wampHelper{self.client, s, self.dml, self.prefix}
 	rntm := self.dml
 	rntm.SetupAllObjects(func(objpath string, obj dml.Data) error {
 
@@ -75,13 +75,18 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 
 	//general options
 	options := wamp.SetOption(wamp.Dict{}, wamp.OptMatch, wamp.MatchPrefix)
-	options =  wamp.SetOption(options, wamp.OptDiscloseCaller, true)
+	options = wamp.SetOption(options, wamp.OptDiscloseCaller, true)
 
 	//register the function handler
 	uri := self.prefix + "methods/"
 	self.client.Register(uri, wh.createWampInvokeFunction(), options)
 
+	//register property handler
+	uri = self.prefix + "properties/"
+	self.client.Register(uri, wh.createWampPropertyFunction(), options)
+
 	//register javascript handler
+	options = wamp.SetOption(options, wamp.OptMatch, wamp.MatchExact)
 	uri = self.prefix + "execute"
 	self.client.Register(uri, wh.createWampJSFunction(), options)
 }

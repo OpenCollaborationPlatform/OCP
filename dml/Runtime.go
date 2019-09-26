@@ -329,6 +329,35 @@ func (self *Runtime) ReadProperty(user User, path string, property string) (inte
 	return prop.GetValue(), nil
 }
 
+func (self *Runtime) WriteProperty(user User, path string, property string, val interface{}) error {
+
+	self.datastore.Begin()
+
+	//save the user for processing
+	self.currentUser = user
+
+	//first check if path is correct and method available
+	obj, err := self.getObjectFromPath(path)
+	if err != nil {
+		self.datastore.Rollback()
+		return err
+	}
+	if !obj.HasProperty(property) {
+		self.datastore.Rollback()
+		return fmt.Errorf("No property %v available in object %v", property, path)
+	}
+
+	prop := obj.GetProperty(property)
+	err = prop.SetValue(val)
+	if err != nil {
+		self.postprocess(true)
+		return utils.StackError(err, "Setting property failed")
+	}
+
+	//postprocess correctly
+	return self.postprocess(false)
+}
+
 // 							Internal Functions
 //*********************************************************************************
 func (self *Runtime) removeObject(obj Object) {
@@ -376,6 +405,8 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 }
 
 //postprocess for all done operations. Entry point for behaviours
+//it executes behaviours including possible rollback if failed.
+//if rollbackonly = true than a full rollback is executed
 func (self *Runtime) postprocess(rollbackOnly bool) error {
 
 	//ensure we always commit at the end

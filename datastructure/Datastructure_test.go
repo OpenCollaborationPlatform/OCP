@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/ickby/CollaborationNode/connection"
-	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/dml"
+	"github.com/ickby/CollaborationNode/p2p"
 
 	wamp "github.com/gammazero/nexus/wamp"
 	uuid "github.com/satori/go.uuid"
@@ -19,8 +19,7 @@ import (
 )
 
 const (
-	dmlDsContent = 
-		  ` Data {
+	dmlDsContent = ` Data {
 				.id: "Test"
 
 			    property string 	testS: "Hallo"
@@ -45,23 +44,13 @@ func TestDatastructure(t *testing.T) {
 	path, _ := ioutil.TempDir("", "datastructure")
 	defer os.RemoveAll(path)
 
-	//and for the swarm!
-	id := uuid.NewV4().String()
-	swarmpath := filepath.Join(path, id)
-	os.MkdirAll(swarmpath, os.ModePerm)
-
-	//setup the dml file to be accessbile for the datastrcuture
-	dmlpath := filepath.Join(swarmpath, "Dml")
-	os.MkdirAll(dmlpath, os.ModePerm)
-	ioutil.WriteFile(filepath.Join(dmlpath, "main.dml"), []byte(dmlDsContent), os.ModePerm)
-
 	Convey("Setting up a new datastructure works", t, func() {
-		
+
 		//make a wamp router to be used for local clients
 		router, _ := connection.MakeTemporaryRouter()
 		dsClient, _ := router.GetLocalClient("dsClient")
 		testClient, _ := router.GetLocalClient("testClient")
-	
+
 		//make a p2p host for communication
 		baseHost, _ := p2p.MakeTemporaryTestingHost(path)
 		defer baseHost.Stop(context.Background())
@@ -70,20 +59,30 @@ func TestDatastructure(t *testing.T) {
 		baseHost.SetMultipleAdress(host.ID(), host.OwnAddresses())
 		host.SetMultipleAdress(baseHost.ID(), baseHost.OwnAddresses())
 		host.Connect(context.Background(), baseHost.ID())
-
-		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 		
+		//and for the swarm!
+		id := uuid.NewV4().String()
+		swarmpath := filepath.Join(host.GetPath(), id)
+		os.MkdirAll(swarmpath, os.ModePerm)
+	
+		//setup the dml file to be accessbile for the datastrcuture
+		dmlpath := filepath.Join(swarmpath, "Dml")
+		os.MkdirAll(dmlpath, os.ModePerm)
+		ioutil.WriteFile(filepath.Join(dmlpath, "main.dml"), []byte(dmlDsContent), os.ModePerm)
+
 		ds, err := NewDatastructure(swarmpath, "/ocp/test", dsClient)
 		So(err, ShouldBeNil)
 		So(ds, ShouldNotBeNil)
 		defer ds.Close()
 
-		swarm, err := host.CreateSwarmWithID(ctx, p2p.SwarmID(id), p2p.SwarmStates(ds.GetState()))
+		swarm, err := host.CreateSwarmWithID(context.Background(), p2p.SwarmID(id), p2p.SwarmStates(ds.GetState()))
 		So(err, ShouldBeNil)
 		ds.Start(swarm)
-		defer swarm.Close(ctx)
+		defer swarm.Close(context.Background())
 
-		Convey("events are forwarded to all clients", func() {
+		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		
+		Convey("events are forwarded to all clients,", func() {
 
 			called := false
 			var err error = nil
@@ -131,43 +130,71 @@ func TestDatastructure(t *testing.T) {
 			So(args[1], ShouldEqual, 42)
 		})
 
-		Convey("methods are callable by clients", func() {
+		Convey("methods are callable by clients,", func() {
 
-		 	opts := make(wamp.Dict, 0)
-		 	res, err := testClient.Call(ctx, "/ocp/test/methods/Test/TestFncZeroArgs", opts, wamp.List{}, wamp.Dict{}, `kill`)
-		 	So(err, ShouldBeNil)
+			opts := make(wamp.Dict, 0)
+			res, err := testClient.Call(ctx, "/ocp/test/methods/Test/TestFncZeroArgs", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
 			So(err, ShouldBeNil)
 			So(ok, ShouldBeFalse)
-			time.Sleep(100*time.Millisecond)
-			
+			time.Sleep(100 * time.Millisecond)
+
 			val, _ := ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
 			So(val, ShouldEqual, 0)
 
-			_, err = testClient.Call(ctx, "/ocp/test/methods/Test/TestFncTwoArgs", opts, wamp.List{1,2}, wamp.Dict{}, `kill`)
-		 	So(err, ShouldBeNil)
-			time.Sleep(100*time.Millisecond)
-			
+			_, err = testClient.Call(ctx, "/ocp/test/methods/Test/TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, `kill`)
+			So(err, ShouldBeNil)
+			time.Sleep(100 * time.Millisecond)
+
 			val, _ = ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
 			So(val, ShouldEqual, 3)
 		})
 
-		Convey("and javascript code can be excecuted", func() {
+		Convey("javascript code can be excecuted,", func() {
 
 			code := `Test.testI = 120`
 
-		 	opts := make(wamp.Dict, 0)
-		 	res, err := testClient.Call(ctx, "/ocp/test/execute", opts, wamp.List{code}, wamp.Dict{}, `kill`)
-		 	So(err, ShouldBeNil)
+			opts := make(wamp.Dict, 0)
+			res, err := testClient.Call(ctx, "/ocp/test/execute", opts, wamp.List{code}, wamp.Dict{}, `kill`)
+			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
 			So(err, ShouldBeNil)
 			So(ok, ShouldBeFalse)
-			time.Sleep(100*time.Millisecond)
-			
+			time.Sleep(100 * time.Millisecond)
+
 			val, _ := ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
 			So(val, ShouldEqual, 120)
+		})
+
+		Convey("and properties are read/writable,", func() {
+
+			opts := make(wamp.Dict, 0)
+			res, err := testClient.Call(ctx, "/ocp/test/properties/Test/testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			So(err, ShouldBeNil)
+			So(len(res.Arguments), ShouldEqual, 1)
+			err, ok := res.Arguments[0].(error)
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeFalse)
+			So(res.Arguments[0], ShouldEqual, 1)
+
+			res, err = testClient.Call(ctx, "/ocp/test/properties/Test/testI", opts, wamp.List{42}, wamp.Dict{}, `kill`)
+			So(err, ShouldBeNil)
+			So(len(res.Arguments), ShouldEqual, 1)
+			err, ok = res.Arguments[0].(error)
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeFalse)
+			So(res.Arguments[0], ShouldEqual, 42)
+
+			res, err = testClient.Call(ctx, "/ocp/test/properties/Test/testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			So(err, ShouldBeNil)
+			So(len(res.Arguments), ShouldEqual, 1)
+			err, ok = res.Arguments[0].(error)
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeFalse)
+			So(res.Arguments[0], ShouldEqual, 42)
 		})
 	})
 }

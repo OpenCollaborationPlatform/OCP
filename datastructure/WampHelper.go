@@ -14,6 +14,7 @@ import (
 type wampHelper struct {
 	client *nxclient.Client
 	swarm  *p2p.Swarm
+	rntm   *dml.Runtime
 	prefix string
 }
 
@@ -55,20 +56,20 @@ func (self wampHelper) createWampPublishFunction(path string, event string) dml.
 }
 
 func (self wampHelper) executeOperation(ctx context.Context, op Operation) *nxclient.InvokeResult {
-	
+
 	//execute the operation!
 	res, err := self.swarm.State.AddCommand(ctx, "dmlState", op.ToData())
 	if err != nil {
 		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 	}
-	
+
 	//check if the returned value is an error
 	if err, ok := res.(error); ok {
 		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 	}
-	
+
 	return &nxclient.InvokeResult{Args: wamp.List{res}}
-	
+
 }
 
 func (self wampHelper) createWampInvokeFunction() nxclient.InvocationHandler {
@@ -85,7 +86,7 @@ func (self wampHelper) createWampInvokeFunction() nxclient.InvocationHandler {
 
 		//build dml path and function
 		idx := strings.LastIndex(string(procedure), "/")
-		path := procedure[(len(self.prefix)+8):idx]
+		path := procedure[(len(self.prefix) + 8):idx] // 8 for methods/
 		fnc := procedure[(idx + 1):]
 
 		//build and excecute the operation arguments
@@ -118,6 +119,42 @@ func (self wampHelper) createWampJSFunction() nxclient.InvocationHandler {
 		//build and execute the operation arguments
 		op := newJsOperation(dml.User(auth), code)
 		return self.executeOperation(ctx, op)
+	}
+
+	return res
+}
+
+func (self wampHelper) createWampPropertyFunction() nxclient.InvocationHandler {
+
+	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+		//get the user id
+		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
+		if auth == "" {
+			return &nxclient.InvokeResult{Err: wamp.URI("No authid disclosed")}
+		}
+
+		//get the paths
+		procedure := wamp.OptionURI(details, "procedure")
+		idx := strings.LastIndex(string(procedure), "/")
+		path := procedure[(len(self.prefix) + 11):idx] //11 for properties/
+		prop := procedure[(idx + 1):]
+
+		//get the arguments: if provided it is a write, otherwise read
+		if len(args) == 0 {
+			val, err := self.rntm.ReadProperty(dml.User(auth), string(path), string(prop))
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+			}
+			return &nxclient.InvokeResult{Args: wamp.List{val}}
+
+		} else if len(args) == 1 {
+			//build and execute the operation arguments
+			op := newPropertyOperation(dml.User(auth), string(path), string(prop), args[0])
+			return self.executeOperation(ctx, op)
+		}
+
+		return &nxclient.InvokeResult{Err: wamp.URI("Only non or one argument supportet")}
 	}
 
 	return res
