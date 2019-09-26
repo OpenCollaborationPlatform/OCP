@@ -9,48 +9,48 @@ import (
 	"github.com/mr-tron/base58/base58"
 )
 
-type identifier struct {
+type Identifier struct {
 	Parent [32]byte
 	Type   string
 	Name   string
 }
 
-func IdentifierFromData(data []byte) (identifier, error) {
+func IdentifierFromData(data []byte) (Identifier, error) {
 
-	var result identifier
+	var result Identifier
 	err := json.Unmarshal(data, &result)
 	if err != nil {
-		return identifier{}, utils.StackError(err, "Unable to recreate identifier from data")
+		return Identifier{}, utils.StackError(err, "Unable to recreate Identifier from data")
 	}
 	return result, nil
 }
 
-func IdentifierFromEncoded(code string) (identifier, error) {
+func IdentifierFromEncoded(code string) (Identifier, error) {
 
 	data, err := base58.Decode(code)
 	if err != nil {
-		return identifier{}, utils.StackError(err, "Unable to decode strig to identifier data")
+		return Identifier{}, utils.StackError(err, "Unable to decode strig to Identifier data")
 	}
 	return IdentifierFromData(data)
 }
 
-func (self identifier) data() []byte {
+func (self Identifier) Data() []byte {
 	data, _ := json.Marshal(self)
 	return data
 }
 
-func (self identifier) hash() [32]byte {
-	return sha256.Sum256(self.data())
+func (self Identifier) Hash() [32]byte {
+	return sha256.Sum256(self.Data())
 }
 
-func (self identifier) encode() string {
-	return base58.Encode(self.data())
+func (self Identifier) Encode() string {
+	return base58.Encode(self.Data())
 }
 
-func (self identifier) equal(id identifier) bool {
+func (self Identifier) Equal(id Identifier) bool {
 	return bytes.Equal(self.Parent[:], id.Parent[:]) && self.Type == id.Type && self.Name == id.Name
 }
 
-func (self identifier) valid() bool {
+func (self Identifier) Valid() bool {
 	return self.Type != "" && self.Name != ""
 }

@@ -116,7 +116,7 @@ func (self transaction) Objects() []Data {
 	//note: must panic on error as otherwise slice has more nil objects in it
 	for i, entry := range entries {
 
-		var id identifier
+		var id Identifier
 		err := entry.ReadType(&id)
 		if err != nil {
 			panic("Cannot read identifier\n")
@@ -131,7 +131,7 @@ func (self transaction) Objects() []Data {
 	return result
 }
 
-func (self transaction) HasObject(id identifier) bool {
+func (self transaction) HasObject(id Identifier) bool {
 
 	entries, err := self.objects.GetEntries()
 	if err != nil {
@@ -140,13 +140,13 @@ func (self transaction) HasObject(id identifier) bool {
 
 	for _, entry := range entries {
 
-		var obj_id identifier
+		var obj_id Identifier
 		err := entry.ReadType(obj_id)
 		if err != nil {
 			continue
 		}
 
-		if obj_id.equal(id) {
+		if obj_id.Equal(id) {
 			return true
 		}
 	}
@@ -156,7 +156,7 @@ func (self transaction) HasObject(id identifier) bool {
 
 //Adds object to the transaction. Note: Already having it is not a error to avoid
 //the need of excessive checking
-func (self transaction) AddObject(id identifier) error {
+func (self transaction) AddObject(id Identifier) error {
 
 	if self.HasObject(id) {
 		return nil
@@ -458,12 +458,12 @@ type transactionBehaviour struct {
 	current       datastore.Value
 }
 
-func NewTransactionBehaviour(name string, parent identifier, rntm *Runtime) Object {
+func NewTransactionBehaviour(name string, parent Identifier, rntm *Runtime) Object {
 
 	behaviour, _ := NewBehaviour(parent, name, `Transaction`, rntm)
 
 	//get the datastores
-	set, err := rntm.datastore.GetOrCreateSet(datastore.ValueType, false, behaviour.Id().hash())
+	set, err := rntm.datastore.GetOrCreateSet(datastore.ValueType, false, behaviour.Id().Hash())
 	if err != nil {
 		return nil
 	}

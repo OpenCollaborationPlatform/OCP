@@ -27,7 +27,7 @@ type Object interface {
 	SetRefcount(uint64) error
 
 	//Object functions
-	Id() identifier
+	Id() Identifier
 	GetParent() Object
 
 	//type handling (full type desciption)
@@ -45,8 +45,8 @@ type object struct {
 
 	//object static state
 	rntm     *Runtime
-	parent   identifier
-	id       identifier
+	parent   Identifier
+	id       Identifier
 	dataType DataType
 
 	//object dynamic state (hence in db)
@@ -56,13 +56,13 @@ type object struct {
 	jsobj *goja.Object
 }
 
-func NewObject(parent identifier, name string, oType string, rntm *Runtime) *object {
+func NewObject(parent Identifier, name string, oType string, rntm *Runtime) *object {
 
 	jsobj := rntm.jsvm.NewObject()
-	id := identifier{parent.hash(), oType, name}
+	id := Identifier{parent.Hash(), oType, name}
 
 	//the versionmanager to access the datastores correctly
-	versManager := datastore.NewVersionManager(id.hash(), rntm.datastore)
+	versManager := datastore.NewVersionManager(id.Hash(), rntm.datastore)
 
 	//the store for the refcount
 	set, err := versManager.GetDatabaseSet(datastore.ValueType)
@@ -93,12 +93,12 @@ func NewObject(parent identifier, name string, oType string, rntm *Runtime) *obj
 	obj.AddProperty("id", MustNewDataType("string"), "", true)
 
 	//add default methods
-	obj.AddMethod("Identifier", MustNewMethod(obj.Id().encode))
+	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode))
 
 	return &obj
 }
 
-func (self *object) Id() identifier {
+func (self *object) Id() Identifier {
 	return self.id
 }
 

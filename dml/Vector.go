@@ -15,7 +15,7 @@ type vector struct {
 	length  *datastore.ValueVersioned
 }
 
-func NewVector(name string, parent identifier, rntm *Runtime) Object {
+func NewVector(name string, parent Identifier, rntm *Runtime) Object {
 
 	base := NewDataBaseClass(name, "Vector", parent, rntm)
 
@@ -170,7 +170,7 @@ func (self *vector) Set(idx int64, value interface{}) error {
 
 		old, _ := self.Get(idx)
 		obj, _ := value.(Object)
-		err = self.entries.Write(idx, obj.Id().encode())
+		err = self.entries.Write(idx, obj.Id().Encode())
 
 		//handle ref counts
 		if err != nil {
@@ -239,7 +239,7 @@ func (self *vector) AppendNew() (interface{}, error) {
 
 	//write new entry
 	if obj, ok := result.(Object); ok {
-		err = self.entries.Write(length, obj.Id().encode())
+		err = self.entries.Write(length, obj.Id().Encode())
 	} else {
 		err = self.entries.Write(length, result)
 	}

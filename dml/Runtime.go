@@ -33,7 +33,7 @@ import (
 )
 
 //Function prototype that can create new object types in DML
-type CreatorFunc func(name string, parent identifier, rntm *Runtime) Object
+type CreatorFunc func(name string, parent Identifier, rntm *Runtime) Object
 
 func NewRuntime(ds *datastore.Datastore) *Runtime {
 
@@ -54,7 +54,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 		mutex:              &sync.Mutex{},
 		ready:              false,
 		currentUser:        "none",
-		objects:            make(map[identifier]Data, 0),
+		objects:            make(map[Identifier]Data, 0),
 		mainObj:            nil,
 		initialObjRefcount: 0,
 		transactions:       &TransactionManager{},
@@ -94,7 +94,7 @@ type Runtime struct {
 	//internal state
 	ready              Boolean //True if a datastructure was read and setup, false if no dml file was parsed
 	currentUser        User    //user that currently access the runtime
-	objects            map[identifier]Data
+	objects            map[Identifier]Data
 	mainObj            Data
 	initialObjRefcount uint64
 
@@ -140,7 +140,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 
 	//process the AST into usable objects
-	obj, err := self.buildObject(ast.Object, identifier{}, make([]*astObject, 0))
+	obj, err := self.buildObject(ast.Object, Identifier{}, make([]*astObject, 0))
 	if err != nil {
 		return utils.StackError(err, "Unable to parse dml code")
 		//TODO clear the database entries...
@@ -175,7 +175,7 @@ func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
 	}
 
 	//iterate all data object in the hirarchy
-	has := make(map[identifier]struct{}, 0)
+	has := make(map[Identifier]struct{}, 0)
 	path := "" 
 	err := setupDataChildren(path, self.mainObj, has, setup)
 	if err != nil {
@@ -202,7 +202,7 @@ func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
 	return nil
 }
 
-func setupDataChildren(path string, obj Data, has map[identifier]struct{}, setup func(string, Data) error) error {
+func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup func(string, Data) error) error {
 	
 	//execute on the object itself!
 	err := setup(path, obj)
@@ -364,7 +364,7 @@ func (self *Runtime) removeObject(obj Object) {
 
 	delete(self.objects, obj.Id())
 	//TODO: unkown how to do it from go
-	self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().encode()))
+	self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().Encode()))
 }
 
 //Function to extend the available data and behaviour types for this runtime
@@ -380,6 +380,7 @@ func (self *Runtime) registerObjectCreator(name string, fnc CreatorFunc) error {
 }
 
 //get the object from the identifier path list (e.g. myobj.childname.yourobject)
+//alternatively to names it can include identifiers (e.g. from Object.Identifier())
 func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 
 	names := strings.Split(path, `.`)
@@ -387,19 +388,41 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 		return nil, fmt.Errorf("Not a valid path to object: no IDs found")
 	}
 
+	var obj Data
 	if names[0] != self.mainObj.Id().Name {
-		return nil, fmt.Errorf("First identifier cannot be found")
+		id, err := IdentifierFromEncoded(names[0])
+		if err != nil {
+			return nil, fmt.Errorf("First identifier %v cannot be found", names[0])
+		}
+		listobj, ok := self.objects[id]
+		if !ok{
+			return nil, fmt.Errorf("First identifier %v cannot be found", names[0])
+		}
+		obj = listobj
+	
+	} else {
+		obj = self.mainObj	
 	}
 
-	obj := self.mainObj
 	for _, name := range names[1:] {
 
 		//check all childs to find the one with given name
 		child, err := obj.GetChildByName(name)
 		if err != nil {
-			return nil, err
+			//maybe its an identifier
+			id, err := IdentifierFromEncoded(name)
+			if err != nil {
+				return nil, fmt.Errorf("Identifier %v cannot be found", name)
+			}
+			listobj, ok := self.objects[id]
+			if !ok{
+				return nil, fmt.Errorf("Identifier %v cannot be found", name)
+			}
+			obj = listobj
+		
+		} else {
+			obj = child
 		}
-		obj = child
 	}
 	return obj, nil
 }
@@ -458,7 +481,7 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 	}
 
 	//garbace collection: which objects can be removed?
-	removers := make([]identifier, 0)
+	removers := make([]Identifier, 0)
 	for id, obj := range self.objects {
 		rc, err := obj.GetRefcount()
 		if err != nil {
@@ -470,7 +493,7 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 	}
 	for _, id := range removers {
 		delete(self.objects, id)
-		self.jsObjMap.Set(id.encode(), nil)
+		self.jsObjMap.Set(id.Encode(), nil)
 	}
 
 	return postError
@@ -505,7 +528,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	}
 
 	//we now register the imported ast as a creator
-	creator := func(name string, parent identifier, rntm *Runtime) Object {
+	creator := func(name string, parent Identifier, rntm *Runtime) Object {
 		//to assgn the correct object name we need to override the ID pasignment. This must be available
 		//on object build time as the identifier is created with it
 		idSet := false
@@ -539,7 +562,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 }
 
 //due to recursive nature og objects we need an extra function
-func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehaviours []*astObject) (Object, error) {
+func (self *Runtime) buildObject(astObj *astObject, parent Identifier, recBehaviours []*astObject) (Object, error) {
 
 	//see if we can build it, and do so if possible
 	creator, ok := self.creators[astObj.Identifier]
@@ -562,7 +585,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	obj := creator(objName, parent, self)
 	obj.SetDataType(MustNewDataType(astObj))
 	obj.SetRefcount(self.initialObjRefcount)
-	if parent.valid() {
+	if parent.Valid() {
 		objId := obj.Id()
 		//if unique in the parents childrens we are generaly unique, as parent is part of our ID
 		for _, sibling := range self.objects[parent].GetChildren() {
@@ -580,12 +603,12 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	if !isBehaviour {
 		//add to rntm
 		self.objects[obj.Id()] = obj.(Data)
-		self.jsObjMap.Set(obj.Id().encode(), obj.GetJSObject())
+		self.jsObjMap.Set(obj.Id().Encode(), obj.GetJSObject())
 	}
 
 	//expose to javascript
 	jsobj := obj.GetJSObject()
-	if parent.valid() {
+	if parent.Valid() {
 		parentObj := self.objects[parent]
 		parentObj.GetJSObject().Set(objName, jsobj)
 	}
@@ -731,7 +754,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent identifier, recBehavi
 	}
 
 	//ant last we add the general object properties: parent etc...
-	if parent.valid() {
+	if parent.Valid() {
 		jsobj.DefineDataProperty("parent", self.objects[parent].GetJSObject(), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	} else {
 		jsobj.DefineDataProperty("parent", self.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)

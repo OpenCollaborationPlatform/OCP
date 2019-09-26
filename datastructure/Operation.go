@@ -57,6 +57,13 @@ func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	if err != nil {
 		return err
 	}
+
+	//check if it is a Object, if so we only return the encoded identifier!
+	obj, ok := val.(dml.Object)
+	if ok {
+		return obj.Id().Encode()
+	}
+	
 	return val
 }
 
@@ -85,6 +92,13 @@ func (self jsOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	if err != nil {
 		return err
 	}
+
+	//check if it is a Object, if so we only return the encoded identifier!
+	obj, ok := val.(dml.Object)
+	if ok {
+		return obj.Id().Encode()
+	}
+	
 	return val
 }
 
@@ -115,5 +129,6 @@ func (self propertyOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	if err != nil {
 		return err
 	}
+
 	return self.Value
 }

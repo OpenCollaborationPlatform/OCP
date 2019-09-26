@@ -23,19 +23,19 @@ type data struct {
 	*object
 	behaviourHandler
 
-	children []identifier
+	children []Identifier
 }
 
-func NewData(name string, parent identifier, rntm *Runtime) Object {
+func NewData(name string, parent Identifier, rntm *Runtime) Object {
 	return NewDataBaseClass(name, "Data", parent, rntm)
 }
 
-func NewDataBaseClass(name string, typename string, parent identifier, rntm *Runtime) *data {
+func NewDataBaseClass(name string, typename string, parent Identifier, rntm *Runtime) *data {
 
 	dat := data{
 		NewObject(parent, name, typename, rntm),
 		NewBehaviourHandler(),
-		make([]identifier, 0),
+		make([]Identifier, 0),
 	}
 
 	return &dat

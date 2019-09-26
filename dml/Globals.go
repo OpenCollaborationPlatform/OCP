@@ -65,7 +65,7 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 	}
 
 	//check uniquiness
-	tmpID := identifier{}
+	tmpID := Identifier{}
 	tmpID.Type = astObj.Identifier
 	tmpID.Name = name
 	_, ok := rntm.objects[tmpID]
@@ -74,7 +74,7 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 	}
 
 	//build the object (without parent)
-	obj, err := rntm.buildObject(astObj, identifier{}, make([]*astObject, 0))
+	obj, err := rntm.buildObject(astObj, Identifier{}, make([]*astObject, 0))
 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
