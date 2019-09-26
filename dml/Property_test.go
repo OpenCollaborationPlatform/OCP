@@ -1,7 +1,7 @@
 package dml
 
 import (
-	datastore "CollaborationNode/datastores"
+	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
 	"os"
 	"strings"

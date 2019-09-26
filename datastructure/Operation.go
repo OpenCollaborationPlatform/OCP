@@ -16,18 +16,6 @@ type Operation interface {
 	ToData() []byte
 }
 
-type functionOperation struct {
-	User      dml.User
-	Path      string
-	Function  string
-	Arguments []interface{}
-}
-
-func newFunctionOperation(user dml.User, path string, fnc string, args []interface{}) Operation {
-
-	return functionOperation{user, path, fnc, args}
-}
-
 func operationFromData(data []byte) (Operation, error) {
 
 	var op Operation
@@ -38,6 +26,18 @@ func operationFromData(data []byte) (Operation, error) {
 		return nil, err
 	}
 	return op, nil
+}
+
+type functionOperation struct {
+	User      dml.User
+	Path      string
+	Function  string
+	Arguments []interface{}
+}
+
+func newFunctionOperation(user dml.User, path string, fnc string, args []interface{}) Operation {
+
+	return functionOperation{user, path, fnc, args}
 }
 
 func (self functionOperation) ToData() []byte {

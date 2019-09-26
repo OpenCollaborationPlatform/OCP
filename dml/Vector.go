@@ -43,10 +43,10 @@ func NewVector(name string, parent identifier, rntm *Runtime) Object {
 	vec.AddMethod("Set", MustNewMethod(vec.Set))
 	vec.AddMethod("Append", MustNewMethod(vec.Append))
 	vec.AddMethod("AppendNew", MustNewMethod(vec.AppendNew))
-	vec.AddMethod("Insert", MustNewMethod(vec.Append))
-	vec.AddMethod("Delete", MustNewMethod(vec.Append))
-	vec.AddMethod("Swap", MustNewMethod(vec.Append))
-	vec.AddMethod("Move", MustNewMethod(vec.Append))
+	vec.AddMethod("Insert", MustNewMethod(vec.Insert))
+	vec.AddMethod("Remove", MustNewMethod(vec.Remove))
+	vec.AddMethod("Swap", MustNewMethod(vec.Swap))
+	vec.AddMethod("Move", MustNewMethod(vec.Move))
 
 	//events of a vector
 	vec.AddEvent("onNewEntry", NewEvent(vec.GetJSObject(), rntm.jsvm, MustNewDataType("int")))

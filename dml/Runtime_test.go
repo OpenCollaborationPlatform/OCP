@@ -2,7 +2,7 @@
 package dml
 
 import (
-	datastore "CollaborationNode/datastores"
+	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -25,7 +25,7 @@ func TestDmlFile(t *testing.T) {
 		rntm := NewRuntime(store)
 
 		//read in the file and parse
-		filereader, err := os.Open("/home/stefan/Projects/Go/src/CollaborationNode/dml/test.dml")
+		filereader, err := os.Open("/home/stefan/Projects/Go/CollaborationNode/dml/test.dml")
 		So(err, ShouldBeNil)
 		err = rntm.Parse(filereader)
 		So(err, ShouldBeNil)

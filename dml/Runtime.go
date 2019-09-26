@@ -308,24 +308,6 @@ func (self *Runtime) CallMethod(user User, path string, method string, args ...i
 	return result, err
 }
 
-func (self *Runtime) RegisterEvent(user User, path string, event string, cb EventCallback) error {
-
-	//save the user for processing
-	self.currentUser = user
-
-	//first check if path is correct and method available
-	obj, err := self.getObjectFromPath(path)
-	if err != nil {
-		return err
-	}
-	if !obj.HasEvent(event) {
-		return fmt.Errorf("No event %v available in object %v", event, path)
-	}
-
-	evt := obj.GetEvent(event)
-	return evt.RegisterCallback(cb)
-}
-
 func (self *Runtime) ReadProperty(user User, path string, property string) (interface{}, error) {
 
 	self.datastore.Begin()
