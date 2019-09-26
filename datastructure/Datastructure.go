@@ -38,6 +38,11 @@ func NewDatastructure(path string, prefix string, client *nxclient.Client) (Data
 	if err != nil {
 		return Datastructure{}, utils.StackError(err, "Unable to create state for datastructure")
 	}
+	
+	//make sure the prefix has a "/" as last charachter
+	if prefix[len(prefix)-1] != '/' {
+		prefix = prefix + "/"
+	}
 
 	//return the datastructure
 	return Datastructure{
@@ -72,7 +77,7 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	options := make(wamp.Dict, 0)
 	options["match"] = "prefix"
 	options["disclose_caller"] = true
-	uri := self.prefix + "/methods/"
+	uri := self.prefix + "methods/"
 	self.client.Register(uri, wh.createWampInvokeFunction(), options)
 }
 

@@ -531,7 +531,7 @@ func TestSwarmDataService(t *testing.T) {
 			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 			res, err := sw1.Data.Add(ctx, testfilepath)
 			So(err, ShouldBeNil)
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(150 * time.Millisecond)
 
 			reader, err := sw1.Data.GetFile(ctx, res)
 			So(err, ShouldBeNil)
@@ -692,7 +692,7 @@ func TestSwarmDataService(t *testing.T) {
 				time.Sleep(100 * time.Millisecond)
 
 				//check if the files were added to the exchange folder
-				exchange := filepath.Join(sw1.path, "DataExchange")
+				exchange := filepath.Join(h1.path, "DataExchange")
 				files, err := ioutil.ReadDir(exchange)
 				So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
 
@@ -734,7 +734,7 @@ func TestSwarmDataService(t *testing.T) {
 
 					Convey("There should still be only 2 datafiles in the exchange folder", func() {
 
-						exchange := filepath.Join(sw2.path, "DataExchange")
+						exchange := filepath.Join(h2.path, "DataExchange")
 						files, err := ioutil.ReadDir(exchange)
 						So(err, ShouldBeNil)
 						So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
@@ -753,7 +753,7 @@ func TestSwarmDataService(t *testing.T) {
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)
 
-						exchange := filepath.Join(sw2.path, "DataExchange")
+						exchange := filepath.Join(h2.path, "DataExchange")
 						files, err := ioutil.ReadDir(exchange)
 						So(err, ShouldBeNil)
 						So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
@@ -781,7 +781,7 @@ func TestSwarmDataService(t *testing.T) {
 
 						Convey("There should be no datafiles in the exchange folder", func() {
 
-							exchange := filepath.Join(sw2.path, "DataExchange")
+							exchange := filepath.Join(h2.path, "DataExchange")
 							files, err := ioutil.ReadDir(exchange)
 							So(err, ShouldBeNil)
 							So(len(files), ShouldEqual, 1) //0 files + 1 db = 1
@@ -809,7 +809,7 @@ func TestSwarmDataService(t *testing.T) {
 
 						Convey("should also remove all files", func() {
 
-							exchange := filepath.Join(sw2.path, "DataExchange")
+							exchange := filepath.Join(h2.path, "DataExchange")
 							files, err := ioutil.ReadDir(exchange)
 							So(err, ShouldBeNil)
 							So(len(files), ShouldEqual, 1) //0 files + 1 db = 1

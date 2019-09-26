@@ -93,16 +93,16 @@ type sharedStateService struct {
 	rApi  ReplicaReadAPI
 }
 
-func newSharedStateService(swarm *Swarm) *sharedStateService {
+func newSharedStateService(swarm *Swarm) (*sharedStateService, error) {
 
 	//setup replica
 	path := filepath.Join(swarm.GetPath())
 	rep, err := replica.NewReplica(string(swarm.ID), path, swarm.host.host, swarm.host.dht)
 	if err != nil {
-		return nil
+		return nil, utils.StackError(err, "Unable to create replica")
 	}
 
-	return &sharedStateService{swarm, rep, ReplicaAPI{}, ReplicaReadAPI{}}
+	return &sharedStateService{swarm, rep, ReplicaAPI{}, ReplicaReadAPI{}}, nil
 }
 
 func (self *sharedStateService) IsRunning() bool {

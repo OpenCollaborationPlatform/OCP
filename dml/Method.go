@@ -91,6 +91,7 @@ type jsMethod struct {
 
 func (self *jsMethod) Call(args ...interface{}) interface{} {
 
+
 	//build the function call argument
 	jsargs := make([]goja.Value, len(args))
 	for i, arg := range args {

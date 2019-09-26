@@ -2,6 +2,7 @@
 package p2p
 
 import (
+	"os"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -303,6 +304,16 @@ func (h *Host) CreateSwarmWithID(ctx context.Context, id SwarmID, states []State
 	
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
+	
+	//We create the swarm, that means net by definition... lets clear all folders
+	//if the id was there already once!
+	swpath := filepath.Join(h.path, string(id))
+	if _, err := os.Stat(swpath); !os.IsNotExist(err) {
+		err := os.RemoveAll(swpath)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to clear swarm folder: existed once already")
+		}
+	}
 	
 	swarm, err := newSwarm(ctx, h, id, states, true, NoPeers())
 	if err != nil {

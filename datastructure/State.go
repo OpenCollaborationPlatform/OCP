@@ -50,7 +50,10 @@ func newState(path string) (dmlState, error) {
 func (self dmlState) Apply(data []byte) interface{} {
 
 	//get the operation from the log entry
-	op := operationFromData(data)
+	op, err := operationFromData(data)
+	if err != nil {
+		return utils.StackError(err, "Provided data is not of Operation type")
+	}
 
 	//apply to runtime
 	return op.ApplyTo(self.dml)

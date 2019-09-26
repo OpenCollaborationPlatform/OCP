@@ -284,7 +284,8 @@ func (self *Runtime) CallMethod(user User, path string, method string, args ...i
 	//first check if path is correct and method available
 	obj, err := self.getObjectFromPath(path)
 	if err != nil {
-		return nil, err
+		self.datastore.Rollback()
+		return nil, utils.StackError(err, "Unable to find object %v", path)
 	}
 	if !obj.HasMethod(method) {
 		self.datastore.Rollback()
@@ -298,7 +299,7 @@ func (self *Runtime) CallMethod(user User, path string, method string, args ...i
 	err, ok := result.(error)
 	if ok && err != nil {
 		self.postprocess(true)
-		return nil, err
+		return nil, utils.StackError(err, "Execution of function failed")
 	}
 
 	//postprocess correctly

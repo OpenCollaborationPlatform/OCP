@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/raft"
+	"github.com/boltdb/bolt"
 	raftbolt "github.com/hashicorp/raft-boltdb"
 	"github.com/ickby/CollaborationNode/utils"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
@@ -46,7 +47,15 @@ func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT
 	}
 
 	// Create the log store and stable store.
-	boltDB, err := raftbolt.NewBoltStore(filepath.Join(path, "raft.db"))
+	opts := raftbolt.Options{
+		NoSync: false,
+		Path: filepath.Join(path, "raft.db"),
+		BoltOptions: &bolt.Options{
+    							Timeout:    1*time.Second,
+						    NoGrowSync: false,
+					},
+	}
+	boltDB, err := raftbolt.New(opts)
 	if err != nil {
 		return nil, fmt.Errorf("new bolt store: %s", err)
 	}
@@ -156,6 +165,12 @@ func (self *Replica) Close(ctx context.Context) error {
 			}
 		}
 	}
+	
+	store, ok := self.logs.(*raftbolt.BoltStore)
+	if !ok {
+		return fmt.Errorf("Cannot close replica store")
+	}
+	store.Close()
 
 	return nil
 }

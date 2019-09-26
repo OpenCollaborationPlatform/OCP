@@ -42,7 +42,7 @@ func (self wampHelper) createWampPublishFunction(path string, event string) dml.
 		}
 
 		//connvert the path into wamp style
-		path = self.prefix + "/events/" + path + "/" + event
+		path = self.prefix + "events/" + path + "/" + event
 		wamppath := strings.Replace(path, ".", "/", -1)
 
 		//other arguments we do not need
@@ -64,7 +64,7 @@ func (self wampHelper) createWampInvokeFunction() nxclient.InvocationHandler {
 
 		//build dml path and function
 		idx := strings.LastIndex(string(procedure), "/")
-		path := procedure[:idx]
+		path := procedure[(len(self.prefix)+8):idx]
 		fnc := procedure[(idx + 1):]
 
 		//build the operation arguments

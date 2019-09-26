@@ -28,26 +28,30 @@ func newFunctionOperation(user dml.User, path string, fnc string, args []interfa
 	return functionOperation{user, path, fnc, args}
 }
 
-func operationFromData(data []byte) Operation {
+func operationFromData(data []byte) (Operation, error) {
 
 	var op Operation
-	buf := bytes.NewReader(data)
+	buf := bytes.NewBuffer(data)
 	d := gob.NewDecoder(buf)
-	d.Decode(&op)
-	return op
+	err := d.Decode(&op)
+	if err != nil {
+		return nil, err
+	}
+	return op, nil
 }
 
 func (self functionOperation) ToData() []byte {
 
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
-	e.Encode(self)
+	var op Operation = self
+	e.Encode(&op)
 	return b.Bytes()
 }
 
 func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 
-	val, err := rntm.CallMethod(self.User, self.Path, self.Function, self.Arguments)
+	val, err := rntm.CallMethod(self.User, self.Path, self.Function, self.Arguments...)
 	if err != nil {
 		return err
 	}

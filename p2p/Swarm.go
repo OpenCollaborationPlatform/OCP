@@ -2,6 +2,7 @@
 package p2p
 
 import (
+	"path/filepath"
 	"context"
 	"fmt"
 	"os"
@@ -110,15 +111,20 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 		conf:   newSwarmConfiguration(),
 		ctx:    swarmctx,
 		cancel: cancel,
-		path:   host.path}
+		path:   filepath.Join(host.path, string(id)),
+	}
 
 	//ensure our folder exist
 	os.MkdirAll(swarm.GetPath(), os.ModePerm)
 
 	//build the services
+	var err error = nil
 	swarm.Rpc = newSwarmRpcService(swarm)
 	swarm.Event = newSwarmEventService(swarm)
-	swarm.State = newSharedStateService(swarm)
+	swarm.State, err = newSharedStateService(swarm)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to create shared state service")
+	}
 	swarm.Data = newSwarmDataService(swarm)
 
 	//setup the shared states, own and user ones
@@ -171,7 +177,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 	}
 
 	//make our self known!
-	err := host.dht.Provide(ctx, id.Cid(), true)
+	err = host.dht.Provide(ctx, id.Cid(), true)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to announce swarm")
 	}
