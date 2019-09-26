@@ -54,6 +54,23 @@ func (self wampHelper) createWampPublishFunction(path string, event string) dml.
 	}
 }
 
+func (self wampHelper) executeOperation(ctx context.Context, op Operation) *nxclient.InvokeResult {
+	
+	//execute the operation!
+	res, err := self.swarm.State.AddCommand(ctx, "dmlState", op.ToData())
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
+	
+	//check if the returned value is an error
+	if err, ok := res.(error); ok {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
+	
+	return &nxclient.InvokeResult{Args: wamp.List{res}}
+	
+}
+
 func (self wampHelper) createWampInvokeFunction() nxclient.InvocationHandler {
 
 	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
@@ -62,21 +79,45 @@ func (self wampHelper) createWampInvokeFunction() nxclient.InvocationHandler {
 		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
 		procedure := wamp.OptionURI(details, "procedure")
 
+		if auth == "" || procedure == "" {
+			return &nxclient.InvokeResult{Err: wamp.URI("No authid disclosed")}
+		}
+
 		//build dml path and function
 		idx := strings.LastIndex(string(procedure), "/")
 		path := procedure[(len(self.prefix)+8):idx]
 		fnc := procedure[(idx + 1):]
 
-		//build the operation arguments
+		//build and excecute the operation arguments
 		op := newFunctionOperation(dml.User(auth), string(path), string(fnc), args)
+		return self.executeOperation(ctx, op)
+	}
 
-		//execute the operation!
-		res, err := self.swarm.State.AddCommand(ctx, "dmlState", op.ToData())
-		if err != nil {
-			return &nxclient.InvokeResult{Args: wamp.List{err}}
+	return res
+}
+
+func (self wampHelper) createWampJSFunction() nxclient.InvocationHandler {
+
+	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+		//get the user id
+		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
+		if auth == "" {
+			return &nxclient.InvokeResult{Err: wamp.URI("No authid disclosed")}
 		}
 
-		return &nxclient.InvokeResult{Args: wamp.List{res}}
+		//get the js code
+		if len(args) != 1 {
+			return &nxclient.InvokeResult{Err: wamp.URI("JS code needs to be provided as single argument")}
+		}
+		code, ok := args[0].(string)
+		if !ok {
+			return &nxclient.InvokeResult{Err: wamp.URI("Argument is not valid JS code")}
+		}
+
+		//build and execute the operation arguments
+		op := newJsOperation(dml.User(auth), code)
+		return self.executeOperation(ctx, op)
 	}
 
 	return res

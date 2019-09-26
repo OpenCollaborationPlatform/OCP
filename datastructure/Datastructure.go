@@ -73,12 +73,17 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 		return nil
 	})
 
+	//general options
+	options := wamp.SetOption(wamp.Dict{}, wamp.OptMatch, wamp.MatchPrefix)
+	options =  wamp.SetOption(options, wamp.OptDiscloseCaller, true)
+
 	//register the function handler
-	options := make(wamp.Dict, 0)
-	options["match"] = "prefix"
-	options["disclose_caller"] = true
 	uri := self.prefix + "methods/"
 	self.client.Register(uri, wh.createWampInvokeFunction(), options)
+
+	//register javascript handler
+	uri = self.prefix + "execute"
+	self.client.Register(uri, wh.createWampJSFunction(), options)
 }
 
 func (self Datastructure) Close() {

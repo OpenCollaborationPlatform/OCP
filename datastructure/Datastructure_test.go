@@ -152,5 +152,22 @@ func TestDatastructure(t *testing.T) {
 			val, _ = ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
 			So(val, ShouldEqual, 3)
 		})
+
+		Convey("and javascript code can be excecuted", func() {
+
+			code := `Test.testI = 120`
+
+		 	opts := make(wamp.Dict, 0)
+		 	res, err := testClient.Call(ctx, "/ocp/test/execute", opts, wamp.List{code}, wamp.Dict{}, `kill`)
+		 	So(err, ShouldBeNil)
+			So(len(res.Arguments), ShouldEqual, 1)
+			err, ok := res.Arguments[0].(error)
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeFalse)
+			time.Sleep(100*time.Millisecond)
+			
+			val, _ := ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
+			So(val, ShouldEqual, 120)
+		})
 	})
 }

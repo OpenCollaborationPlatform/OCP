@@ -9,6 +9,7 @@ import (
 
 func init() {
 	gob.Register(functionOperation{})
+	gob.Register(jsOperation{})
 }
 
 type Operation interface {
@@ -52,6 +53,34 @@ func (self functionOperation) ToData() []byte {
 func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 
 	val, err := rntm.CallMethod(self.User, self.Path, self.Function, self.Arguments...)
+	if err != nil {
+		return err
+	}
+	return val
+}
+
+type jsOperation struct {
+	User  dml.User
+	Code  string	
+}
+
+func newJsOperation(user dml.User, code string) Operation {
+
+	return jsOperation{user, code}
+}
+
+func (self jsOperation) ToData() []byte {
+
+	var b bytes.Buffer
+	e := gob.NewEncoder(&b)
+	var op Operation = self
+	e.Encode(&op)
+	return b.Bytes()
+}
+
+func (self jsOperation) ApplyTo(rntm *dml.Runtime) interface{} {
+
+	val, err := rntm.RunJavaScript(self.User, self.Code)
 	if err != nil {
 		return err
 	}
