@@ -206,6 +206,20 @@ func (self *DocumentHandler) closeDoc(ctx context.Context, args wamp.List, kwarg
 	return &nxclient.InvokeResult{Args: wamp.List{docID}}
 }
 
+
+func (self *DocumentHandler) ListDocuments() []string {
+	
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+	
+	res := make([]string, len(self.documents))
+	for i, doc := range self.documents {
+		res[i] = doc.ID
+	}
+	
+	return res
+}
+
 func (self *DocumentHandler) listDocs(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
 	if len(args) != 0 {
