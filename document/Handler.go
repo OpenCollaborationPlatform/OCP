@@ -65,11 +65,25 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host) (*DocumentHan
 	client.Register("ocp.documents.create", dh.createDoc, wamp.Dict{})
 	client.Register("ocp.documents.open", dh.openDoc, wamp.Dict{})
 	client.Register("ocp.documents.list", dh.listDocs, wamp.Dict{})
+	client.Register("ocp.documents.close", dh.closeDoc, wamp.Dict{})
 
 	//register the RPC api
 	host.Rpc.Register(DocumentAPI{dh})
 
 	return dh, nil
+}
+
+func (self *DocumentHandler) Close(ctx context.Context) {
+	
+	//go over all documents nd close them!
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	
+	for _, doc := range self.documents {
+		doc.Close(ctx)
+	}
+	
+	self.documents = make([]Document, 0)
 }
 
 func (self *DocumentHandler) createDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
@@ -104,8 +118,8 @@ func (self *DocumentHandler) createDoc(ctx context.Context, args wamp.List, kwar
 	self.documents = append(self.documents, doc)
 
 	//inform everyone about the new doc... p2p and locally!
-	self.client.Publish("ocp.documents.new", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
-	self.host.Event.Publish("ocp.documents.new", []byte(doc.ID))
+	self.client.Publish("ocp.documents.created", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
+	self.host.Event.Publish("ocp.documents.created", []byte(doc.ID))
 
 	return &nxclient.InvokeResult{Args: wamp.List{doc.ID}}
 }
@@ -120,6 +134,16 @@ func (self *DocumentHandler) openDoc(ctx context.Context, args wamp.List, kwargs
 	if !ok {
 		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be document id")}
 	}
+
+	//check if already open /unlocka afterwards to not lock during potenially long 
+	//swarm operation)
+	self.mutex.RLock()
+	for _, doc := range self.documents {
+		if doc.ID == docID {
+			return &nxclient.InvokeResult{Err: wamp.URI("Document already open")}
+		}
+	}
+	self.mutex.RUnlock()
 
 	//we know doc id == swarm id... hence use it to find an active peer!
 	swarmID := p2p.SwarmID(docID)
@@ -146,8 +170,38 @@ func (self *DocumentHandler) openDoc(ctx context.Context, args wamp.List, kwargs
 	self.documents = append(self.documents, doc)
 
 	//inform everyone about the newly opened doc... p2p and locally!
-	self.client.Publish("ocp.documents.open", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
-	self.host.Event.Publish("ocp.documents.open", []byte(doc.ID))
+	self.client.Publish("ocp.documents.opened", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
+	self.host.Event.Publish("ocp.documents.opened", []byte(doc.ID))
+
+	return &nxclient.InvokeResult{Args: wamp.List{docID}}
+}
+
+func (self *DocumentHandler) closeDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+	//the user needs to provide the doc id!
+	if len(args) != 1 {
+		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be document id")}
+	}
+	docID, ok := args[0].(string)
+	if !ok {
+		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be document id")}
+	}
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	
+	//find the document to close!
+	for i, doc := range self.documents {
+		if doc.ID == docID {
+			doc.Close(ctx)
+			self.documents = append(self.documents[:i], self.documents[i+1:]...)
+			break
+		}
+	}	
+
+	//inform everyone about the closed doc... p2p and locally!
+	self.client.Publish("ocp.documents.closed", wamp.Dict{}, wamp.List{docID}, wamp.Dict{})
+	self.host.Event.Publish("ocp.documents.closed", []byte(docID))
 
 	return &nxclient.InvokeResult{Args: wamp.List{docID}}
 }

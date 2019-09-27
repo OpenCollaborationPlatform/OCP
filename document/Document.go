@@ -91,6 +91,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.addPeer", doc.ID), doc.addPeer, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.setPeerAuth", doc.ID), doc.setPeerAuth, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.removePeer", doc.ID), doc.removePeer, wamp.Dict{}))
+	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.listPeers", doc.ID), doc.listPeers, wamp.Dict{}))
 
 	for _, err := range errS {
 		if err != nil {
@@ -102,6 +103,12 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	}
 
 	return doc, nil
+}
+
+func (self Document) Close(ctx context.Context) {
+	self.datastructure.Close()
+	self.client.Close()
+	self.swarm.Close(ctx)
 }
 
 func getPeer(args wamp.List) (p2p.PeerID, error) {
@@ -185,4 +192,15 @@ func (self Document) removePeer(ctx context.Context, args wamp.List, kwargs, det
 	}
 
 	return &nxclient.InvokeResult{}
+}
+
+func (self Document) listPeers(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+	peers := self.swarm.GetPeers(p2p.AUTH_NONE)
+	resargs := make(wamp.List, len(peers))
+	for i, p := range peers {
+		resargs[i] = p
+	}
+	
+	return &nxclient.InvokeResult{Args: resargs}
 }
