@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/utils"
 	"sync"
 
 	uuid "github.com/satori/go.uuid"
@@ -44,12 +45,12 @@ type DocumentHandler struct {
 	mutex     *sync.RWMutex
 }
 
-func NewDocumentHandler(router *connection.Router, host *p2p.Host) *DocumentHandler {
+func NewDocumentHandler(router *connection.Router, host *p2p.Host) (*DocumentHandler, error) {
 
 	mutex := &sync.RWMutex{}
 	client, err := router.GetLocalClient("document")
 	if err != nil {
-		panic(fmt.Sprintf("Could not setup document handler: %s", err))
+		return nil, utils.StackError(err, "Could not setup document handler")
 	}
 
 	dh := &DocumentHandler{
@@ -68,7 +69,7 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host) *DocumentHand
 	//register the RPC api
 	host.Rpc.Register(DocumentAPI{dh})
 
-	return dh
+	return dh, nil
 }
 
 func (self *DocumentHandler) createDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {

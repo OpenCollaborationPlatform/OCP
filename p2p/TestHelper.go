@@ -13,7 +13,6 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 
 	blocks "github.com/ipfs/go-block-format"
-
 	ipfslog "github.com/ipfs/go-log"
 	ipfswriter "github.com/ipfs/go-log/writer"
 	libp2p "github.com/libp2p/go-libp2p"
@@ -40,6 +39,23 @@ func init() {
 //for external modules that need a host for tessting
 func MakeTemporaryTestingHost(path string) (*Host, error) {
 	return temporaryHost(path)
+}
+
+func MakeTemporaryTwoHostNetwork(path string) (*Host, *Host, error) {
+	host1, err := MakeTemporaryTestingHost(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	host2, err := MakeTemporaryTestingHost(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	
+	host1.SetMultipleAdress(host2.ID(), host2.OwnAddresses())
+	host2.SetMultipleAdress(host1.ID(), host1.OwnAddresses())
+	host1.Connect(context.Background(), host2.ID())
+	
+	return host1, host2, nil
 }
 
 //creates a random host. The used directory will be a sibling of the provided one.

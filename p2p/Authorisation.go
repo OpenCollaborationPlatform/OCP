@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"strings"
 	"fmt"
 	"sync"
 )
@@ -18,6 +19,22 @@ const (
 	AUTH_READONLY  = AUTH_STATE(1)
 	AUTH_READWRITE = AUTH_STATE(2)
 )
+
+func AuthStateFromString(state string) (AUTH_STATE, error) {
+	
+	switch strings.ToLower(state) {
+		
+		case "read", "readonly", "auth_readonly":
+			return AUTH_READONLY, nil
+		case "write", "readwrite", "auth_readwrite":
+			return AUTH_READWRITE, nil
+		case "none", "auth_none":
+			return AUTH_NONE, nil
+		default: 
+			return AUTH_NONE, fmt.Errorf("Not valid auth state string")
+	}
+	return AUTH_NONE, fmt.Errorf("Not valid auth state string")
+}
 
 //a interface that allows to query the authorisation state of a peer
 //*****************************************************************

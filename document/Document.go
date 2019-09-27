@@ -104,17 +104,85 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	return doc, nil
 }
 
+func getPeer(args wamp.List) (p2p.PeerID, error) {
+	//get the peer to add and the wanted AUTH state
+	if len(args) < 1 {
+		return p2p.PeerID(""), fmt.Errorf("First Argument must be peer id")
+	}
+	peer, ok := args[0].(string) 
+	if !ok {
+		return p2p.PeerID(""), fmt.Errorf("First Argument must be peer id")
+	}
+	pid, err := p2p.PeerIDFromString(peer)
+	if err != nil {
+		return p2p.PeerID(""), fmt.Errorf("Invalid peer id provided")
+	}
+	return pid, nil
+}
+func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
+	
+	if len(args) != 2 {
+		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Arguments must be peer id and auth state")
+	}
+
+	pid, err := getPeer(args)
+	if err != nil {
+		return pid, p2p.AUTH_NONE, err
+	}	
+
+	auth, ok := args[1].(string) 
+	if !ok {
+		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Second Argument must be auth state (read, write or none)")
+	}
+	pidauth, err := p2p.AuthStateFromString(auth)
+	if err != nil {
+		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Invalid auth state provided (muste be read, write or none)")
+	}
+	
+	return pid, pidauth, nil
+}
+
 func (self Document) addPeer(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+	pid, auth, err := getPeerAuthData(args)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
+
+	err = self.swarm.AddPeer(ctx, pid, auth)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
 
 	return &nxclient.InvokeResult{}
 }
 
 func (self Document) setPeerAuth(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
+	pid, auth, err := getPeerAuthData(args)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
+	
+	err = self.swarm.AddPeer(ctx, pid, auth)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
+
 	return &nxclient.InvokeResult{}
 }
 
 func (self Document) removePeer(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+	pid, err := getPeer(args)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
+
+	err = self.swarm.RemovePeer(ctx, pid)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
 
 	return &nxclient.InvokeResult{}
 }
