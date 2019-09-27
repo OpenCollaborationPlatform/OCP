@@ -223,7 +223,7 @@ func TestDataService(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(n, ShouldEqual, 555)
 			So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
-			
+
 			Convey("and makes it retreivable by owner", func() {
 				ids, err := h1.Data.(*hostDataService).store.GetCidsForOwner("global")
 				So(err, ShouldBeNil)
@@ -304,7 +304,7 @@ func TestDataService(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(len(ids), ShouldEqual, 6)
 				})
-			
+
 				Convey("and retreiving from the other shall be possible too.", func() {
 
 					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
@@ -398,7 +398,7 @@ func TestDataService(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(compareDirectories(res2path, dirpath2), ShouldBeNil)
 				})
-				
+
 				Convey("and makes it retreivable by owner", func() {
 					ids, err := h1.Data.(*hostDataService).store.GetCidsForOwner("global")
 					So(err, ShouldBeNil)
@@ -430,7 +430,7 @@ func TestDataService(t *testing.T) {
 						So(err, ShouldBeNil)
 						So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
 					})
-					
+
 					Convey("and makes it retreivable by owner", func() {
 						ids, err := h2.Data.(*hostDataService).store.GetCidsForOwner("global")
 						So(err, ShouldBeNil)
@@ -614,7 +614,7 @@ func TestSwarmDataService(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(n, ShouldEqual, filesize)
 				So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
-				
+
 				Convey("and makes it retreivable by owner", func() {
 					ids, err := sw1.Data.(*swarmDataService).data.store.GetCidsForOwner(string(sw1.ID))
 					So(err, ShouldBeNil)
@@ -705,7 +705,7 @@ func TestSwarmDataService(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(compareDirectories(res2path, dirpath2), ShouldBeNil)
 				})
-				
+
 				Convey("and makes it retreivable by owner", func() {
 					ids, err := sw1.Data.(*swarmDataService).data.store.GetCidsForOwner(string(sw1.ID))
 					So(err, ShouldBeNil)
@@ -739,7 +739,7 @@ func TestSwarmDataService(t *testing.T) {
 						So(err, ShouldBeNil)
 						So(len(files), ShouldEqual, 3) //2 files + 1 db = 3
 					})
-					
+
 					Convey("and makes it retreivable by owner", func() {
 						ids, err := sw1.Data.(*swarmDataService).data.store.GetCidsForOwner(string(sw1.ID))
 						So(err, ShouldBeNil)

@@ -70,27 +70,27 @@ func (self *swarmRpcService) swarmService(service string) string {
 	return self.swarm.ID.Pretty() + "/" + service
 }
 
-func (self *swarmRpcService) Call(dest peer.ID, svcName, svcMethod string, args, reply interface{}) error {
+func (self *swarmRpcService) Call(dest PeerID, svcName, svcMethod string, args, reply interface{}) error {
 	return self.rpc.Call(dest, self.swarmService(svcName), svcMethod, args, reply)
 }
 
-func (self *swarmRpcService) CallContext(ctx context.Context, dest peer.ID, svcName, svcMethod string, args, reply interface{}) error {
+func (self *swarmRpcService) CallContext(ctx context.Context, dest PeerID, svcName, svcMethod string, args, reply interface{}) error {
 	return self.rpc.CallContext(ctx, dest, self.swarmService(svcName), svcMethod, args, reply)
 }
 
-func (self *swarmRpcService) Go(dest peer.ID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
+func (self *swarmRpcService) Go(dest PeerID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
 	return self.rpc.Go(dest, self.swarmService(svcName), svcMethod, args, reply, done)
 }
 
-func (self *swarmRpcService) GoContext(ctx context.Context, dest peer.ID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
+func (self *swarmRpcService) GoContext(ctx context.Context, dest PeerID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
 	return self.rpc.GoContext(ctx, dest, self.swarmService(svcName), svcMethod, args, reply, done)
 }
 
-func (self *swarmRpcService) MultiCall(ctxs []context.Context, dests []peer.ID, svcName, svcMethod string, args interface{}, replies []interface{}) []error {
+func (self *swarmRpcService) MultiCall(ctxs []context.Context, dests []PeerID, svcName, svcMethod string, args interface{}, replies []interface{}) []error {
 	return self.rpc.MultiCall(ctxs, dests, self.swarmService(svcName), svcMethod, args, replies)
 }
 
-func (self *swarmRpcService) MultiGo(ctxs []context.Context, dests []peer.ID, svcName, svcMethod string, args interface{}, replies []interface{}, dones []chan *gorpc.Call) error {
+func (self *swarmRpcService) MultiGo(ctxs []context.Context, dests []PeerID, svcName, svcMethod string, args interface{}, replies []interface{}, dones []chan *gorpc.Call) error {
 	return self.rpc.MultiGo(ctxs, dests, self.swarmService(svcName), svcMethod, args, replies, dones)
 }
 

@@ -528,7 +528,7 @@ func (self BitswapStore) GetCidsForOwner(owner string) ([]cid.Cid, error) {
 					return ids, utils.StackError(err, "Stored ID invalid")
 				}
 				ids = append(ids, dirid)
-				
+
 				dirids, err := self.getDirSubblocks(tx, dirid)
 				if err != nil {
 					return ids, utils.StackError(err, "Unable to get subblocks for directory")
@@ -550,7 +550,7 @@ func (self BitswapStore) GetCidsForOwner(owner string) ([]cid.Cid, error) {
 	inner2:
 		for k2, _ := c2.First(); k2 != nil; k2, _ = c2.Next() {
 			if string(k2) == owner {
-				
+
 				//add the block itself
 				blockid, err := cid.Cast(copyKey(k))
 				if err != nil {
@@ -593,7 +593,7 @@ func (self BitswapStore) GetCidsForOwner(owner string) ([]cid.Cid, error) {
 			}
 		}
 	}
-	
+
 	//remove douplicates
 	seen := make(map[cid.Cid]struct{}, len(ids))
 	j := 0

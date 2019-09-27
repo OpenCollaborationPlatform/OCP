@@ -52,11 +52,11 @@ func TestBasicRPC(t *testing.T) {
 			Convey("and must be callable from the other host", func() {
 
 				var res int
-				err := h2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+				err := h2.Rpc.Call(h1.ID(), "Service", "Add", 3, &res)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 3)
 
-				err = h2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+				err = h2.Rpc.Call(h1.ID(), "Service", "Add", 3, &res)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 6)
 			})
@@ -64,11 +64,11 @@ func TestBasicRPC(t *testing.T) {
 			Convey("as well as from outself", func() {
 
 				var res int
-				err := h1.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+				err := h1.Rpc.Call(h1.ID(), "Service", "Add", 3, &res)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 3)
 
-				err = h1.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+				err = h1.Rpc.Call(h1.ID(), "Service", "Add", 3, &res)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 6)
 			})
@@ -76,7 +76,7 @@ func TestBasicRPC(t *testing.T) {
 			Convey("but not on the other hot", func() {
 
 				var res int
-				err := h1.Rpc.Call(h2.ID().pid(), "Service", "Add", 3, &res)
+				err := h1.Rpc.Call(h2.ID(), "Service", "Add", 3, &res)
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -124,7 +124,7 @@ func TestSwarmRPC(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					var res int
-					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+					err = sw2.Rpc.Call(h1.ID(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, 3)
 				})
@@ -138,7 +138,7 @@ func TestSwarmRPC(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					var res int
-					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+					err = sw2.Rpc.Call(h1.ID(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, 3)
 				})
@@ -159,7 +159,7 @@ func TestSwarmRPC(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					var res int
-					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+					err = sw2.Rpc.Call(h1.ID(), "Service", "Add", 3, &res)
 					So(err, ShouldNotBeNil)
 					So(res, ShouldEqual, 0)
 				})
@@ -173,7 +173,7 @@ func TestSwarmRPC(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					var res int
-					err = sw2.Rpc.Call(h1.ID().pid(), "Service", "Add", 3, &res)
+					err = sw2.Rpc.Call(h1.ID(), "Service", "Add", 3, &res)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, 3)
 				})

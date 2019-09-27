@@ -1,13 +1,13 @@
 package document
 
 import (
-	"strings"
 	"context"
 	nxclient "github.com/gammazero/nexus/client"
 	wamp "github.com/gammazero/nexus/wamp"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
+	"strings"
 )
 
 //Async datastructure whcih encapsulates synchronous DML runtime and a datastore.
@@ -102,7 +102,6 @@ func (self Datastructure) GetState() p2p.State {
 	return self.dmlState
 }
 
-
 //							helper functions
 //******************************************************************************
 
@@ -116,7 +115,6 @@ func (self Datastructure) setupDmlEvents(obj dml.EventHandler, path string) {
 		evt.RegisterCallback(self.createWampPublishFunction(path, evtName))
 	}
 }
-
 
 func (self Datastructure) createWampPublishFunction(path string, event string) dml.EventCallback {
 
@@ -171,7 +169,7 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 
 		//build dml path and function
 		idx := strings.LastIndex(string(procedure), ".")
-		path := procedure[(len(self.prefix)+8):idx] // 8 for methods.
+		path := procedure[(len(self.prefix) + 8):idx] // 8 for methods.
 		fnc := procedure[(idx + 1):]
 
 		//build and excecute the operation arguments
@@ -222,7 +220,7 @@ func (self Datastructure) createWampPropertyFunction() nxclient.InvocationHandle
 		//get the paths
 		procedure := wamp.OptionURI(details, "procedure")
 		idx := strings.LastIndex(string(procedure), ".")
-		path := procedure[(len(self.prefix)+11):idx] //11 for .properties
+		path := procedure[(len(self.prefix) + 11):idx] //11 for .properties
 		prop := procedure[(idx + 1):]
 
 		//get the arguments: if provided it is a write, otherwise read

@@ -63,7 +63,7 @@ func (self *ReplicaReadAPI) Join(ctx context.Context, peer PeerID, ret *AUTH_STA
 		return fmt.Errorf("Peer is not allowed to join the state sharing")
 	}
 	auth := self.conf.PeerAuth(peer)
-	err := self.rep.ConnectPeer(ctx, peer.pid(), auth == AUTH_READWRITE)
+	err := self.rep.ConnectPeer(ctx, peer, auth == AUTH_READWRITE)
 	*ret = auth
 	return err
 }
@@ -78,7 +78,7 @@ func (self *ReplicaReadAPI) Leave(ctx context.Context, peer PeerID, ret *struct{
 	if !self.conf.HasPeer(peer) {
 		return fmt.Errorf("Peer is not part of the state sharing: can't leave")
 	}
-	err := self.rep.DisconnectPeer(ctx, peer.pid())
+	err := self.rep.DisconnectPeer(ctx, peer)
 	return err
 }
 
@@ -168,7 +168,7 @@ func (self *sharedStateService) Close(ctx context.Context) {
 
 	//if we are connecteed we need to change that: remove our self from the cluster
 	//if we are the last peer in the cluster we simply shut down
-	isLast, err := self.rep.IsLastPeer(self.swarm.host.ID().pid())
+	isLast, err := self.rep.IsLastPeer(self.swarm.host.ID())
 	if self.IsRunning() && !isLast && err == nil {
 
 		//fetch leader and call him to leave
@@ -233,7 +233,7 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 			continue
 		}
 
-		err = self.swarm.Rpc.CallContext(callctx, peer.pid(), "ReplicaReadAPI", "GetLeader", struct{}{}, &leader)
+		err = self.swarm.Rpc.CallContext(callctx, peer, "ReplicaReadAPI", "GetLeader", struct{}{}, &leader)
 		if err == nil {
 			break
 		}

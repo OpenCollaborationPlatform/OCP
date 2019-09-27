@@ -119,7 +119,7 @@ func (self BitswapRouting) FindProvidersAsync(ctx context.Context, val cid.Cid, 
 		for _, peer := range swarm.GetPeers(AUTH_NONE) {
 			if self.host.IsConnected(peer) {
 				hasValues = append(hasValues, false)
-				self.host.Rpc.GoContext(goctx, peer.pid(), "RoutingService", "HasCID", val, &hasValues[len(hasValues)-1], ret)
+				self.host.Rpc.GoContext(goctx, peer, "RoutingService", "HasCID", val, &hasValues[len(hasValues)-1], ret)
 			}
 		}
 	}

@@ -186,23 +186,23 @@ func (h *Host) GetPath() string {
 
 func (h *Host) SetAdress(peer PeerID, addr ma.Multiaddr) error {
 
-	h.host.Peerstore().AddAddr(peer.pid(), addr, peerstore.PermanentAddrTTL)
+	h.host.Peerstore().AddAddr(peer, addr, peerstore.PermanentAddrTTL)
 	return nil
 }
 
 func (self *Host) SetMultipleAdress(peer PeerID, addrs []ma.Multiaddr) error {
 
-	self.host.Peerstore().AddAddrs(peer.pid(), addrs, peerstore.PermanentAddrTTL)
+	self.host.Peerstore().AddAddrs(peer, addrs, peerstore.PermanentAddrTTL)
 	return nil
 }
 
 func (h *Host) Connect(ctx context.Context, peer PeerID) error {
 
-	info := h.host.Peerstore().PeerInfo(peer.pid())
+	info := h.host.Peerstore().PeerInfo(peer)
 	if len(info.Addrs) == 0 {
 		//go find it!
 		var err error
-		info, err = h.dht.FindPeer(ctx, peer.pid())
+		info, err = h.dht.FindPeer(ctx, peer)
 		if err != nil {
 			return utils.StackError(err, "Unable to find adress of peer, cannot connect")
 		}
@@ -211,12 +211,12 @@ func (h *Host) Connect(ctx context.Context, peer PeerID) error {
 }
 
 func (h *Host) CloseConnection(peer PeerID) error {
-	return h.host.Network().ClosePeer(peer.pid())
+	return h.host.Network().ClosePeer(peer)
 }
 
 func (h *Host) IsConnected(peer PeerID) bool {
 
-	return len(h.host.Network().ConnsToPeer(peer.pid())) > 0
+	return len(h.host.Network().ConnsToPeer(peer)) > 0
 }
 
 func (h *Host) EnsureConnection(ctx context.Context, peer PeerID) error {
@@ -260,12 +260,12 @@ func (h *Host) OwnAddresses() []ma.Multiaddr {
 func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {
 
 	proto := ma.ProtocolWithCode(ma.P_IPFS).Name
-	p2paddr, err := ma.NewMultiaddr("/" + proto + "/" + peer.pid().Pretty())
+	p2paddr, err := ma.NewMultiaddr("/" + proto + "/" + peer.Pretty())
 	if err != nil {
 		return nil, err
 	}
 
-	pi := h.host.Peerstore().PeerInfo(peer.pid())
+	pi := h.host.Peerstore().PeerInfo(peer)
 	var addrs []ma.Multiaddr
 	for _, addr := range pi.Addrs {
 		addrs = append(addrs, addr.Encapsulate(p2paddr))
@@ -304,10 +304,10 @@ func (h *Host) CreateSwarm(ctx context.Context, states []State) (*Swarm, error) 
 }
 
 func (h *Host) CreateSwarmWithID(ctx context.Context, id SwarmID, states []State) (*Swarm, error) {
-	
+
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
-	
+
 	swarm, err := newSwarm(ctx, h, id, states, true, NoPeers())
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create swarm")
@@ -356,4 +356,83 @@ func (h *Host) removeSwarm(id SwarmID) {
 			return
 		}
 	}
+}
+
+//remove swarm from list: only called from Swarm itself in Close()
+func (h *Host) FindSwarmMember(ctx context.Context, id SwarmID) (PeerID, error) {
+
+	peerChan := h.findSwarmPeersAsync(ctx, id, 1)
+
+	select {
+	case peer, more := <-peerChan:
+		if !more {
+			//we are not able to find any peers... that is bad!
+			return PeerID(""), fmt.Errorf("Unable to find any peer in swarm")
+		}
+		return peer, nil
+
+	case <-ctx.Done():
+		//we did not find any swarm member... return with error
+		return PeerID(""), fmt.Errorf("Did not find any swarm members before timeout")
+	}
+}
+
+//finds and connects other peers in the swarm
+func (self *Host) findSwarmPeersAsync(ctx context.Context, id SwarmID, num int) <-chan PeerID {
+
+	//we look for hosts that provide the swarm CID. However, cids are always provided
+	//for min. 24h. That means we afterwards need to check if the host still has the
+	//swarm active by querying the host API
+	ret := make(chan PeerID, 0)
+
+	go func() {
+
+		dhtCtx, cncl := context.WithCancel(ctx)
+		input := self.dht.FindProvidersAsync(dhtCtx, id.Cid(), num*5)
+		found := 0
+		for {
+			select {
+
+			case info, more := <-input:
+				if !more {
+					close(ret)
+					cncl()
+					return
+				}
+				if info.ID.Validate() == nil && len(info.Addrs) != 0 && info.ID != self.ID() {
+
+					self.SetMultipleAdress(PeerID(info.ID), info.Addrs)
+					self.EnsureConnection(ctx, PeerID(info.ID))
+
+					//check host api!
+					var has bool
+					err := self.Rpc.CallContext(ctx, info.ID, "HostRPCApi", "HasSwarm", id, &has)
+					if err != nil {
+						break //wait for next peer if contacting failed for whatever reason
+					}
+					if !has {
+						break //wait for next peer if this one does not have the swarm anymore
+					}
+
+					//found a peer! return it
+					ret <- PeerID(info.ID)
+
+					//check if we have enough!
+					found = found + 1
+					if found >= num {
+						close(ret)
+						cncl()
+						return
+					}
+				}
+
+			case <-ctx.Done():
+				close(ret)
+				cncl()
+				return
+			}
+		}
+	}()
+
+	return ret
 }

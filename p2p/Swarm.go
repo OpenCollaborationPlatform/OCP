@@ -2,10 +2,10 @@
 package p2p
 
 import (
-	"path/filepath"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
@@ -154,7 +154,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 
 		} else {
 			//let's go and search a swarm member!
-			peerChan := swarm.findSwarmPeersAsync(ctx, 1)
+			peerChan := swarm.host.findSwarmPeersAsync(ctx, swarm.ID, 1)
 
 			select {
 			case peer, more := <-peerChan:
@@ -199,66 +199,6 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 	}()
 
 	return swarm, nil
-}
-
-//finds and connects other peers in the swarm
-func (self *Swarm) findSwarmPeersAsync(ctx context.Context, num int) <-chan PeerID {
-
-	//we look for hosts that provide the swarm CID. However, cids are always provided
-	//for min. 24h. That means we afterwards need to check if the host still has the
-	//swarm active by querying the host API
-	ret := make(chan PeerID, num)
-
-	go func() {
-
-		dhtCtx, cncl := context.WithCancel(ctx)
-		input := self.host.dht.FindProvidersAsync(dhtCtx, self.ID.Cid(), num*5)
-		found := 0
-		for {
-			select {
-
-			case info, more := <-input:
-				if !more {
-					close(ret)
-					cncl()
-					return
-				}
-				if info.ID.Validate() == nil && len(info.Addrs) != 0 && info.ID != self.host.ID().pid() {
-
-					self.host.SetMultipleAdress(PeerID(info.ID), info.Addrs)
-					self.host.EnsureConnection(ctx, PeerID(info.ID))
-
-					//check host api!
-					var has bool
-					err := self.host.Rpc.CallContext(ctx, info.ID, "HostRPCApi", "HasSwarm", self.ID, &has)
-					if err != nil {
-						break //wait for next peer if contacting failed for whatever reason
-					}
-					if !has {
-						break //wait for next peer if this one does not have the swarm anymore
-					}
-
-					//found a peer! return it
-					ret <- PeerID(info.ID)
-
-					//check if we have enough!
-					found = found + 1
-					if found >= num {
-						close(ret)
-						cncl()
-						return
-					}
-				}
-
-			case <-ctx.Done():
-				close(ret)
-				cncl()
-				return
-			}
-		}
-	}()
-
-	return ret
 }
 
 /* Peer handling

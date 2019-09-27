@@ -1,89 +1,169 @@
 package document
 
 import (
-	"github.com/ickby/CollaborationNode/connection"
-	"github.com/ickby/CollaborationNode/p2p"
 	"context"
 	"fmt"
-	"log"
+	"github.com/ickby/CollaborationNode/connection"
+	"github.com/ickby/CollaborationNode/p2p"
 	"sync"
 
+	uuid "github.com/satori/go.uuid"
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
 )
 
-var (
-	docClient *nxclient.Client
-	server    *connection.Server
-	router    *connection.Router
-	documents []*Document
-	nodeID    p2p.PeerID
+//A p2p RPC API that allows querying some document details
+type DocumentAPI struct {
+	handler *DocumentHandler
+}
+
+func (self DocumentAPI) DocumentDML (ctx context.Context, val string, ret *p2p.Cid) error {
+	
+	//find the correct document
+	self.handler.mutex.RLock()
+	defer self.handler.mutex.RUnlock()
+	
+	for _, doc := range self.handler.documents {
+		if doc.ID == val {
+			*ret = doc.cid
+			return nil
+		}
+	}
+	return fmt.Errorf("No document with given ID available")
+}
+
+type DocumentHandler struct {
+
+	//connection handling
+	client *nxclient.Client
+	router *connection.Router
+	host   *p2p.Host
+
+	//document handling
+	documents []Document
 	mutex     *sync.RWMutex
-)
+}
 
-func Setup(s *connection.Server, r *connection.Router, node p2p.PeerID) {
+func NewDocumentHandler(router *connection.Router, host *p2p.Host) *DocumentHandler {
 
-	mutex = &sync.RWMutex{}
-	server = s
-	router = r
-	nodeID = node
-	client, err := r.GetLocalClient("document")
+	mutex := &sync.RWMutex{}
+	client, err := router.GetLocalClient("document")
 	if err != nil {
 		panic(fmt.Sprintf("Could not setup document handler: %s", err))
 	}
-	docClient = client
+
+	dh := &DocumentHandler{
+		client:    client,
+		router:    router,
+		host:      host,
+		documents: make([]Document, 0),
+		mutex:     mutex,
+	}
 
 	//here we create all general document related RPCs and Topic
-	docClient.Register("ocp.documents.create", createDoc, wamp.Dict{"disclose_caller": true})
+	client.Register("ocp.documents.create", dh.createDoc, wamp.Dict{})
+	client.Register("ocp.documents.open", dh.openDoc, wamp.Dict{})
+	client.Register("ocp.documents.list", dh.listDocs, wamp.Dict{})
+
+	//register the RPC api
+	host.Rpc.Register(DocumentAPI{dh})
+
+	return dh
 }
 
-func createDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self *DocumentHandler) createDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
-	log.Print("Adding document")
-
-	caller, ok := details["caller"]
+	//the user needs to provide the dml folder!
+	if len(args) != 1 {
+		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to dml folder")}
+	}
+	dmlpath, ok := args[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Err: wamp.URI("No caller disclosed in call")}
+		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to dml folder")}
 	}
-	id, ok := caller.(wamp.ID)
-	if !ok {
-		return &nxclient.InvokeResult{Err: wamp.URI("No caller disclosed in call")}
+	if dmlpath[(len(dmlpath)-3):] != "Dml" {
+		return &nxclient.InvokeResult{Err: wamp.URI("Path is not valid Dml folder")}
 	}
 
-	client, err := server.GetClientByRouterSession(id)
+	//add the dml folder to the data exchange!
+	cid, err := self.host.Data.Add(ctx, dmlpath)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(fmt.Sprintf("No caller available: %s", err))}
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 	}
 
-	log.Print("Adding document: Data collected")
-
-	//see if we can register that document
-	result, err := server.Call("ocp.documents.create", wamp.Dict{}, wamp.List{client.AuthID}, wamp.Dict{})
+	//create the document
+	id := uuid.NewV4().String()
+	doc, err := NewDocument(ctx, self.router, self.host, cid, id, false)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(fmt.Sprintf("Creation failed: %s", err))}
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 	}
 
-	doc, err := NewDocument(id, result.Arguments[0].(string))
-	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(fmt.Sprintf("%s", err))}
-	}
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.documents = append(self.documents, doc)
 
-	log.Print("Adding document: call made")
-	mutex.Lock()
-	defer mutex.Unlock()
-	documents = append(documents, doc)
+	//inform everyone about the new doc... p2p and locally!
+	self.client.Publish("ocp.documents.new", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
+	self.host.Event.Publish("ocp.documents.new", []byte(doc.ID))
 
-	log.Print("Adding document: done")
 	return &nxclient.InvokeResult{Args: wamp.List{doc.ID}}
 }
 
-func removeDoc(doc *Document) {
+func (self *DocumentHandler) openDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
-	mutex.Lock()
-	defer mutex.Unlock()
-	for i, value := range documents {
-		if value == doc {
-			documents = append(documents[:i], documents[i+1:]...)
-		}
+	//the user needs to provide the doc id!
+	if len(args) != 1 {
+		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be document id")}
 	}
+	docID, ok := args[0].(string)
+	if !ok {
+		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be document id")}
+	}
+
+	//we know doc id == swarm id... hence use it to find an active peer!
+	swarmID := p2p.SwarmID(docID)
+	peer, err := self.host.FindSwarmMember(ctx, swarmID)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI("No document with id found: "+ err.Error())}
+	}
+
+	//ask the peer what the correct dml cid for this document is!
+	var cid p2p.Cid
+	err = self.host.Rpc.Call(peer, "DocumentAPI", "DocumentDML", docID, &cid)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI("No dml description for document found: " + err.Error())}
+	}
+	
+	//create the document by joining it
+	doc, err := NewDocument(ctx, self.router, self.host, cid, docID, true)
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+	}
+
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.documents = append(self.documents, doc)
+
+	//inform everyone about the newly opened doc... p2p and locally!
+	self.client.Publish("ocp.documents.open", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
+	self.host.Event.Publish("ocp.documents.open", []byte(doc.ID))
+
+	return &nxclient.InvokeResult{Args: wamp.List{docID}}
+}
+
+func (self *DocumentHandler) listDocs(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+	if len(args) != 0 {
+		return &nxclient.InvokeResult{Err: wamp.URI("Function does not take arguments")}
+	}
+	
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+	
+	res := make(wamp.List, len(self.documents))
+	for i, doc := range self.documents {
+		res[i] = doc.ID
+	}
+	
+	return &nxclient.InvokeResult{Args: res}
 }

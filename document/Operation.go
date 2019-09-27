@@ -63,7 +63,7 @@ func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	if ok {
 		return obj.Id().Encode()
 	}
-	
+
 	return val
 }
 
@@ -98,7 +98,7 @@ func (self jsOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	if ok {
 		return obj.Id().Encode()
 	}
-	
+
 	return val
 }
 

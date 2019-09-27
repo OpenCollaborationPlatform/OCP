@@ -66,12 +66,12 @@ func TestDatastructure(t *testing.T) {
 		baseHost.SetMultipleAdress(host.ID(), host.OwnAddresses())
 		host.SetMultipleAdress(baseHost.ID(), baseHost.OwnAddresses())
 		host.Connect(context.Background(), baseHost.ID())
-		
+
 		//and for the swarm!
 		id := uuid.NewV4().String()
 		swarmpath := filepath.Join(host.GetPath(), id)
 		os.MkdirAll(swarmpath, os.ModePerm)
-	
+
 		//setup the dml file to be accessbile for the datastrcuture
 		dmlpath := filepath.Join(swarmpath, "Dml")
 		os.MkdirAll(dmlpath, os.ModePerm)
@@ -88,7 +88,7 @@ func TestDatastructure(t *testing.T) {
 		defer swarm.Close(context.Background())
 
 		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
-		
+
 		Convey("events are forwarded to all clients,", func() {
 
 			called := false
@@ -209,9 +209,9 @@ func TestDatastructure(t *testing.T) {
 			opts := make(wamp.Dict, 0)
 			res, err := testClient.Call(ctx, "ocp.test.methods.Test.Vector.AppendNew", opts, wamp.List{}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
-			
+
 			id := res.Arguments[0].(string)
-			uri := "ocp.test.properties." + id + ".testI"	
+			uri := "ocp.test.properties." + id + ".testI"
 			res, err = testClient.Call(ctx, uri, opts, wamp.List{20}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)

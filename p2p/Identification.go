@@ -10,20 +10,7 @@ import (
 	peer "github.com/libp2p/go-libp2p-peer"
 )
 
-type PeerID peer.ID
-
-func (self PeerID) pid() peer.ID {
-	return peer.ID(self)
-}
-
-func (self PeerID) String() string {
-	return peer.IDB58Encode(self.pid())
-}
-
-func (self PeerID) ShortName() string {
-	str := self.String()
-	return string(str[len(str)-4:])
-}
+type PeerID = peer.ID
 
 func PeerIDFromString(id string) (PeerID, error) {
 
