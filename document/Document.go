@@ -1,8 +1,8 @@
 package document
 
 import (
-	"CollaborationNode/connection"
-	"CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/connection"
+	"github.com/ickby/CollaborationNode/p2p"
 	"context"
 	"fmt"
 	"sync"

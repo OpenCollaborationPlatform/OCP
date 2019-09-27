@@ -2,7 +2,7 @@
 package commands
 
 import (
-	"CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/p2p"
 	"crypto/rand"
 	"fmt"
 	"io"

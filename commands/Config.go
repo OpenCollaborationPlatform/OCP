@@ -2,7 +2,7 @@
 package commands
 
 import (
-	"CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/utils"
 	"fmt"
 	"sort"
 	"strings"

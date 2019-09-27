@@ -1,25 +1,113 @@
 package datastructure
 
 import (
-	"context"
 	"strings"
-
-	"github.com/ickby/CollaborationNode/dml"
-	"github.com/ickby/CollaborationNode/p2p"
-
+	"context"
 	nxclient "github.com/gammazero/nexus/client"
 	wamp "github.com/gammazero/nexus/wamp"
+	"github.com/ickby/CollaborationNode/dml"
+	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/utils"
 )
 
-type wampHelper struct {
-	client *nxclient.Client
-	swarm  *p2p.Swarm
-	rntm   *dml.Runtime
+//Async datastructure whcih encapsulates synchronous DML runtime and a datastore.
+//It works operation based: All operations are carried out ordered
+type Datastructure struct {
+
+	//general
+	path   string
 	prefix string
+
+	//dml state handling
+	dml      *dml.Runtime
+	dmlState dmlState
+
+	//connectvity: p2p and client
+	swarm  *p2p.Swarm
+	client *nxclient.Client
 }
 
+/* Creates a new shared dml datastructure and exposes it to wamp.
+ * - The dml folder needs to be found in "path", and the datastore will be
+ * 	 created there too.
+ * - Prefix is the wamp URI prefix the datastructure uses. After this prefix all
+ *   datastrucutre events are created in /events/... and all methods in /methods/...
+ */
+func NewDatastructure(path string, prefix string, client *nxclient.Client) (Datastructure, error) {
+
+	//create the state
+	state, err := newState(path)
+	if err != nil {
+		return Datastructure{}, utils.StackError(err, "Unable to create state for datastructure")
+	}
+
+	//make sure the prefix has a "/" as last charachter
+	if prefix[len(prefix)-1] != '.' {
+		prefix = prefix + "."
+	}
+
+	//return the datastructure
+	return Datastructure{
+		path:     path,
+		prefix:   prefix,
+		dml:      state.dml,
+		dmlState: state,
+		swarm:    nil,
+		client:   client,
+	}, nil
+}
+
+// 							Bookepping functions
+// *****************************************************************************
+func (self Datastructure) Start(s *p2p.Swarm) {
+	self.swarm = s
+
+	//initiate the client connections for events
+	rntm := self.dml
+	rntm.SetupAllObjects(func(objpath string, obj dml.Data) error {
+
+		//build the full path
+		fpath := objpath + obj.Id().Name
+
+		//go over all events and set them up
+		self.setupDmlEvents(obj, fpath)
+		return nil
+	})
+
+	//general options
+	options := wamp.SetOption(wamp.Dict{}, wamp.OptMatch, wamp.MatchPrefix)
+	options = wamp.SetOption(options, wamp.OptDiscloseCaller, true)
+
+	//register the function handler
+	uri := self.prefix + "methods"
+	self.client.Register(uri, self.createWampInvokeFunction(), options)
+
+	//register property handler
+	uri = self.prefix + "properties"
+	self.client.Register(uri, self.createWampPropertyFunction(), options)
+
+	//register javascript handler
+	options = wamp.SetOption(options, wamp.OptMatch, wamp.MatchExact)
+	uri = self.prefix + "execute"
+	self.client.Register(uri, self.createWampJSFunction(), options)
+}
+
+func (self Datastructure) Close() {
+	self.dmlState.Close()
+	self.client.Unregister(self.prefix + "methods")
+	self.client.Unregister(self.prefix + "properties")
+}
+
+func (self Datastructure) GetState() p2p.State {
+	return self.dmlState
+}
+
+
+//							helper functions
+//******************************************************************************
+
 //setup events so that they publish in the wamp client!
-func (self wampHelper) SetupDmlEvents(obj dml.EventHandler, path string) {
+func (self Datastructure) setupDmlEvents(obj dml.EventHandler, path string) {
 
 	//go over all events and set them up
 	for _, evtName := range obj.Events() {
@@ -29,10 +117,8 @@ func (self wampHelper) SetupDmlEvents(obj dml.EventHandler, path string) {
 	}
 }
 
-//							helper functions
-//******************************************************************************
 
-func (self wampHelper) createWampPublishFunction(path string, event string) dml.EventCallback {
+func (self Datastructure) createWampPublishFunction(path string, event string) dml.EventCallback {
 
 	return func(vals ...interface{}) error {
 
@@ -54,7 +140,7 @@ func (self wampHelper) createWampPublishFunction(path string, event string) dml.
 	}
 }
 
-func (self wampHelper) executeOperation(ctx context.Context, op Operation) *nxclient.InvokeResult {
+func (self Datastructure) executeOperation(ctx context.Context, op Operation) *nxclient.InvokeResult {
 
 	//execute the operation!
 	res, err := self.swarm.State.AddCommand(ctx, "dmlState", op.ToData())
@@ -71,7 +157,7 @@ func (self wampHelper) executeOperation(ctx context.Context, op Operation) *nxcl
 
 }
 
-func (self wampHelper) createWampInvokeFunction() nxclient.InvocationHandler {
+func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler {
 
 	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
@@ -96,7 +182,7 @@ func (self wampHelper) createWampInvokeFunction() nxclient.InvocationHandler {
 	return res
 }
 
-func (self wampHelper) createWampJSFunction() nxclient.InvocationHandler {
+func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 
 	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
@@ -123,7 +209,7 @@ func (self wampHelper) createWampJSFunction() nxclient.InvocationHandler {
 	return res
 }
 
-func (self wampHelper) createWampPropertyFunction() nxclient.InvocationHandler {
+func (self Datastructure) createWampPropertyFunction() nxclient.InvocationHandler {
 
 	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
@@ -141,7 +227,7 @@ func (self wampHelper) createWampPropertyFunction() nxclient.InvocationHandler {
 
 		//get the arguments: if provided it is a write, otherwise read
 		if len(args) == 0 {
-			val, err := self.rntm.ReadProperty(dml.User(auth), string(path), string(prop))
+			val, err := self.dml.ReadProperty(dml.User(auth), string(path), string(prop))
 			if err != nil {
 				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 			}

@@ -2,8 +2,8 @@
 package commands
 
 import (
-	"CollaborationNode/node"
-	"CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/node"
+	"github.com/ickby/CollaborationNode/utils"
 	"crypto/rand"
 	"fmt"
 	"io/ioutil"
