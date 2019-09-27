@@ -31,7 +31,7 @@ func InitConfig(path string) {
 	}
 	ConfigDir := folders[0]
 
-	if path == "" {
+	if path == "default" {
 
 		//we aways need to have a config file
 		if !ConfigDir.Exists("config.json") {
@@ -97,11 +97,8 @@ type ConfigEntry struct {
 var (
 	configEntries = map[string]interface{}{
 		"connection": map[string]interface{}{
+			"uri": ConfigEntry{Default: "localhost", Short: "u", Text: "The uri the node is listening on for client connections "},
 			"port": ConfigEntry{Default: 8000, Short: "p", Text: "The port on which the node listents for client connections"},
-		},
-		"server": map[string]interface{}{
-			"uri":  ConfigEntry{Default: "localhost", Short: "u", Text: "The server URI to which to conenct to (without port)"},
-			"port": ConfigEntry{Default: 9000, Short: "p", Text: "The port which is used to connecto to the collaboration server"},
 		},
 		"p2p": map[string]interface{}{
 			"port":      ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens on for p2p connections from other nodes"},
@@ -114,7 +111,7 @@ var (
 	node       bool
 )
 
-func GetConfigEntry(keys ...string) ConfigEntry {
+func GetConfigEntry(keys ...string) (ConfigEntry, error) {
 
 	//could be viper access string like connection.port
 	if len(keys) == 1 {
@@ -124,24 +121,29 @@ func GetConfigEntry(keys ...string) ConfigEntry {
 	return getConfigEntryByArray(keys)
 }
 
-func getConfigEntryByArray(keys []string) ConfigEntry {
+func getConfigEntryByArray(keys []string) (ConfigEntry, error) {
 
 	//iterate over all nested values
 	tmp := configEntries
 	for i, key := range keys {
+		
+		val, ok := tmp[key]
+		if !ok {
+			return ConfigEntry{}, fmt.Errorf("Key %v does not exist in default config", key)
+		}
+		
 		if i == (len(keys) - 1) {
 			//maybe its not a entry...
-			val, ok := tmp[key]
 			if !ok || val == nil {
-				return ConfigEntry{}
+				return ConfigEntry{}, fmt.Errorf("Default config entry is empty, which is invalid")
 			}
-			return tmp[key].(ConfigEntry)
+			return val.(ConfigEntry), nil
 		}
 		tmp = tmp[key].(map[string]interface{})
 	}
 
 	log.Fatal("No such config entry exists")
-	return ConfigEntry{}
+	return ConfigEntry{}, nil
 }
 
 //Adds a flag to a command based on a config entry. This uses the long and short names
@@ -149,7 +151,11 @@ func getConfigEntryByArray(keys []string) ConfigEntry {
 //viper access string.
 func AddConfigFlag(cmd *cobra.Command, accessor string) {
 
-	config := GetConfigEntry(accessor)
+	config, err := GetConfigEntry(accessor)
+	if err != nil {
+		return
+	}
+	
 	keys := strings.Split(accessor, ".")
 	name := keys[len(keys)-1]
 

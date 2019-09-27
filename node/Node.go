@@ -2,11 +2,11 @@
 package node
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 
 	"github.com/ickby/CollaborationNode/connection"
@@ -14,15 +14,22 @@ import (
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
 
-	"github.com/spf13/viper"
+)
+
+const (
+	OcpVersion string = "v0.1 development version"
 )
 
 type Node struct {
+	//connection
 	quit    chan string        //This is the quit channel: send on it to shutdown
-	Server  *connection.Server //Connection to WAMP server
 	Router  *connection.Router //WAMP router for client connections (and gateway)
 	Host    *p2p.Host          //P2P host for direct comunication and data transfer
-	ID      p2p.PeerID         //n.ID: setup from config
+
+	//functionality
+	Documents *document.DocumentHandler //the handler for documents
+
+	//misc
 	Version string             //Default setup version string
 }
 
@@ -30,31 +37,25 @@ func NewNode() *Node {
 
 	return &Node{
 		quit:    make(chan string),
-		Version: "v0.1 development version"}
+		Version: OcpVersion}
 }
 
-func (n *Node) Start() {
+func (n *Node) Start() error {
 
-	//load ID and establish the p2p network
-	n.ID = p2p.PeerIDFromPublicKeyFile(filepath.Join(viper.GetString("directory"), "public"))
-	log.Printf("Node ID set to %s", n.ID.Pretty())
+	//setup the p2p network
 	n.Host = p2p.NewHost()
 	n.Host.Start()
 
-	//connect to the collaboration server
-	n.Server = connection.NewServer(n.ID)
-	if err := n.Server.Start(n.quit); err != nil {
-		log.Printf("Connection to server failed: %s", err)
-	} else {
-		log.Print("Connection to server successfull")
-	}
-
 	//start up our local router
-	n.Router = connection.NewRouter(n.Server)
+	n.Router = connection.NewRouter()
 	n.Router.Start(n.quit)
 
 	//load the document component
-	document.Setup(n.Server, n.Router, n.ID)
+	dh, err := document.NewDocumentHandler(n.Router, n.Host) 
+	if err != nil {
+		return utils.StackError(err, "Unable to load document handler")
+	}
+	n.Documents = dh
 
 	//make sure we get system signals
 	sigs := make(chan os.Signal)
@@ -65,16 +66,18 @@ func (n *Node) Start() {
 	}()
 
 	//save the pidfile
-	err := utils.WritePidPort()
+	err = utils.WritePidPort()
 	if err != nil {
-		log.Fatalf(fmt.Sprintf("Writing PID file failed with \"%s\"", err))
+		return utils.StackError(err, "Unable to write pid/port file")
 	}
+	
+	return nil
 }
 
-func (n *Node) Stop(reason string) {
+func (n *Node) Stop(ctx context.Context, reason string) {
 
-	n.Host.Stop()
-	n.Server.Stop()
+	n.Documents.Close(ctx)
+	n.Host.Stop(ctx)
 	n.Router.Stop()
 	utils.ClearPidPort()
 	defer func() { n.quit <- reason }()

@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"time"
 	"github.com/ickby/CollaborationNode/node"
 	"github.com/ickby/CollaborationNode/utils"
 	"context"
@@ -29,7 +30,7 @@ var (
 func Execute() {
 
 	//flags
-	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "", "", "Set configfile to use instead of system config")
+	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "default", "Set configfile to use instead of system config")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable extra output like debug messages")
 
 	rootCmd.AddCommand(cmdVersion, cmdStart, cmdStop, cmdInit, cmdConfig)
@@ -49,7 +50,7 @@ func initOnlineCommands() {
 
 //this is a herlper function which setups a function to be accessible via the router
 //so that it can be called by normal cobra command
-func onlineCommand(name string, f func([]string, map[string]interface{}) string) func(*cobra.Command, []string) {
+func onlineCommand(name string, f func(context.Context, []string, map[string]interface{}) string) func(*cobra.Command, []string) {
 
 	onlineCMDs = append(onlineCMDs, func(node *node.Node) {
 
@@ -69,7 +70,7 @@ func onlineCommand(name string, f func([]string, map[string]interface{}) string)
 			}
 
 			//call the function
-			result := f(slice, wampkwargs)
+			result := f(ctx, slice, wampkwargs)
 
 			//postprocess the result
 			return &nxclient.InvokeResult{Args: wamp.List{result}}
@@ -116,7 +117,7 @@ func onlineCommand(name string, f func([]string, map[string]interface{}) string)
 		}
 
 		//call the node command
-		ctx := context.Background()
+		ctx,_ := context.WithTimeout(context.Background(), 5*time.Second)
 		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, flags, "")
 		if err != nil {
 			fmt.Println("Error:", err)
@@ -152,13 +153,13 @@ func setup(pidPortPanic bool) {
 		return
 	}
 
-	authFunc := func(c *wamp.Challenge) (string, wamp.Dict) {
-		return "", wamp.Dict{}
-	}
+	//authFunc := func(c *wamp.Challenge) (string, wamp.Dict) {
+	//	return "", wamp.Dict{}
+	//}
 	cfg := nxclient.ClientConfig{
 		Realm:        "ocp",
 		HelloDetails: wamp.Dict{"authid": "command", "role": "local"},
-		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": authFunc},
+		//AuthHandlers: map[string]nxclient.AuthFunc{"ticket": authFunc},
 	}
 	c, err := nxclient.ConnectNet(fmt.Sprintf("ws://localhost:%v/", port), cfg)
 
@@ -184,11 +185,11 @@ var rootCmd = &cobra.Command{
 		setup(true)
 	},
 
-	Run: onlineCommand("ocp", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("ocp", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
-		s := "OCP node running:\n"
-		s += fmt.Sprintf("Version: 	%s", ocpNode.Version)
-		s += fmt.Sprintf("ID: 		%s", ocpNode.ID.Pretty())
+		s := "OCP node running\n"
+		s += fmt.Sprintf("Version: 	%s\n", ocpNode.Version)
+		s += fmt.Sprintf("ID: 		%s\n", ocpNode.Host.ID().Pretty())
 		return s
 	}),
 }

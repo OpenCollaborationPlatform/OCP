@@ -2,9 +2,9 @@
 package connection
 
 import (
-	"github.com/ickby/CollaborationNode/p2p"
 	"context"
 	"fmt"
+	"github.com/ickby/CollaborationNode/p2p"
 	"log"
 	"sync"
 

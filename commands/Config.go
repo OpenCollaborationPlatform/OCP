@@ -17,9 +17,9 @@ func init() {
 }
 
 var cmdConfig = &cobra.Command{
-	Use: "config",
-	Short: `This command allows you to acces and modify the permanent configuration 
-			of the ocp node. A node restart is required for changes to take effect`,
+	Use: "config [subconf]",
+	Short: `Create, access and modify the node configuration`,
+	Long: `By default prints the whole currently selected configuration. For subconfigurations provide the chain of keys`,
 	Args: cobra.MaximumNArgs(1),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		setup(false)
@@ -80,9 +80,12 @@ var cmdConfig = &cobra.Command{
 			indent := strings.Repeat("   ", len(parts)-1)
 			fmt.Printf("%s%s: %v", indent, parts[len(parts)-1], viper.Get(key))
 
-			default_ := utils.GetConfigEntry(key).Default
-			if default_ != nil && fmt.Sprintf("%v", viper.Get(key)) != fmt.Sprintf("%v", default_) {
-				fmt.Printf(" (default: %v)", default_)
+			conf, err := utils.GetConfigEntry(key)
+			if err == nil {
+				default_ := conf.Default
+				if default_ != nil && fmt.Sprintf("%v", viper.Get(key)) != fmt.Sprintf("%v", default_) {
+					fmt.Printf(" (default: %v)", default_)
+				}
 			}
 			fmt.Println("")
 		}
@@ -91,7 +94,7 @@ var cmdConfig = &cobra.Command{
 
 var cmdConfigWrite = &cobra.Command{
 	Use:   "write",
-	Short: "write [accessor] [value] Writes value for given config to the file",
+	Short: "write [accessor] [value] Writes value to the current selected config",
 	Long:  "Writes a config value to the config file. The setting will not be used by a already running node",
 	Args:  cobra.ExactArgs(2),
 
@@ -110,9 +113,9 @@ var cmdConfigWrite = &cobra.Command{
 var cmdConfigCreate = &cobra.Command{
 	Use:   "create",
 	Short: "create [name] Creates new config file with given name",
-	Long: "Creates a named config file which can be used as alternativ to the default one. It will be stored in the " +
-		"default config folder. The create file can be used via the global --config flag, e.g\n" +
-		"ocp new MyConfigFile \nocp start --config MyConfigFile",
+	Long: `Creates a named config file which can be used as alternativ to the default one. It will be stored in the
+			default config folder. The create file can be used via the global --config flag, e.g\n
+			ocp new MyConfigFile \nocp start --config MyConfigFile`,
 	Args: cobra.ExactArgs(1),
 
 	Run: func(cmd *cobra.Command, args []string) {

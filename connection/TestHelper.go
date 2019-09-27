@@ -6,14 +6,14 @@ import (
 )
 
 func MakeTemporaryRouter() (*Router, error) {
-	
-	r := NewRouter(nil)
-	r.Start(make(chan string,0))
+
+	r := NewRouter()
+	r.Start(make(chan string, 0))
 	return r, nil
 }
 
 func MakeTwoTemporaryRouters() (*Router, *Router, error) {
-	
+
 	// we need to make sure that all routers use different ports!
 	jsonConf := []byte(`
 		{
@@ -27,7 +27,7 @@ func MakeTwoTemporaryRouters() (*Router, *Router, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	jsonConf = []byte(`
 		{
 	    		"connection": {
@@ -40,6 +40,6 @@ func MakeTwoTemporaryRouters() (*Router, *Router, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	return r1, r2, nil
 }

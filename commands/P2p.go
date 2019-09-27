@@ -1,7 +1,8 @@
 // p2p.go
 package commands
-
+/*
 import (
+	"context"
 	"github.com/ickby/CollaborationNode/p2p"
 	"crypto/rand"
 	"fmt"
@@ -33,7 +34,7 @@ var cmdP2P = &cobra.Command{
 	Use:   "p2p",
 	Short: "Access the p2p network",
 
-	Run: onlineCommand("p2p", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("p2p", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		result := fmt.Sprintf("Connected Peers:\t%d\n", len(ocpNode.Host.Peers()))
 		result += fmt.Sprintln("Own addresses:")
@@ -48,7 +49,7 @@ var cmdP2PPeers = &cobra.Command{
 	Use:   "peers",
 	Short: "List all peers the node is connected to",
 
-	Run: onlineCommand("p2p.peers", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("p2p.peers", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		result := ""
 		for _, peer := range ocpNode.Host.Peers() {
@@ -72,7 +73,7 @@ var cmdP2PAddrs = &cobra.Command{
 	Short: "List all known addresses for the given peer",
 	Args:  cobra.ExactArgs(1),
 
-	Run: onlineCommand("p2p.address", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("p2p.address", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		peerid, err := peer.IDB58Decode(args[0])
 		if err != nil {
@@ -98,7 +99,7 @@ var cmdP2PConnect = &cobra.Command{
 	Short: "Connect to peer with given full address (e.g. /ip4/1.2.3.4/tcp/10/ipfs/Qxml...)",
 	Args:  cobra.ExactArgs(1),
 
-	Run: onlineCommand("p2p.connect", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("p2p.connect", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		addr, err := multiaddr.NewMultiaddr(args[0])
 		if err != nil {
@@ -118,7 +119,7 @@ var cmdP2PClose = &cobra.Command{
 	Short: "close [peer] Close connection to given peer",
 	Args:  cobra.ExactArgs(1),
 
-	Run: onlineCommand("p2p.close", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("p2p.close", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		pid, err := p2p.PeerIDFromString(args[0])
 		if err != nil {
@@ -137,7 +138,7 @@ var cmdP2PSwarm = &cobra.Command{
 	Short: "lists all open swarms and allows to handle them via subcommands",
 	Args:  cobra.ExactArgs(0),
 
-	Run: onlineCommand("p2p.swarm", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("p2p.swarm", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		var result string
 		for _, swarm := range ocpNode.Host.Swarms() {
@@ -158,7 +159,7 @@ var cmdP2PSwarmCreate = &cobra.Command{
 	Short: "create [id] [options] creates a new swarm with given id",
 	Args:  cobra.ExactArgs(1),
 
-	Run: onlineCommand("p2p.swarm.create", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("p2p.swarm.create", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		seed := int(flags["seed"].(float64))
 		var r io.Reader
@@ -182,7 +183,7 @@ var cmdP2PSwarmAdd = &cobra.Command{
 	Short: "add [swarm] [peer] adds a peer to a swarm",
 	Args:  cobra.ExactArgs(2),
 
-	Run: onlineCommand("p2p.swarm.add", func(args []string, flags map[string]interface{}) string {
+	Run: onlineCommand("p2p.swarm.add", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		sid := p2p.SwarmID(args[0])
 		pid, err := p2p.PeerIDFromString(args[1])
@@ -281,3 +282,4 @@ var cmdP2PSwarmFileAdd = &cobra.Command{
 		return fmt.Sprintf("Posted file as %s", str)
 	}),
 }
+*/

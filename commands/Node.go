@@ -2,6 +2,7 @@
 package commands
 
 import (
+	"context"
 	"github.com/ickby/CollaborationNode/node"
 	"github.com/ickby/CollaborationNode/utils"
 	"crypto/rand"
@@ -17,15 +18,13 @@ import (
 
 //flag variables
 var (
-	clean bool
 	force bool
 )
 
 func init() {
 
 	//add flags
-	cmdInit.Flags().BoolVarP(&clean, "clean", "c", false, "If the given dir exist it gets cleaned and newly initialized")
-	cmdInit.Flags().BoolVarP(&force, "force", "f", false, "Initialize new directory even if there is one already")
+	cmdInit.Flags().BoolVarP(&force, "force", "f", false, "Reinitialize even if already initialized or used otherwise")
 
 	utils.AddConfigFlag(cmdStart, "connection.port")
 }
@@ -36,7 +35,7 @@ var cmdVersion = &cobra.Command{
 	Long: `The version of the ocp node. It prints the version of the called one 
 	        	no the running one. Call just \'ocp\' to see verison of that.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(ocpNode.Version)
+		fmt.Println(node.OcpVersion)
 	},
 }
 
@@ -44,7 +43,7 @@ var cmdStart = &cobra.Command{
 	Use:   "start",
 	Short: "Starts up the ocp node",
 	Long: `The node will be started up if there is no node running yet. Otherwise an 
-			error will be printed`,
+			error will be printed. Note: This command blocks till node is closed`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -68,20 +67,20 @@ var cmdStart = &cobra.Command{
 var cmdStop = &cobra.Command{
 	Use:   "stop",
 	Short: "Stops the running ocp node",
-	Long: `The node will be sttoped if there is one running. Otherwise an 
+	Long: `The node will be stoped if there is one running. Otherwise an 
 			error will be printed`,
 
-	Run: onlineCommand("stop", func(args []string, flags map[string]interface{}) string {
-		defer func() { ocpNode.Stop("Shutdown request received") }()
+	Run: onlineCommand("stop", func(ctx context.Context, args []string, flags map[string]interface{}) string {
+		defer func() { ocpNode.Stop(ctx, "Shutdown request received") }()
 		return ""
 	}),
 }
 
 var cmdInit = &cobra.Command{
-	Use:   "init",
-	Short: "Initializes a directory to be used as node storage",
+	Use:   "init [directory]",
+	Short: "Initializes a directory to be used as node storage, optional at user defined path",
 	Long: `OCP node needs a directory to store runtime as well as project data. With 
-			 this command this directory is prepared`,
+			 this command this directory is prepared. It is either a default directory or a user supplied one`,
 	Args: cobra.MaximumNArgs(1),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		//we override root persistant prerun to not panic out on no init
@@ -107,10 +106,6 @@ var cmdInit = &cobra.Command{
 				fmt.Println("Specified directiory already initialized. Nothing done.")
 				return
 			}
-			if !force {
-				fmt.Println("There is a initialized directiory already, use --force to override")
-				return
-			}
 		}
 
 		//setup the folder
@@ -122,11 +117,12 @@ var cmdInit = &cobra.Command{
 				return
 			}
 		} else {
-			if !clean {
-				fmt.Println("Folder exists, but clean was not specified: nothing done")
+
+			if !force {
+				fmt.Printf("Folder already in use. Specify --force to reuse it")
 				return
 			}
-			//clean means: delete it and recreate
+			//make it free for use to use
 			if err := os.RemoveAll(nodeDir); err != nil {
 				fmt.Printf("Error cleaning the node folder \"%s\": %s", nodeDir, err)
 				return
