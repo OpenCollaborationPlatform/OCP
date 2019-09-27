@@ -1,4 +1,4 @@
-package datastructure
+package document
 
 import (
 	"archive/zip"
