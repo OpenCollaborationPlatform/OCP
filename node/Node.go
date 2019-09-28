@@ -11,6 +11,7 @@ import (
 
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/document"
+	"github.com/ickby/CollaborationNode/user"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -28,6 +29,7 @@ type Node struct {
 
 	//functionality
 	Documents *document.DocumentHandler //the handler for documents
+	Users     *user.UserHandler //handler for users
 
 	//misc
 	Version string             //Default setup version string
@@ -57,6 +59,13 @@ func (n *Node) Start() error {
 	}
 	n.Documents = dh
 
+	//load the user component
+	uh, err := user.NewUserHandler(n.Router, n.Host) 
+	if err != nil {
+		return utils.StackError(err, "Unable to load user handler")
+	}
+	n.Users = uh
+
 	//make sure we get system signals
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
@@ -76,6 +85,7 @@ func (n *Node) Start() error {
 
 func (n *Node) Stop(ctx context.Context, reason string) {
 
+	n.Users.Close()
 	n.Documents.Close(ctx)
 	n.Host.Stop(ctx)
 	n.Router.Stop()

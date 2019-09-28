@@ -4,7 +4,7 @@ package document
 import (
 	"bytes"
 	"context"
-//	"fmt"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/ickby/CollaborationNode/connection"
-//	"github.com/ickby/CollaborationNode/dml"
+	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 
 	wamp "github.com/gammazero/nexus/wamp"
@@ -55,7 +55,7 @@ const (
 				}
 			}`
 )
-/*
+
 func TestDatastructure(t *testing.T) {
 
 	//make temporary folder for the data
@@ -236,7 +236,7 @@ func TestDatastructure(t *testing.T) {
 		})
 	})
 }
-*/
+
 
 func TestDatastructureData(t *testing.T) {
 

@@ -282,6 +282,86 @@ func (h *Host) Keys() (crypto.PrivKey, crypto.PubKey) {
 	return h.privKey, h.pubKey
 }
 
+/*		Search and Find Handling
+******************************** */
+
+//provides for 24h, afterwards gets deletet if not provided again
+func (h *Host) Provide(ctx context.Context, cid Cid) error {
+	return h.dht.Provide(ctx, cid, true)
+}
+
+//find peers that provide the given cid. The returned slice can have less than num 
+//entries, depending on the find results
+func (h *Host) FindProviders(ctx context.Context, cid Cid, num int) ([]PeerID, error) {
+	
+	input := h.dht.FindProvidersAsync(ctx, cid, num)
+	result := make([]PeerID, 0)
+	for {
+		select {
+		
+		case info, more := <-input:
+			if !more {
+				return result, nil
+			}
+			h.SetMultipleAdress(PeerID(info.ID), info.Addrs)
+			h.EnsureConnection(ctx, PeerID(info.ID))
+			result = append(result, PeerID(info.ID))
+		
+		case <-ctx.Done():
+			return result, nil
+		}
+	}
+	return result, nil
+}
+
+//find peers that provide the given cid
+func (h *Host) FindProvidersAsync(ctx context.Context, cid Cid, num int) (chan PeerID, error) {
+	
+	ret := make(chan PeerID, num)
+
+	go func() {
+
+		found := 0
+		dhtCtx, cncl := context.WithCancel(ctx)
+		input := h.dht.FindProvidersAsync(dhtCtx, cid, num*2)
+		for {
+			select {
+
+			case info, more := <-input:
+				if !more {
+					close(ret)
+					cncl()
+					return
+				}
+				if info.ID.Validate() == nil && len(info.Addrs) != 0 && info.ID != h.ID() {
+
+					h.SetMultipleAdress(PeerID(info.ID), info.Addrs)
+					h.EnsureConnection(ctx, PeerID(info.ID))
+
+					//found a peer! return it
+					ret <- PeerID(info.ID)
+
+					//check if we have enough!
+					found = found + 1
+					if found >= num {
+						close(ret)
+						cncl()
+						return
+					}
+				}
+
+			case <-ctx.Done():
+				close(ret)
+				cncl()
+				return
+			}
+		}
+	}()
+
+	return ret, nil
+}
+
+
 /*		Swarm Handling
 ****************************** */
 
@@ -383,7 +463,7 @@ func (self *Host) findSwarmPeersAsync(ctx context.Context, id SwarmID, num int) 
 	//we look for hosts that provide the swarm CID. However, cids are always provided
 	//for min. 24h. That means we afterwards need to check if the host still has the
 	//swarm active by querying the host API
-	ret := make(chan PeerID, 0)
+	ret := make(chan PeerID, num)
 
 	go func() {
 
