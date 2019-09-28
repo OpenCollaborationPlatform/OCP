@@ -55,8 +55,10 @@ func MustNewDataType(val interface{}) DataType {
 
 func (self DataType) IsValid() bool {
 
-	//first check if it is a plain type
-	return true
+	//as every strange string is interpretet as complex datatype and we cannot
+	//easily check it is a valid complex  we only check if string is empty
+	return self.value != ""
+	
 }
 
 func (self DataType) AsString() string {

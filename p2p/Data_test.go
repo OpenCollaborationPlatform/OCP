@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 
-	"io"
+//	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -487,6 +487,128 @@ func TestDataService(t *testing.T) {
 						})
 					})
 				})
+			})
+		})
+	})
+}
+
+func TestDataStreaming(t *testing.T) {
+
+	//make temporary folder for the data
+	tmppath, _ := ioutil.TempDir("", "p2p")
+	defer os.RemoveAll(tmppath)
+
+	Convey("Setting up two random hosts,", t, func() {
+
+		path := filepath.Join(tmppath, "current")
+		defer os.RemoveAll(path) //make sure empty bitswaps are created each run
+
+		//Setup the hosts
+		h1, _ := temporaryHost(path)
+		defer h1.Stop(context.Background())
+
+		h2, _ := temporaryHost(path)
+		defer h1.Stop(context.Background())
+
+		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
+		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
+		h1.Connect(context.Background(), h2.ID())
+		
+		Convey("it is possible to stream small data to one host", func() {
+			
+			data := repeatableData(10)
+			stream := NewStreamBlockifyer()
+			
+			c := stream.Start()
+			c <- data
+			stream.Stop()
+			
+			ctx,_ := context.WithTimeout(context.Background(), 5*time.Second)
+			id, err := h1.Data.AddBlocks(ctx, stream)
+			So(err, ShouldBeNil)
+			
+			Convey("and afterwards it is streamable by both hosts", func() {
+			
+				c, err := h1.Data.ReadChannel(ctx, id)
+				So(err, ShouldBeNil)
+				So(c, ShouldNotBeNil)
+				res := <-c 		
+				So(bytes.Equal(data, res), ShouldBeTrue)			
+				_, more := <-c
+				So(more, ShouldBeFalse)
+
+				c, err = h2.Data.ReadChannel(ctx, id)
+				So(err, ShouldBeNil)
+				So(c, ShouldNotBeNil)
+				res = <-c 				
+				So(bytes.Equal(data, res), ShouldBeTrue)
+				_, more = <-c
+				So(more, ShouldBeFalse)
+			})
+		})
+
+		Convey("also is possible to stream large data to the other host", func() {
+			
+			datasize := int(float32(blocksize) * 4.2)
+			data := repeatableData(datasize)
+			stream := NewStreamBlockifyer()
+			
+			c := stream.Start()
+			reader := bytes.NewReader(data)
+			buf := make([]byte, blocksize)
+			for {
+				n, err := reader.Read(buf)
+				if n == 0 || err != nil {
+		        		break
+		  	  	}
+				c <- buf[:n]
+			}			
+			stream.Stop()
+			
+			ctx,_ := context.WithTimeout(context.Background(), 5*time.Second)
+			id, err := h1.Data.AddBlocks(ctx, stream)
+			So(err, ShouldBeNil)
+			
+			Convey("and afterwards it is streamable by both hosts", func() {
+			
+				c, err := h1.Data.ReadChannel(ctx, id)
+				So(err, ShouldBeNil)
+				So(c, ShouldNotBeNil)
+				
+				res := make([]byte, 0)
+				loop:
+				for {
+					select {
+					case d, more := <-c:
+						if !more {
+							break loop
+						}
+						res = append(res, d...)	
+					}						
+				}
+				So(bytes.Equal(data, res), ShouldBeTrue)			
+				_, more := <-c
+				So(more, ShouldBeFalse)
+
+				c, err = h2.Data.ReadChannel(ctx, id)
+				So(err, ShouldBeNil)
+				So(c, ShouldNotBeNil)
+				
+				res = make([]byte, 0)
+				loop2:
+				for {
+					select {
+					case d, more := <-c:
+						if !more {
+							break loop2
+						}
+						res = append(res, d...)	
+					}						
+				}
+					
+				So(bytes.Equal(data, res), ShouldBeTrue)
+				_, more = <-c
+				So(more, ShouldBeFalse)
 			})
 		})
 	})

@@ -46,7 +46,7 @@ func TestTypeProperty(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(str, ShouldNotBeEmpty)
 
-			val, err := rntm.RunJavaScript("", "toplevel.test")
+			val, err := rntm.RunJavaScript( "", "toplevel.test")
 			So(err, ShouldBeNil)
 			strJs, ok := val.(string)
 			So(ok, ShouldBeTrue)
@@ -63,7 +63,7 @@ func TestTypeProperty(t *testing.T) {
 				if (obj.test != 10) {
 					throw "object properties not correctly created"
 				}`
-			_, err := rntm.RunJavaScript("", code)
+			_, err := rntm.RunJavaScript( "", code)
 			So(err, ShouldBeNil)
 		})
 
@@ -75,7 +75,7 @@ func TestTypeProperty(t *testing.T) {
 				if (!(id in Objects)) {
 					throw "object is not accessible, but should be"
 				}`
-			_, err := rntm.RunJavaScript("", code)
+			_, err := rntm.RunJavaScript( "", code)
 			So(err, ShouldBeNil)
 		})
 

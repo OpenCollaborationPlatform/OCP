@@ -31,9 +31,11 @@ func newState(path string) (dmlState, error) {
 		return dmlState{}, utils.StackError(err, "Cannot create datastore for datastructure")
 	}
 
-	//read in the file and create the runtime
-	//path/Dml/main.dml
+	//create the runtime
 	rntm := dml.NewRuntime(store)
+	rntm.RegisterObjectCreator("Raw", NewRawDmlObject)
+
+	//parse the dm file in path/Dml/main.dml
 	file := filepath.Join(path, "Dml", "main.dml")
 	filereader, err := os.Open(file)
 	if err != nil {

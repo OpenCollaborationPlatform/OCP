@@ -188,15 +188,28 @@ func getP2PBlock(block blocks.Block) (P2PDataBlock, error) {
 							Block creation
 ******************************************************************************/
 
+//general interface to get blocks!
+type Blockifyer interface {
+	GetBlocks() ([]blocks.Block, cid.Cid, error)
+}
+
+type FileBlockifyer struct {
+	path string
+}
+
+func NewFileBlockifyer(path string) Blockifyer {
+	return FileBlockifyer{path}
+}
+
 //generates a p2p file descriptor from a real file.
 // - This does split the files into blocks
 // - same file returns exactly the same blocks, undependend of path
 // Returns all created blocks as well as the high level cid used to adress this file
-func blockifyFile(path string) ([]blocks.Block, cid.Cid, error) {
+func (self FileBlockifyer) GetBlocks() ([]blocks.Block, cid.Cid, error) {
 
 	result := make([]blocks.Block, 0)
 
-	fi, err := os.Open(path)
+	fi, err := os.Open(self.path)
 	if err != nil {
 		return result, cid.Cid{}, err
 	}
@@ -211,7 +224,7 @@ func blockifyFile(path string) ([]blocks.Block, cid.Cid, error) {
 		return result, cid.Cid{}, fmt.Errorf("File is empty, cannot blockify it")
 	}
 
-	name := filepath.Base(path)
+	name := filepath.Base(self.path)
 
 	//we want 1Mb slices, lets see how much we need
 	blocknum := int(math.Ceil(float64(size) / float64(blocksize)))
@@ -252,5 +265,85 @@ func blockifyFile(path string) ([]blocks.Block, cid.Cid, error) {
 	block.Sort()
 	result[0] = block.ToBlock()
 
+	return result, result[0].Cid(), nil
+}
+
+
+
+//streamer for binary data 
+type StreamerBlockifyer struct {
+	stream chan []byte
+	data   []byte
+}
+
+func NewStreamBlockifyer() *StreamerBlockifyer {
+	return &StreamerBlockifyer{nil, make([]byte, 0)}
+}
+
+func (self *StreamerBlockifyer) Start() chan []byte { 
+	self.stream = make(chan []byte, 0)
+	
+	//processing 
+	go func() {
+		for {
+			select {			
+			case data, more := <- self.stream:
+				if !more {
+					return
+				}
+				//store the data!
+				self.data = append(self.data, data...)
+			}
+		}
+	}()
+	
+	return self.stream
+}
+
+func (self *StreamerBlockifyer) Stop() { 
+	
+	close(self.stream)
+}
+
+func (self *StreamerBlockifyer) GetBlocks() ([]blocks.Block, cid.Cid, error) {
+	
+	if len(self.data) ==  0 {
+		return nil, Cid{}, fmt.Errorf("No data was provided")
+	} 
+	
+	if int64(len(self.data)) <= blocksize  {
+		//file block!
+		result := make([]blocks.Block, 1)
+		block := P2PFileBlock{"", self.data}
+		result[0] = block.ToBlock()
+
+		return result, result[0].Cid(), nil
+	}
+	
+	//multifile block
+	size := int64(len(self.data))
+	blocknum := int(math.Ceil(float64(size) / float64(blocksize)))
+
+	result := make([]blocks.Block, blocknum+1)
+	rawblocks := make([]Cid, blocknum)
+	for i := 0; i < blocknum; i++ {
+
+		start := int64(i)*blocksize
+		end := int64(i+1)*blocksize
+		if end > int64(len(self.data)) {
+			end = int64(len(self.data))
+		}
+
+		block := P2PRawBlock{start, self.data[start:end]}
+
+		//store the blocks
+		result[i+1] = block.ToBlock()
+		rawblocks[i] = result[i+1].Cid()
+	}
+	
+	block := P2PMultiFileBlock{size, "", rawblocks}
+	block.Sort()
+	result[0] = block.ToBlock()
+	
 	return result, result[0].Cid(), nil
 }

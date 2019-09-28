@@ -1,4 +1,5 @@
 package document
+
 /*
 import (
 	"context"
@@ -24,18 +25,18 @@ const (
 
 			    property string 	testS: "Hallo"
 			    property int 	testI: 1
-				
+
 				event TestEventZeroArgs()
 				event TestEventTwoArgs(string, int)
-				
+
 				function TestFncZeroArgs() {
 					this.testI = 0
 				}
-				
+
 				function TestFncTwoArgs(a, b) {
 					this.testI = a+b
 				}
-				
+
 				Vector {
 					.id: "Vector"
 					.type: Data {

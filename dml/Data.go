@@ -19,7 +19,7 @@ type Data interface {
 	GetChildByName(name string) (Data, error)
 }
 
-type data struct {
+type DataImpl struct {
 	*object
 	behaviourHandler
 
@@ -30,9 +30,9 @@ func NewData(name string, parent Identifier, rntm *Runtime) Object {
 	return NewDataBaseClass(name, "Data", parent, rntm)
 }
 
-func NewDataBaseClass(name string, typename string, parent Identifier, rntm *Runtime) *data {
+func NewDataBaseClass(name string, typename string, parent Identifier, rntm *Runtime) *DataImpl {
 
-	dat := data{
+	dat := DataImpl{
 		NewObject(parent, name, typename, rntm),
 		NewBehaviourHandler(),
 		make([]Identifier, 0),
@@ -41,12 +41,12 @@ func NewDataBaseClass(name string, typename string, parent Identifier, rntm *Run
 	return &dat
 }
 
-func (self *data) AddChild(obj Data) {
+func (self *DataImpl) AddChild(obj Data) {
 
 	self.children = append(self.children, obj.Id())
 }
 
-func (self *data) GetChildren() []Data {
+func (self *DataImpl) GetChildren() []Data {
 
 	result := make([]Data, len(self.children))
 	for i, child := range self.children {
@@ -55,7 +55,7 @@ func (self *data) GetChildren() []Data {
 	return result
 }
 
-func (self *data) GetChildByName(name string) (Data, error) {
+func (self *DataImpl) GetChildByName(name string) (Data, error) {
 
 	for _, child := range self.children {
 		if child.Name == name {
@@ -66,7 +66,7 @@ func (self *data) GetChildByName(name string) (Data, error) {
 }
 
 //override to handle children refcount additional to our own
-func (self *data) IncreaseRefcount() error {
+func (self *DataImpl) IncreaseRefcount() error {
 	//increase child refcount
 	for _, child := range self.children {
 		res, ok := self.rntm.objects[child]
@@ -82,7 +82,7 @@ func (self *data) IncreaseRefcount() error {
 }
 
 //override to handle children refcount additional to our own
-func (self *data) DecreaseRefcount() error {
+func (self *DataImpl) DecreaseRefcount() error {
 	//decrease child refcount
 	for _, child := range self.children {
 		res, ok := self.rntm.objects[child]

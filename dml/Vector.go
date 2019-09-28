@@ -2,14 +2,14 @@
 package dml
 
 import (
-	datastore "github.com/ickby/CollaborationNode/datastores"
+	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 	"fmt"
 )
 
 //vector type: stores requested data type by index (0-based)
 type vector struct {
-	*data
+	*DataImpl
 
 	entries *datastore.MapVersioned
 	length  *datastore.ValueVersioned

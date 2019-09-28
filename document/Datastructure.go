@@ -7,6 +7,7 @@ import (
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
+	cid "github.com/ipfs/go-cid"
 	"strings"
 )
 
@@ -85,6 +86,10 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	//register property handler
 	uri = self.prefix + "properties"
 	self.client.Register(uri, self.createWampPropertyFunction(), options)
+
+	//register raw data handler
+	uri = self.prefix + "raw"
+	self.client.Register(uri, self.createWampRawFunction(), options)
 
 	//register javascript handler
 	options = wamp.SetOption(options, wamp.OptMatch, wamp.MatchExact)
@@ -238,6 +243,155 @@ func (self Datastructure) createWampPropertyFunction() nxclient.InvocationHandle
 		}
 
 		return &nxclient.InvokeResult{Err: wamp.URI("Only non or one argument supportet")}
+	}
+
+	return res
+}
+
+func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
+
+	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+		//get the user id
+		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
+		if auth == "" {
+			return &nxclient.InvokeResult{Err: wamp.URI("No authid disclosed")}
+		}
+
+		//get the paths
+		procedure := wamp.OptionURI(details, "procedure")
+		idx := strings.LastIndex(string(procedure), ".")
+		path := procedure[(len(self.prefix) + 11):idx] //11 for .properties
+		fnc := procedure[(idx + 1):]
+
+		switch fnc {
+		case "SetByPath":
+			if len(path) != 1 {
+				return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to file or directory")}
+			}
+			path, ok := args[0].(string)
+			if !ok {
+				return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to file or directory")}
+			}
+			//add the file!
+			cid, err := self.swarm.Data.Add(ctx, path)
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+			}
+			//set the cid to the dml object
+			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()})
+			return self.executeOperation(ctx, op)
+
+		case "WriteIntoPath":
+			if len(path) != 1 {
+				return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to directory")}
+			}
+			path, ok := args[0].(string)
+			if !ok {
+				return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to directory")}
+			}
+
+			//get the cid from the data object!
+			val, err := self.dml.CallMethod(dml.User(auth), string(path), "Get")
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+			}
+			sval, ok := val.(string)
+			if !ok {
+				return &nxclient.InvokeResult{Err: wamp.URI("Raw object does not contain any data")}
+			}
+			id, err := cid.Decode(sval)
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI("Raw object does not contain any data")}
+			}
+
+			//write the data
+			path, err = self.swarm.Data.Write(ctx, id, path)
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+			}
+
+			//return the exact path of new file
+			return &nxclient.InvokeResult{Args: wamp.List{path}}
+
+		case "SetByBinary":
+			//as progressive results are only possible when calling, not when
+			//get called, we call back and get the data progressivly
+			//the arguments is the uri to call, and the arg to identify the data!
+			if len(args) != 2 {
+				return &nxclient.InvokeResult{Err: wamp.URI("Arguments must be URI to call for progressive data and the argsument for that uri")}
+			}
+			uri, ok := args[0].(string)
+			if !ok {
+				return &nxclient.InvokeResult{Err: wamp.URI("First argument must be URI")}
+			}
+			arg := args[1] //Arg is allowed to be everything
+
+			//make the progressive call!
+			block := p2p.NewStreamBlockifyer()
+			channel := block.Start()
+			callback := func(result *wamp.Result) {
+				//get the data block
+				if len(result.Arguments) != 1 {
+					return
+				}
+
+				data, ok := result.Arguments[0].([]byte)
+				if !ok {
+					return
+				}
+
+				channel <- data
+			}
+			_, err := self.client.CallProgress(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, wamp.CancelModeKill, callback)
+			block.Stop()
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+			}
+
+			//add the data we received
+			cid, err := self.swarm.Data.AddBlocks(ctx, block)
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+			}
+			//set the cid to the dml object
+			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()})
+			return self.executeOperation(ctx, op)
+
+		case "ReadBinary":
+
+			//get the cid from the data object!
+			val, err := self.dml.CallMethod(dml.User(auth), string(path), "Get")
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+			}
+			sval, ok := val.(string)
+			if !ok {
+				return &nxclient.InvokeResult{Err: wamp.URI("Raw object does not contain any data")}
+			}
+			id, err := cid.Decode(sval)
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI("Raw object does not contain any data")}
+			}
+
+			// Read and send chunks of data
+			channel, err := self.swarm.Data.ReadChannel(ctx, id)
+			if err != nil {
+				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+			}
+			for data := range channel {
+				// Send a chunk of data.
+				err := self.client.SendProgress(ctx, wamp.List{data}, nil)
+				if err != nil {
+					close(channel)
+					return &nxclient.InvokeResult{Err: wamp.ErrCanceled}
+				}
+			}
+
+			return &nxclient.InvokeResult{}
+		}
+
+		return &nxclient.InvokeResult{Err: wamp.URI("Unknown function")}
 	}
 
 	return res

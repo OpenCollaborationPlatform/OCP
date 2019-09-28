@@ -69,9 +69,9 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	rntm.jsvm.Set("Transaction", transMngr.jsobj)
 
 	//add the datastructures
-	rntm.registerObjectCreator("Data", NewData)
-	rntm.registerObjectCreator("Vector", NewVector)
-	rntm.registerObjectCreator("Transaction", NewTransactionBehaviour)
+	rntm.RegisterObjectCreator("Data", NewData)
+	rntm.RegisterObjectCreator("Vector", NewVector)
+	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
 
 	//setup globals
 	rntm.jsvm.Set("Objects", rntm.jsObjMap)
@@ -202,28 +202,15 @@ func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
 	return nil
 }
 
-func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup func(string, Data) error) error {
-	
-	//execute on the object itself!
-	err := setup(path, obj)
-	if err != nil {
-		return err
+//Function to extend the available data and behaviour types for this runtime
+func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
+
+	_, ok := self.creators[name]
+	if ok {
+		return fmt.Errorf("Object name already registered")
 	}
-	has[obj.Id()] = struct{}{}
-	
-	//advance path and execute all children
-	path = path + "." + obj.Id().Name
-	for _, child := range obj.GetChildren() {
-		
-		datachild, ok := child.(Data)
-		if ok {
-			err := setupDataChildren(path, datachild, has, setup)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	
+
+	self.creators[name] = fnc
 	return nil
 }
 
@@ -360,23 +347,37 @@ func (self *Runtime) WriteProperty(user User, path string, property string, val 
 
 // 							Internal Functions
 //*********************************************************************************
+
+func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup func(string, Data) error) error {
+	
+	//execute on the object itself!
+	err := setup(path, obj)
+	if err != nil {
+		return err
+	}
+	has[obj.Id()] = struct{}{}
+	
+	//advance path and execute all children
+	path = path + "." + obj.Id().Name
+	for _, child := range obj.GetChildren() {
+		
+		datachild, ok := child.(Data)
+		if ok {
+			err := setupDataChildren(path, datachild, has, setup)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	
+	return nil
+}
+
 func (self *Runtime) removeObject(obj Object) {
 
 	delete(self.objects, obj.Id())
 	//TODO: unkown how to do it from go
 	self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().Encode()))
-}
-
-//Function to extend the available data and behaviour types for this runtime
-func (self *Runtime) registerObjectCreator(name string, fnc CreatorFunc) error {
-
-	_, ok := self.creators[name]
-	if ok {
-		return fmt.Errorf("Object name already registered")
-	}
-
-	self.creators[name] = fnc
-	return nil
 }
 
 //get the object from the identifier path list (e.g. myobj.childname.yourobject)
@@ -558,7 +559,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 		name = file[0 : len(file)-len(extension)]
 	}
 
-	return self.registerObjectCreator(name, creator)
+	return self.RegisterObjectCreator(name, creator)
 }
 
 //due to recursive nature og objects we need an extra function

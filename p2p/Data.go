@@ -24,14 +24,17 @@ import (
 //condent identifier
 type Cid = cid.Cid
 
+//the data service interface!
 type DataService interface {
 	Add(ctx context.Context, path string) (Cid, error)              //adds a file or directory
+	AddBlocks(ctx context.Context, blocks Blockifyer) (Cid, error)  //adds a Blockifyer
 	AddAsync(path string) (Cid, error)                              //adds a file or directory, but returns when the local operation is done
 	Drop(ctx context.Context, id Cid) error                         //removes a file or directory
 	Fetch(ctx context.Context, id Cid) error                        //Fetches the given data
 	FetchAsync(id Cid) error                                        //Fetches the given data async
 	GetFile(ctx context.Context, id Cid) (*os.File, error)          //gets the file described by the id (fetches if needed)
 	Write(ctx context.Context, id Cid, path string) (string, error) //writes the file or directory to the given path (fetches if needed)
+	ReadChannel(ctx context.Context, id Cid) (chan []byte, error)   //reads the data in individual binary blocks (does not work for directory)
 	Close()
 }
 
@@ -86,6 +89,17 @@ type hostDataService struct {
 func (self *hostDataService) Add(ctx context.Context, path string) (Cid, error) {
 
 	filecid, _, err := self.basicAdd(path, "global")
+	if err != nil {
+		return cid.Cid{}, utils.StackError(err, "Unable to add path")
+	}
+
+	//return
+	return filecid, err
+}
+
+func (self *hostDataService) AddBlocks(ctx context.Context, blocks Blockifyer) (Cid, error) {
+	
+	filecid, _, err := self.basicAddBlocks(blocks, "global")
 	if err != nil {
 		return cid.Cid{}, utils.StackError(err, "Unable to add path")
 	}
@@ -169,6 +183,11 @@ func (self *hostDataService) announceAllGlobal() {
 	}()
 }
 
+func (self *hostDataService) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
+	
+	return self.basicReadChannel(ctx, id, self.bitswap, "global")
+}
+
 func (self *hostDataService) Close() {
 
 	self.ticker.Stop()
@@ -180,10 +199,15 @@ func (self *hostDataService) Close() {
 
 func (self *hostDataService) basicAddFile(path string) (cid.Cid, []blocks.Block, error) {
 
+	return self.basicAddBlockifyer(NewFileBlockifyer(path))
+}
+
+func (self *hostDataService) basicAddBlockifyer(bl Blockifyer) (cid.Cid, []blocks.Block, error) {
+
 	//we first blockify the file bevore moving it into our store.
 	//This is done to know the cid after which we name the file in the store
 	//to avoid having problems with same filenames for different files
-	blocks, filecid, err := blockifyFile(path)
+	blocks, filecid, err := bl.GetBlocks()
 	if err != nil {
 		return filecid, nil, utils.StackError(err, "Unable to blockify file")
 	}
@@ -258,6 +282,23 @@ func (self *hostDataService) basicAdd(path string, owner string) (cid.Cid, []blo
 	case mode.IsRegular():
 		resCid, resBlocks, err = self.basicAddFile(path)
 	}
+
+	if err != nil {
+		self.basicDrop(resCid, owner)
+		return resCid, nil, utils.StackError(err, "Unable to add path")
+	}
+
+	//set ownership
+	if owner != "" {
+		err = self.store.SetOwnership(resBlocks[0], owner)
+	}
+
+	return resCid, resBlocks, err
+}
+
+func (self *hostDataService) basicAddBlocks(blockifyer Blockifyer, owner string) (cid.Cid, []blocks.Block, error) {
+
+	resCid, resBlocks, err := self.basicAddBlockifyer(blockifyer)
 
 	if err != nil {
 		self.basicDrop(resCid, owner)
@@ -459,6 +500,43 @@ func (self *hostDataService) basicWrite(ctx context.Context, id cid.Cid, path st
 	}
 
 	return "", fmt.Errorf("Shoudn't be here...")
+}
+
+func (self *hostDataService) basicReadChannel(ctx context.Context, id cid.Cid, fetcher exchange.Fetcher, owner string) (chan []byte, error) {
+
+	_, file, err := self.basicGetFile(ctx, id, fetcher, owner)
+	if err != nil {
+		return nil, err
+	}
+		
+	res := make(chan []byte, 0)
+	go func() {
+		defer file.Close()
+		defer close(res)
+
+		buf := make([]byte, blocksize)
+		for {
+			n, err := file.Read(buf)
+			if n == 0 {
+		        return
+		    }
+			res <- buf[:n]
+			
+			//eof handled after roving the last data
+			if err != nil {
+				return
+			}
+			
+			//check if context still open
+			select{
+				case <-ctx.Done():
+					return
+				default:
+			}
+		}
+	}()
+
+	return res, nil
 }
 
 func (self *hostDataService) basicDrop(id cid.Cid, owner string) error {
@@ -698,6 +776,28 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (Cid, error)
 	return filecid, nil
 }
 
+func (self *swarmDataService) AddBlocks(ctx context.Context, blocks Blockifyer) (Cid, error) {
+	
+	filecid, _, err := self.data.basicAddBlocks(blocks, string(self.id))
+	if err != nil {
+		return cid.Cid{}, utils.StackError(err, "Unable to add blockifyer")
+	}
+
+	//store in shared state
+	cmd, err := dataStateCommand{filecid, false}.toByte()
+	if err != nil {
+		return cid.Undef, utils.StackError(err, "Unable to create command")
+	}
+	_, err = self.stateService.AddCommand(ctx, "dataState", cmd)
+	if err != nil {
+		self.data.Drop(ctx, filecid)
+		return cid.Undef, utils.StackError(err, "Unable to share blocks with swarm members")
+	}
+
+	//return
+	return filecid, err
+}
+
 func (self *swarmDataService) AddAsync(path string) (Cid, error) {
 
 	//add the file
@@ -787,6 +887,23 @@ func (self *swarmDataService) Write(ctx context.Context, id Cid, path string) (s
 	}
 
 	return path, nil
+}
+
+func (self *swarmDataService) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
+	
+	c, err := self.data.basicReadChannel(ctx, id, self.session, string(self.id))
+	if err != nil {
+		return nil, err
+	}
+
+	//check if it is in the state already, if not we need to add
+	if !self.state.HasFile(id) {
+		//store in shared state
+		cmd, _ := dataStateCommand{id, false}.toByte()
+		self.stateService.AddCommand(ctx, "dataState", cmd)
+	}
+	
+	return c, nil
 }
 
 func (self *swarmDataService) Close() {

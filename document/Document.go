@@ -62,7 +62,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	var swarm *p2p.Swarm
 	if !join {
 		swarm, err = host.CreateSwarmWithID(ctx, p2p.SwarmID(id), p2p.SwarmStates(ds.GetState()))
-		
+
 	} else {
 		swarm, err = host.JoinSwarm(ctx, p2p.SwarmID(id), p2p.SwarmStates(ds.GetState()), p2p.NoPeers())
 	}
@@ -83,11 +83,12 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 		swarm:         swarm,
 		datastructure: ds,
 		ID:            id,
-		cid: 		   dml,
+		cid:           dml,
 	}
 
 	//register all docclient user functions
 	errS := []error{}
+	//peer handling
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.addPeer", doc.ID), doc.addPeer, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.setPeerAuth", doc.ID), doc.setPeerAuth, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.removePeer", doc.ID), doc.removePeer, wamp.Dict{}))
@@ -111,12 +112,15 @@ func (self Document) Close(ctx context.Context) {
 	self.swarm.Close(ctx)
 }
 
+//							Peer Handling
+//******************************************************************************
+
 func getPeer(args wamp.List) (p2p.PeerID, error) {
 	//get the peer to add and the wanted AUTH state
 	if len(args) < 1 {
 		return p2p.PeerID(""), fmt.Errorf("First Argument must be peer id")
 	}
-	peer, ok := args[0].(string) 
+	peer, ok := args[0].(string)
 	if !ok {
 		return p2p.PeerID(""), fmt.Errorf("First Argument must be peer id")
 	}
@@ -127,7 +131,7 @@ func getPeer(args wamp.List) (p2p.PeerID, error) {
 	return pid, nil
 }
 func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
-	
+
 	if len(args) != 2 {
 		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Arguments must be peer id and auth state")
 	}
@@ -135,9 +139,9 @@ func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
 	pid, err := getPeer(args)
 	if err != nil {
 		return pid, p2p.AUTH_NONE, err
-	}	
+	}
 
-	auth, ok := args[1].(string) 
+	auth, ok := args[1].(string)
 	if !ok {
 		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Second Argument must be auth state (read, write or none)")
 	}
@@ -145,7 +149,7 @@ func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
 	if err != nil {
 		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Invalid auth state provided (muste be read, write or none)")
 	}
-	
+
 	return pid, pidauth, nil
 }
 
@@ -170,7 +174,7 @@ func (self Document) setPeerAuth(ctx context.Context, args wamp.List, kwargs, de
 	if err != nil {
 		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 	}
-	
+
 	err = self.swarm.AddPeer(ctx, pid, auth)
 	if err != nil {
 		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
@@ -201,6 +205,9 @@ func (self Document) listPeers(ctx context.Context, args wamp.List, kwargs, deta
 	for i, p := range peers {
 		resargs[i] = p
 	}
-	
+
 	return &nxclient.InvokeResult{Args: resargs}
 }
+
+//							Data Handling
+//******************************************************************************

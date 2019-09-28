@@ -8,9 +8,9 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 	"sync"
 
-	uuid "github.com/satori/go.uuid"
 	nxclient "github.com/gammazero/nexus/client"
 	"github.com/gammazero/nexus/wamp"
+	uuid "github.com/satori/go.uuid"
 )
 
 //A p2p RPC API that allows querying some document details
@@ -18,12 +18,12 @@ type DocumentAPI struct {
 	handler *DocumentHandler
 }
 
-func (self DocumentAPI) DocumentDML (ctx context.Context, val string, ret *p2p.Cid) error {
-	
+func (self DocumentAPI) DocumentDML(ctx context.Context, val string, ret *p2p.Cid) error {
+
 	//find the correct document
 	self.handler.mutex.RLock()
 	defer self.handler.mutex.RUnlock()
-	
+
 	for _, doc := range self.handler.documents {
 		if doc.ID == val {
 			*ret = doc.cid
@@ -74,15 +74,15 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host) (*DocumentHan
 }
 
 func (self *DocumentHandler) Close(ctx context.Context) {
-	
+
 	//go over all documents nd close them!
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	
+
 	for _, doc := range self.documents {
 		doc.Close(ctx)
 	}
-	
+
 	self.documents = make([]Document, 0)
 }
 
@@ -135,7 +135,7 @@ func (self *DocumentHandler) openDoc(ctx context.Context, args wamp.List, kwargs
 		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be document id")}
 	}
 
-	//check if already open /unlocka afterwards to not lock during potenially long 
+	//check if already open /unlocka afterwards to not lock during potenially long
 	//swarm operation)
 	self.mutex.RLock()
 	for _, doc := range self.documents {
@@ -149,7 +149,7 @@ func (self *DocumentHandler) openDoc(ctx context.Context, args wamp.List, kwargs
 	swarmID := p2p.SwarmID(docID)
 	peer, err := self.host.FindSwarmMember(ctx, swarmID)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI("No document with id found: "+ err.Error())}
+		return &nxclient.InvokeResult{Err: wamp.URI("No document with id found: " + err.Error())}
 	}
 
 	//ask the peer what the correct dml cid for this document is!
@@ -158,7 +158,7 @@ func (self *DocumentHandler) openDoc(ctx context.Context, args wamp.List, kwargs
 	if err != nil {
 		return &nxclient.InvokeResult{Err: wamp.URI("No dml description for document found: " + err.Error())}
 	}
-	
+
 	//create the document by joining it
 	doc, err := NewDocument(ctx, self.router, self.host, cid, docID, true)
 	if err != nil {
@@ -189,7 +189,7 @@ func (self *DocumentHandler) closeDoc(ctx context.Context, args wamp.List, kwarg
 
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	
+
 	//find the document to close!
 	for i, doc := range self.documents {
 		if doc.ID == docID {
@@ -197,7 +197,7 @@ func (self *DocumentHandler) closeDoc(ctx context.Context, args wamp.List, kwarg
 			self.documents = append(self.documents[:i], self.documents[i+1:]...)
 			break
 		}
-	}	
+	}
 
 	//inform everyone about the closed doc... p2p and locally!
 	self.client.Publish("ocp.documents.closed", wamp.Dict{}, wamp.List{docID}, wamp.Dict{})
@@ -206,17 +206,16 @@ func (self *DocumentHandler) closeDoc(ctx context.Context, args wamp.List, kwarg
 	return &nxclient.InvokeResult{Args: wamp.List{docID}}
 }
 
-
 func (self *DocumentHandler) ListDocuments() []string {
-	
+
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
-	
+
 	res := make([]string, len(self.documents))
 	for i, doc := range self.documents {
 		res[i] = doc.ID
 	}
-	
+
 	return res
 }
 
@@ -225,14 +224,14 @@ func (self *DocumentHandler) listDocs(ctx context.Context, args wamp.List, kwarg
 	if len(args) != 0 {
 		return &nxclient.InvokeResult{Err: wamp.URI("Function does not take arguments")}
 	}
-	
+
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
-	
+
 	res := make(wamp.List, len(self.documents))
 	for i, doc := range self.documents {
 		res[i] = doc.ID
 	}
-	
+
 	return &nxclient.InvokeResult{Args: res}
 }
