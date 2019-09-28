@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 
-//	"io"
+	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -207,7 +207,7 @@ func TestDataService(t *testing.T) {
 		Convey("Adding small data to one host should be possible", func() {
 
 			//generate a testfile
-			filedata := repeatableData(555)
+			filedata := RepeatableData(555)
 			testfilepath := filepath.Join(path, "testfile")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
@@ -280,7 +280,7 @@ func TestDataService(t *testing.T) {
 
 			//generate a testfile
 			filesize := int(float32(blocksize) * 4.2)
-			filedata := repeatableData(filesize)
+			filedata := RepeatableData(filesize)
 			testfilepath := filepath.Join(path, "testfile2")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
@@ -358,8 +358,8 @@ func TestDataService(t *testing.T) {
 			os.MkdirAll(dirpath1, os.ModePerm)
 
 			//generate testfiles
-			largedata := repeatableData(int(float32(blocksize) * 4.2))
-			smalldata := repeatableData(int(float32(blocksize) * 0.5))
+			largedata := RepeatableData(int(float32(blocksize) * 4.2))
+			smalldata := RepeatableData(int(float32(blocksize) * 0.5))
 
 			testfilepath := filepath.Join(dirpath1, "testfile1")
 			ioutil.WriteFile(testfilepath, largedata, os.ModePerm)
@@ -516,7 +516,7 @@ func TestDataStreaming(t *testing.T) {
 		
 		Convey("it is possible to stream small data to one host", func() {
 			
-			data := repeatableData(10)
+			data := RepeatableData(10)
 			stream := NewStreamBlockifyer()
 			
 			c := stream.Start()
@@ -550,7 +550,7 @@ func TestDataStreaming(t *testing.T) {
 		Convey("also is possible to stream large data to the other host", func() {
 			
 			datasize := int(float32(blocksize) * 4.2)
-			data := repeatableData(datasize)
+			data := RepeatableData(datasize)
 			stream := NewStreamBlockifyer()
 			
 			c := stream.Start()
@@ -646,7 +646,7 @@ func TestSwarmDataService(t *testing.T) {
 		Convey("Adding small data to one host swarm should be possible", func() {
 
 			//generate a testfile
-			filedata := repeatableData(555)
+			filedata := RepeatableData(555)
 			testfilepath := filepath.Join(path, "testfile")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
@@ -717,7 +717,7 @@ func TestSwarmDataService(t *testing.T) {
 
 			//generate a testfile
 			filesize := int(float32(blocksize) * 4.2)
-			filedata := repeatableData(filesize)
+			filedata := RepeatableData(filesize)
 			testfilepath := filepath.Join(path, "testfile2")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
@@ -786,8 +786,8 @@ func TestSwarmDataService(t *testing.T) {
 			os.MkdirAll(dirpath1, os.ModePerm)
 
 			//generate testfiles
-			largedata := repeatableData(int(float32(blocksize) * 4.2))
-			smalldata := repeatableData(int(float32(blocksize) * 0.5))
+			largedata := RepeatableData(int(float32(blocksize) * 4.2))
+			smalldata := RepeatableData(int(float32(blocksize) * 0.5))
 
 			testfilepath := filepath.Join(dirpath1, "testfile1")
 			ioutil.WriteFile(testfilepath, largedata, os.ModePerm)

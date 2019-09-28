@@ -151,12 +151,12 @@ func randomBlock(size int) blocks.Block {
 
 func repeatableBlock(size int) blocks.Block {
 
-	data := repeatableData(size)
+	data := RepeatableData(size)
 	block := P2PFileBlock{"RepeatableBlock", data}
 	return block.ToBlock()
 }
 
-func repeatableData(size int) []byte {
+func RepeatableData(size int) []byte {
 
 	data := make([]byte, size)
 	for i := 0; i < size; i++ {

@@ -88,7 +88,7 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	self.client.Register(uri, self.createWampPropertyFunction(), options)
 
 	//register raw data handler
-	uri = self.prefix + "raw"
+	uri = self.prefix + "rawdata"
 	self.client.Register(uri, self.createWampRawFunction(), options)
 
 	//register javascript handler
@@ -261,20 +261,20 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 		//get the paths
 		procedure := wamp.OptionURI(details, "procedure")
 		idx := strings.LastIndex(string(procedure), ".")
-		path := procedure[(len(self.prefix) + 11):idx] //11 for .properties
+		path := procedure[(len(self.prefix) + 8):idx] //11 for .rawdata
 		fnc := procedure[(idx + 1):]
 
 		switch fnc {
 		case "SetByPath":
-			if len(path) != 1 {
+			if len(args) != 1 {
 				return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to file or directory")}
 			}
-			path, ok := args[0].(string)
+			filepath, ok := args[0].(string)
 			if !ok {
 				return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to file or directory")}
 			}
 			//add the file!
-			cid, err := self.swarm.Data.Add(ctx, path)
+			cid, err := self.swarm.Data.Add(ctx, filepath)
 			if err != nil {
 				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 			}
@@ -283,10 +283,10 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			return self.executeOperation(ctx, op)
 
 		case "WriteIntoPath":
-			if len(path) != 1 {
+			if len(args) != 1 {
 				return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to directory")}
 			}
-			path, ok := args[0].(string)
+			dirpath, ok := args[0].(string)
 			if !ok {
 				return &nxclient.InvokeResult{Err: wamp.URI("Argument must be path to directory")}
 			}
@@ -306,13 +306,13 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			}
 
 			//write the data
-			path, err = self.swarm.Data.Write(ctx, id, path)
+			filepath, err := self.swarm.Data.Write(ctx, id, dirpath)
 			if err != nil {
 				return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 			}
 
 			//return the exact path of new file
-			return &nxclient.InvokeResult{Args: wamp.List{path}}
+			return &nxclient.InvokeResult{Args: wamp.List{filepath}}
 
 		case "SetByBinary":
 			//as progressive results are only possible when calling, not when
