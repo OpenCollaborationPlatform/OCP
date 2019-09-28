@@ -103,7 +103,8 @@ var (
 		"p2p": map[string]interface{}{
 			"port":      ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens on for p2p connections from other nodes"},
 			"uri":       ConfigEntry{Default: "0.0.0.0", Short: "u", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
-			"bootstrap": ConfigEntry{Default: []string{"/ip4/207.154.206.195/tcp/3000/ipfs/QmexAnfpHrhMmAC5UNQVS8iBuUUgDrMbMY17Cck2gKrqeX"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification"},
+			"bootstrap": ConfigEntry{Default: []string{}, Short: "b", Text: "The nodes to connect to at startup for adress indetification"},
+			"only": ConfigEntry{Default: false, Short: "o", Text: "The node bootstraps only the config nodes, not the default ones"},
 		},
 	}
 

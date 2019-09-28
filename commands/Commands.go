@@ -25,11 +25,13 @@ var (
 	ocpNode    *node.Node
 	configPath string
 	verbose    bool
+	timeout    int
 )
 
 func Execute() {
 
 	//flags
+	rootCmd.PersistentFlags().IntVarP(&timeout, "timeout", "t", 5, "Set the timeout for all operations in seconds")
 	rootCmd.PersistentFlags().StringVarP(&configPath, "config", "c", "default", "Set configfile to use instead of system config")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable extra output like debug messages")
 
@@ -117,10 +119,11 @@ func onlineCommand(name string, f func(context.Context, []string, map[string]int
 		}
 
 		//call the node command
-		ctx,_ := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx,_ := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, flags, "")
 		if err != nil {
 			fmt.Println("Error:", err)
+			return
 		}
 
 		//postprocess the result and print it

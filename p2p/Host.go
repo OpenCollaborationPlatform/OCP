@@ -102,28 +102,6 @@ func (h *Host) Start() error {
 		return err
 	}
 
-	//bootstrap
-	nodes := viper.GetStringSlice("p2p.bootstrap")
-	for _, value := range nodes {
-
-		addr, err := ma.NewMultiaddr(value)
-		if err != nil {
-			log.Printf("Not a valid bootstrap node: %s", err)
-		}
-		info, err := peer.AddrInfoFromP2pAddr(addr)
-		if err != nil {
-			log.Printf("Invalid multiadress: %v", value)
-			continue
-		}
-		//connect
-		tctx, _ := context.WithTimeout(context.Background(), 100*time.Millisecond)
-		err = h.host.Connect(tctx, *info)
-		if err != nil {
-			log.Printf("Cannot connect to  %v", value)
-			continue
-		}
-	}
-
 	//setup the dht
 	kadctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
 	h.dht, err = kaddht.New(kadctx, h.host)
@@ -152,6 +130,41 @@ func (h *Host) Start() error {
 	}
 
 	return nil
+}
+
+func (h *Host) Bootstrap() {
+	
+	//bootstrap default nodes
+	only := viper.GetBool("p2p.only")
+	if !only {
+		for _, value := range kaddht.DefaultBootstrapPeers {
+			h.connectMultiAddress(value)
+		}
+	}
+
+	//bootstrap config nodes
+	nodes := viper.GetStringSlice("p2p.bootstrap")	
+	for _, value := range nodes {
+		addr, err := ma.NewMultiaddr(value)
+		if err != nil {
+			log.Printf("Provided bootstrapnode invalid: %v", value)
+			continue
+		}
+		h.connectMultiAddress(addr)
+	}
+}
+
+func (h *Host) connectMultiAddress(addr ma.Multiaddr) {
+	
+	go func() {
+		info, err := peer.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			return
+		}
+		//connect
+		tctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+		h.host.Connect(tctx, *info)
+	}()
 }
 
 func (h *Host) Stop(ctx context.Context) error {
