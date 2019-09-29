@@ -21,7 +21,7 @@ func init() {
 }
 
 var cmdUsers = &cobra.Command{
-	Use:   "users",
+	Use:   "user",
 	Short: "Set own user identity and find others",
 	Run: onlineCommand("users", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 		

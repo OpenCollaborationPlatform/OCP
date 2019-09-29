@@ -17,15 +17,15 @@ import (
 	gologging "github.com/whyrusleeping/go-logging"
 )
 
-var nodeClient *nxclient.Client = nil
-var isConnected bool = false
-
 var (
 	onlineCMDs []func(*node.Node) //all functions needed to setup the online commands
 	ocpNode    *node.Node
 	configPath string
 	verbose    bool
 	timeout    int
+	
+	nodeClient *nxclient.Client = nil
+	isConnected bool = false
 )
 
 func Execute() {
@@ -120,7 +120,7 @@ func onlineCommand(name string, f func(context.Context, []string, map[string]int
 
 		//call the node command
 		ctx,_ := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, flags, "")
+		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, flags, "kill")
 		if err != nil {
 			fmt.Println("Error:", err)
 			return
@@ -190,7 +190,7 @@ var rootCmd = &cobra.Command{
 
 	Run: onlineCommand("ocp", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
-		s := "OCP node running\n"
+		s := fmt.Sprintf("OCP node running (with config \"%v\")\n", configPath)
 		s += fmt.Sprintf("Version: 	%s\n", ocpNode.Version)
 		s += fmt.Sprintf("ID: 		%s\n", ocpNode.Host.ID().Pretty())
 		return s

@@ -81,9 +81,9 @@ func (self *UserHandler) ID() UserID {
 
 func (self *UserHandler) SetUser(ctx context.Context, id UserID) error {
 	
-	fmt.Println("Start Provide user name")
+	fmt.Printf("Start Provide user name: %v\n", id.Cid())
 	err := self.host.Provide(ctx, id.Cid())
-	fmt.Println("Done Provide user name")	
+	fmt.Printf("Done Provide user name, err: %v\n", err)	
 	if err != nil {
 		return utils.StackError(err, "Unable to set username")
 	}
@@ -113,7 +113,9 @@ func (self *UserHandler) setUser(ctx context.Context, args wamp.List, kwargs, de
 
 func (self *UserHandler) FindUser(ctx context.Context, id UserID, num int) (p2p.PeerID, error) {
 
+	fmt.Printf("Try to find user name (%v times): %v\n",num, id.Cid())
 	result, err := self.host.FindProviders(ctx, id.Cid(), num)
+	fmt.Printf("result is: %v\n", result)
 	if err != nil {
 		return p2p.PeerID(""), err
 	}
