@@ -8,11 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spf13/viper"
 	logging "github.com/ipfs/go-log"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/jbenet/goprocess"
 	"github.com/jbenet/goprocess/context"
@@ -50,21 +52,42 @@ type BootstrapConfig struct {
 	BootstrapPeers func() []peer.AddrInfo
 }
 
+func init() {
+	
+	addrs := make([]peer.AddrInfo, 0)
+	only := viper.GetBool("p2p.only")
+	if !only {
+		for _, addr := range kaddht.DefaultBootstrapPeers {
+			info, err := peer.AddrInfoFromP2pAddr(addr)
+			if err == nil {
+				addrs = append(addrs, *info)
+			}
+		}
+	}
+	
+	nodes := viper.GetStringSlice("p2p.bootstrap")	
+	for _, value := range nodes {
+		addr, err := ma.NewMultiaddr(value)
+		if err != nil {
+			log.Errorf("Invalid bootstrap address provided: %v", value)
+			continue
+		}
+		info, err := peer.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			log.Errorf("Invalid bootstrap address provided: %v", value)
+			continue
+		}
+		addrs = append(addrs, *info)
+	}
+	
+	DefaultBootstrapConfig.BootstrapPeers = func() []peer.AddrInfo {return addrs}
+}
+
 // DefaultBootstrapConfig specifies default sane parameters for bootstrapping.
 var DefaultBootstrapConfig = BootstrapConfig{
 	MinPeerThreshold:  4,
 	Period:            30 * time.Second,
 	ConnectionTimeout: (30 * time.Second) / 3, // Perod / 3
-	BootstrapPeers: func() []peer.AddrInfo {
-		res := make([]peer.AddrInfo, 0)
-		for _, addr := range kaddht.DefaultBootstrapPeers {
-			info, err := peer.AddrInfoFromP2pAddr(addr)
-			if err == nil {
-				res = append(res, *info)
-			}
-		}
-		return res
-	},
 }
 
 // Bootstrap kicks off IpfsNode bootstrapping. This function will periodically
