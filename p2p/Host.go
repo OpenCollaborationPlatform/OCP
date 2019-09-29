@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -103,9 +102,8 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		return err
 	}
 
-	//setup the dht
-	kadctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-	h.dht, err = kaddht.New(kadctx, h.host)
+	//setup the dht (careful: the context does control lifetime of some internal dht things)
+	h.dht, err = kaddht.New(context.Background(), h.host)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup distributed hash table")
 	}
@@ -271,11 +269,21 @@ func (h *Host) Keys() (crypto.PrivKey, crypto.PubKey) {
 	return h.privKey, h.pubKey
 }
 
+func  (h *Host) Routing() *kaddht.IpfsDHT {
+	return h.dht
+}
+
 /*		Search and Find Handling
 ******************************** */
 
 //provides for 24h, afterwards gets deletet if not provided again
 func (h *Host) Provide(ctx context.Context, cid Cid) error {
+
+	if len(h.host.Network().Conns()) == 0 {
+			return fmt.Errorf("Cannot provide, no connected peers")
+	}
+	
+
 	return h.dht.Provide(ctx, cid, true)
 }
 
