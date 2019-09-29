@@ -1,2 +1,2 @@
-release: ./bin/ocp init
-web: ./bin/ocp start
+release: ./bin/CollaborationNode init
+web: ./bin/CollaborationNode start
