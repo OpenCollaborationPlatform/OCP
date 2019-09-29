@@ -51,9 +51,16 @@ type BootstrapConfig struct {
 	// to control the peers the process uses at any moment.
 	BootstrapPeers func() []peer.AddrInfo
 }
+// DefaultBootstrapConfig specifies default sane parameters for bootstrapping.
 
-func init() {
+func GetDefaultBootstrapConfig() BootstrapConfig {
 	
+	var DefaultBootstrapConfig = BootstrapConfig{
+		MinPeerThreshold:  4,
+		Period:            30 * time.Second,
+		ConnectionTimeout: (30 * time.Second) / 3, // Perod / 3
+	}
+
 	addrs := make([]peer.AddrInfo, 0)
 	only := viper.GetBool("p2p.only")
 	if !only {
@@ -65,7 +72,7 @@ func init() {
 		}
 	}
 	
-	nodes := viper.GetStringSlice("p2p.bootstrap")	
+	nodes := viper.GetStringSlice("p2p.bootstrap")
 	for _, value := range nodes {
 		addr, err := ma.NewMultiaddr(value)
 		if err != nil {
@@ -80,14 +87,11 @@ func init() {
 		addrs = append(addrs, *info)
 	}
 	
-	DefaultBootstrapConfig.BootstrapPeers = func() []peer.AddrInfo {return addrs}
-}
-
-// DefaultBootstrapConfig specifies default sane parameters for bootstrapping.
-var DefaultBootstrapConfig = BootstrapConfig{
-	MinPeerThreshold:  4,
-	Period:            30 * time.Second,
-	ConnectionTimeout: (30 * time.Second) / 3, // Perod / 3
+	DefaultBootstrapConfig.BootstrapPeers = func() []peer.AddrInfo {
+		return addrs
+	}
+	
+	return DefaultBootstrapConfig
 }
 
 // Bootstrap kicks off IpfsNode bootstrapping. This function will periodically

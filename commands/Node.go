@@ -133,7 +133,12 @@ var cmdInit = &cobra.Command{
 			}
 		}
 
-		utils.SaveToConfigV(nodeDir, "directory")
+		viper.Set("directory", nodeDir)
+		err = viper.WriteConfig()
+		if err != nil {
+			fmt.Printf("Could not store the directory information in config: %s\n", err)
+			return
+		}
 
 		//Generate our node keys (and hence identity)
 		priv, pub, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, rand.Reader)

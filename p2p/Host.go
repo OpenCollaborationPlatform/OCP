@@ -111,7 +111,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	}
 
 	//bootstrap if required (means connect to online nodes)
-	conf := DefaultBootstrapConfig
+	conf := GetDefaultBootstrapConfig()
 	if !shouldBootstrap {		
 		conf.BootstrapPeers = func()[]peer.AddrInfo {return make([]peer.AddrInfo, 0)}
 	}

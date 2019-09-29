@@ -27,6 +27,8 @@ var cmdConfig = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 
+		fmt.Printf("Config file: %v\n", viper.ConfigFileUsed())
+
 		var keys []string
 		if len(args) == 0 {
 			keys = viper.AllKeys()
@@ -106,7 +108,24 @@ var cmdConfigWrite = &cobra.Command{
 			return
 		}
 
-		utils.SaveToConfigV(args[1], args[0])
+		entry, err := utils.GetConfigEntry(args[0])
+		if err != nil { 
+			fmt.Printf(err.Error())
+			return
+		}
+
+		val, err := entry.ValueFromString(args[1])
+		if err != nil { 
+			fmt.Printf(err.Error())
+			return
+		}
+
+		viper.Set(args[0], val)
+		err = viper.WriteConfig()
+		if err != nil {
+			fmt.Printf(err.Error())
+		}
+		fmt.Println("Configuration updated")
 	},
 }
 

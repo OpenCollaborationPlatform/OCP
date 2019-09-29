@@ -6,11 +6,14 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/libp2p/go-libp2p-core/peer"
+	ma "github.com/multiformats/go-multiaddr"
 )
 
 func init() {
 
 	//flags
+	cmdP2P.Flags().BoolP("full", "f", false, "Print full adress including the identifier")
 	cmdP2PPeers.Flags().BoolP("address", "a", false, "Print full adress instead of ID (only one of possibly multiple)")
 //	cmdP2PSwarmCreate.Flags().IntP("seed", "s", 0, "set a seed for swarm key generation for deterministic outcomes instead of random keys")
 //	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")//
@@ -18,7 +21,7 @@ func init() {
 
 //	cmdP2PSwarmFile.AddCommand(cmdP2PSwarmFileAdd)
 //	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent, cmdP2PSwarmFile)
-	cmdP2P.AddCommand(cmdP2PPeers)
+	cmdP2P.AddCommand(cmdP2PPeers, cmdP2PConnect)
 	rootCmd.AddCommand(cmdP2P)
 }
 
@@ -30,8 +33,14 @@ var cmdP2P = &cobra.Command{
 
 		result := fmt.Sprintf("PeerID: %v\n", ocpNode.Host.ID().Pretty())
 		result += fmt.Sprintln("Own addresses:")
+		full := flags["full"].(bool)
 		for _, addr := range ocpNode.Host.OwnAddresses() {
-			result += addr.String() + "\n"
+			result += addr.String()
+			if !full {
+				result += "\n"
+			} else {
+				result += "/ipfs/" + ocpNode.Host.ID().Pretty() + "\n"
+			} 
 		}
 		return result
 	}),
@@ -51,7 +60,10 @@ var cmdP2PPeers = &cobra.Command{
 				if err != nil {
 					return fmt.Sprintf("Error while parsing adresses: %s", err)
 				}
-				result += fmt.Sprintf("%s\n", addrs[0].String())
+				result += peer.Pretty() + ":\n"
+				for _, addr := range addrs {
+					result += fmt.Sprintf("\t%s/ipfs/%s\n", addr.String(), peer.Pretty())
+				}
 			} else {
 				result += peer.Pretty() + "\n"
 			}
@@ -59,6 +71,32 @@ var cmdP2PPeers = &cobra.Command{
 		return result
 	}),
 }
+
+var cmdP2PConnect = &cobra.Command{
+	Use:   "connect",
+	Short: "Connect to peer with given full address (e.g. /ip4/1.2.3.4/tcp/10/ipfs/Qxml...)",
+	Args:  cobra.ExactArgs(1),
+
+	Run: onlineCommand("p2p.connect", func(ctx context.Context, args []string, flags map[string]interface{}) string {
+
+		addr, err := ma.NewMultiaddr(args[0])
+		if err != nil {
+			return err.Error()
+		}
+		info, err := peer.AddrInfoFromP2pAddr(addr)
+		if err != nil {
+			return err.Error()
+		}
+
+		ocpNode.Host.SetMultipleAdress(info.ID, info.Addrs)		
+		if err := ocpNode.Host.Connect(ctx, info.ID); err != nil {
+			return err.Error()
+		}
+
+		return "Successfully connected"
+	}),
+}
+
 /*
 var cmdP2PAddrs = &cobra.Command{
 	Use:   "address",
@@ -83,26 +121,6 @@ var cmdP2PAddrs = &cobra.Command{
 		}
 
 		return result
-	}),
-}
-
-var cmdP2PConnect = &cobra.Command{
-	Use:   "connect",
-	Short: "Connect to peer with given full address (e.g. /ip4/1.2.3.4/tcp/10/ipfs/Qxml...)",
-	Args:  cobra.ExactArgs(1),
-
-	Run: onlineCommand("p2p.connect", func(ctx context.Context, args []string, flags map[string]interface{}) string {
-
-		addr, err := multiaddr.NewMultiaddr(args[0])
-		if err != nil {
-			return err.Error()
-		}
-
-		if err := ocpNode.Host.Connect(addr); err != nil {
-			return err.Error()
-		}
-
-		return "Successfully connected"
 	}),
 }
 

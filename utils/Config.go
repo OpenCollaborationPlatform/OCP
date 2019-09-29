@@ -2,9 +2,9 @@
 package utils
 
 import (
+	"strconv"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -15,6 +15,22 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
+
+var (
+	configEntries = map[string]interface{}{
+		"connection": map[string]interface{}{
+			"uri": ConfigEntry{Default: "localhost", Short: "u", Text: "The uri the node is listening on for client connections "},
+			"port": ConfigEntry{Default: 8000, Short: "p", Text: "The port on which the node listents for client connections"},
+		},
+		"p2p": map[string]interface{}{
+			"port":      ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens on for p2p connections from other nodes"},
+			"uri":       ConfigEntry{Default: "0.0.0.0", Short: "u", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
+			"bootstrap": ConfigEntry{Default: []string{"/ip4/167.99.243.88/tcp/7000/ipfs/Qma3YcKHuurgq99grLoGhBLBXtzpjSpPRscZ8BZT1K2HZi"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification"},
+			"only": ConfigEntry{Default: false, Short: "o", Text: "The node bootstraps only the config nodes, not the default ones"},
+		},
+	}
+)
+
 
 //Default init of config stuff:
 // - There is always a config file, even if node is not initialized
@@ -94,23 +110,78 @@ type ConfigEntry struct {
 	Default interface{}
 }
 
-var (
-	configEntries = map[string]interface{}{
-		"connection": map[string]interface{}{
-			"uri": ConfigEntry{Default: "localhost", Short: "u", Text: "The uri the node is listening on for client connections "},
-			"port": ConfigEntry{Default: 8000, Short: "p", Text: "The port on which the node listents for client connections"},
-		},
-		"p2p": map[string]interface{}{
-			"port":      ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens on for p2p connections from other nodes"},
-			"uri":       ConfigEntry{Default: "0.0.0.0", Short: "u", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
-			"bootstrap": ConfigEntry{Default: []string{}, Short: "b", Text: "The nodes to connect to at startup for adress indetification"},
-			"only": ConfigEntry{Default: false, Short: "o", Text: "The node bootstraps only the config nodes, not the default ones"},
-		},
-	}
+func (self ConfigEntry) ValueFromString(value string) (interface{}, error) {
+	
+	switch self.Default.(type) {
+	case int:
+		i, err := strconv.ParseInt(value, 10, 32)
+		return int(i), err
+		
+	case string:
+		return value, nil
+		
+	case float64:
+		return strconv.ParseFloat(value, 64)
+		
+	case []string:
+		//first and last are [], remove!
+		list := value[1:(len(value)-1)]
+		return strings.Split(list, ","), nil
+		
+	case []int:
+		res := make([]int, 0)
+		//first and last are [], remove!
+		list := value[1:(len(value)-1)]
+		splits := strings.Split(list, ",")
+		for _, val := range splits {
+			i, err := strconv.ParseInt(val, 10, 32)
+			if err != nil {
+				res = append(res, int(i))
+			}
+		}
+		return res, nil
+		
+	case bool:
+		if strings.ToLower(value) == "true" {
+			return true, nil
+		}
+		if strings.ToLower(value) == "false" {
+			return false, nil
+		}
 
-	writeValue string
-	node       bool
-)
+	default:
+		return nil, fmt.Errorf("error")
+	}
+	
+	return nil, fmt.Errorf("Cannot read, need type %T", self.Default)
+}
+
+func (self ConfigEntry) IsStringSlice() bool {
+
+	switch self.Default.(type) {
+		case []string: 
+			return true
+		default:
+			return false 
+	}
+	return false
+}
+
+func (self ConfigEntry) IsIntSlice() bool {
+
+	switch self.Default.(type) {
+		case []int: 
+			return true
+		default:
+			return false 
+	}
+	return false
+}
+
+func (self ConfigEntry) IsSlice() bool {
+
+	return self.IsStringSlice() || self.IsIntSlice()
+}
 
 func GetConfigEntry(keys ...string) (ConfigEntry, error) {
 
@@ -197,57 +268,6 @@ func setupConfigDefaults(configs map[string]interface{}, accessor string) {
 	}
 }
 
-func GetConfigMap() map[string]interface{} {
-
-	var conf map[string]interface{}
-	data, err := ioutil.ReadFile(viper.ConfigFileUsed())
-	if err != nil {
-		fmt.Println("Error while loading configuration file")
-		return nil
-	}
-	json.Unmarshal(data, &conf)
-	if conf != nil {
-		return conf
-	}
-
-	return make(map[string]interface{})
-}
-
-func SaveToConfigV(value interface{}, keys ...string) {
-
-	//could be viper style key: connection.port
-	if len(keys) == 1 {
-		SaveToConfig(value, strings.Split(keys[0], "."))
-		return
-	}
-
-	//just a array of strings
-	SaveToConfig(value, keys)
-}
-
-func SaveToConfig(value interface{}, keys []string) {
-
-	conf := GetConfigMap()
-
-	//iterate over all nested values
-	tmp := conf
-	for i, key := range keys {
-		if i == (len(keys) - 1) {
-			tmp[key] = value
-			break
-		}
-		//check if the map exists and create if not
-		_, ok := tmp[key]
-		if !ok {
-			tmp[key] = make(map[string]interface{})
-		}
-		tmp = tmp[key].(map[string]interface{})
-	}
-
-	//write back the file
-	data, _ := json.MarshalIndent(conf, "", "  ")
-	ioutil.WriteFile(viper.ConfigFileUsed(), data, 0644)
-}
 
 func GetDefaultNodeFolder() string {
 
