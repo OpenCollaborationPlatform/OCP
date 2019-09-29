@@ -98,7 +98,7 @@ func (self *hostDataService) Add(ctx context.Context, path string) (Cid, error) 
 }
 
 func (self *hostDataService) AddBlocks(ctx context.Context, blocks Blockifyer) (Cid, error) {
-	
+
 	filecid, _, err := self.basicAddBlocks(blocks, "global")
 	if err != nil {
 		return cid.Cid{}, utils.StackError(err, "Unable to add path")
@@ -184,7 +184,7 @@ func (self *hostDataService) announceAllGlobal() {
 }
 
 func (self *hostDataService) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
-	
+
 	return self.basicReadChannel(ctx, id, self.bitswap, "global")
 }
 
@@ -508,7 +508,7 @@ func (self *hostDataService) basicReadChannel(ctx context.Context, id cid.Cid, f
 	if err != nil {
 		return nil, err
 	}
-		
+
 	res := make(chan []byte, 0)
 	go func() {
 		defer file.Close()
@@ -518,20 +518,20 @@ func (self *hostDataService) basicReadChannel(ctx context.Context, id cid.Cid, f
 		for {
 			n, err := file.Read(buf)
 			if n == 0 {
-		        return
-		    }
+				return
+			}
 			res <- buf[:n]
-			
+
 			//eof handled after roving the last data
 			if err != nil {
 				return
 			}
-			
+
 			//check if context still open
-			select{
-				case <-ctx.Done():
-					return
-				default:
+			select {
+			case <-ctx.Done():
+				return
+			default:
 			}
 		}
 	}()
@@ -777,7 +777,7 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (Cid, error)
 }
 
 func (self *swarmDataService) AddBlocks(ctx context.Context, blocks Blockifyer) (Cid, error) {
-	
+
 	filecid, _, err := self.data.basicAddBlocks(blocks, string(self.id))
 	if err != nil {
 		return cid.Cid{}, utils.StackError(err, "Unable to add blockifyer")
@@ -890,7 +890,7 @@ func (self *swarmDataService) Write(ctx context.Context, id Cid, path string) (s
 }
 
 func (self *swarmDataService) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
-	
+
 	c, err := self.data.basicReadChannel(ctx, id, self.session, string(self.id))
 	if err != nil {
 		return nil, err
@@ -902,7 +902,7 @@ func (self *swarmDataService) ReadChannel(ctx context.Context, id Cid) (chan []b
 		cmd, _ := dataStateCommand{id, false}.toByte()
 		self.stateService.AddCommand(ctx, "dataState", cmd)
 	}
-	
+
 	return c, nil
 }
 

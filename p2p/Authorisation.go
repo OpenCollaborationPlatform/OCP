@@ -1,8 +1,8 @@
 package p2p
 
 import (
-	"strings"
 	"fmt"
+	"strings"
 	"sync"
 )
 
@@ -21,17 +21,17 @@ const (
 )
 
 func AuthStateFromString(state string) (AUTH_STATE, error) {
-	
+
 	switch strings.ToLower(state) {
-		
-		case "read", "readonly", "auth_readonly":
-			return AUTH_READONLY, nil
-		case "write", "readwrite", "auth_readwrite":
-			return AUTH_READWRITE, nil
-		case "none", "auth_none":
-			return AUTH_NONE, nil
-		default: 
-			return AUTH_NONE, fmt.Errorf("Not valid auth state string")
+
+	case "read", "readonly", "auth_readonly":
+		return AUTH_READONLY, nil
+	case "write", "readwrite", "auth_readwrite":
+		return AUTH_READWRITE, nil
+	case "none", "auth_none":
+		return AUTH_NONE, nil
+	default:
+		return AUTH_NONE, fmt.Errorf("Not valid auth state string")
 	}
 	return AUTH_NONE, fmt.Errorf("Not valid auth state string")
 }

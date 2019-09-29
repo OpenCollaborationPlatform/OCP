@@ -4,8 +4,8 @@ package p2p
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
-	"log"
 	"path/filepath"
 	"sync"
 	"time"
@@ -14,12 +14,12 @@ import (
 
 	libp2p "github.com/libp2p/go-libp2p"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
-	peer "github.com/libp2p/go-libp2p-core/peer"
 	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	ma "github.com/multiformats/go-multiaddr"
 	uuid "github.com/satori/go.uuid"
+	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/spf13/viper"
 )
 
@@ -39,8 +39,9 @@ type Host struct {
 	swarmMutex sync.RWMutex
 	swarms     []*Swarm
 
-	privKey crypto.PrivKey
-	pubKey  crypto.PubKey
+	privKey      crypto.PrivKey
+	pubKey       crypto.PubKey
+	bootstrapper io.Closer
 
 	//find service
 	dht *kaddht.IpfsDHT
@@ -61,7 +62,7 @@ func NewHost() *Host {
 }
 
 // Starts the listening for connections and the bootstrap prozess
-func (h *Host) Start() error {
+func (h *Host) Start(shouldBootstrap bool) error {
 
 	//store the path
 	h.path = viper.GetString("directory")
@@ -108,11 +109,16 @@ func (h *Host) Start() error {
 	if err != nil {
 		return utils.StackError(err, "Unable to setup distributed hash table")
 	}
-	conf := kaddht.BootstrapConfig{
-		Queries: 3,                // how many queries to run per period
-		Period:  5 * time.Minute,  // how often to run periodic bootstrap.
-		Timeout: 10 * time.Second} // how long to wait for a bootstrap query to run
-	h.dht.BootstrapWithConfig(kadctx, conf)
+
+	//bootstrap if required (means connect to online nodes)
+	conf := DefaultBootstrapConfig
+	if !shouldBootstrap {		
+		conf.BootstrapPeers = func()[]peer.AddrInfo {return make([]peer.AddrInfo, 0)}
+	}
+	h.bootstrapper, err = bootstrap(h.ID(), h.host, h.dht, conf)
+	if err != nil {
+		return utils.StackError(err, "Unable to bootstrap p2p node")
+	}
 
 	//add the services
 	h.Rpc = newRpcService(h)
@@ -132,42 +138,12 @@ func (h *Host) Start() error {
 	return nil
 }
 
-func (h *Host) Bootstrap() {
-	
-	//bootstrap default nodes
-	only := viper.GetBool("p2p.only")
-	if !only {
-		for _, value := range kaddht.DefaultBootstrapPeers {
-			h.connectMultiAddress(value)
-		}
-	}
-
-	//bootstrap config nodes
-	nodes := viper.GetStringSlice("p2p.bootstrap")	
-	for _, value := range nodes {
-		addr, err := ma.NewMultiaddr(value)
-		if err != nil {
-			log.Printf("Provided bootstrapnode invalid: %v", value)
-			continue
-		}
-		h.connectMultiAddress(addr)
-	}
-}
-
-func (h *Host) connectMultiAddress(addr ma.Multiaddr) {
-	
-	go func() {
-		info, err := peer.AddrInfoFromP2pAddr(addr)
-		if err != nil {
-			return
-		}
-		//connect
-		tctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-		h.host.Connect(tctx, *info)
-	}()
-}
-
 func (h *Host) Stop(ctx context.Context) error {
+
+	//stop bootstrapping
+	if h.bootstrapper != nil {
+		h.bootstrapper.Close()
+	}
 
 	//stop data replication
 
@@ -303,15 +279,15 @@ func (h *Host) Provide(ctx context.Context, cid Cid) error {
 	return h.dht.Provide(ctx, cid, true)
 }
 
-//find peers that provide the given cid. The returned slice can have less than num 
+//find peers that provide the given cid. The returned slice can have less than num
 //entries, depending on the find results
 func (h *Host) FindProviders(ctx context.Context, cid Cid, num int) ([]PeerID, error) {
-	
+
 	input := h.dht.FindProvidersAsync(ctx, cid, num)
 	result := make([]PeerID, 0)
 	for {
 		select {
-		
+
 		case info, more := <-input:
 			if !more {
 				return result, nil
@@ -319,7 +295,7 @@ func (h *Host) FindProviders(ctx context.Context, cid Cid, num int) ([]PeerID, e
 			h.SetMultipleAdress(PeerID(info.ID), info.Addrs)
 			h.EnsureConnection(ctx, PeerID(info.ID))
 			result = append(result, PeerID(info.ID))
-		
+
 		case <-ctx.Done():
 			return result, nil
 		}
@@ -329,7 +305,7 @@ func (h *Host) FindProviders(ctx context.Context, cid Cid, num int) ([]PeerID, e
 
 //find peers that provide the given cid
 func (h *Host) FindProvidersAsync(ctx context.Context, cid Cid, num int) (chan PeerID, error) {
-	
+
 	ret := make(chan PeerID, num)
 
 	go func() {
@@ -373,7 +349,6 @@ func (h *Host) FindProvidersAsync(ctx context.Context, cid Cid, num int) (chan P
 
 	return ret, nil
 }
-
 
 /*		Swarm Handling
 ****************************** */

@@ -1,18 +1,10 @@
 // p2p.go
 package commands
-/*
+
 import (
 	"context"
-	"github.com/ickby/CollaborationNode/p2p"
-	"crypto/rand"
 	"fmt"
-	"io"
-	mrand "math/rand"
-	"strings"
 
-	"github.com/libp2p/go-libp2p-crypto"
-	"github.com/libp2p/go-libp2p-peer"
-	"github.com/multiformats/go-multiaddr"
 	"github.com/spf13/cobra"
 )
 
@@ -20,13 +12,13 @@ func init() {
 
 	//flags
 	cmdP2PPeers.Flags().BoolP("address", "a", false, "Print full adress instead of ID (only one of possibly multiple)")
-	cmdP2PSwarmCreate.Flags().IntP("seed", "s", 0, "set a seed for swarm key generation for deterministic outcomes instead of random keys")
-	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")
-	cmdP2PSwarmAdd.Flags().BoolP("readonly", "r", false, "the peer is only allowed to read from the swarm")
+//	cmdP2PSwarmCreate.Flags().IntP("seed", "s", 0, "set a seed for swarm key generation for deterministic outcomes instead of random keys")
+//	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")//
+//	cmdP2PSwarmAdd.Flags().BoolP("readonly", "r", false, "the peer is only allowed to read from the swarm")
 
-	cmdP2PSwarmFile.AddCommand(cmdP2PSwarmFileAdd)
-	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent, cmdP2PSwarmFile)
-	cmdP2P.AddCommand(cmdP2PPeers, cmdP2PAddrs, cmdP2PConnect, cmdP2PClose, cmdP2PSwarm)
+//	cmdP2PSwarmFile.AddCommand(cmdP2PSwarmFileAdd)
+//	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent, cmdP2PSwarmFile)
+	cmdP2P.AddCommand(cmdP2PPeers)
 	rootCmd.AddCommand(cmdP2P)
 }
 
@@ -36,7 +28,7 @@ var cmdP2P = &cobra.Command{
 
 	Run: onlineCommand("p2p", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
-		result := fmt.Sprintf("Connected Peers:\t%d\n", len(ocpNode.Host.Peers()))
+		result := fmt.Sprintf("PeerID: %v\n", ocpNode.Host.ID().Pretty())
 		result += fmt.Sprintln("Own addresses:")
 		for _, addr := range ocpNode.Host.OwnAddresses() {
 			result += addr.String() + "\n"
@@ -52,7 +44,7 @@ var cmdP2PPeers = &cobra.Command{
 	Run: onlineCommand("p2p.peers", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		result := ""
-		for _, peer := range ocpNode.Host.Peers() {
+		for _, peer := range ocpNode.Host.Peers(true) {
 
 			if flags["address"].(bool) {
 				addrs, err := ocpNode.Host.Addresses(peer)
@@ -67,7 +59,7 @@ var cmdP2PPeers = &cobra.Command{
 		return result
 	}),
 }
-
+/*
 var cmdP2PAddrs = &cobra.Command{
 	Use:   "address",
 	Short: "List all known addresses for the given peer",
@@ -81,7 +73,7 @@ var cmdP2PAddrs = &cobra.Command{
 		}
 
 		result := ""
-		addrs, err := ocpNode.Host.Addresses(p2p.PeerID{peerid})
+		addrs, err := ocpNode.Host.Addresses(peerid)
 		if err != nil {
 			result = fmt.Sprintf("Error with peer ID: %s", err)
 			return result

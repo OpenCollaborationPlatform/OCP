@@ -29,7 +29,7 @@ func init() {
 	//disable logging for this tests
 	//log.SetOutput(ioutil.Discard)
 
-	ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
+	//ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
 	ipfswriter.LevelInfo()
 	ipfslog.GetSubsystems() //just to not need to remove import
 	//ipfslog.SetDebugLogging()
@@ -50,11 +50,11 @@ func MakeTemporaryTwoHostNetwork(path string) (*Host, *Host, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	
+
 	host1.SetMultipleAdress(host2.ID(), host2.OwnAddresses())
 	host2.SetMultipleAdress(host1.ID(), host1.OwnAddresses())
 	host1.Connect(context.Background(), host2.ID())
-	
+
 	return host1, host2, nil
 }
 
@@ -104,7 +104,7 @@ func temporaryHost(dir string) (*Host, error) {
 
 	//start the host
 	h := NewHost()
-	err = h.Start()
+	err = h.Start(false)
 	if err != nil {
 		return nil, err
 	}

@@ -513,34 +513,34 @@ func TestDataStreaming(t *testing.T) {
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
 		h1.Connect(context.Background(), h2.ID())
-		
+
 		Convey("it is possible to stream small data to one host", func() {
-			
+
 			data := RepeatableData(10)
 			stream := NewStreamBlockifyer()
-			
+
 			c := stream.Start()
 			c <- data
 			stream.Stop()
-			
-			ctx,_ := context.WithTimeout(context.Background(), 5*time.Second)
+
+			ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 			id, err := h1.Data.AddBlocks(ctx, stream)
 			So(err, ShouldBeNil)
-			
+
 			Convey("and afterwards it is streamable by both hosts", func() {
-			
+
 				c, err := h1.Data.ReadChannel(ctx, id)
 				So(err, ShouldBeNil)
 				So(c, ShouldNotBeNil)
-				res := <-c 		
-				So(bytes.Equal(data, res), ShouldBeTrue)			
+				res := <-c
+				So(bytes.Equal(data, res), ShouldBeTrue)
 				_, more := <-c
 				So(more, ShouldBeFalse)
 
 				c, err = h2.Data.ReadChannel(ctx, id)
 				So(err, ShouldBeNil)
 				So(c, ShouldNotBeNil)
-				res = <-c 				
+				res = <-c
 				So(bytes.Equal(data, res), ShouldBeTrue)
 				_, more = <-c
 				So(more, ShouldBeFalse)
@@ -548,64 +548,64 @@ func TestDataStreaming(t *testing.T) {
 		})
 
 		Convey("also is possible to stream large data to the other host", func() {
-			
+
 			datasize := int(float32(blocksize) * 4.2)
 			data := RepeatableData(datasize)
 			stream := NewStreamBlockifyer()
-			
+
 			c := stream.Start()
 			reader := bytes.NewReader(data)
 			buf := make([]byte, blocksize)
 			for {
 				n, err := reader.Read(buf)
 				if n == 0 || err != nil {
-		        		break
-		  	  	}
+					break
+				}
 				c <- buf[:n]
-			}			
+			}
 			stream.Stop()
-			
-			ctx,_ := context.WithTimeout(context.Background(), 5*time.Second)
+
+			ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 			id, err := h1.Data.AddBlocks(ctx, stream)
 			So(err, ShouldBeNil)
-			
+
 			Convey("and afterwards it is streamable by both hosts", func() {
-			
+
 				c, err := h1.Data.ReadChannel(ctx, id)
 				So(err, ShouldBeNil)
 				So(c, ShouldNotBeNil)
-				
+
 				res := make([]byte, 0)
-				loop:
+			loop:
 				for {
 					select {
 					case d, more := <-c:
 						if !more {
 							break loop
 						}
-						res = append(res, d...)	
-					}						
+						res = append(res, d...)
+					}
 				}
-				So(bytes.Equal(data, res), ShouldBeTrue)			
+				So(bytes.Equal(data, res), ShouldBeTrue)
 				_, more := <-c
 				So(more, ShouldBeFalse)
 
 				c, err = h2.Data.ReadChannel(ctx, id)
 				So(err, ShouldBeNil)
 				So(c, ShouldNotBeNil)
-				
+
 				res = make([]byte, 0)
-				loop2:
+			loop2:
 				for {
 					select {
 					case d, more := <-c:
 						if !more {
 							break loop2
 						}
-						res = append(res, d...)	
-					}						
+						res = append(res, d...)
+					}
 				}
-					
+
 				So(bytes.Equal(data, res), ShouldBeTrue)
 				_, more = <-c
 				So(more, ShouldBeFalse)

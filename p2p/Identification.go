@@ -3,7 +3,6 @@ package p2p
 
 import (
 	"io/ioutil"
-	"log"
 	"sync"
 
 	crypto "github.com/libp2p/go-libp2p-crypto"

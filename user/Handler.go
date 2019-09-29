@@ -81,7 +81,9 @@ func (self *UserHandler) ID() UserID {
 
 func (self *UserHandler) SetUser(ctx context.Context, id UserID) error {
 	
-	err := self.host.Provide(ctx, id.Cid())	
+	fmt.Println("Start Provide user name")
+	err := self.host.Provide(ctx, id.Cid())
+	fmt.Println("Done Provide user name")	
 	if err != nil {
 		return utils.StackError(err, "Unable to set username")
 	}
