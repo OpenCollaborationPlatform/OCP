@@ -8,13 +8,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spf13/viper"
 	logging "github.com/ipfs/go-log"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/libp2p/go-libp2p-core/peerstore"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/spf13/viper"
 
 	"github.com/jbenet/goprocess"
 	"github.com/jbenet/goprocess/context"
@@ -51,10 +51,11 @@ type BootstrapConfig struct {
 	// to control the peers the process uses at any moment.
 	BootstrapPeers func() []peer.AddrInfo
 }
+
 // DefaultBootstrapConfig specifies default sane parameters for bootstrapping.
 
 func GetDefaultBootstrapConfig() BootstrapConfig {
-	
+
 	var DefaultBootstrapConfig = BootstrapConfig{
 		MinPeerThreshold:  4,
 		Period:            30 * time.Second,
@@ -71,7 +72,7 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 			}
 		}
 	}
-	
+
 	nodes := viper.GetStringSlice("p2p.bootstrap")
 	for _, value := range nodes {
 		addr, err := ma.NewMultiaddr(value)
@@ -86,11 +87,11 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 		}
 		addrs = append(addrs, *info)
 	}
-	
+
 	DefaultBootstrapConfig.BootstrapPeers = func() []peer.AddrInfo {
 		return addrs
 	}
-	
+
 	return DefaultBootstrapConfig
 }
 

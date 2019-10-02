@@ -54,7 +54,11 @@ var cmdStart = &cobra.Command{
 
 		//start the node
 		ocpNode = node.NewNode()
-		ocpNode.Start()
+		err := ocpNode.Start()
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
 
 		//setup all online commands
 		initOnlineCommands()

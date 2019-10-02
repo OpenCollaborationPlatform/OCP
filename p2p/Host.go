@@ -8,17 +8,19 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
 
 	libp2p "github.com/libp2p/go-libp2p"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/peer"
 	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	mdns "github.com/libp2p/go-libp2p/p2p/discovery"
 	ma "github.com/multiformats/go-multiaddr"
 	uuid "github.com/satori/go.uuid"
-	"github.com/libp2p/go-libp2p-core/peer"
 	"github.com/spf13/viper"
 )
 
@@ -33,6 +35,21 @@ func (self HostRPCApi) HasSwarm(ctx context.Context, id SwarmID, has *bool) erro
 	return nil
 }
 
+//little helper for mdns discovery
+type discoveryHandler struct {
+	ctx  context.Context
+	host p2phost.Host
+}
+
+func (dh *discoveryHandler) HandlePeerFound(p peer.AddrInfo) {
+	log.Info("connecting to discovered peer: ", p)
+	ctx, cancel := context.WithTimeout(dh.ctx, 30*time.Second)
+	defer cancel()
+	if err := dh.host.Connect(ctx, p); err != nil {
+		log.Warningf("failed to connect to peer %s found by discovery: %s", p.ID, err)
+	}
+}
+
 type Host struct {
 	host       p2phost.Host
 	swarmMutex sync.RWMutex
@@ -42,8 +59,11 @@ type Host struct {
 	pubKey       crypto.PubKey
 	bootstrapper io.Closer
 
-	//find service
-	dht *kaddht.IpfsDHT
+	//services
+	serviceCtx  context.Context
+	serviceCncl context.CancelFunc
+	dht         *kaddht.IpfsDHT
+	mdns        mdns.Service
 
 	//serivces the host provides
 	Rpc   *hostRpcService
@@ -91,7 +111,9 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	addr := fmt.Sprintf("/ip4/%s/tcp/%d", viper.GetString("p2p.uri"), viper.GetInt("p2p.port"))
 
 	//setup default p2p host
-	ctx := context.Background()
+	ctx, cncl := context.WithCancel(context.Background())
+	h.serviceCtx = ctx
+	h.serviceCncl = cncl
 	h.host, err = libp2p.New(ctx,
 		libp2p.Identity(priv),
 		libp2p.ListenAddrStrings(addr),
@@ -101,17 +123,29 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	if err != nil {
 		return err
 	}
+	
+	//setup mdns discovery
+	listenddrs, err := h.host.Network().InterfaceListenAddresses()
+	fmt.Printf("Returned %v and %v\n", listenddrs, err)
+	tag := "_ocp-discovery._udp.local"
+	h.mdns, err = mdns.NewMdnsService(ctx, h.host, 30*time.Second, tag)
+	if err != nil {
+		fmt.Printf("Unable to setup mdns service: %v\n", err)
+		h.mdns = nil
+	} else {
+		h.mdns.RegisterNotifee(&discoveryHandler{h.serviceCtx, h.host})
+	}
 
 	//setup the dht (careful: the context does control lifetime of some internal dht things)
-	h.dht, err = kaddht.New(context.Background(), h.host)
+	h.dht, err = kaddht.New(ctx, h.host)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup distributed hash table")
 	}
 
 	//bootstrap if required (means connect to online nodes)
 	conf := GetDefaultBootstrapConfig()
-	if !shouldBootstrap {		
-		conf.BootstrapPeers = func()[]peer.AddrInfo {return make([]peer.AddrInfo, 0)}
+	if !shouldBootstrap {
+		conf.BootstrapPeers = func() []peer.AddrInfo { return make([]peer.AddrInfo, 0) }
 	}
 	h.bootstrapper, err = bootstrap(h.ID(), h.host, h.dht, conf)
 	if err != nil {
@@ -143,8 +177,6 @@ func (h *Host) Stop(ctx context.Context) error {
 		h.bootstrapper.Close()
 	}
 
-	//stop data replication
-
 	//stop swarms
 	for _, swarm := range h.Swarms() {
 		swarm.Close(ctx)
@@ -161,7 +193,13 @@ func (h *Host) Stop(ctx context.Context) error {
 		h.Rpc.Close()
 	}
 
-	//stop dht
+	//stop dht and mdns
+	if h.serviceCncl != nil {
+		h.serviceCncl()
+	}
+	if h.mdns != nil {
+		h.mdns.Close()
+	}
 	h.dht.Close()
 
 	return h.host.Close()
@@ -269,7 +307,7 @@ func (h *Host) Keys() (crypto.PrivKey, crypto.PubKey) {
 	return h.privKey, h.pubKey
 }
 
-func  (h *Host) Routing() *kaddht.IpfsDHT {
+func (h *Host) Routing() *kaddht.IpfsDHT {
 	return h.dht
 }
 
@@ -280,9 +318,8 @@ func  (h *Host) Routing() *kaddht.IpfsDHT {
 func (h *Host) Provide(ctx context.Context, cid Cid) error {
 
 	if len(h.host.Network().Conns()) == 0 {
-			return fmt.Errorf("Cannot provide, no connected peers")
+		return fmt.Errorf("Cannot provide, no connected peers")
 	}
-	
 
 	return h.dht.Provide(ctx, cid, true)
 }
