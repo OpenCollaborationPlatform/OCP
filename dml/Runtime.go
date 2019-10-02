@@ -70,6 +70,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 
 	//add the datastructures
 	rntm.RegisterObjectCreator("Data", NewData)
+	rntm.RegisterObjectCreator("Variant", NewVariant)
 	rntm.RegisterObjectCreator("Vector", NewVector)
 	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
 

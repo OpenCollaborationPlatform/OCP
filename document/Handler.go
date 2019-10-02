@@ -65,7 +65,7 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host) (*DocumentHan
 	client.Register("ocp.documents.create", dh.createDoc, wamp.Dict{})
 	client.Register("ocp.documents.open", dh.openDoc, wamp.Dict{})
 	client.Register("ocp.documents.list", dh.listDocs, wamp.Dict{})
-	client.Register(".py", dh.closeDoc, wamp.Dict{})
+	client.Register("ocp.documents.close", dh.closeDoc, wamp.Dict{})
 
 	//register the RPC api
 	host.Rpc.Register(DocumentAPI{dh})

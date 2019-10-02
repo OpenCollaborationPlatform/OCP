@@ -31,24 +31,32 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 	var prop Property
 
 	if !constprop {
+			
 		if dtype.IsPOD() {
-			value, _ := set.GetOrCreateValue([]byte(name))
-
+		
 			//setup default value if needed
+			value, _ := set.GetOrCreateValue([]byte(name))
 			res, err := value.HoldsValue()
 			if err != nil {
 				return nil, utils.StackError(err, "Cannot create property, datastore not accessible")
 			}
 			if !res {
 				value.Write(default_value)
-			}
-
+			}	
 			prop = &dataProperty{NewEventHandler(), dtype, *value}
 
 		} else if dtype.IsType() {
-
-			//type property needs to store parsings ast object which cannot be serialized, hence const only
-			return nil, fmt.Errorf("Type property can only be const")
+			//setup default value if needed
+			value, _ := set.GetOrCreateValue([]byte(name))
+			res, err := value.HoldsValue()
+			if err != nil {
+				return nil, utils.StackError(err, "Cannot create property, datastore not accessible")
+			}
+			if !res {
+				dt := default_value.(DataType)
+				value.Write(dt.AsString())
+			}	
+			prop = &typeProperty{NewEventHandler(), *value}
 
 		} else {
 			return nil, fmt.Errorf("Unknown type")
@@ -58,7 +66,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 			prop = &constProperty{NewEventHandler(), dtype, default_value}
 
 		} else if dtype.IsType() {
-			prop = &typeProperty{NewEventHandler(), MustNewDataType("int")}
+			prop = &constTypeProperty{NewEventHandler(), MustNewDataType("int")}
 			prop.SetValue(default_value)
 
 		} else {
@@ -122,6 +130,57 @@ func (self *dataProperty) GetValue() interface{} {
 	return val
 }
 
+
+type typeProperty struct {
+	eventHandler
+	db           datastore.ValueVersioned
+}
+
+func (self typeProperty) Type() DataType {
+	return MustNewDataType("type")
+}
+
+func (self typeProperty) IsConst() bool {
+	return false
+}
+
+//we store the basic information, plain type string or parser result for object
+func (self *typeProperty) SetValue(val interface{}) error {
+
+	//check if the type is correct
+	err := MustNewDataType("type").MustBeTypeOf(val)
+	if err != nil {
+		return utils.StackError(err, "Cannot set type property: invalid argument")
+	}
+
+	data := val.(DataType)
+	self.db.Write(data.AsString())
+
+	return self.GetEvent("onChanged").Emit(val)
+}
+
+//we only return basic information, mailny for JS accessibility
+func (self *typeProperty) GetValue() interface{} {
+	
+	var data string
+	err := self.db.ReadType(&data)
+	if err != nil {
+		log.Printf("Error reading value: %s", err)
+		return nil
+	}
+	return data
+}
+
+func (self *typeProperty) GetDataType() DataType {
+	
+	var data string
+	err := self.db.ReadType(&data)
+	if err != nil {
+		log.Printf("Cannot access datastore: &v", err)
+	}
+	return DataType{data}
+}
+
 //Const property
 //**************
 
@@ -148,7 +207,7 @@ func (self *constProperty) SetValue(val interface{}) error {
 	}
 
 	self.value = val
-	return self.GetEvent("onChanged").Emit(val)
+	return nil
 }
 
 func (self *constProperty) GetValue() interface{} {
@@ -156,21 +215,21 @@ func (self *constProperty) GetValue() interface{} {
 	return self.value
 }
 
-type typeProperty struct {
+type constTypeProperty struct {
 	eventHandler
 	data DataType
 }
 
-func (self typeProperty) Type() DataType {
+func (self constTypeProperty) Type() DataType {
 	return MustNewDataType("type")
 }
 
-func (self typeProperty) IsConst() bool {
+func (self constTypeProperty) IsConst() bool {
 	return true
 }
 
 //we store the basic information, plain type string or parser result for object
-func (self *typeProperty) SetValue(val interface{}) error {
+func (self *constTypeProperty) SetValue(val interface{}) error {
 
 	//check if the type is correct
 	err := MustNewDataType("type").MustBeTypeOf(val)
@@ -184,11 +243,11 @@ func (self *typeProperty) SetValue(val interface{}) error {
 }
 
 //we only return basic information, mailny for JS accessibility
-func (self *typeProperty) GetValue() interface{} {
+func (self *constTypeProperty) GetValue() interface{} {
 	return self.data.AsString()
 }
 
-func (self *typeProperty) GetDataType() DataType {
+func (self *constTypeProperty) GetDataType() DataType {
 	return self.data
 }
 

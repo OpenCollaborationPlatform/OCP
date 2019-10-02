@@ -477,7 +477,7 @@ func (self *vector) DecreaseRefcount() error {
 
 func (self *vector) entryDataType() DataType {
 
-	prop := self.GetProperty("type").(*typeProperty)
+	prop := self.GetProperty("type").(*constTypeProperty)
 	dt := prop.GetDataType()
 	return dt
 }

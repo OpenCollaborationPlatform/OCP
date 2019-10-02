@@ -125,8 +125,6 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	}
 	
 	//setup mdns discovery
-	listenddrs, err := h.host.Network().InterfaceListenAddresses()
-	fmt.Printf("Returned %v and %v\n", listenddrs, err)
 	tag := "_ocp-discovery._udp.local"
 	h.mdns, err = mdns.NewMdnsService(ctx, h.host, 30*time.Second, tag)
 	if err != nil {

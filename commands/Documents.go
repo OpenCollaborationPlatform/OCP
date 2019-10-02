@@ -15,6 +15,8 @@ var (
 func init() {
 
 	cmdDocClose.Flags().BoolP("remove", "r", false, "removes all data and folders of docuents")
+	cmdDocClose.Flags().BoolP("all", "a", false, "closes all open documens")
+
 
 	cmdDocuments.AddCommand(cmdDocClose, cmdDocCreate, cmdDocOpen)
 	rootCmd.AddCommand(cmdDocuments)
@@ -43,10 +45,18 @@ var cmdDocClose = &cobra.Command{
 	Args: cobra.ExactArgs(1),
 	Run: onlineCommand("documents.close", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 		
-		err := ocpNode.Documents.CloseDocument(ctx, args[0])
-		if err != nil {
-			return err.Error()
+		docs := args
+		if flags["all"].(bool) {
+			docs = ocpNode.Documents.ListDocuments()
 		}
+				
+		for _, doc := range docs {
+			err := ocpNode.Documents.CloseDocument(ctx, doc)
+			if err != nil {
+				return err.Error()
+			}
+		}
+		
 		return "sucessfully closed"
 	}),
 }

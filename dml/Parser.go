@@ -79,7 +79,7 @@ type astFunction struct {
 //matching all supported DML datatypes. Note that a astObject is also a datatype.
 //one special datatype is type whichs value is again a DataType
 type astDataType struct {
-	Pod    string     `@("string" | "bool" | "int" | "float" | "type")`
+	Pod    string     `@("string" | "bool" | "int" | "float" | "type" )`
 	Object *astObject `| @@`
 }
 
