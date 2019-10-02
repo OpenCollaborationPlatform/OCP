@@ -29,7 +29,7 @@ func init() {
 	//disable logging for this tests
 	//log.SetOutput(ioutil.Discard)
 
-	//ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
+	ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
 	ipfswriter.LevelInfo()
 	ipfslog.GetSubsystems() //just to not need to remove import
 	//ipfslog.SetDebugLogging()

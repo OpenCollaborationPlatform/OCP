@@ -11,6 +11,7 @@
       <item>StateMachine</item>
       <item>State</item>
       <item>Transition</item>
+      <item>Raw</item>
     </list>
 	<list name="behaviour">
       <item>Access</item>

@@ -36,12 +36,8 @@ func newState(path string) (dmlState, error) {
 	rntm.RegisterObjectCreator("Raw", NewRawDmlObject)
 
 	//parse the dm file in path/Dml/main.dml
-	file := filepath.Join(path, "Dml", "main.dml")
-	filereader, err := os.Open(file)
-	if err != nil {
-		return dmlState{}, utils.StackError(err, "Unable to load dml file")
-	}
-	err = rntm.Parse(filereader)
+	dmlpath := filepath.Join(path, "Dml")
+	err = rntm.ParseFolder(dmlpath)
 	if err != nil {
 		return dmlState{}, utils.StackError(err, "Unable to parse dml file")
 	}

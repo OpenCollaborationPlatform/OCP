@@ -233,6 +233,9 @@ func (self *dmlLexer) matchJSFunctionBody() (lexer.Token, bool) {
 func (self *dmlLexer) matchString() (lexer.Token, bool) {
 
 	//first charachter must be string opening
+	if len(self.buf) < self.cursor.Offset+1 {
+		return lexer.Token{}, false
+	}
 	if string(self.buf[self.cursor.Offset]) != `"` {
 		return lexer.Token{}, false
 	}

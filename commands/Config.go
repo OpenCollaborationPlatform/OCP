@@ -27,10 +27,9 @@ var cmdConfig = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 
-		fmt.Printf("Config file: %v\n", viper.ConfigFileUsed())
-
 		var keys []string
 		if len(args) == 0 {
+			fmt.Printf("Config file: %v\n", viper.ConfigFileUsed())
 			keys = viper.AllKeys()
 
 		} else {

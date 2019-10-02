@@ -92,6 +92,7 @@ type Runtime struct {
 	mutex     *sync.Mutex
 
 	//internal state
+	importPath 		  string
 	ready              Boolean //True if a datastructure was read and setup, false if no dml file was parsed
 	currentUser        User    //user that currently access the runtime
 	objects            map[Identifier]Data
@@ -105,7 +106,24 @@ type Runtime struct {
 // Setup / creation Methods
 // ************************
 
-//Parses the dml code and setups the full structure
+func (self *Runtime) ParseFolder(path string) error {
+	//check the main file
+	main := filepath.Join(path, "main.dml")
+	file, err := os.Open(main)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	
+	//set the import path
+	self.importPath = path
+	
+	//parse the file!
+	return self.Parse(file)	
+}
+
+//Parses the dml code and setups the full structure. Note: Cannot handle local 
+//imports
 func (self *Runtime) Parse(reader io.Reader) error {
 
 	self.datastore.Begin()
@@ -132,6 +150,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	self.initialObjRefcount = uint64(math.MaxUint64 / 2)
 
 	//first import everything needed
+	
 	for _, imp := range ast.Imports {
 		err := self.importDML(imp)
 		if err != nil {
@@ -503,10 +522,12 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 func (self *Runtime) importDML(astImp *astImport) error {
 
 	//load the file and create a reader
-	reader, err := os.Open(astImp.File)
+	imppath := filepath.Join(self.importPath, astImp.File)
+	reader, err := os.Open(imppath)
 	if err != nil {
-		return utils.StackError(err, "Unable to read %v", astImp.File)
+		return utils.StackError(err, "Unable to read %v (%v)", astImp.File, imppath)
 	}
+	defer reader.Close()
 
 	//we start with building the AST
 	ast := &DML{}
