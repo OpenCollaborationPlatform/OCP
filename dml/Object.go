@@ -94,6 +94,9 @@ func NewObject(parent Identifier, name string, oType string, rntm *Runtime) *obj
 
 	//add default methods
 	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode))
+	
+	//add default events
+	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm.jsvm, MustNewDataType("string")))
 
 	return &obj
 }
@@ -178,5 +181,11 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	}
 
 	self.propertyHandler.properties[name] = prop
+	
+	//register change event
+	prop.GetEvent("onChanged").RegisterCallback(func(...interface{}) error {
+		return self.GetEvent("onPropertyChanged").Emit(name)
+	})
+	
 	return nil
 }

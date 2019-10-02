@@ -176,7 +176,7 @@ func (self *typeProperty) GetDataType() DataType {
 	var data string
 	err := self.db.ReadType(&data)
 	if err != nil {
-		log.Printf("Cannot access datastore: &v", err)
+		log.Printf("Cannot access datastore: %v", err)
 	}
 	return DataType{data}
 }

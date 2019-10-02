@@ -13,6 +13,8 @@
 	
 	.testF.onChanged: function(val) {Document.testI = Math.floor(val)}
 	
+	.onPropertyChanged: function(name) {}
+	
 	event testE(int, string): function(a,b) {
 		Document.testB = false
 	}
