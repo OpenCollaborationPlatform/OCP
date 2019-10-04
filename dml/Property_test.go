@@ -42,15 +42,14 @@ func TestTypeProperty(t *testing.T) {
 		Convey("The property must be accessbile", func() {
 			So(rntm.mainObj.HasProperty("test"), ShouldBeTrue)
 			val := rntm.mainObj.GetProperty("test").GetValue()
-			str, ok := val.(string)
+			dt, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
-			So(str, ShouldNotBeEmpty)
 
 			val, err := rntm.RunJavaScript( "", "toplevel.test")
 			So(err, ShouldBeNil)
-			strJs, ok := val.(string)
+			dtJs, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
-			So(strJs, ShouldEqual, str)
+			So(dtJs.IsEqual(dt), ShouldBeTrue)
 		})
 
 		Convey("and the the type must be creatable.", func() {

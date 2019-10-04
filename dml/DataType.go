@@ -61,6 +61,10 @@ func (self DataType) IsValid() bool {
 	
 }
 
+func (self DataType) IsEqual(dt DataType) bool {
+	return self.value == dt.value
+}
+
 func (self DataType) AsString() string {
 	return self.value
 }
@@ -122,7 +126,7 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 
 }
 
-func (self DataType) ComplexAsAst() (*astObject, error) {
+func (self DataType) complexAsAst() (*astObject, error) {
 
 	if !self.IsComplex() {
 		return nil, fmt.Errorf("DataType is not complex, convertion into AST not possible")

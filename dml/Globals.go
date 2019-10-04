@@ -18,12 +18,12 @@ func SetupGlobals(rntm *Runtime) {
 			panic("Wrong arguments: Only type description must be passed")
 		}
 		typeArg := call.Arguments[0].Export()
-		typeStr, ok := typeArg.(string)
+		datatype, ok := typeArg.(DataType)
 		if !ok {
 			panic(rntm.jsvm.ToValue("A valid type description must be given as argument"))
 		}
 
-		obj, err := ConstructObject(rntm, MustNewDataType(typeStr), "")
+		obj, err := ConstructObject(rntm, datatype, "")
 		if err != nil {
 			panic(rntm.jsvm.ToValue(utils.StackError(err, "Unable to build object from type desciption").Error()))
 		}
@@ -41,7 +41,7 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 		return nil, fmt.Errorf("Not a complex datatype which can be build into Object")
 	}
 
-	astObj, err := dt.ComplexAsAst()
+	astObj, err := dt.complexAsAst()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to build object from type description")
 	}

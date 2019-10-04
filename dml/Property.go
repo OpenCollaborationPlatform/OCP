@@ -168,7 +168,7 @@ func (self *typeProperty) GetValue() interface{} {
 		log.Printf("Error reading value: %s", err)
 		return nil
 	}
-	return data
+	return DataType{data}
 }
 
 func (self *typeProperty) GetDataType() DataType {
@@ -244,7 +244,7 @@ func (self *constTypeProperty) SetValue(val interface{}) error {
 
 //we only return basic information, mailny for JS accessibility
 func (self *constTypeProperty) GetValue() interface{} {
-	return self.data.AsString()
+	return self.data
 }
 
 func (self *constTypeProperty) GetDataType() DataType {
