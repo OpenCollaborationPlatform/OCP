@@ -117,16 +117,16 @@ func TestTransactionBehaviour(t *testing.T) {
 
 		var code = `
 				Data {
-					.id: "Document"
+					.name: "Document"
 					
 					Data {
-						.id: "result"
+						.name: "result"
 						property string value: ""
 					}
 					
 					Transaction {
 						
-						.id: "trans"
+						.name: "trans"
 						
 						.onOpen: function() {
 							this.parent.result.value += "o1"
@@ -137,14 +137,14 @@ func TestTransactionBehaviour(t *testing.T) {
 					}
 					
 					Data {
-						.id: "Child"
+						.name: "Child"
 						
 						Data {
-							.id: "ChildChild"
+							.name: "ChildChild"
 						}
 						
 						Transaction {
-							.id: "ChildTransaction"
+							.name: "ChildTransaction"
 							.recursive: true
 						
 							.onOpen: function() {Document.result.value += "o2"}
@@ -155,14 +155,14 @@ func TestTransactionBehaviour(t *testing.T) {
 					}
 					
 					Data {
-						.id: "Child2"
+						.name: "Child2"
 					} // test object without transaction behaviour
 					
 					Data {
-						.id: "Child3"
+						.name: "Child3"
 						
 						Transaction{
-							.id: "Transaction3"
+							.name: "Transaction3"
 						} //test default transaction behaviour
 					}
 							
@@ -176,7 +176,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 		Convey("the object structure must be correct", func() {
 
-			val, err := rntm.RunJavaScript("User1", "Document.trans.parent.id")
+			val, err := rntm.RunJavaScript("User1", "Document.trans.parent.name")
 			So(err, ShouldBeNil)
 			value, ok := val.(string)
 			So(ok, ShouldBeTrue)
@@ -261,13 +261,13 @@ func TestTransactionAbort(t *testing.T) {
 
 		var code = `
 				Data {
-					.id: "Document"
+					.name: "Document"
 					
 					property  int p: 1
 					property bool abort: false
 					
 					Data {
-						.id: "DocumentObject"
+						.name: "DocumentObject"
 							
 						property int p: 1
 						
@@ -278,22 +278,22 @@ func TestTransactionAbort(t *testing.T) {
 					}
 					
 					Data {
-						.id: "TransDocumentObject"
+						.name: "TransDocumentObject"
 							
 						property int p: 1
 						
 						Transaction{
-							.id: "trans"
+							.name: "trans"
 						}
 					}
 					
 					Data {
-						.id: "FailTransDocumentObject"
+						.name: "FailTransDocumentObject"
 							
 						property int p: 1
 						
 						Transaction{
-							.id: "trans"
+							.name: "trans"
 							
 							.onParticipation: function() {	
 								throw("Unable to take part in transaction")
@@ -303,7 +303,7 @@ func TestTransactionAbort(t *testing.T) {
 					
 					Transaction {
 						
-						.id: "trans"
+						.name: "trans"
 						
 						function CanBeAdded() {
 							return !this.parent.abort

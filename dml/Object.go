@@ -89,7 +89,7 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
 	}
 
 	//default properties
-	obj.AddProperty("id", MustNewDataType("string"), "", true)
+	obj.AddProperty("name", MustNewDataType("string"), "", true)
 
 	//add default methods
 	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode))

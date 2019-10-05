@@ -23,25 +23,25 @@ func TestPODVector(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		code := `Data {
-					.id:"toplevel"
+					.name:"toplevel"
 					
 					Vector {
-						.id: "IntVec"
+						.name: "IntVec"
 						.type: int
 					}
 					
 					Vector {
-						.id: "BoolVec"
+						.name: "BoolVec"
 						.type: bool
 					}
 					
 					Vector {
-						.id: "StringVec"
+						.name: "StringVec"
 						.type: string
 					}
 					
 					Vector {
-						.id: "FloatVec"
+						.name: "FloatVec"
 						.type: float
 					}					
 				}`
@@ -257,10 +257,10 @@ func TestTypeVector(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		code := `Data {
-					.id:"toplevel"
+					.name:"toplevel"
 
 					Vector {
-						.id: "TypeVec"
+						.name: "TypeVec"
 						.type: Data {
 							property int test: 0
 						}

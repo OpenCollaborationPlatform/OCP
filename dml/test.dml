@@ -2,7 +2,7 @@
 
 //comment
  Data {
-    .id: "Document"
+    .name: "Document"
 
     property string 	testS: "Hallo"
     property int 	testI: 1
@@ -29,17 +29,17 @@
 	}
 	
 	Data {
-		.id: "DocumentObject"
+		.name: "DocumentObject"
 		property int test: 10
 	}
 	
 	Imported {
-		.id: "ImportTest"
+		.name: "ImportTest"
 		
 		property int annothertest: 4
 		
 		Data {
-			.id: "DefaultChild"
+			.name: "DefaultChild"
 		}
 	}
 }

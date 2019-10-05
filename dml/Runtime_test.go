@@ -152,11 +152,11 @@ func TestDmlFile(t *testing.T) {
 				if (Document.children.length != 2) {
 					throw "It must have exactly 1 child"
 				}
-				if (Document.children[0].id != "DocumentObject") {
+				if (Document.children[0].name != "DocumentObject") {
 					throw "child access seems not to work"
 				}
 				
-				if (Document.children[1].id != "ImportTest") {
+				if (Document.children[1].name != "ImportTest") {
 					throw "Import seems not to work"
 				}
 				if (Document.parent != null) {
@@ -165,7 +165,7 @@ func TestDmlFile(t *testing.T) {
 				if (Document.children[0].parent != Document) {
 					throw "parent is not set correctly"
 				}
-				if (Document.DocumentObject.id != "DocumentObject") {
+				if (Document.DocumentObject.name != "DocumentObject") {
 					throw "no direkt children access possible"
 				}
 				`

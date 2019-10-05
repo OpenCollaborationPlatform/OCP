@@ -23,7 +23,7 @@ func TestTypeProperty(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		code := `Data {
-				.id:"toplevel"
+				.name:"toplevel"
 				
 				const property type test: Data {
 					property int test: 10

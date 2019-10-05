@@ -23,11 +23,11 @@ func TestPODVariant(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		code := `Data {
-					.id:"toplevel"
+					.name:"toplevel"
 					const property type other: bool
 					
 					Variant {
-						.id: "Variant"
+						.name: "Variant"
 						.type: int
 					}				
 				}`
@@ -85,10 +85,10 @@ func TestTypeVariant(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		code := `Data {
-					.id:"toplevel"
+					.name:"toplevel"
 
 					Variant {
-						.id: "Variant"
+						.name: "Variant"
 						.type: int
 					}
 				}`

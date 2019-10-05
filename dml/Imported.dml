@@ -1,11 +1,11 @@
  //comment
  Data {
-    .id: "Imported"
+    .name: "Imported"
 	
 	property int test: 1
 
 	Data {
-		.id: "ImportedChild"
+		.name: "ImportedChild"
 		property int test: 10
 	}
 }

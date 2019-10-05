@@ -560,7 +560,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 		//on object build time as the identifier is created with it
 		idSet := false
 		for _, astAssign := range ast.Object.Assignments {
-			if astAssign.Key[0] == "id" {
+			if astAssign.Key[0] == "name" {
 				*astAssign.Value.String = id.Name
 				idSet = true
 				break
@@ -568,7 +568,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 		}
 		if !idSet {
 			val := &astValue{String: &id.Name}
-			asgn := &astAssignment{Key: []string{"id"}, Value: val}
+			asgn := &astAssignment{Key: []string{"name"}, Value: val}
 			ast.Object.Assignments = append(ast.Object.Assignments, asgn)
 		}
 
@@ -602,7 +602,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 	//we need the objects name first. Search for the id property assignment
 	var objName string
 	for _, astAssign := range astObj.Assignments {
-		if astAssign.Key[0] == "id" {
+		if astAssign.Key[0] == "name" {
 			objName = *astAssign.Value.String
 		}
 	}

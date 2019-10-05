@@ -18,7 +18,7 @@ func TestSimpleObject(t *testing.T) {
 		 * should be fine
 		 */
 		Test{
-			.id: 1 //with comment
+			.name: 1 //with comment
 
 			//and even more comments
 			.name: "my funny \" string"
@@ -42,7 +42,7 @@ func TestSimpleObject(t *testing.T) {
 
 			prop := obj.Assignments[0]
 			So(len(prop.Key), ShouldEqual, 1)
-			So(prop.Key[0], ShouldEqual, "id")
+			So(prop.Key[0], ShouldEqual, "name")
 			So(*prop.Value.Int, ShouldEqual, 1)
 
 			prop = obj.Assignments[1]
@@ -79,15 +79,15 @@ func TestNestedObject(t *testing.T) {
 
 		var text = `
 		Test{
-			.id: 1
+			.name: 1
 			.name: "my funny \" string"
 
 			SubObject {
-				.id: 1.1
+				.name: 1.1
 				.value: false
 
 				SubSubObject1 {
-					.id: "Who cares"
+					.name: "Who cares"
 				}
 				SubSubObject2 {
 
@@ -113,7 +113,7 @@ func TestNestedObject(t *testing.T) {
 			So(obj.Identifier, ShouldEqual, "SubObject")
 			So(len(obj.Assignments), ShouldEqual, 2)
 			prop := obj.Assignments[0]
-			So(prop.Key[0], ShouldEqual, "id")
+			So(prop.Key[0], ShouldEqual, "name")
 			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
 			prop = obj.Assignments[1]
 			So(prop.Key[0], ShouldEqual, "value")
@@ -139,7 +139,7 @@ func TestNestedObject(t *testing.T) {
 			So(reObj.Identifier, ShouldEqual, "SubObject")
 			So(len(reObj.Assignments), ShouldEqual, 2)
 			prop := reObj.Assignments[0]
-			So(prop.Key[0], ShouldEqual, "id")
+			So(prop.Key[0], ShouldEqual, "name")
 			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
 			prop = reObj.Assignments[1]
 			So(prop.Key[0], ShouldEqual, "value")
@@ -158,7 +158,7 @@ func TestJavascriptFunctions(t *testing.T) {
 			.name: "my funny \" string"
 			
 			SubObject {
-				.id: 1.1
+				.name: 1.1
 
 				function MySubFunc(vara, varb) {
 					could be annything
@@ -169,7 +169,7 @@ func TestJavascriptFunctions(t *testing.T) {
 				could be annything
 			}
 			
-			.id: 1
+			.name: 1
 		}`
 
 		dml := &DML{}
@@ -190,7 +190,7 @@ func TestJavascriptFunctions(t *testing.T) {
 			So(obj.Identifier, ShouldEqual, "SubObject")
 			So(len(obj.Assignments), ShouldEqual, 1)
 			prop := obj.Assignments[0]
-			So(prop.Key[0], ShouldEqual, "id")
+			So(prop.Key[0], ShouldEqual, "name")
 			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)
 		})
 	})
