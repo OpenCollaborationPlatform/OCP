@@ -496,15 +496,8 @@ func (self *vector) buildNew() (interface{}, error) {
 		obj.IncreaseRefcount()
 		result = obj
 
-	} else if dt.IsType() || dt.IsObject() || dt.IsString() {
-		result = ""
-
-	} else if dt.IsBool() {
-		result = false
-	} else if dt.IsInt() {
-		result = 0
-	} else if dt.IsFloat() {
-		result = 0.0
+	} else {
+		result = dt.GetDefaultValue()
 	}
 
 	return result, err
