@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dop251/goja"
+	"github.com/alecthomas/participle"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -15,7 +16,7 @@ func SetupGlobals(rntm *Runtime) {
 
 		//get the type description, which must be passed as argument
 		if len(call.Arguments) != 1 {
-			panic("Wrong arguments: Only type description must be passed")
+			panic("Wrong arguments: DataType only must be passed")
 		}
 		typeArg := call.Arguments[0].Export()
 		datatype, ok := typeArg.(DataType)
@@ -28,6 +29,43 @@ func SetupGlobals(rntm *Runtime) {
 			panic(rntm.jsvm.ToValue(utils.StackError(err, "Unable to build object from type desciption").Error()))
 		}
 		return obj.GetJSObject()
+	})
+	
+	//constructor for DML data type
+	rntm.jsvm.Set("DataType", func(call goja.ConstructorCall) *goja.Object {
+
+		//get the type description, which must be passed as argument
+		if len(call.Arguments) != 1 {
+			panic("Wrong arguments: Only type description must be passed")
+		}
+		typeArg := call.Arguments[0].Export()
+		typestr, ok := typeArg.(string)
+		if !ok {
+			panic(rntm.jsvm.ToValue("A valid type description must be given as argument"))
+		}
+		
+		var dt DataType
+		switch typestr {
+			case "int", "float", "string", "bool", "type", "object":
+				dt, _ = NewDataType(typestr)
+			default:
+				ast := &DML{}
+				parser, err := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
+				if err != nil {
+					panic(utils.StackError(err, "Unable to setup dml parser").Error())
+				}
+			
+				err = parser.ParseString(typestr, ast)
+				if err != nil {
+					panic(utils.StackError(err, "Unable to parse dml code").Error())
+				}
+				dt, err = NewDataType(ast.Object)
+				if err != nil {
+					panic(utils.StackError(err, "Unable to create DataType from DML code").Error())
+				}
+		}
+
+		return rntm.jsvm.ToValue(dt).(*goja.Object)
 	})
 
 }
@@ -46,45 +84,15 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 		return nil, utils.StackError(err, "Unable to build object from type description")
 	}
 
-	//set a uuid name to ensure unique identifier if none is set. Important if there is no parent!
-	if name == "" {
-		id := uuid.NewV4()
-		name = id.String()
-	}
-	isAssigned := false
-	for _, astAssign := range astObj.Assignments {
-		if astAssign.Key[0] == "id" {
-			*astAssign.Value.String = name
-			isAssigned = true
-		}
-	}
-	if !isAssigned {
-		val := &astValue{String: &name}
-		asgn := &astAssignment{Key: []string{"id"}, Value: val}
-		astObj.Assignments = append(astObj.Assignments, asgn)
-	}
+	//set a uuid to ensure unique identifier. Important if there is no parent!
+	uid := uuid.NewV4().String()
 
-	//check uniquiness
-	tmpID := Identifier{}
-	tmpID.Type = astObj.Identifier
-	tmpID.Name = name
-	_, ok := rntm.objects[tmpID]
-	if ok {
-		return nil, fmt.Errorf("No unique name given: cannot create object")
-	}
-
-	//build the object (without parent)
-	obj, err := rntm.buildObject(astObj, Identifier{}, make([]*astObject, 0))
+	//build the object (without parent, but with uuid)
+	obj, err := rntm.buildObject(astObj, Identifier{}, uid, make([]*astObject, 0))
 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
 	}
 
 	return obj, nil
-	return nil, nil
-}
-
-//functions
-func ParseDML(code string) {
-
 }

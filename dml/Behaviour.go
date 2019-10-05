@@ -18,10 +18,10 @@ type Behaviour interface {
 	Copy() Behaviour
 }
 
-func NewBehaviour(parent Identifier, name string, oType string, rntm *Runtime) (*behaviour, error) {
+func NewBehaviour(id Identifier, parent Identifier, rntm *Runtime) (*behaviour, error) {
 
 	result := behaviour{
-		NewObject(parent, name, oType, rntm),
+		NewObject(id, parent, rntm),
 	}
 
 	//add default behaviour properties

@@ -26,14 +26,14 @@ type DataImpl struct {
 	children []Identifier
 }
 
-func NewData(name string, parent Identifier, rntm *Runtime) Object {
-	return NewDataBaseClass(name, "Data", parent, rntm)
+func NewData(id Identifier, parent Identifier, rntm *Runtime) Object {
+	return NewDataBaseClass(id, parent, rntm)
 }
 
-func NewDataBaseClass(name string, typename string, parent Identifier, rntm *Runtime) *DataImpl {
+func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) *DataImpl {
 
 	dat := DataImpl{
-		NewObject(parent, name, typename, rntm),
+		NewObject(id, parent, rntm),
 		NewBehaviourHandler(),
 		make([]Identifier, 0),
 	}

@@ -75,6 +75,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 	}
 
 	//add all required events
+	prop.AddEvent("onBeforeChange", NewEvent(vm.NewObject(), vm, dtype))
 	prop.AddEvent("onChanged", NewEvent(vm.NewObject(), vm, dtype))
 
 	return prop, nil
@@ -109,6 +110,8 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	if !self.db.IsValid() {
 		return fmt.Errorf("Invalid database entry")
 	}
+	
+	self.GetEvent("onBeforeChange").Emit(val)	
 	err = self.db.Write(val)
 	if err != nil {
 		return err
@@ -152,6 +155,8 @@ func (self *typeProperty) SetValue(val interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Cannot set type property: invalid argument")
 	}
+
+	self.GetEvent("onBeforeChange").Emit(val)
 
 	data := val.(DataType)
 	self.db.Write(data.AsString())

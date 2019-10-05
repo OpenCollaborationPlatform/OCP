@@ -15,9 +15,9 @@ type vector struct {
 	length  *datastore.ValueVersioned
 }
 
-func NewVector(name string, parent Identifier, rntm *Runtime) Object {
+func NewVector(id Identifier, parent Identifier, rntm *Runtime) Object {
 
-	base := NewDataBaseClass(name, "Vector", parent, rntm)
+	base := NewDataBaseClass(id, parent, rntm)
 
 	//get the db entries
 	set, _ := base.GetDatabaseSet(datastore.MapType)

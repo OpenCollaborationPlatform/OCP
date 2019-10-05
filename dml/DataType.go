@@ -40,6 +40,15 @@ func NewDataType(val interface{}) (DataType, error) {
 		} else {
 			result = DataType{ast.Pod}
 		}
+		
+	case *astObject:
+
+		ast := val.(*astObject)
+		data, err := json.Marshal(ast)
+		if err != nil {
+			return DataType{}, utils.StackError(err, "Unable to marshal AST type representation into DataType")
+		}
+		result = DataType{base58.Encode(data)}
 	}
 
 	return result, nil
@@ -88,12 +97,12 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 		if self.IsObject() {
 			return nil
 		}
-
+		
 		//or if the object is exactly the complex type we store
-		if self.IsComplex() && obj.DataType().value == self.value {
+		if obj.DataType().IsEqual(self) {
 			return nil
 		}
-		return fmt.Errorf(`wrong type, got 'object' and expected '%s'`, self.AsString())
+		return fmt.Errorf("wrong object type, expected vs. received\n %v\n%v", self.AsString(), obj.DataType().AsString())
 	}
 
 	//check if the type is correct
@@ -157,4 +166,23 @@ func (self DataType) IsComplex() bool {
 		!self.IsBool() &&
 		!self.IsObject() &&
 		!self.IsType()
+}
+
+func (self DataType) GetDefaultValue() interface{} {
+	
+	switch self.value {
+	case "string":
+		return string("")
+	case "int":
+		return int64(0)
+	case "float":
+		return float64(0.0)
+	case "bool":
+		return bool(false)
+	case "type":
+		return MustNewDataType("int")
+	}
+
+	//object and complex return "none" object	
+	return nil
 }

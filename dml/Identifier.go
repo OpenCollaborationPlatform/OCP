@@ -13,6 +13,7 @@ type Identifier struct {
 	Parent [32]byte
 	Type   string
 	Name   string
+	Uuid	   string
 }
 
 func IdentifierFromData(data []byte) (Identifier, error) {

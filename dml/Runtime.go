@@ -33,7 +33,7 @@ import (
 )
 
 //Function prototype that can create new object types in DML
-type CreatorFunc func(name string, parent Identifier, rntm *Runtime) Object
+type CreatorFunc func(id Identifier, parent Identifier, rntm *Runtime) Object
 
 func NewRuntime(ds *datastore.Datastore) *Runtime {
 
@@ -160,7 +160,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 
 	//process the AST into usable objects
-	obj, err := self.buildObject(ast.Object, Identifier{}, make([]*astObject, 0))
+	obj, err := self.buildObject(ast.Object, Identifier{}, "", make([]*astObject, 0))
 	if err != nil {
 		return utils.StackError(err, "Unable to parse dml code")
 		//TODO clear the database entries...
@@ -555,22 +555,24 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	}
 
 	//we now register the imported ast as a creator
-	creator := func(name string, parent Identifier, rntm *Runtime) Object {
+	creator := func(id Identifier, parent Identifier, rntm *Runtime) Object {
 		//to assgn the correct object name we need to override the ID pasignment. This must be available
 		//on object build time as the identifier is created with it
 		idSet := false
 		for _, astAssign := range ast.Object.Assignments {
 			if astAssign.Key[0] == "id" {
-				*astAssign.Value.String = name
+				*astAssign.Value.String = id.Name
 				idSet = true
 				break
 			}
 		}
 		if !idSet {
-			return nil
+			val := &astValue{String: &id.Name}
+			asgn := &astAssignment{Key: []string{"id"}, Value: val}
+			ast.Object.Assignments = append(ast.Object.Assignments, asgn)
 		}
 
-		obj, _ := rntm.buildObject(ast.Object, parent, make([]*astObject, 0))
+		obj, _ := rntm.buildObject(ast.Object, parent, id.Uuid, make([]*astObject, 0))
 		return obj
 	}
 
@@ -588,8 +590,8 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	return self.RegisterObjectCreator(name, creator)
 }
 
-//due to recursive nature og objects we need an extra function
-func (self *Runtime) buildObject(astObj *astObject, parent Identifier, recBehaviours []*astObject) (Object, error) {
+//due to recursive nature of objects we need an extra function
+func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid string, recBehaviours []*astObject) (Object, error) {
 
 	//see if we can build it, and do so if possible
 	creator, ok := self.creators[astObj.Identifier]
@@ -604,25 +606,18 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, recBehavi
 			objName = *astAssign.Value.String
 		}
 	}
-	if objName == "" {
-		return nil, fmt.Errorf("we need the ID proeprty, otherwise everything falls appart")
+	
+	//create the object ID and check for uniqueness
+	id := Identifier{Parent: parent.Hash(), Name: objName, Type: astObj.Identifier, Uuid: uuid}
+	_, has := self.objects[id]
+	if has {	
+		return nil, fmt.Errorf("Object with same type (%s) and ID (%s) already exists", id.Type, id.Name)
 	}
 
-	//setup the object including datastore and check for uniqueness
-	obj := creator(objName, parent, self)
+	//setup the object including datastore
+	obj := creator(id, parent, self)
 	obj.SetDataType(MustNewDataType(astObj))
 	obj.SetRefcount(self.initialObjRefcount)
-	if parent.Valid() {
-		objId := obj.Id()
-		//if unique in the parents childrens we are generaly unique, as parent is part of our ID
-		for _, sibling := range self.objects[parent].GetChildren() {
-			if sibling.Id().Type == objId.Type &&
-				sibling.Id().Name == objId.Name {
-
-				return nil, fmt.Errorf("Object with same type (%s) and ID (%s) already exists", objId.Type, objId.Name)
-			}
-		}
-	}
 
 	//check if data or behaviour
 	_, isBehaviour := obj.(Behaviour)
@@ -635,7 +630,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, recBehavi
 
 	//expose to javascript
 	jsobj := obj.GetJSObject()
-	if parent.Valid() {
+	if parent.Valid() && objName != "" {
 		parentObj := self.objects[parent]
 		parentObj.GetJSObject().Set(objName, jsobj)
 	}
@@ -699,7 +694,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, recBehavi
 		for _, astChild := range astObj.Objects {
 
 			//build the child
-			child, err := self.buildObject(astChild, obj.Id(), localRecBehaviours)
+			child, err := self.buildObject(astChild, obj.Id(), "", localRecBehaviours)
 			if err != nil {
 				return nil, err
 			}
@@ -927,23 +922,17 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 		return fmt.Errorf("object can only be of plain type")
 	}
 	var dt DataType
-	var defaultVal interface{}
 	switch astProp.Type.Pod {
 	case "string":
 		dt = MustNewDataType("string")
-		defaultVal = string("")
 	case "int":
 		dt = MustNewDataType("int")
-		defaultVal = int64(0)
 	case "float":
 		dt = MustNewDataType("float")
-		defaultVal = float64(0.0)
 	case "bool":
 		dt = MustNewDataType("bool")
-		defaultVal = bool(false)
 	case "type":
 		dt = MustNewDataType("type")
-		defaultVal = MustNewDataType("int")
 	}
 
 	var constprop bool = false
@@ -956,7 +945,7 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 			return fmt.Errorf("Constant property needs to have a value assigned")
 		}
 
-		err := obj.AddProperty(astProp.Key, dt, defaultVal, constprop)
+		err := obj.AddProperty(astProp.Key, dt, dt.GetDefaultValue(), constprop)
 		if err != nil {
 			return utils.StackError(err, "Cannot add property to object")
 		}

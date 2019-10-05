@@ -56,10 +56,9 @@ type object struct {
 	jsobj *goja.Object
 }
 
-func NewObject(parent Identifier, name string, oType string, rntm *Runtime) *object {
+func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
 
 	jsobj := rntm.jsvm.NewObject()
-	id := Identifier{parent.Hash(), oType, name}
 
 	//the versionmanager to access the datastores correctly
 	versManager := datastore.NewVersionManager(id.Hash(), rntm.datastore)

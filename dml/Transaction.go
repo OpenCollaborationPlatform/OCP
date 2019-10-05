@@ -458,9 +458,9 @@ type transactionBehaviour struct {
 	current       datastore.Value
 }
 
-func NewTransactionBehaviour(name string, parent Identifier, rntm *Runtime) Object {
+func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) Object {
 
-	behaviour, _ := NewBehaviour(parent, name, `Transaction`, rntm)
+	behaviour, _ := NewBehaviour(id, parent, rntm)
 
 	//get the datastores
 	set, err := rntm.datastore.GetOrCreateSet(datastore.ValueType, false, behaviour.Id().Hash())

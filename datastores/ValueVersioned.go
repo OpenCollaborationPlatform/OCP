@@ -976,13 +976,18 @@ func (self *ValueVersioned) IsValid() bool {
 	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
-		for _, bkey := range append(self.setkey, self.key) {
-			bucket = bucket.Bucket(bkey)
-		}
 		if bucket == nil {
 			result = false
 			return nil
 		}
+		for _, bkey := range append(self.setkey, self.key) {
+			bucket = bucket.Bucket(bkey)
+			if bucket == nil {
+				result = false
+				return nil
+			}
+		}
+
 		cur := bucket.Get(itob(CURRENT))
 		if cur == nil || btoi(cur) == INVALID {
 			result = false
