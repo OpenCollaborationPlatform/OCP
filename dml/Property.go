@@ -21,7 +21,7 @@ type Property interface {
 	GetValue() interface{}
 }
 
-func NewProperty(name string, dtype DataType, default_value interface{}, set *datastore.ValueVersionedSet, vm *goja.Runtime, constprop bool) (Property, error) {
+func NewProperty(name string, dtype DataType, default_value interface{}, set *datastore.ValueVersionedSet, rntm *Runtime, constprop bool) (Property, error) {
 
 	err := dtype.MustBeTypeOf(default_value)
 	if err != nil {
@@ -75,8 +75,8 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 	}
 
 	//add all required events
-	prop.AddEvent("onBeforeChange", NewEvent(vm.NewObject(), vm, dtype))
-	prop.AddEvent("onChanged", NewEvent(vm.NewObject(), vm, dtype))
+	prop.AddEvent("onBeforeChange", NewEvent(rntm.jsvm.NewObject(), rntm, dtype))
+	prop.AddEvent("onChanged", NewEvent(rntm.jsvm.NewObject(), rntm, dtype))
 
 	return prop, nil
 }

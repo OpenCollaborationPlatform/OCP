@@ -390,7 +390,7 @@ func TestTransactionAbort(t *testing.T) {
 			rntm.mainObj.FixStateAsVersion()
 			store.Commit()
 
-			Convey("Changing data of non-transactino subobject should work", func() {
+			Convey("Changing data of non-transaction subobject should work", func() {
 
 				code = `Document.DocumentObject.p=3;`
 				_, err := rntm.RunJavaScript("User1", code)

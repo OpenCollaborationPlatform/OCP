@@ -72,6 +72,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	rntm.RegisterObjectCreator("Data", NewData)
 	rntm.RegisterObjectCreator("Variant", NewVariant)
 	rntm.RegisterObjectCreator("Vector", NewVector)
+	rntm.RegisterObjectCreator("Map", NewMap)
 	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
 
 	//setup globals
@@ -254,31 +255,17 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 	}
 
 	err = self.postprocess(false)
+	if err != nil {
+		return nil, err
+	}
 
 	//check if it is a dml object and convert to dml object
-	obj, ok := val.(*goja.Object)
-	if ok {
-		
-		fncobj := obj.Get("Identifier")
-		if fncobj != nil {
-			fnc := fncobj.Export()
-			wrapper, ok := fnc.(func(goja.FunctionCall) goja.Value)
-			if ok {
-				encoded := wrapper(goja.FunctionCall{})
-				id, err := IdentifierFromEncoded(encoded.Export().(string))
-				if err != nil {
-					return nil, utils.StackError(err, "Unable to convert returned object from javascript")
-				}
-				obj, ok := self.objects[id]
-				if !ok {
-					return nil, utils.StackError(err, "Cannot find object returned from javascript")
-				}
-				return obj, nil
-	
-			} else {
-				return nil, fmt.Errorf("Javascript returned object, but it has errous Identifier method")
-			}
-		}
+	obj, err := objectFromJSValue(val, self)
+	if err != nil {
+		return nil, err
+	}
+	if obj != nil {
+		return obj, err
 	}
 
 	//return default values
@@ -670,7 +657,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 		}
 		obj.AddMethod(*fnc.Name, method)
 	}
-	obj.SetupJSMethods(self.jsvm, jsobj)
+	obj.SetupJSMethods(self, jsobj)
 
 	//go on with all subobjects (if not behaviour)
 	if !isBehaviour {
@@ -886,7 +873,7 @@ func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) 
 	}
 
 	//build the event
-	evt := NewEvent(parent.GetJSObject(), self.jsvm, args...)
+	evt := NewEvent(parent.GetJSObject(), self, args...)
 
 	//and see if we should add a default callback
 	if astEvt.Default != nil {

@@ -18,14 +18,14 @@ type Event interface {
 	RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error
 }
 
-func NewEvent(jsparent *goja.Object, vm *goja.Runtime, args ...DataType) Event {
+func NewEvent(jsparent *goja.Object, rntm *Runtime, args ...DataType) Event {
 
 	evt := &event{methodHandler: NewMethodHandler(),
 		parameterTypes: args,
 		callbacks:      make([]EventCallback, 0)}
 
 	//now the js object
-	evtObj := vm.NewObject()
+	evtObj := rntm.jsvm.NewObject()
 
 	emitMethod, _ := NewMethod(evt.Emit)
 	evt.AddMethod("Emit", emitMethod)
@@ -33,9 +33,9 @@ func NewEvent(jsparent *goja.Object, vm *goja.Runtime, args ...DataType) Event {
 	evt.AddMethod("RegisterCallback", registerMethod)
 
 	evt.jsobj = evtObj
-	evt.jsvm = vm
+	evt.jsvm = rntm.jsvm
 	evt.jsparent = jsparent
-	evt.SetupJSMethods(vm, evtObj)
+	evt.SetupJSMethods(rntm, evtObj)
 
 	return evt
 }
@@ -171,10 +171,18 @@ func (self *eventHandler) Events() []string {
 }
 
 //little helper to extract the call arguments
-func extractArgs(values []goja.Value) []interface{} {
+func extractArgs(values []goja.Value, rntm *Runtime) []interface{} {
 
 	res := make([]interface{}, len(values))
 	for i, val := range values {
+		//check if it is a goja object
+		obj, _ := objectFromJSValue(val, rntm)
+		if obj != nil {
+			res[i] = obj
+			continue
+		}
+		
+		//no, normal values!
 		res[i] = val.Export()
 	}
 	return res

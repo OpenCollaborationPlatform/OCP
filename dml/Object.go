@@ -33,6 +33,9 @@ type Object interface {
 	//type handling (full type desciption)
 	DataType() DataType
 	SetDataType(DataType)
+	
+	//Genertic
+	GetRuntime() *Runtime
 }
 
 //the most basic implementation of an dml Object. It is intended as dml grouping
@@ -95,7 +98,7 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
 	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode))
 	
 	//add default events
-	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm.jsvm, MustNewDataType("string")))
+	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm, MustNewDataType("string")))
 
 	return &obj
 }
@@ -174,7 +177,7 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	if !ok {
 		return fmt.Errorf("Unable to create database set")
 	}
-	prop, err := NewProperty(name, dtype, default_val, vSet, self.GetJSRuntime(), constprop)
+	prop, err := NewProperty(name, dtype, default_val, vSet, self.GetRuntime(), constprop)
 	if err != nil {
 		return err
 	}
@@ -187,4 +190,8 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	})
 	
 	return nil
+}
+
+func (self *object) GetRuntime() *Runtime {
+	return self.rntm
 }

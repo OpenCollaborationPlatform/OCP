@@ -117,7 +117,7 @@ type MethodHandler interface {
 	GetMethod(name string) Method
 	Methods() []string
 
-	SetupJSMethods(vm *goja.Runtime, obj *goja.Object) error
+	SetupJSMethods(vm *Runtime, obj *goja.Object) error
 }
 
 func NewMethodHandler() methodHandler {
@@ -152,7 +152,7 @@ func (self *methodHandler) Methods() []string {
 	return meths
 }
 
-func (self *methodHandler) SetupJSMethods(vm *goja.Runtime, obj *goja.Object) error {
+func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error {
 
 	keys := obj.Keys()
 	for name, method := range self.methods {
@@ -175,7 +175,7 @@ func (self *methodHandler) SetupJSMethods(vm *goja.Runtime, obj *goja.Object) er
 		if isJS {
 			//we only need to setup the runtime and object
 			jsmethod.jsobj = obj
-			jsmethod.jsvm = vm
+			jsmethod.jsvm = rntm.jsvm
 			obj.Set(name, jsmethod.fnc)
 
 		} else {
@@ -183,17 +183,15 @@ func (self *methodHandler) SetupJSMethods(vm *goja.Runtime, obj *goja.Object) er
 			wrapped := func(jsargs goja.FunctionCall) goja.Value {
 
 				//js args to go args
-				args := make([]interface{}, len(jsargs.Arguments))
-				for i, jsarg := range jsargs.Arguments {
-					args[i] = jsarg.Export()
-				}
+				args := extractArgs(jsargs.Arguments, rntm)
+
 				//call the function
 				res := thisMethod.Call(args...)
 
 				//check if we have a error and if it is not nil to panic for goja
 				err, ok := res.(error)
 				if ok && err != nil {
-					panic(vm.ToValue(err.Error()))
+					panic(rntm.jsvm.ToValue(err.Error()))
 				}
 
 				//object has special return value
@@ -203,9 +201,9 @@ func (self *methodHandler) SetupJSMethods(vm *goja.Runtime, obj *goja.Object) er
 				}
 
 				//go return values to js return values
-				return vm.ToValue(res)
+				return rntm.jsvm.ToValue(res)
 			}
-			jsmethod := vm.ToValue(wrapped)
+			jsmethod := rntm.jsvm.ToValue(wrapped)
 			obj.Set(name, jsmethod)
 		}
 	}

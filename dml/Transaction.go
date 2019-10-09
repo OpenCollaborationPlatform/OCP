@@ -209,7 +209,7 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 
 	//build js object
 	mngr.jsobj = rntm.jsvm.NewObject()
-	err = mngr.SetupJSMethods(mngr.rntm.jsvm, mngr.jsobj)
+	err = mngr.SetupJSMethods(mngr.rntm, mngr.jsobj)
 	if err != nil {
 		return &TransactionManager{}, utils.StackError(err, "Unable to expose TransactionMAnager methods to javascript")
 	}
@@ -479,10 +479,10 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) Ob
 	tbhvr.AddMethod("DependendObjects", MustNewMethod(tbhvr.defaultDependendObjects)) //return array of objects that need also to be added to transaction
 
 	//add default events
-	tbhvr.AddEvent(`onOpen`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))          //called when a new transaction was opened
-	tbhvr.AddEvent(`onParticipation`, NewEvent(behaviour.GetJSObject(), rntm.jsvm)) //called when added to a transaction
-	tbhvr.AddEvent(`onClosing`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))       //called when transaction, to which the parent was added, is closed (means finished)
-	tbhvr.AddEvent(`onFailure`, NewEvent(behaviour.GetJSObject(), rntm.jsvm))       //called when adding to transaction failed, e.g. because already in annother transaction
+	tbhvr.AddEvent(`onOpen`, NewEvent(behaviour.GetJSObject(), rntm))          //called when a new transaction was opened
+	tbhvr.AddEvent(`onParticipation`, NewEvent(behaviour.GetJSObject(), rntm)) //called when added to a transaction
+	tbhvr.AddEvent(`onClosing`, NewEvent(behaviour.GetJSObject(), rntm))       //called when transaction, to which the parent was added, is closed (means finished)
+	tbhvr.AddEvent(`onFailure`, NewEvent(behaviour.GetJSObject(), rntm))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
 	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction))
