@@ -636,33 +636,15 @@ func (self *ListVersioned) Add(value interface{}) (ListEntry, error) {
 
 func (self *ListVersioned) GetEntries() ([]ListEntry, error) {
 
-	entries := make([]ListEntry, 0)
+	vals, err := self.kvset.getValues()
+	if err != nil {
+		return []ListEntry{}, err
+	}
 
-	//iterate over all entries...
-	err := self.kvset.db.View(func(tx *bolt.Tx) error {
-
-		bucket := tx.Bucket(self.kvset.dbkey)
-		for _, bkey := range self.kvset.setkey {
-			bucket = bucket.Bucket(bkey)
-		}
-
-		//collect the entries
-		err := bucket.ForEach(func(k []byte, v []byte) error {
-
-			//don't use VERSIONS and CURRENT
-			if !bytes.Equal(k, itob(VERSIONS)) && v == nil {
-				//copy the key as it is not valid outside for each
-				var key = make([]byte, len(k))
-				copy(key, k)
-
-				//build the value and add to the list
-				value := ValueVersioned{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, key}
-				entries = append(entries, &listVersionedEntry{value})
-			}
-			return nil
-		})
-		return err
-	})
+	entries := make([]ListEntry, len(vals))	
+	for i, val := range vals {
+		entries[i] = &listVersionedEntry{val}
+	}
 
 	return entries, err
 }

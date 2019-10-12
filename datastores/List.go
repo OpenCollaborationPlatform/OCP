@@ -268,12 +268,18 @@ func (self *List) GetEntries() ([]ListEntry, error) {
 		//collect the entries
 		err := bucket.ForEach(func(k []byte, v []byte) error {
 
+			//ceck if it is a valid key or if it was removed
+			value := Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, k}
+			if !value.IsValid() {
+				return nil
+			}
+
 			//copy the key as it is not valid outside for each
 			var key = make([]byte, len(k))
 			copy(key, k)
+			value.key = key
 
-			//build the value and add to the list
-			value := Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, key}
+			//add to the list			
 			entries = append(entries, &listEntry{value})
 			return nil
 		})

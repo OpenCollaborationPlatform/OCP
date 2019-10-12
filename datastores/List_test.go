@@ -209,9 +209,17 @@ func TestListVersionedData(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(strvalue, ShouldEqual, "hello")
 
+			entries, err := list.GetEntries()
+			So(err, ShouldBeNil)
+			So(len(entries), ShouldEqual, 2)
+			
 			So(entry1.Remove(), ShouldBeNil)
 			_, err = entry1.Read()
 			So(err, ShouldNotBeNil)
+			
+			entries, err = list.GetEntries()
+			So(err, ShouldBeNil)
+			So(len(entries), ShouldEqual, 1)
 		})
 
 		Convey("and versioning of that listVersioned data works well", func() {
@@ -244,8 +252,8 @@ func TestListVersionedData(t *testing.T) {
 			//we rebuild the list entries
 			entries, err := list.GetEntries()
 			So(err, ShouldBeNil)
-			So(len(entries), ShouldEqual, 2)
-			entry2 := entries[1]
+			So(len(entries), ShouldEqual, 1)
+			entry2 := entries[0]
 
 			So(entry2.Write("bye"), ShouldBeNil)
 
@@ -266,12 +274,14 @@ func TestListVersionedData(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(val.(string), ShouldEqual, "bye")
 
+			//when version is checked out no change is allowed
 			_, err = list.Add(1)
 			So(err, ShouldNotBeNil)
 			version, err := lset.FixStateAsVersion()
 			So(err, ShouldNotBeNil)
 			So(version.IsValid(), ShouldBeFalse)
 
+			//checking out HEAD allows change
 			err = lset.LoadVersion(VersionID(HEAD))
 			So(err, ShouldBeNil)
 			So(entry2.Remove(), ShouldBeNil)
@@ -282,7 +292,6 @@ func TestListVersionedData(t *testing.T) {
 			So(lset.LoadVersion(version), ShouldBeNil)
 			err = lset.LoadVersion(VersionID(HEAD))
 			So(err, ShouldBeNil)
-
 		})
 
 		Convey("Finally versions must be removable", func() {
@@ -308,8 +317,8 @@ func TestListVersionedData(t *testing.T) {
 
 			entries, err := list.GetEntries()
 			So(err, ShouldBeNil)
-			So(len(entries), ShouldEqual, 2)
-			entry3 := entries[1]
+			So(len(entries), ShouldEqual, 1)
+			entry3 := entries[0]
 			So(entry3.Write(9.38), ShouldBeNil)
 			lset.ResetHead()
 			data, err := entry3.Read()

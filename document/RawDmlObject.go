@@ -16,9 +16,9 @@ type Raw struct {
 	value *datastore.ValueVersioned
 }
 
-func NewRawDmlObject(name string, parent dml.Identifier, rntm *dml.Runtime) dml.Object {
+func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) dml.Object {
 
-	base := dml.NewDataBaseClass(name, "Raw", parent, rntm)
+	base := dml.NewDataBaseClass(id, parent, rntm)
 
 	//get the db entry
 	set, _ := base.GetDatabaseSet(datastore.ValueType)

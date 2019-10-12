@@ -847,6 +847,19 @@ func (self *ValueVersionedSet) getKeys() ([][]byte, error) {
 	return keys, nil
 }
 
+func (self *ValueVersionedSet) getValues() ([]ValueVersioned, error) {
+
+	result := make([]ValueVersioned, 0)
+	values := self.collectValueVersioneds()
+	for _, value := range values {
+		if value.IsValid() {
+			result = append(result, value)
+		}
+	}
+
+	return result, nil
+}
+
 /*
  * Key-ValueVersioned functions
  * ********************************************************************************
