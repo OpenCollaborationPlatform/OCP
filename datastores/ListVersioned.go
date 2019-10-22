@@ -702,3 +702,8 @@ func (self *listVersionedEntry) IsValid() bool {
 func (self *listVersionedEntry) Remove() error {
 	return self.value.remove()
 }
+
+func (self *listVersionedEntry) Id() uint64 {
+	return btoi(self.value.key)
+}
+

@@ -303,6 +303,7 @@ type ListEntry interface {
 	ReadType(value interface{}) error
 	IsValid() bool
 	Remove() error
+	Id() uint64
 }
 
 type listEntry struct {
@@ -327,4 +328,8 @@ func (self *listEntry) IsValid() bool {
 
 func (self *listEntry) Remove() error {
 	return self.value.remove()
+}
+
+func (self *listEntry) Id() uint64 {
+	return btoi(self.value.key)
 }

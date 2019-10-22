@@ -35,7 +35,7 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) Object {
 	}
 
 	//add properties
-	vec.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), true)
+	vec.AddProperty("type", MustNewDataType("type"), MustNewDataType("none"), true)
 
 	//add methods
 	vec.AddMethod("Length", MustNewMethod(vec.Length))

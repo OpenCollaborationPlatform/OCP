@@ -64,8 +64,8 @@ func MustNewDataType(val interface{}) DataType {
 
 func (self DataType) IsValid() bool {
 
-	//as every strange string is interpretet as complex datatype and we cannot
-	//easily check it is a valid complex  we only check if string is empty
+	//as every else strange string is interpretet as complex datatype and we cannot
+	//easily check it is a valid complex, hence we only check if string is empty
 	return self.value != ""
 	
 }
@@ -153,6 +153,7 @@ func (self DataType) complexAsAst() (*astObject, error) {
 	return astObj, nil
 }
 
+func (self DataType) IsNone() bool { return self.value == "none" }
 func (self DataType) IsString() bool { return self.value == "string" }
 func (self DataType) IsInt() bool    { return self.value == "int" }
 func (self DataType) IsFloat() bool  { return self.value == "float" }
@@ -180,7 +181,7 @@ func (self DataType) GetDefaultValue() interface{} {
 	case "bool":
 		return bool(false)
 	case "type":
-		return MustNewDataType("int")
+		return MustNewDataType("none")
 	}
 
 	//object and complex return "none" object	

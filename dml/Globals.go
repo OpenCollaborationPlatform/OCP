@@ -96,3 +96,30 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 
 	return obj, nil
 }
+
+//Construct a data object from encoded description (as provided by type property)
+//and a given identifier
+func LoadObject(rntm *Runtime, dt DataType, id Identifier) (Object, error) {
+
+	if !dt.IsComplex() {
+		return nil, fmt.Errorf("Not a complex datatype which can be build into Object")
+	}
+
+	astObj, err := dt.complexAsAst()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to build object from type description")
+	}
+
+	//build the object (without parent, but with uuid)
+	obj, err := rntm.buildObject(astObj, Identifier{}, id.Uuid, make([]*astObject, 0))
+
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to create subobject")
+	}
+	
+	if !obj.Id().Equal(id) {
+		return nil, fmt.Errorf("Loaded object is faulty: Identifiers do not match")
+	}
+
+	return obj, nil
+}

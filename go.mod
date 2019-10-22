@@ -25,6 +25,7 @@ require (
 	github.com/go-check/check v0.0.0-20190902080502-41f04d3bba15 // indirect
 	github.com/go-delve/delve v1.3.1 // indirect
 	github.com/go-sourcemap/sourcemap v2.1.2+incompatible // indirect
+	github.com/gonum/graph v0.0.0-20190426092945-678096d81a4b
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/pprof v0.0.0-20190908185732-236ed259b199 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20190915194858-d3ddacdb130f // indirect
@@ -109,6 +110,7 @@ require (
 	golang.org/x/sys v0.0.0-20190924154521-2837fb4f24fe // indirect
 	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
 	golang.org/x/tools v0.0.0-20190925020647-22afafe3322a // indirect
+	gonum.org/v1/gonum v0.0.0-20191012094511-9fd3ad46a789
 	google.golang.org/api v0.10.0 // indirect
 	google.golang.org/appengine v1.6.3 // indirect
 	google.golang.org/genproto v0.0.0-20190916214212-f660b8655731 // indirect

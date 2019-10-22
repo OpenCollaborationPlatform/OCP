@@ -30,8 +30,8 @@ func NewMap(id Identifier, parent Identifier, rntm *Runtime) Object {
 	}
 
 	//add properties
-	mapI.AddProperty("key", MustNewDataType("type"), MustNewDataType("int"), true)
-	mapI.AddProperty("value", MustNewDataType("type"), MustNewDataType("int"), true)
+	mapI.AddProperty("key", MustNewDataType("type"), MustNewDataType("none"), true)
+	mapI.AddProperty("value", MustNewDataType("type"), MustNewDataType("none"), true)
 
 	//add methods
 	mapI.AddMethod("Length", MustNewMethod(mapI.Length))
