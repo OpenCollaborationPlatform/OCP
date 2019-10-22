@@ -87,7 +87,7 @@ func (self *vector) Load() error {
 				if !ok {
 
 					//we made sure the object does not exist. We need to load it
-					obj, err := ConstructObject(self.rntm, dt, id.Name)
+					obj, err := LoadObject(self.rntm, dt, id)
 					if err != nil {
 						return utils.StackError(err, "Unable to load object for vector: construction failed")
 					}
