@@ -121,6 +121,27 @@ func TestValueBasic(t *testing.T) {
 
 			So(result, ShouldEqual, data)
 		})
+		
+		Convey("Complex structs are usable", func() {
+			
+			name := makeSetFromString("test")
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set := genset.(*ValueSet)
+			value, _ := set.GetOrCreateValue([]byte("structtest"))
+
+			type myStruct struct {
+				First interface{}
+				Second interface{}
+			}
+			
+			val := myStruct{float64(1), float64(2)}
+			So(value.Write(val), ShouldBeNil)
+			
+			var val2 myStruct 
+			So(value.ReadType(&val2),ShouldBeNil)
+			So(val2, ShouldResemble, val)
+		})
 	})
 }
 

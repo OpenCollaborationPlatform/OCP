@@ -90,6 +90,14 @@ func (self DataType) IsPOD() bool {
 
 func (self DataType) MustBeTypeOf(val interface{}) error {
 
+	//nil is special
+	if val == nil {
+		if self.IsNone() {
+			return nil
+		}
+		return fmt.Errorf("wrong object type, got '%T' and expected 'nil'", val)
+	}
+
 	//check first if it is a object (as this includes many subtypes switch does not work)
 	obj, ok := val.(Object)
 	if ok {
@@ -104,7 +112,7 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 		}
 		return fmt.Errorf("wrong object type, expected vs. received\n %v\n%v", self.AsString(), obj.DataType().AsString())
 	}
-
+	
 	//check if the type is correct
 	switch val.(type) {
 	case int, int32, int64:
@@ -166,7 +174,8 @@ func (self DataType) IsComplex() bool {
 		!self.IsFloat() &&
 		!self.IsBool() &&
 		!self.IsObject() &&
-		!self.IsType()
+		!self.IsType() &&
+		!self.IsNone()
 }
 
 func (self DataType) GetDefaultValue() interface{} {

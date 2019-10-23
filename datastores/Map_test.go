@@ -374,5 +374,26 @@ func TestMapVersionedData(t *testing.T) {
 			So(mp.ReadType("key9", &res), ShouldBeNil)
 			So(res, ShouldEqual, 3)
 		})
+		
+		Convey("Complex structs are usable in maps", func() {
+			
+			name := makeSetFromString("test")
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			mset := genset.(*MapVersionedSet)
+			mp, _ := mset.GetOrCreateMap([]byte("mymapVersioned"))
+
+			type myStruct struct {
+				First interface{}
+				Second interface{}
+			}
+			
+			val := myStruct{"hello", "world"}
+			So(mp.Write(1, val), ShouldBeNil)
+			
+			var val2 myStruct 
+			So(mp.ReadType(1, &val2),ShouldBeNil)
+			So(val2, ShouldResemble, val)
+		})
 	})
 }
