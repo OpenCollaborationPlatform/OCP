@@ -1,5 +1,3 @@
-//+build test
-
 package dml
 
 import (
@@ -14,12 +12,13 @@ import (
 
 func TestPODGraph(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Loading dml code into runtime including pod graph types,", t, func() {
 
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
+		
+		//create the datastore
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
@@ -54,19 +53,62 @@ func TestPODGraph(t *testing.T) {
 			Convey("And adding edges works as expected", func() {
 				
 				code = `	toplevel.IntGraph.NewEdge(1, 2)
-					toplevel.IntGraph.NewEdge(2, 4)`
+					toplevel.IntGraph.NewEdge(2, 4)
+					toplevel.IntGraph.NewEdge(4, 1)`
 				_, err := rntm.RunJavaScript("", code)
 				So(err, ShouldBeNil)
 
-				code = `toplevel.IntGraph.HasEdge(1,2)`
+				code = `toplevel.IntGraph.HasEdgeBetween(1,2)`
 				val, err := rntm.RunJavaScript("", code)
 				So(err, ShouldBeNil)
 				So(val, ShouldBeTrue)
 
-				code = `toplevel.IntGraph.HasEdge(2,1)`
+				code = `toplevel.IntGraph.HasEdgeBetween(2,1)`
 				val, err = rntm.RunJavaScript("", code)
 				So(err, ShouldBeNil)
 				So(val, ShouldBeFalse)
+
+				code = `toplevel.IntGraph.HasEdgeBetween(1,4)`
+				val, err = rntm.RunJavaScript("", code)
+				So(err, ShouldBeNil)
+				So(val, ShouldBeFalse)
+
+				code = `toplevel.IntGraph.HasEdgeBetween(4,1)`
+				val, err = rntm.RunJavaScript("", code)
+				So(err, ShouldBeNil)
+				So(val, ShouldBeTrue)
+				
+				Convey("Removing a edge works as expected", func() {
+					
+					code = `	toplevel.IntGraph.RemoveEdgeBetween(1,2);
+							toplevel.IntGraph.HasEdgeBetween(1,2)`
+					val, err = rntm.RunJavaScript("", code)
+					So(err, ShouldBeNil)
+					So(val, ShouldBeFalse)
+				})
+
+				Convey("Removing a node works", func() {
+					
+					code = `	toplevel.IntGraph.RemoveNode(2);
+							toplevel.IntGraph.Nodes()`
+					val, err = rntm.RunJavaScript("", code)
+					So(err, ShouldBeNil)
+					So(val, ShouldResemble, []interface{}{int64(1), int64(4)})
+					
+					Convey("and does also remove all relevant edges", func() {
+						
+						code = `	toplevel.IntGraph.HasEdgeBetween(1,2)`
+						_, err = rntm.RunJavaScript("", code)
+						So(err, ShouldNotBeNil)
+						code = `	toplevel.IntGraph.HasEdgeBetween(2,4)`
+						_, err = rntm.RunJavaScript("", code)
+						So(err, ShouldNotBeNil)
+						code = `	toplevel.IntGraph.HasEdgeBetween(4,1)`
+						val, err = rntm.RunJavaScript("", code)
+						So(err, ShouldBeNil)
+						So(val, ShouldBeTrue)
+					})
+				})
 			})
 		})
 	})

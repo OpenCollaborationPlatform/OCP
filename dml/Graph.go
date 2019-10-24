@@ -7,6 +7,7 @@ import (
 	
 	gonum "gonum.org/v1/gonum/graph"
 	"gonum.org/v1/gonum/graph/simple"
+	uuid "github.com/satori/go.uuid"
 
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
@@ -50,13 +51,15 @@ func NewGraph(id Identifier, parent Identifier, rntm *Runtime) Object {
 	//add methods
 	gr.AddMethod("AddNode", MustNewMethod(gr.AddNode))
 	gr.AddMethod("NewNode", MustNewMethod(gr.NewNode))
-	gr.AddMethod("RemoveNode", MustNewMethod(gr.NewNode))
+	gr.AddMethod("RemoveNode", MustNewMethod(gr.RemoveNode))
+	gr.AddMethod("HasNode", MustNewMethod(gr.HasNode))
 	gr.AddMethod("Nodes", MustNewMethod(gr.Nodes))
 	gr.AddMethod("AddEdge", MustNewMethod(gr.AddEdge))
 	gr.AddMethod("NewEdge", MustNewMethod(gr.NewEdge))
 	gr.AddMethod("RemoveEdge", MustNewMethod(gr.RemoveEdge))
 	gr.AddMethod("RemoveEdgeBetween", MustNewMethod(gr.RemoveEdgeBetween))
 	gr.AddMethod("HasEdge", MustNewMethod(gr.HasEdge))
+	gr.AddMethod("HasEdgeBetween", MustNewMethod(gr.HasEdgeBetween))
 	gr.AddMethod("Edge", MustNewMethod(gr.Edge))
 
 	return gr
@@ -78,7 +81,7 @@ func (self graphNode) ID() int64 {
 	return self.id
 }
 
-func (self *graph) getGonumDirected() gonum.Directed {
+func (self *graph) getGonumDirected() (gonum.Directed, map[interface{}] gonum.Node) {
 	
 	directed := simple.NewDirectedGraph()
 	keys, _ := self.nodeData.GetKeys()
@@ -105,7 +108,16 @@ func (self *graph) getGonumDirected() gonum.Directed {
 		directed.SetEdge(graphedge)
 	}
 	
-	return directed
+	return directed, mapper
+}
+
+func (self *graph) getGonumGraph() (gonum.Graph, map[interface{}] gonum.Node) {
+	directed, mapper := self.getGonumDirected()
+	if !self.isDirected() {
+		return &gonum.Undirect{directed}, mapper
+	}
+	
+	return directed, mapper
 }
 
 //inverse of keyToDB
@@ -172,6 +184,19 @@ func (self *graph) Nodes() ([]interface{}, error) {
 	return result, nil
 }
 
+func (self *graph) HasNode(node interface{}) (bool, error) {
+
+	//check key type
+	dt := self.nodeDataType()
+	err := dt.MustBeTypeOf(node)
+	if err != nil {
+		return false, utils.StackError(err, "Wrong type for node")
+	}
+
+	dbkey := self.typeToDB(node, dt)
+	return self.nodeData.HasKey(dbkey), nil
+}
+
 
 func (self *graph) AddNode(value interface{}) error {
 
@@ -216,20 +241,42 @@ func (self *graph) NewNode() (interface{}, error) {
 
 func (self *graph) RemoveNode(value interface{}) error {
 
-	//check key type
-	dt := self.nodeDataType()
-	err := dt.MustBeTypeOf(value)
-	if err != nil {
-		return utils.StackError(err, "Cannot remove node, has wrong type")
+	if has, _ := self.HasNode(value); !has {
+		return fmt.Errorf("No such node available, cannot remove")
 	}
-
+	
+	dt := self.nodeDataType()
 	if dt.IsComplex() || dt.IsObject() {
 		obj := value.(Object)
 		obj.DecreaseRefcount()
 	}
 
 	dbentry := self.typeToDB(value, dt)
-	return self.nodeData.Remove(dbentry)
+	err := self.nodeData.Remove(dbentry)
+	if err != nil {
+		return utils.StackError(err, "unable to remove node from graph")
+	}
+	
+	//remove all edges that connect to this node
+	keys, err := self.edgeData.GetKeys()
+	if err != nil {
+		return fmt.Errorf("Unable to access edges")
+	}
+	for _, key := range keys {
+
+		//check if this is the edge
+		data, err := self.edgeData.Read(key)
+		if err != nil {
+			return utils.StackError(err, "Unable to access edge, wrong type stored")
+		}
+		edge := data.(*graphEdge)
+		
+		if 	(edge.Source == value || edge.Target == value) { 
+			self.edgeData.Remove(key)
+		}
+	}
+	
+	return nil
 }
 
 func (self *graph) AddEdge(source, target, value interface{}) error {
@@ -242,26 +289,20 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 	}
 	
 	//check if we have the two nodes
-	ndt := self.nodeDataType()
-	err = ndt.MustBeTypeOf(source)
+	hassource, err := self.HasNode(source)
 	if err != nil {
 		return utils.StackError(err, "Source node is of wrong type")
 	}
-	key := self.typeToDB(source, ndt)
-	if !self.nodeData.HasKey(key) {
-		return fmt.Errorf("Source node not available in graph")
-	}
-	err = ndt.MustBeTypeOf(target)
+	hastarget, err := self.HasNode(target)
 	if err != nil {
-		return utils.StackError(err, "Source node is of wrong type")
+		return utils.StackError(err, "Target node is of wrong type")
 	}
-	key = self.typeToDB(target, ndt)
-	if !self.nodeData.HasKey(key) {
-		return fmt.Errorf("Target node not available in graph")
+	if !hassource || !hastarget {
+		return fmt.Errorf("Source and target nodes must be available, but are not")
 	}
 
 	//check if edge already exists
-	if has, _ := self.HasEdge(source, target); has {
+	if has, _ := self.HasEdgeBetween(source, target); has {
 		return fmt.Errorf("Edge does already exist")
 	}
 
@@ -284,7 +325,25 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 //creates a new entry with a all new type, returns the new node
 func (self *graph) NewEdge(source, target interface{}) (interface{}, error) {
 
-	//create a new entry
+	//check if we have the two nodes
+	hassource, err := self.HasNode(source)
+	if err != nil {
+		return nil, utils.StackError(err, "Source node is of wrong type")
+	}
+	hastarget, err := self.HasNode(target)
+	if err != nil {
+		return nil, utils.StackError(err, "Target node is of wrong type")
+	}
+	if !hassource || !hastarget {
+		return nil, fmt.Errorf("Source and target nodes must be available, but are not")
+	}
+
+	//check if edge already exists
+	if has, _ := self.HasEdgeBetween(source, target); has {
+		return nil, fmt.Errorf("Edge does already exist")
+	}
+
+	//create a new entry if possible
 	dt := self.edgeDataType()
 	var result interface{}
 	if dt.IsComplex() {
@@ -292,14 +351,25 @@ func (self *graph) NewEdge(source, target interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to append new object to graph: construction failed")
 		}
+		obj.IncreaseRefcount()
 		result = obj
 
+	} else if dt.IsNone() {
+		
+		//use a custom internal scheme
+		result = uuid.NewV4().Bytes()
+	
 	} else {
-		result = dt.GetDefaultValue()
+		//all other type would result in a default value that is always the same,
+		//hence not allowing to add multiple edges. This is stupid!
+		return nil, fmt.Errorf("New edge only workes with complex or none edge type")
 	}
+	
+	//write
+	dbentry := self.typeToDB(result, dt)
+	edge := graphEdge{source, target}
 
-	//write new entry
-	return result, self.AddEdge(source, target, result)
+	return result, self.edgeData.Write(dbentry, edge)
 }
 
 func (self *graph) RemoveEdge(value interface{}) error {
@@ -323,15 +393,17 @@ func (self *graph) RemoveEdge(value interface{}) error {
 
 func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 
-	//check key type
-	ndt := self.nodeDataType()
-	err := ndt.MustBeTypeOf(source)
+	//check if we have the two nodes
+	hassource, err := self.HasNode(source)
 	if err != nil {
-		return utils.StackError(err, "Cannot remove edge, source node has wrong type")
+		return utils.StackError(err, "Source node is of wrong type")
 	}
-	err = ndt.MustBeTypeOf(target)
+	hastarget, err := self.HasNode(target)
 	if err != nil {
-		return utils.StackError(err, "Cannot remove edge, target node has wrong type")
+		return utils.StackError(err, "Target node is of wrong type")
+	}
+	if !hassource || !hastarget {
+		return fmt.Errorf("Source and target nodes must be available, but are not")
 	}
 
 	//we need to iterate all edges!
@@ -362,26 +434,39 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 				obj := value.(Object)
 				obj.DecreaseRefcount()
 			}
-			return self.nodeData.Remove(key)
+			return self.edgeData.Remove(key)
 		}		
 	}
 
 	return fmt.Errorf("No edge between the two nodes, cannot remove")
 }
 
-func (self *graph) HasEdge(source, target interface{}) (bool, error) {
-
-	fmt.Printf("Has edge %v to %v\n", source, target)
-
+func (self *graph) HasEdge(value interface{}) (bool, error) {
+	
 	//check key type
-	ndt := self.nodeDataType()
-	err := ndt.MustBeTypeOf(source)
+	dt := self.edgeDataType()
+	err := dt.MustBeTypeOf(value)
 	if err != nil {
-		return false, utils.StackError(err, "Source node has wrong type")
+		return false, utils.StackError(err, "Edge has wrong type")
 	}
-	err = ndt.MustBeTypeOf(target)
+	
+	dbkey := self.typeToDB(value, dt)
+	return self.edgeData.HasKey(dbkey), nil
+}
+	
+func (self *graph) HasEdgeBetween(source, target interface{}) (bool, error) {
+
+	//check if we have the two nodes
+	hassource, err := self.HasNode(source)
 	if err != nil {
-		return false, utils.StackError(err, "Target node has wrong type")
+		return false, utils.StackError(err, "Source node is of wrong type")
+	}
+	hastarget, err := self.HasNode(target)
+	if err != nil {
+		return false, utils.StackError(err, "Target node is of wrong type")
+	}
+	if !hassource || !hastarget {
+		return false, fmt.Errorf("Source and target nodes must be available, but are not")
 	}
 
 	//we need to iterate all edges!
