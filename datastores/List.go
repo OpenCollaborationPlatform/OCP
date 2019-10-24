@@ -300,7 +300,6 @@ func (self *List) getListKey() []byte {
 type ListEntry interface {
 	Write(value interface{}) error
 	Read() (interface{}, error)
-	ReadType(value interface{}) error
 	IsValid() bool
 	Remove() error
 	Id() uint64
@@ -316,10 +315,6 @@ func (self *listEntry) Write(value interface{}) error {
 
 func (self *listEntry) Read() (interface{}, error) {
 	return self.value.Read()
-}
-
-func (self *listEntry) ReadType(value interface{}) error {
-	return self.value.ReadType(value)
 }
 
 func (self *listEntry) IsValid() bool {

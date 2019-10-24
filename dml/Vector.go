@@ -26,6 +26,11 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) Object {
 	set, _ = base.GetDatabaseSet(datastore.ValueType)
 	valueSet := set.(*datastore.ValueVersionedSet)
 	length, _ := valueSet.GetOrCreateValue([]byte("__vector_order"))
+	
+	//initial values
+	if holds, _ := length.HoldsValue(); !holds {
+		length.Write(int64(0))
+	}
 
 	//build the vector
 	vec := &vector{
@@ -58,9 +63,14 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) Object {
 
 func (self *vector) Length() (int64, error) {
 
-	var result int64
-	err := self.length.ReadType(&result)
-	return result, err
+	result, err := self.length.Read()
+	if err != nil {
+		return -1, err
+	}
+	if result == nil {
+		return 0, nil
+	}
+	return result.(int64), nil
 }
 
 //implement DynamicData interface
@@ -76,10 +86,9 @@ func (self *vector) Load() error {
 		}
 		for _, key := range keys {
 
-			var res string
-			err = self.entries.ReadType(key, &res)
+			res, err := self.entries.Read(key)
 			if err == nil {
-				id, err := IdentifierFromEncoded(res)
+				id, err := IdentifierFromEncoded(res.(string))
 				if err != nil {
 					return utils.StackError(err, "Unable to load vector: Stored identifier is invalid")
 				}
@@ -117,10 +126,9 @@ func (self *vector) Get(idx int64) (interface{}, error) {
 	var err error = nil
 
 	if dt.IsObject() || dt.IsComplex() {
-		var res string
-		err = self.entries.ReadType(idx, &res)
+		res, err := self.entries.Read(idx)
 		if err == nil {
-			id, e := IdentifierFromEncoded(res)
+			id, e := IdentifierFromEncoded(res.(string))
 			if e != nil {
 				err = e
 			} else {
@@ -134,10 +142,9 @@ func (self *vector) Get(idx int64) (interface{}, error) {
 
 	} else if dt.IsType() {
 
-		var res string
-		err = self.entries.ReadType(idx, &res)
+		res, err := self.entries.Read(idx)
 		if err == nil {
-			result, err = NewDataType(res)
+			result, err = NewDataType(res.(string))
 		}
 
 	} else {
@@ -316,8 +323,7 @@ func (self *vector) Remove(idx int64) error {
 	//deleting means moving each entry after idx one down and shortening the length by 1
 	l, _ := self.Length()
 	for i := idx; i < (l - 1); i++ {
-		var data []byte
-		err := self.entries.ReadType(i+1, &data)
+		data, err := self.entries.Read(i+1)
 		if err != nil {
 			return utils.StackError(err, "Unable to move vector entries after deleting entry")
 		}
@@ -340,14 +346,12 @@ func (self *vector) Remove(idx int64) error {
 func (self *vector) Swap(idx1 int64, idx2 int64) error {
 
 	//get the data to move
-	var data1 []byte
-	err := self.entries.ReadType(idx1, &data1)
+	data1, err := self.entries.Read(idx1)
 	if err != nil {
 		return utils.StackError(err, "Unable to swap vector entries")
 	}
 
-	var data2 []byte
-	err = self.entries.ReadType(idx2, &data2)
+	data2, err := self.entries.Read(idx2)
 	if err != nil {
 		return utils.StackError(err, "Unable to swap vector entries")
 	}
@@ -376,8 +380,7 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 	}
 
 	//get the data to move
-	var data []byte
-	err := self.entries.ReadType(oldIdx, &data)
+	data, err := self.entries.Read(oldIdx)
 	if err != nil {
 		return utils.StackError(err, "Unable to move vector entries")
 	}
@@ -385,8 +388,7 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 	//move the in-between idx 1 down
 	if oldIdx < newIdx {
 		for i := oldIdx + 1; i <= newIdx; i++ {
-			var res []byte
-			err := self.entries.ReadType(i, &res)
+			res, err := self.entries.Read(i)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
 			}
@@ -398,8 +400,7 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 	} else {
 
 		for i := oldIdx; i > newIdx; i-- {
-			var res []byte
-			err := self.entries.ReadType(i-1, &res)
+			res, err := self.entries.Read(i-1)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
 			}
@@ -427,10 +428,9 @@ func (self *vector) IncreaseRefcount() error {
 
 		length, _ := self.Length()
 		for i := int64(0); i < length; i++ {
-			var res string
-			err := self.entries.ReadType(i, &res)
+			res, err := self.entries.Read(i)
 			if err == nil {
-				id, e := IdentifierFromEncoded(res)
+				id, e := IdentifierFromEncoded(res.(string))
 				if e == nil {
 					res, ok := self.rntm.objects[id]
 					if ok {
@@ -455,10 +455,9 @@ func (self *vector) DecreaseRefcount() error {
 
 		length, _ := self.Length()
 		for i := int64(0); i < length; i++ {
-			var res string
-			err := self.entries.ReadType(i, &res)
+			res, err := self.entries.Read(i)
 			if err == nil {
-				id, e := IdentifierFromEncoded(res)
+				id, e := IdentifierFromEncoded(res.(string))
 				if e == nil {
 					res, ok := self.rntm.objects[id]
 					if ok {

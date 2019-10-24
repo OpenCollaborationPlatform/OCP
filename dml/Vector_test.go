@@ -54,7 +54,8 @@ func TestPODVector(t *testing.T) {
 			store.Begin()
 			child, _ := rntm.mainObj.GetChildByName("IntVec")
 			intvec := child.(*vector)
-			length, _ := intvec.Length()
+			length, err := intvec.Length()
+			So(err, ShouldBeNil)
 			So(length, ShouldEqual, 0)
 			store.Rollback()
 			code = `toplevel.IntVec.Append(0)`

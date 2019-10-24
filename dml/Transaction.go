@@ -5,6 +5,7 @@ package dml
 import (
 	"bytes"
 	"fmt"
+	"encoding/gob"
 
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
@@ -13,6 +14,10 @@ import (
 	"github.com/dop251/goja"
 	uuid "github.com/satori/go.uuid"
 )
+
+func init() {
+	gob.Register(new([32]byte))
+}
 
 /*********************************************************************************
 								Object
@@ -91,13 +96,12 @@ func (self transaction) Equal(trans transaction) bool {
 
 func (self transaction) User() (User, error) {
 
-	var user User
-	err := self.user.ReadType(&user)
+	user, err := self.user.Read()
 	if err != nil {
 		return User(""), utils.StackError(err, "Unable to read transaction user from database")
 	}
 
-	return user, nil
+	return *(user.(*User)), nil
 }
 
 func (self transaction) SetUser(user User) error {
@@ -116,13 +120,12 @@ func (self transaction) Objects() []Data {
 	//note: must panic on error as otherwise slice has more nil objects in it
 	for i, entry := range entries {
 
-		var id Identifier
-		err := entry.ReadType(&id)
+		id, err := entry.Read()
 		if err != nil {
 			panic("Cannot read identifier\n")
 		}
 
-		obj, ok := self.rntm.objects[id]
+		obj, ok := self.rntm.objects[*(id.(*Identifier))]
 		if !ok {
 			panic("Id not available")
 		}
@@ -140,13 +143,12 @@ func (self transaction) HasObject(id Identifier) bool {
 
 	for _, entry := range entries {
 
-		var obj_id Identifier
-		err := entry.ReadType(obj_id)
+		obj_id, err := entry.Read()
 		if err != nil {
 			continue
 		}
 
-		if obj_id.Equal(id) {
+		if obj_id.(*Identifier).Equal(id) {
 			return true
 		}
 	}
@@ -284,8 +286,8 @@ func (self *TransactionManager) Close() error {
 	}
 	keys, _ := self.transactions.GetKeys()
 	for _, key := range keys {
-		var transkey [32]byte
-		self.transactions.ReadType(key, &transkey)
+		data, _ := self.transactions.Read(key)
+		transkey := *(data.(*[32]byte))
 		if bytes.Equal(transkey[:], trans.identification[:]) {
 			self.transactions.Remove(key)
 			break
@@ -408,13 +410,12 @@ func (self *TransactionManager) getTransaction() (transaction, error) {
 		return transaction{}, fmt.Errorf("No transaction available for user")
 	}
 
-	var key [32]byte
-	err := self.transactions.ReadType(self.rntm.currentUser, &key)
+	key, err := self.transactions.Read(self.rntm.currentUser)
 	if err != nil {
 		return transaction{}, utils.StackError(err, "Faied to access user transaction")
 	}
 
-	return loadTransaction(key, self.rntm)
+	return loadTransaction(*(key.(*[32]byte)), self.rntm)
 }
 
 //opens a new transaction for the current user (without handling the old one if any)
@@ -492,16 +493,21 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) Ob
 
 func (self *transactionBehaviour) InTransaction() bool {
 
-	var result bool
-	self.inTransaction.ReadType(&result)
-	return result
+	if holds, _ := self.inTransaction.HoldsValue(); !holds {
+		return false
+	}
+
+	res, _ := self.inTransaction.Read()
+	if res == nil {
+		return false
+	}
+	return res.(bool)
 }
 
 func (self *transactionBehaviour) GetTransaction() transaction {
 
-	var key [32]byte
-	self.current.ReadType(&key)
-	trans, err := loadTransaction(key, self.rntm)
+	key, _ := self.current.Read()
+	trans, err := loadTransaction(*(key.(*[32]byte)), self.rntm)
 	if err != nil {
 		panic(err.Error())
 	}

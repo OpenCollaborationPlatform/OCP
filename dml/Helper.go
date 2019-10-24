@@ -2,9 +2,14 @@ package dml
 
 import (
 	"fmt"
+	"encoding/gob"
 	"github.com/dop251/goja"
 	"github.com/ickby/CollaborationNode/utils"
 )
+
+func init() {
+	gob.Register(new(User))
+}
 
 //should be implemented by everythign that is exposed to JS
 type JSObject interface {

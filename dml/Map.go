@@ -65,6 +65,28 @@ func (self *mapImpl) keyToDB(key interface{}) interface{} {
 		return val.AsString()
 	}
 	
+	//numeric types should be unified!
+	switch key.(type) {
+		case int:
+			key = int64(key.(int))
+		case int8:
+			key = int64(key.(int8))
+		case int16:
+			key = int64(key.(int16))
+		case int32:
+			key = int64(key.(int32))
+		case uint:
+			key = uint64(key.(uint))
+		case uint8:
+			key = uint64(key.(uint8))
+		case uint16:
+			key = uint64(key.(uint16))
+		case uint32:
+			key = uint64(key.(uint32))
+		case float32:
+			key = float64(key.(float32))
+	}
+	
 	//everything else is simply used as key
 	return key
 
@@ -171,10 +193,9 @@ func (self *mapImpl) Load() error {
 		}
 		for _, key := range keys {
 
-			var res string
-			err = self.entries.ReadType(key, &res)
+			res, err := self.entries.Read(key)
 			if err == nil {
-				id, err := IdentifierFromEncoded(res)
+				id, err := IdentifierFromEncoded(res.(string))
 				if err != nil {
 					return utils.StackError(err, "Unable to load mapImpl: Stored identifier is invalid")
 				}
@@ -219,10 +240,9 @@ func (self *mapImpl) Get(key interface{}) (interface{}, error) {
 	var result interface{}
 
 	if dt.IsObject() || dt.IsComplex() {
-		var res string
-		err = self.entries.ReadType(dbkey, &res)
+		res, err := self.entries.Read(dbkey)
 		if err == nil {
-			id, err := IdentifierFromEncoded(res)
+			id, err := IdentifierFromEncoded(res.(string))
 			if err != nil {
 				return nil, utils.StackError(err, "Invalid identifier stored in DB")
 			} else {
@@ -236,12 +256,11 @@ func (self *mapImpl) Get(key interface{}) (interface{}, error) {
 
 	} else if dt.IsType() {
 
-		var res string
-		err := self.entries.ReadType(dbkey, &res)
+		res, err := self.entries.Read(dbkey)
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to get stored type")	
 		}
-		result, err = NewDataType(res)
+		result, err = NewDataType(res.(string))
 		if err != nil {
 			return nil, utils.StackError(err, "Invalid datatype stored")
 		}
@@ -424,10 +443,9 @@ func (self *mapImpl) IncreaseRefcount() error {
 		}
 		for _, key := range keys {
 
-			var res string
-			err = self.entries.ReadType(key, &res)
+			res, err := self.entries.Read(key)
 			if err == nil {
-				id, err := IdentifierFromEncoded(res)
+				id, err := IdentifierFromEncoded(res.(string))
 				if err != nil {
 					return utils.StackError(err, "Unable to increase map refcount: Invalid child identifier stored")
 				}
@@ -479,10 +497,9 @@ func (self *mapImpl) DecreaseRefcount() error {
 		}
 		for _, key := range keys {
 
-			var res string
-			err = self.entries.ReadType(key, &res)
+			res, err := self.entries.Read(key)
 			if err == nil {
-				id, err := IdentifierFromEncoded(res)
+				id, err := IdentifierFromEncoded(res.(string))
 				if err != nil {
 					return utils.StackError(err, "Unable to increase map refcount: Invalid child identifier stored")
 				}

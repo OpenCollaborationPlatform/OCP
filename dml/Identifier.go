@@ -4,10 +4,15 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"crypto/sha256"
+	"encoding/gob"
 	"encoding/json"
 
 	"github.com/mr-tron/base58/base58"
 )
+
+func init() { 
+	gob.Register(new(Identifier))
+}
 
 type Identifier struct {
 	Parent [32]byte

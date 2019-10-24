@@ -56,10 +56,9 @@ func (self *variant) Load() error {
 	dt := self.getDataType()
 	if dt.IsObject() || dt.IsComplex() {
 
-			var res string
-			err := self.value.ReadType(&res)
+			res, err := self.value.Read()
 			if err == nil {
-				id, err := IdentifierFromEncoded(res)
+				id, err := IdentifierFromEncoded(res.(string))
 				if err != nil {
 					return utils.StackError(err, "Unable to load variant: Stored identifier is invalid")
 				}
@@ -138,10 +137,9 @@ func (self *variant) GetValue() (interface{}, error) {
 	var result interface{}
 	
 	if dt.IsObject() || dt.IsComplex() {
-		var res string
-		err := self.value.ReadType(&res)
+		res, err := self.value.Read()
 		if err == nil {
-			id, err := IdentifierFromEncoded(res)
+			id, err := IdentifierFromEncoded(res.(string))
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to parse object id from databaase value")
 			} else {
@@ -158,12 +156,11 @@ func (self *variant) GetValue() (interface{}, error) {
 
 	} else if dt.IsType() {
 
-		var res string
-		err := self.value.ReadType(&res)
+		res, err := self.value.Read()
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to read type from database")	
 		}
-		result, err = NewDataType(res)
+		result, err = NewDataType(res.(string))
 		
 	} else {
 		//plain types remain
@@ -204,28 +201,28 @@ func (self *variant) beforeChangeCallback(args ... interface{}) error {
 func (self *variant) changedCallback(args ...interface{}) error {
 
 
-	//build the default values!
+	//build the default values! And set the value. Don't use SetValue as this 
+	//assumes old and new value have same datatype
 	dt := self.getDataType()
-	var result interface{}
 	if dt.IsComplex() {
 		obj, err := ConstructObject(self.rntm, dt, "")
 		if err != nil {
 			return utils.StackError(err, "Unable to setup variant object: construction failed")
 		}
 		obj.IncreaseRefcount()
-		result = obj
+		return self.value.Write(obj.Id().Encode())
 
-	} else {
-		result = dt.GetDefaultValue()
+	} else if dt.IsType() {
+
+		val, _ := dt.GetDefaultValue().(DataType)
+		return self.value.Write(val.AsString())
+
+	}else {
+		result := dt.GetDefaultValue()
+		return self.value.Write(result)
 	}
 		
-	//set the value 
-	err := self.SetValue(result)
-	if err != nil {
-		return utils.StackError(err, "Unable to set newly constructed object")
-	}
-	
-	return nil
+	return fmt.Errorf("Something went wrong")
 }
 
 func (self *variant) getDataType() DataType {
@@ -242,10 +239,9 @@ func (self *variant) IncreaseRefcount() error {
 	dt := self.getDataType()
 	if dt.IsObject() || dt.IsComplex() {
 		
-		var res string
-		err := self.value.ReadType(&res)
+		res, err := self.value.Read()
 		if err == nil {
-			id, e := IdentifierFromEncoded(res)
+			id, e := IdentifierFromEncoded(res.(string))
 			if e == nil {
 				res, ok := self.rntm.objects[id]
 				if ok {
@@ -267,10 +263,9 @@ func (self *variant) DecreaseRefcount() error {
 	dt := self.getDataType()
 	if dt.IsObject() || dt.IsComplex() {
 		
-		var res string
-		err := self.value.ReadType(&res)
+		res, err := self.value.Read()
 		if err == nil {
-			id, e := IdentifierFromEncoded(res)
+			id, e := IdentifierFromEncoded(res.(string))
 			if e == nil {
 				res, ok := self.rntm.objects[id]
 				if ok {

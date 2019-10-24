@@ -227,9 +227,9 @@ func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 	return id, err
 }
 
-func (self *VersionManagerImp) getVersionInfo(id VersionID) (map[string]interface{}, error) {
+func (self *VersionManagerImp) getVersionInfo(id VersionID) (map[string]string, error) {
 
-	version := make(map[string]interface{})
+	version := make(map[string]string)
 	err := self.store.boltdb.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("VersionManager"))
@@ -243,11 +243,11 @@ func (self *VersionManagerImp) getVersionInfo(id VersionID) (map[string]interfac
 		if err != nil {
 			return err
 		}
-		resmap, ok := res.(map[string]interface{})
+		resmap, ok := res.(*map[string]string)
 		if !ok {
 			return fmt.Errorf("Problem with parsing the saved data, type: %T", res)
 		}
-		version = resmap
+		version = *resmap
 		return nil
 	})
 	if err != nil {
@@ -263,7 +263,7 @@ func (self *VersionManagerImp) LoadVersion(id VersionID) error {
 	}
 
 	//grab the needed verion
-	var version map[string]interface{}
+	var version map[string]string
 	if !id.IsHead() {
 		var err error
 		version, err = self.getVersionInfo(id)
@@ -286,11 +286,7 @@ func (self *VersionManagerImp) LoadVersion(id VersionID) error {
 			if !ok {
 				return fmt.Errorf("No version saved for the set")
 			}
-			strid, ok := data.(string)
-			if !ok {
-				return fmt.Errorf("Unable to read saved data: %T", data)
-			}
-			err := set.LoadVersion(VersionID(stoi(strid)))
+			err := set.LoadVersion(VersionID(stoi(data)))
 			if err != nil {
 				return err
 			}
@@ -370,7 +366,7 @@ func (self *VersionManagerImp) RemoveVersionsUpTo(ID VersionID) error {
 	for _, set := range sets {
 		//remove up to version
 		val := version[itos(uint64(set.GetType()))]
-		ival := stoi(val.(string))
+		ival := stoi(val)
 		err := set.RemoveVersionsUpTo(VersionID(ival))
 		if err != nil {
 			return err
@@ -415,7 +411,7 @@ func (self *VersionManagerImp) RemoveVersionsUpFrom(ID VersionID) error {
 	for _, set := range sets {
 		//remove up to version
 		val := version[itos(uint64(set.GetType()))]
-		ival := stoi(val.(string))
+		ival := stoi(val)
 		err := set.RemoveVersionsUpFrom(VersionID(ival))
 		if err != nil {
 			return err

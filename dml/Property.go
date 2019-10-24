@@ -167,23 +167,21 @@ func (self *typeProperty) SetValue(val interface{}) error {
 //we only return basic information, mailny for JS accessibility
 func (self *typeProperty) GetValue() interface{} {
 	
-	var data string
-	err := self.db.ReadType(&data)
+	data, err := self.db.Read()
 	if err != nil {
 		log.Printf("Error reading value: %s", err)
 		return nil
 	}
-	return DataType{data}
+	return DataType{data.(string)}
 }
 
 func (self *typeProperty) GetDataType() DataType {
 	
-	var data string
-	err := self.db.ReadType(&data)
+	data, err := self.db.Read()
 	if err != nil {
 		log.Printf("Cannot access datastore: %v", err)
 	}
-	return DataType{data}
+	return DataType{data.(string)}
 }
 
 //Const property

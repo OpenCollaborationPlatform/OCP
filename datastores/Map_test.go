@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"encoding/gob"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -88,7 +89,7 @@ func TestMap(t *testing.T) {
 			So(mp.HasKey(key1), ShouldBeTrue)
 			val, err := mp.Read(key1)
 			So(err, ShouldBeNil)
-			value, ok := val.(int64)
+			value, ok := val.(int)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 12)
 
@@ -199,7 +200,7 @@ func TestMapVersionedData(t *testing.T) {
 			So(mp.HasKey(key1), ShouldBeTrue)
 			val, err := mp.Read(key1)
 			So(err, ShouldBeNil)
-			value, ok := val.(int64)
+			value, ok := val.(int)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 12)
 
@@ -363,15 +364,16 @@ func TestMapVersionedData(t *testing.T) {
 			mset.RemoveVersionsUpTo(vR)
 			mset.LoadVersion(VersionID(HEAD))
 			So(mp.HasKey("key9"), ShouldBeTrue)
-			var res int
-			So(mp.ReadType("key9", &res), ShouldBeNil)
+			res, err := mp.Read("key9")
+			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 3)
 
 			//removing all versions up to vR should not remove key9
 			mset.RemoveVersionsUpTo(v3)
 			mset.LoadVersion(VersionID(HEAD))
 			So(mp.HasKey("key9"), ShouldBeTrue)
-			So(mp.ReadType("key9", &res), ShouldBeNil)
+			res, err = mp.Read("key9")
+			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 3)
 		})
 		
@@ -383,17 +385,18 @@ func TestMapVersionedData(t *testing.T) {
 			mset := genset.(*MapVersionedSet)
 			mp, _ := mset.GetOrCreateMap([]byte("mymapVersioned"))
 
-			type myStruct struct {
+			type myMapStruct struct {
 				First interface{}
 				Second interface{}
 			}
+			gob.Register(new(myMapStruct))
 			
-			val := myStruct{"hello", "world"}
+			val := myMapStruct{"hello", "world"}
 			So(mp.Write(1, val), ShouldBeNil)
 			
-			var val2 myStruct 
-			So(mp.ReadType(1, &val2),ShouldBeNil)
-			So(val2, ShouldResemble, val)
+			val2, err := mp.Read(1)
+			So(err,ShouldBeNil)
+			So(val2, ShouldResemble, &val)
 		})
 	})
 }

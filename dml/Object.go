@@ -144,9 +144,11 @@ func (self *object) GetRefcount() (uint64, error) {
 		return 0, fmt.Errorf("Unable to access refcount")
 	}
 
-	var current uint64
-	self.refCount.ReadType(&current)
-	return current, nil
+	val, err := self.refCount.Read()
+	if err != nil {
+		return 0, err
+	}
+	return val.(uint64), nil
 }
 
 func (self *object) SetRefcount(val uint64) error {

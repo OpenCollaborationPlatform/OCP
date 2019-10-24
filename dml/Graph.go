@@ -3,6 +3,7 @@ package dml
 
 import (
 	"fmt"
+	"encoding/gob"
 	
 	gonum "gonum.org/v1/gonum/graph"
 	"gonum.org/v1/gonum/graph/simple"
@@ -10,6 +11,11 @@ import (
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 )
+
+func init() { 
+	gob.Register(new(struct{}))
+	gob.Register(new(graphEdge))
+}
 
 //map type: stores requested data type by index (0-based)
 type graph struct {
@@ -90,9 +96,11 @@ func (self *graph) getGonumDirected() gonum.Directed {
 	//all edges next
 	keys, _ = self.edgeData.GetKeys()
 	for _, key := range keys {
-		var edge graphEdge
-		self.edgeData.ReadType(key, &edge)
-		
+		data, err := self.edgeData.Read(key)
+		if err != nil {
+			continue
+		}
+		edge := data.(*graphEdge)
 		graphedge := directed.NewEdge(mapper[edge.Source], mapper[edge.Target])
 		directed.SetEdge(graphedge)
 	}
@@ -336,11 +344,12 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 	for _, key := range keys {
 
 		//check if this is the edge to remove
-		var edge graphEdge
-		err := self.edgeData.ReadType(key, &edge)
+		data, err := self.edgeData.Read(key)
 		if err != nil {
 			return utils.StackError(err, "Unable to access edge, wrong type stored")
 		}
+		edge := data.(*graphEdge)
+
 		if 	(edge.Source == source && edge.Target == target) || 
 		 	(!self.isDirected() && (edge.Source == target && edge.Target == source)) { 
 
@@ -384,12 +393,12 @@ func (self *graph) HasEdge(source, target interface{}) (bool, error) {
 	for _, key := range keys {
 
 		//check if this is the edge
-		var edge graphEdge
-		err := self.edgeData.ReadType(key, &edge)
+		data, err := self.edgeData.Read(key)
 		if err != nil {
 			return false, utils.StackError(err, "Unable to access edge, wrong type stored")
 		}
-		fmt.Printf("Check edge %v\n", edge)
+		edge := data.(*graphEdge)
+		
 		if 	(edge.Source == source && edge.Target == target) || 
 		 	(!self.isDirected() && (edge.Source == target && edge.Target == source) ) { 
 
@@ -422,8 +431,12 @@ func (self *graph) Edge(source, target interface{}) (interface{}, error) {
 	for _, key := range keys {
 
 		//check if this is the edge
-		var edge graphEdge
-		self.edgeData.ReadType(key, &edge)
+		data, err := self.edgeData.Read(key)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to access edge, wrong type stored")
+		}
+		edge := data.(*graphEdge)
+		
 		if 	(edge.Source == source && edge.Target == target) || 
 		 	(!self.isDirected() && (edge.Source == target && edge.Target == source) ) { 
 

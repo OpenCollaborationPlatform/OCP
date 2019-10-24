@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"encoding/gob"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -111,15 +112,14 @@ func TestValueBasic(t *testing.T) {
 			data := string("This is raw data test")
 			value1.Write(data)
 
-			var binary []byte
-			value1.ReadType(&binary)
-			So(bytes.Equal(binary, []byte(data)), ShouldBeFalse)
+			binary, _ := value1.Read()
+			So(binary.(string), ShouldEqual, data)
 
 			value2, _ := set.GetOrCreateValue([]byte("rawtest2"))
-			value2.Write(binary)
+			value2.Write([]byte(data))
 			result, _ := value2.Read()
 
-			So(result, ShouldEqual, data)
+			So(bytes.Equal(result.([]byte), []byte(data)), ShouldBeTrue)
 		})
 		
 		Convey("Complex structs are usable", func() {
@@ -134,13 +134,14 @@ func TestValueBasic(t *testing.T) {
 				First interface{}
 				Second interface{}
 			}
+			gob.Register(new(myStruct))
 			
-			val := myStruct{float64(1), float64(2)}
+			val := myStruct{1, 2}
 			So(value.Write(val), ShouldBeNil)
 			
-			var val2 myStruct 
-			So(value.ReadType(&val2),ShouldBeNil)
-			So(val2, ShouldResemble, val)
+			val2, err := value.Read()
+			So(err,ShouldBeNil)
+			So(val2, ShouldResemble, &val)
 		})
 	})
 }
@@ -244,15 +245,14 @@ func TestValueVersionedBasics(t *testing.T) {
 			data := string("This is raw data test")
 			value1.Write(data)
 
-			var binary []byte
-			value1.ReadType(&binary)
-			So(bytes.Equal(binary, []byte(data)), ShouldBeFalse)
+			binary, _ := value1.Read()
+			So(binary, ShouldEqual, data)
 
 			value2, _ := set.GetOrCreateValue([]byte("rawtest2"))
-			value2.Write(binary)
+			value2.Write([]byte(data))
 			result, _ := value2.Read()
 
-			So(result, ShouldEqual, data)
+			So(bytes.Equal(result.([]byte), []byte(data)), ShouldBeTrue)
 		})
 	})
 }
@@ -429,7 +429,7 @@ func TestValueVersioned(t *testing.T) {
 			val, _ := pair1.Read()
 			So(val.(string), ShouldEqual, "again")
 			val, _ = pair2.Read()
-			So(val.(int64), ShouldEqual, -5)
+			So(val.(int), ShouldEqual, -5)
 			val, err = pair3.Read()
 			So(err, ShouldNotBeNil)
 
@@ -438,7 +438,7 @@ func TestValueVersioned(t *testing.T) {
 			val, _ = pair1.Read()
 			So(val.(string), ShouldEqual, "next")
 			val, _ = pair2.Read()
-			So(val.(int64), ShouldEqual, 29)
+			So(val.(int), ShouldEqual, 29)
 			So(pair3.IsValid(), ShouldBeTrue)
 			val, _ = pair3.Read()
 			So(val.(float64), ShouldAlmostEqual, 1.32)
@@ -447,7 +447,7 @@ func TestValueVersioned(t *testing.T) {
 			val, _ = pair1.Read()
 			So(val.(string), ShouldEqual, "again")
 			val, _ = pair2.Read()
-			So(val.(int64), ShouldEqual, -5)
+			So(val.(int), ShouldEqual, -5)
 			So(pair3.IsValid(), ShouldBeFalse)
 			_, err = pair3.Read()
 			So(err, ShouldNotBeNil)

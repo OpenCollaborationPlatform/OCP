@@ -14,9 +14,8 @@ bucket(SetKey) [
 import (
 	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
-	"encoding/json"
+	"encoding/gob"
 	"fmt"
-	"math"
 
 	"github.com/boltdb/bolt"
 )
@@ -297,7 +296,7 @@ func (self *Value) Write(value interface{}) error {
 
 func (self *Value) Read() (interface{}, error) {
 
-	var result interface{}
+	var res interface{}
 	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
@@ -308,45 +307,16 @@ func (self *Value) Read() (interface{}, error) {
 		if data == nil {
 			return fmt.Errorf("Value was not set before read")
 		}
-		res, err := getInterface(data)
-		result = res
+		var err error 
+		res, err = getInterface(data)
 		return err
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to read value")
 	}
 
-	return result, nil
-}
-
-//to be used for more complex types: give the type to load the data in
-func (self *Value) ReadType(result interface{}) error {
-
-	err := self.db.View(func(tx *bolt.Tx) error {
-
-		bucket := tx.Bucket(self.dbkey)
-		for _, bkey := range self.setkey {
-			bucket = bucket.Bucket(bkey)
-		}
-		data := bucket.Get(self.key)
-		if data == nil {
-			return fmt.Errorf("Value was not set before read")
-		}
-		byteResult, isByte := result.(*[]byte)
-		if isByte {
-			*byteResult = make([]byte, len(data))
-			copy(*byteResult, data)
-			return nil
-		}
-		return json.Unmarshal(data, result)
-	})
-
-	if err != nil {
-		return utils.StackError(err, "Unable to read value into given type %t", result)
-	}
-
-	return nil
+	return res, nil
 }
 
 //returns true if:
@@ -421,30 +391,25 @@ func (self *Value) remove() error {
 //helper functions
 func getBytes(data interface{}) ([]byte, error) {
 
-	//if it is []byte already there is no need for marshaling
-	byt, isByte := data.([]byte)
-	if isByte {
-		return byt, nil
+	var buf bytes.Buffer
+	enc := gob.NewEncoder(&buf)
+	if err := enc.Encode(&data); err != nil {
+		return nil, err
 	}
-	return json.Marshal(data)
+
+	return buf.Bytes(), nil
 }
 
 func getInterface(bts []byte) (interface{}, error) {
 
 	var res interface{}
-	err := json.Unmarshal(bts, &res)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to unmarhal interface")
-	}
-	return convertInterface(res), nil
-}
+	
+	buf := bytes.NewBuffer(bts)
+	dec := gob.NewDecoder(buf)
 
-func convertInterface(val interface{}) interface{} {
-
-	//json does not distuinguish between float and int
-	num, ok := val.(float64)
-	if ok && num == math.Trunc(num) {
-		return int64(num)
+	if err := dec.Decode(&res); err != nil {
+		return nil, err
 	}
-	return val
+	
+	return res, nil
 }

@@ -83,7 +83,7 @@ func TestListBasic(t *testing.T) {
 			val, err = entry1.Read()
 			So(err, ShouldBeNil)
 			So(val, ShouldNotBeNil)
-			inte, ok := val.(int64)
+			inte, ok := val.(int)
 			So(ok, ShouldBeTrue)
 			So(inte, ShouldEqual, 12)
 
@@ -196,7 +196,7 @@ func TestListVersionedData(t *testing.T) {
 			So(entry1, ShouldNotBeNil)
 			val, err := entry1.Read()
 			So(err, ShouldBeNil)
-			value, ok := val.(int64)
+			value, ok := val.(int)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 12)
 

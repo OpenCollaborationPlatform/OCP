@@ -36,7 +36,7 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
+	"encoding/gob"
 	"fmt"
 	"math"
 
@@ -48,6 +48,10 @@ const (
 	CURRENT  uint64 = math.MaxUint64 - 10
 	VERSIONS uint64 = math.MaxUint64 - 11
 )
+
+func init() {
+	gob.Register(new(map[string]string))
+}
 
 func NewValueVersionedDatabase(db *boltWrapper) (*ValueVersionedDatabase, error) {
 
@@ -208,7 +212,7 @@ func (self *ValueVersionedSet) Print(params ...int) {
 					inter, _ := getInterface(sv)
 					//build the versioning string
 					str := "["
-					data, ok := inter.(map[string]interface{})
+					data, ok := inter.(map[string]string)
 					if ok {
 						for mk, mv := range data {
 							byt := stob(mk)
@@ -217,7 +221,7 @@ func (self *ValueVersionedSet) Print(params ...int) {
 							} else {
 								str = str + string(stob(mk)) + ": %v,  "
 							}
-							mvid := stoi(mv.(string))
+							mvid := stoi(mv)
 							if mvid == INVALID {
 								str = fmt.Sprintf(str, "INVALID")
 							} else {
@@ -352,8 +356,7 @@ func (self *ValueVersionedSet) ResetHead() error {
 		}
 
 		//if we have a real version we need the data to return to!
-		var data interface{}
-		err := val.readVersion(latest, &data)
+		data, err := val.readVersion(latest)
 
 		//if the version is invalid we don't do anything
 		if err != nil {
@@ -460,9 +463,9 @@ func (self *ValueVersionedSet) FixStateAsVersion() (VersionID, error) {
 	return VersionID(currentVersion), err
 }
 
-func (self *ValueVersionedSet) getVersionInfo(id VersionID) (map[string]interface{}, error) {
+func (self *ValueVersionedSet) getVersionInfo(id VersionID) (map[string]string, error) {
 
-	version := make(map[string]interface{})
+	version := make(map[string]string)
 	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		for _, sk := range append(self.setkey, itob(VERSIONS)) {
@@ -476,11 +479,11 @@ func (self *ValueVersionedSet) getVersionInfo(id VersionID) (map[string]interfac
 		if err != nil {
 			return err
 		}
-		resmap, ok := res.(map[string]interface{})
+		resmap, ok := res.(*map[string]string)
 		if !ok {
 			return fmt.Errorf("Problem with parsing the saved data")
 		}
-		version = resmap
+		version = *resmap
 		return nil
 	})
 	if err != nil {
@@ -496,12 +499,12 @@ func (self *ValueVersionedSet) LoadVersion(id VersionID) error {
 	}
 
 	//grab the needed verion
-	var version map[string]interface{}
+	var version map[string]string
 	if !id.IsHead() {
 		var err error
 		version, err = self.getVersionInfo(id)
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to get version Info")
 		}
 	}
 
@@ -534,11 +537,7 @@ func (self *ValueVersionedSet) LoadVersion(id VersionID) error {
 					if !ok {
 						err = subbucket.Put(itob(CURRENT), itob(INVALID))
 					} else {
-						verstr, ok := vers.(string)
-						if !ok {
-							return fmt.Errorf("Stored version information is not a VersionID")
-						}
-						err = subbucket.Put(itob(CURRENT), stob(verstr))
+						err = subbucket.Put(itob(CURRENT), stob(vers))
 					}
 				}
 				if err != nil {
@@ -630,11 +629,7 @@ func (self *ValueVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 	deleted_keys := make([]string, 0)
 	for key, valueVersioned := range version {
 
-		valueVersionedstr, ok := valueVersioned.(string)
-		if !ok {
-			return fmt.Errorf("Stored version information is not a VersionID")
-		}
-		valueVersioneddata := stoi(valueVersionedstr)
+		valueVersioneddata := stoi(valueVersioned)
 		keydata := stob(key)
 
 		//check what is the values latest version
@@ -774,11 +769,7 @@ func (self *ValueVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 
 					//we are already available in the given version. But we can delete
 					//all bucket versions that are too new
-					strval, ok := ifval.(string)
-					if !ok {
-						return fmt.Errorf("Stored data is not version ID")
-					}
-					idval := stoi(strval)
+					idval := stoi(ifval)
 					subbucket := bucket.Bucket(key)
 					todelete := make([][]byte, 0)
 					err = subbucket.ForEach(func(k, v []byte) error {
@@ -1044,21 +1035,16 @@ func (self *ValueVersioned) HoldsValue() (bool, error) {
 
 func (self *ValueVersioned) Read() (interface{}, error) {
 
-	var result interface{}
-	err := self.readVersion(self.CurrentVersion(), &result)
+	result, err := self.readVersion(self.CurrentVersion())
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to read stored value")
 	}
-	return convertInterface(result), nil
+	return result, nil
 }
 
-func (self *ValueVersioned) ReadType(result interface{}) error {
+func (self *ValueVersioned) readVersion(ID VersionID) (interface{}, error) {
 
-	return self.readVersion(self.CurrentVersion(), result)
-}
-
-func (self *ValueVersioned) readVersion(ID VersionID, result interface{}) error {
-
+	var res interface{}
 	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
@@ -1072,21 +1058,13 @@ func (self *ValueVersioned) readVersion(ID VersionID, result interface{}) error 
 		if data == nil {
 			return fmt.Errorf("ValueVersioned was not set before read")
 		}
-		byteResult, isByte := result.(*[]byte)
-		if isByte {
-			*byteResult = make([]byte, len(data))
-			copy(*byteResult, data)
-			return nil
-		}
 
-		return json.Unmarshal(data, result)
+		var err error
+		res, err = getInterface(data)
+		return err
 	})
 
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return res, err
 }
 
 func (self *ValueVersioned) remove() error {

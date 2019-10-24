@@ -157,12 +157,12 @@ func (self *MapVersionedSet) Print(params ...int) {
 				subbucket := bucket.Bucket(k)
 				subbucket.ForEach(func(sk []byte, sv []byte) error {
 					inter, _ := getInterface(sv)
-					data := inter.(map[string]interface{})
+					data := inter.(map[string]string)
 					//build the versioning string
 					str := "["
 					for mk, mv := range data {
 						str = str + string(stob(mk)) + ": %v,  "
-						mvid := stoi(mv.(string))
+						mvid := stoi(mv)
 						if mvid == INVALID {
 							str = fmt.Sprintf(str, "INVALID")
 						} else {
@@ -312,9 +312,9 @@ func (self *MapVersionedSet) FixStateAsVersion() (VersionID, error) {
 	return VersionID(currentVersion), nil
 }
 
-func (self *MapVersionedSet) getVersionInfo(id VersionID) (map[string]interface{}, error) {
+func (self *MapVersionedSet) getVersionInfo(id VersionID) (map[string]string, error) {
 
-	version := make(map[string]interface{})
+	version := make(map[string]string)
 	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		for _, sk := range [][]byte{self.setkey, itob(VERSIONS)} {
@@ -328,11 +328,11 @@ func (self *MapVersionedSet) getVersionInfo(id VersionID) (map[string]interface{
 		if err != nil {
 			return err
 		}
-		resmapVersioned, ok := res.(map[string]interface{})
+		resmapVersioned, ok := res.(*map[string]string)
 		if !ok {
 			return fmt.Errorf("Problem with parsing the saved data")
 		}
-		version = resmapVersioned
+		version = *resmapVersioned
 		return nil
 	})
 	if err != nil {
@@ -348,7 +348,7 @@ func (self *MapVersionedSet) LoadVersion(id VersionID) error {
 	}
 
 	//grab the needed verion
-	var version map[string]interface{}
+	var version map[string]string
 	if !id.IsHead() {
 		var err error
 		version, err = self.getVersionInfo(id)
@@ -369,11 +369,7 @@ func (self *MapVersionedSet) LoadVersion(id VersionID) error {
 			if !ok {
 				return fmt.Errorf("Unable to load version information for %v", string(mp.getMapVersionedKey()))
 			}
-			s, ok := v.(string)
-			if !ok {
-				return fmt.Errorf("Stored version information has wrong format")
-			}
-			mp.kvset.LoadVersion(VersionID(stoi(s)))
+			mp.kvset.LoadVersion(VersionID(stoi(v)))
 		}
 	}
 
@@ -445,7 +441,7 @@ func (self *MapVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 	for _, mp := range mapVersioneds {
 		//remove up to version
 		val := version[btos(mp.getMapVersionedKey())]
-		ival := stoi(val.(string))
+		ival := stoi(val)
 		err := mp.kvset.RemoveVersionsUpTo(VersionID(ival))
 		if err != nil {
 			return err
@@ -492,7 +488,7 @@ func (self *MapVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 	for _, mp := range mapVersioneds {
 		//remove up to version
 		val := version[btos(mp.getMapVersionedKey())]
-		ival := stoi(val.(string))
+		ival := stoi(val)
 		err := mp.kvset.RemoveVersionsUpFrom(VersionID(ival))
 		if err != nil {
 			return err
@@ -647,19 +643,6 @@ func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 	return pair.Read()
 }
 
-func (self *MapVersioned) ReadType(key interface{}, value interface{}) error {
-
-	k, err := getBytes(key)
-	if err != nil {
-		return err
-	}
-	pair, err := self.kvset.GetOrCreateValue(k)
-	if err != nil {
-		return err
-	}
-	return pair.ReadType(value)
-}
-
 func (self *MapVersioned) Remove(key interface{}) error {
 
 	k, err := getBytes(key)
@@ -709,6 +692,15 @@ func (self *MapVersioned) GetKeys() ([]interface{}, error) {
 	}
 
 	return keys, nil
+}
+
+func (self *MapVersioned) Print(params ...int) {
+
+	if len(params) > 0 {
+		self.kvset.Print(params[0])
+	} else {
+		self.kvset.Print()
+	}
 }
 
 func (self *MapVersioned) getMapVersionedKey() []byte {
