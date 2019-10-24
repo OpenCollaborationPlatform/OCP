@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	
 	gonum "gonum.org/v1/gonum/graph"
+	topo "gonum.org/v1/gonum/graph/topo"
 	"gonum.org/v1/gonum/graph/simple"
 	uuid "github.com/satori/go.uuid"
 
@@ -61,6 +62,11 @@ func NewGraph(id Identifier, parent Identifier, rntm *Runtime) Object {
 	gr.AddMethod("HasEdge", MustNewMethod(gr.HasEdge))
 	gr.AddMethod("HasEdgeBetween", MustNewMethod(gr.HasEdgeBetween))
 	gr.AddMethod("Edge", MustNewMethod(gr.Edge))
+
+	gr.AddMethod("FromNode", MustNewMethod(gr.FromNode))
+	gr.AddMethod("ToNode", MustNewMethod(gr.ToNode))
+	gr.AddMethod("Sorted", MustNewMethod(gr.Sorted))
+	gr.AddMethod("Cycles", MustNewMethod(gr.Cycles))
 
 	return gr
 }
@@ -532,6 +538,134 @@ func (self *graph) Edge(source, target interface{}) (interface{}, error) {
 	return nil, fmt.Errorf("No edge between nodes")
 }
 
+//*****************************************************************************
+//			Graph functions
+//*****************************************************************************
+
+//return all nodes reachable from the given one
+func (self *graph) FromNode(node interface{}) (interface{}, error) {
+
+	//check if node exists
+	has, err := self.HasNode(node)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, fmt.Errorf("Not does not exist")
+	}
+	
+	gg, mapper := self.getGonumGraph()
+	res := gg.From(mapper[node].ID())
+
+	result := make([]interface{}, 0)
+	for k:= res.Next(); k; k = res.Next() {
+		gnode := res.Node().(graphNode)
+		result = append(result, gnode.node)
+	}
+
+	return result, nil
+}
+
+//return all nodes which can reach the given one
+func (self *graph) ToNode(node interface{}) (interface{}, error) {
+
+	if !self.isDirected() {
+		return self.FromNode(node)
+	}
+
+	//check if node exists
+	has, err := self.HasNode(node)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, fmt.Errorf("Not does not exist")
+	}
+	
+	gg, mapper := self.getGonumDirected()
+	res := gg.To(mapper[node].ID())
+
+	result := make([]interface{}, 0)
+	for k:= res.Next(); k; k = res.Next() {
+		gnode := res.Node().(graphNode)
+		result = append(result, gnode.node)
+	}
+	return result, nil
+}
+
+//return a topological sort of all nodes
+//the returned value is a slice of interfaces. The interfaces are nodes or 
+//slices of nodes if they form a circle that cannot be ordered
+func (self *graph) Sorted() ([]interface{}, error) {
+
+	if !self.isDirected() {
+		return nil, fmt.Errorf("This is only available for directed graphs")
+	}
+
+	gg, _ := self.getGonumDirected()
+	sorted, err := topo.Sort(gg)
+	
+	result := make([]interface{}, len(sorted))
+	
+	//check if there are cycles 
+	cycles, hascycles := err.(topo.Unorderable)
+	if hascycles {
+		
+		cycleCnt := 0
+		for i, node := range sorted {
+			
+			if node == nil {
+				//build the cycle node slice
+				cyc := cycles[cycleCnt]
+				cycSlice := make([]interface{}, len(cyc)) 
+				for j, n := range cyc { 
+					gn := n.(graphNode)
+					cycSlice[j] = gn.node
+				}
+				//and store it
+				result[i] = cycSlice
+				cycleCnt++
+			
+			} else {
+				gnode := node.(graphNode)
+				result[i] = gnode.node
+			}
+		}		
+	} else {
+		for i, node := range sorted {
+			gnode := node.(graphNode)
+			result[i] = gnode.node
+		}
+	}
+	
+	return result, nil
+}
+
+//return all cycles that form the basis of the graph
+func (self *graph) Cycles() ([][]interface{}, error) {
+
+	gg, _ := self.getGonumDirected()
+	var cycles [][]gonum.Node
+	
+	if self.isDirected() { 
+		cycles = topo.DirectedCyclesIn(gg)
+	
+	} else {
+		cycles = topo.UndirectedCyclesIn(gonum.Undirect{gg})
+	}
+	
+	result := make([][]interface{}, len(cycles))
+	for i, cycle := range cycles {
+		nc := make([]interface{}, len(cycle))
+		for j, node := range cycle {
+			gnode := node.(graphNode)
+			nc[j] = gnode.node
+		}
+		result[i] = nc
+	}
+
+	return result, nil
+}
 
 //*****************************************************************************
 //			Internal functions
