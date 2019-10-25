@@ -197,12 +197,12 @@ func (self *hostDataService) Close() {
 
 /*************************** Internal Functions ******************************/
 
-func (self *hostDataService) basicAddFile(path string) (cid.Cid, []blocks.Block, error) {
+func (self *hostDataService) basicAddFile(path string, owner string) (cid.Cid, []blocks.Block, error) {
 
-	return self.basicAddBlockifyer(NewFileBlockifyer(path))
+	return self.basicAddBlockifyer(NewFileBlockifyer(path), owner)
 }
 
-func (self *hostDataService) basicAddBlockifyer(bl Blockifyer) (cid.Cid, []blocks.Block, error) {
+func (self *hostDataService) basicAddBlockifyer(bl Blockifyer, owner string) (cid.Cid, []blocks.Block, error) {
 
 	//we first blockify the file bevore moving it into our store.
 	//This is done to know the cid after which we name the file in the store
@@ -211,9 +211,21 @@ func (self *hostDataService) basicAddBlockifyer(bl Blockifyer) (cid.Cid, []block
 	if err != nil {
 		return filecid, nil, utils.StackError(err, "Unable to blockify file")
 	}
+	
+	//the first block is put in the store to allow setting a owner for all blocks
+	//that is needed in case we need to announce on the dht when adding the blocks
+	//to bitswap
+	//set ownership
+	if owner != "" {
+		self.store.Put(blocks[0])
+		self.store.SetOwnership(blocks[0], owner)
+		err := self.bitswap.HasBlock(blocks[0])
+		if err != nil {
+			return cid.Undef, nil, utils.StackError(err, "Unable to add file")
+		}
+	}
 
-	//make the blocks available in the exchange! (no need to add to store before
-	//as bitswap does this anyway)
+	//make the badditional  blocks available
 	for _, block := range blocks {
 		if has, _ := self.store.Has(block.Cid()); !has {
 			err = self.bitswap.HasBlock(block)
@@ -226,7 +238,7 @@ func (self *hostDataService) basicAddBlockifyer(bl Blockifyer) (cid.Cid, []block
 	return filecid, blocks, err
 }
 
-func (self *hostDataService) basicAddDirectory(path string) (cid.Cid, []blocks.Block, error) {
+func (self *hostDataService) basicAddDirectory(path string, owner string) (cid.Cid, []blocks.Block, error) {
 
 	//the result
 	result := make([]blocks.Block, 0)
@@ -253,6 +265,15 @@ func (self *hostDataService) basicAddDirectory(path string) (cid.Cid, []blocks.B
 	dirblock.Sort()
 	block := dirblock.ToBlock()
 
+	//the dir block is put in the store to allow setting a owner for all blocks
+	//that is needed in case we need to announce on the dht when adding the blocks
+	//to bitswap
+	//set ownership
+	if owner != "" {
+		self.store.Put(block)
+		self.store.SetOwnership(block, owner)
+	}
+	
 	//Make the block available
 	err = self.bitswap.HasBlock(block)
 	if err != nil {
@@ -278,19 +299,14 @@ func (self *hostDataService) basicAdd(path string, owner string) (cid.Cid, []blo
 
 	switch mode := info.Mode(); {
 	case mode.IsDir():
-		resCid, resBlocks, err = self.basicAddDirectory(path)
+		resCid, resBlocks, err = self.basicAddDirectory(path, owner)
 	case mode.IsRegular():
-		resCid, resBlocks, err = self.basicAddFile(path)
+		resCid, resBlocks, err = self.basicAddFile(path, owner)
 	}
 
 	if err != nil {
 		self.basicDrop(resCid, owner)
 		return resCid, nil, utils.StackError(err, "Unable to add path")
-	}
-
-	//set ownership
-	if owner != "" {
-		err = self.store.SetOwnership(resBlocks[0], owner)
 	}
 
 	return resCid, resBlocks, err
@@ -298,16 +314,11 @@ func (self *hostDataService) basicAdd(path string, owner string) (cid.Cid, []blo
 
 func (self *hostDataService) basicAddBlocks(blockifyer Blockifyer, owner string) (cid.Cid, []blocks.Block, error) {
 
-	resCid, resBlocks, err := self.basicAddBlockifyer(blockifyer)
+	resCid, resBlocks, err := self.basicAddBlockifyer(blockifyer, owner)
 
 	if err != nil {
 		self.basicDrop(resCid, owner)
 		return resCid, nil, utils.StackError(err, "Unable to add path")
-	}
-
-	//set ownership
-	if owner != "" {
-		err = self.store.SetOwnership(resBlocks[0], owner)
 	}
 
 	return resCid, resBlocks, err

@@ -1,3 +1,5 @@
+//+build test
+
 package p2p
 
 import (

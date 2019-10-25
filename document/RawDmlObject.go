@@ -1,12 +1,18 @@
 package document
 
 import (
+	"encoding/gob"
+	
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 
 	cid "github.com/ipfs/go-cid"
 )
+
+func init() {
+	gob.Register(new(p2p.Cid))
+}
 
 //Raw dml type: stores data identifiers and allows some information gathering
 type Raw struct {
@@ -59,9 +65,8 @@ func (self *Raw) Set(cidstr string) error {
 //adds the path, either file or directory, to the Raw object
 func (self *Raw) Get() (string, error) {
 
-	var id p2p.Cid
-	err := self.value.ReadType(&id)
-	return id.String(), err
+	id, err := self.value.Read()
+	return id.(*p2p.Cid).String(), err
 }
 
 //adds the path, either file or directory, to the Raw object
@@ -72,12 +77,11 @@ func (self *Raw) IsSet() (bool, error) {
 	}
 
 	//could also be invalid CID after clear!
-	var id p2p.Cid
-	err := self.value.ReadType(&id)
+	id, err := self.value.Read()
 	if err != nil {
 		return false, err
 	}
-	return id.Defined(), nil
+	return id.(*p2p.Cid).Defined(), nil
 }
 
 //adds the path, either file or directory, to the Raw object

@@ -17,7 +17,7 @@ import (
 
 const (
 	dmlDocContent = ` Data {
-				.id: "Test"
+				.name: "Test"
 
 			    property string 	testS: "Hallo"
 			    property int 	testI: 1
@@ -34,7 +34,7 @@ const (
 				}
 				
 				Vector {
-					.id: "Vector"
+					.name: "Vector"
 					.type: Data {
 								property int testI: 10
 						   }
@@ -152,7 +152,7 @@ func TestDocumentTwoNodes(t *testing.T) {
 		So(handler2, ShouldNotBeNil)
 		defer handler2.Close(context.Background())
 
-		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
 		Convey("creating a document is possible on host 1", func() {
 

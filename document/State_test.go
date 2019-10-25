@@ -12,7 +12,7 @@ import (
 
 const (
 	dmlContent = ` Data {
-				.id: "Test"
+				.name: "Test"
 
 			    property string 	testS: "Hallo"
 			    property int 	testI: 1

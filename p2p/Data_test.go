@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"fmt"
 	"bytes"
 	"context"
 
@@ -198,7 +199,7 @@ func TestDataService(t *testing.T) {
 		defer h1.Stop(context.Background())
 
 		h2, _ := temporaryHost(path)
-		defer h1.Stop(context.Background())
+		defer h2.Stop(context.Background())
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())

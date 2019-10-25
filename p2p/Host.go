@@ -124,11 +124,10 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		return err
 	}
 	
-	//setup mdns discovery
+	//setup mdns discovery (careful: the context does control lifetime of some internal mdns things)
 	tag := "_ocp-discovery._udp.local"
 	h.mdns, err = mdns.NewMdnsService(ctx, h.host, 30*time.Second, tag)
 	if err != nil {
-		fmt.Printf("Unable to setup mdns service: %v\n", err)
 		h.mdns = nil
 	} else {
 		h.mdns.RegisterNotifee(&discoveryHandler{h.serviceCtx, h.host})

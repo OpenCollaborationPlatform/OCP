@@ -23,7 +23,7 @@ import (
 
 const (
 	dmlDsContent = ` Data {
-				.id: "Test"
+				.name: "Test"
 
 			    property string 	testS: "Hallo"
 			    property int 	testI: 1
@@ -40,18 +40,18 @@ const (
 				}
 
 				Vector {
-					.id: "Vector"
+					.name: "Vector"
 					.type: Data {
 								property int testI: 10
 						   }
 				}
 				
 				Raw {
-					.id: "RawData"
+					.name: "RawData"
 				}
 
 				Raw {
-					.id: "RawData2"
+					.name: "RawData2"
 				}
 			}`
 )
