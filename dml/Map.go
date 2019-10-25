@@ -14,7 +14,7 @@ type mapImpl struct {
 	entries *datastore.MapVersioned
 }
 
-func NewMap(id Identifier, parent Identifier, rntm *Runtime) Object {
+func NewMap(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
 	base := NewDataBaseClass(id, parent, rntm)
 
@@ -47,7 +47,7 @@ func NewMap(id Identifier, parent Identifier, rntm *Runtime) Object {
 	//mapI.AddEvent("onChangedEntry", NewEvent(mapI.GetJSObject(), rntm.jsvm, MustNewDataType("int")))
 	//mapI.AddEvent("onRemovedEntry", NewEvent(mapI.GetJSObject(), rntm.jsvm, MustNewDataType("int")))
 
-	return mapI
+	return mapI, nil
 }
 
 //convert all possible key types to something usable in the DB

@@ -15,7 +15,7 @@ type vector struct {
 	length  *datastore.ValueVersioned
 }
 
-func NewVector(id Identifier, parent Identifier, rntm *Runtime) Object {
+func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
 	base := NewDataBaseClass(id, parent, rntm)
 
@@ -58,7 +58,7 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) Object {
 	vec.AddEvent("onChangedEntry", NewEvent(vec.GetJSObject(), rntm, MustNewDataType("int")))
 	vec.AddEvent("onDeletedEntry", NewEvent(vec.GetJSObject(), rntm, MustNewDataType("int")))
 
-	return vec
+	return vec, nil
 }
 
 func (self *vector) Length() (int64, error) {

@@ -15,7 +15,7 @@ func init() {
 
 type Operation interface {
 	ApplyTo(*dml.Runtime) interface{}
-	ToData() []byte
+	ToData() ([]byte, error)
 }
 
 func operationFromData(data []byte) (Operation, error) {
@@ -42,13 +42,13 @@ func newFunctionOperation(user dml.User, path string, fnc string, args []interfa
 	return functionOperation{user, path, fnc, args}
 }
 
-func (self functionOperation) ToData() []byte {
+func (self functionOperation) ToData() ([]byte, error) {
 
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
 	var op Operation = self
-	e.Encode(&op)
-	return b.Bytes()
+	err := e.Encode(&op)
+	return b.Bytes(), err
 }
 
 func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
@@ -77,13 +77,13 @@ func newJsOperation(user dml.User, code string) Operation {
 	return jsOperation{user, code}
 }
 
-func (self jsOperation) ToData() []byte {
+func (self jsOperation) ToData() ([]byte, error) {
 
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
 	var op Operation = self
-	e.Encode(&op)
-	return b.Bytes()
+	err := e.Encode(&op)
+	return b.Bytes(), err
 }
 
 func (self jsOperation) ApplyTo(rntm *dml.Runtime) interface{} {
@@ -114,13 +114,13 @@ func newPropertyOperation(user dml.User, path string, prop string, val interface
 	return propertyOperation{user, path, prop, val}
 }
 
-func (self propertyOperation) ToData() []byte {
+func (self propertyOperation) ToData() ([]byte, error) {
 
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
 	var op Operation = self
-	e.Encode(&op)
-	return b.Bytes()
+	err := e.Encode(&op)
+	return b.Bytes(), err
 }
 
 func (self propertyOperation) ApplyTo(rntm *dml.Runtime) interface{} {

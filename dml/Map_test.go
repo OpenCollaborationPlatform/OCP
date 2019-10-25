@@ -30,7 +30,7 @@ func TestPODMap(t *testing.T) {
 						.key: int
 						.value: int
 					}
-					
+									
 					Map {
 						.name: "StringBoolMap"
 						.key: string
@@ -198,6 +198,10 @@ func TestComplexTypeMap(t *testing.T) {
 							property int test: 0
 						}
 					}
+
+					function test(key) {
+						return this.TypeMap.New(key)
+					}
 				}`
 
 		rntm := NewRuntime(store)
@@ -215,6 +219,10 @@ func TestComplexTypeMap(t *testing.T) {
 
 			code = `toplevel.TypeMap.New("test")`
 			_, err := rntm.RunJavaScript("user3", code)
+			So(err, ShouldBeNil)
+
+			code = `toplevel.test("test2")`
+			_, err = rntm.RunJavaScript("user3", code)
 			So(err, ShouldBeNil)
 			
 			code = `obj = new Object(toplevel.TypeMap.value)

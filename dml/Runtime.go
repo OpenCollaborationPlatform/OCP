@@ -33,7 +33,7 @@ import (
 )
 
 //Function prototype that can create new object types in DML
-type CreatorFunc func(id Identifier, parent Identifier, rntm *Runtime) Object
+type CreatorFunc func(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 
 func NewRuntime(ds *datastore.Datastore) *Runtime {
 
@@ -227,11 +227,11 @@ func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
 //Function to extend the available data and behaviour types for this runtime
 func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 
-	_, ok := self.creators[name]
+/*	_, ok := self.creators[name]
 	if ok {
-		return fmt.Errorf("Object name already registered")
+		return fmt.Errorf("Object name '%v' already registered", name)
 	}
-
+*/
 	self.creators[name] = fnc
 	return nil
 }
@@ -533,7 +533,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to parse %v", astImp.File)
 	}
-
+	
 	//first import everything needed
 	for _, imp := range ast.Imports {
 		err := self.importDML(imp)
@@ -543,7 +543,8 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	}
 
 	//we now register the imported ast as a creator
-	creator := func(id Identifier, parent Identifier, rntm *Runtime) Object {
+	creator := func(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
+			
 		//to assgn the correct object name we need to override the ID pasignment. This must be available
 		//on object build time as the identifier is created with it
 		idSet := false
@@ -560,8 +561,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 			ast.Object.Assignments = append(ast.Object.Assignments, asgn)
 		}
 
-		obj, _ := rntm.buildObject(ast.Object, parent, id.Uuid, make([]*astObject, 0))
-		return obj
+		return rntm.buildObject(ast.Object, parent, id.Uuid, make([]*astObject, 0))
 	}
 
 	//build the name, file or alias
@@ -596,14 +596,21 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 	}
 	
 	//create the object ID and check for uniqueness
-	id := Identifier{Parent: parent.Hash(), Name: objName, Type: astObj.Identifier, Uuid: uuid}
+	var phash [32]byte
+	if parent.Valid() {
+		phash = parent.Hash()
+	}
+	id := Identifier{Parent: phash, Name: objName, Type: astObj.Identifier, Uuid: uuid}
 	_, has := self.objects[id]
 	if has {	
 		return nil, fmt.Errorf("Object with same type (%s) and ID (%s) already exists", id.Type, id.Name)
 	}
 
 	//setup the object including datastore
-	obj := creator(id, parent, self)
+	obj, err := creator(id, parent, self)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to create object %v (%v)", id.Name, id.Type)
+	}
 	obj.SetDataType(MustNewDataType(astObj))
 	obj.SetRefcount(self.initialObjRefcount)
 
@@ -618,7 +625,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 
 	//expose to javascript
 	jsobj := obj.GetJSObject()
-	if parent.Valid() && objName != "" {
+	if parent.Valid() && id.Name != "" {
 		parentObj := self.objects[parent]
 		parentObj.GetJSObject().Set(objName, jsobj)
 	}
@@ -630,7 +637,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 			return nil, utils.StackError(err, "Unable to create property %v in object %v", astProp.Key, objName)
 		}
 	}
-	err := obj.SetupJSProperties(self.jsvm, jsobj)
+	err = obj.SetupJSProperties(self.jsvm, jsobj)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create javascript property interface for %v", objName)
 	}
@@ -662,7 +669,6 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 
 	//go on with all subobjects (if not behaviour)
 	if !isBehaviour {
-
 		//create our local version of the recursive behaviour map to allow adding values for children
 		localRecBehaviours := make([]*astObject, len(recBehaviours))
 		copy(localRecBehaviours, recBehaviours)
@@ -680,7 +686,6 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 		jsChildren := make([]goja.Value, 0)
 
 		for _, astChild := range astObj.Objects {
-
 			//build the child
 			child, err := self.buildObject(astChild, obj.Id(), "", localRecBehaviours)
 			if err != nil {

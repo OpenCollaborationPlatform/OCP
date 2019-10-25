@@ -26,8 +26,8 @@ type DataImpl struct {
 	children []Identifier
 }
 
-func NewData(id Identifier, parent Identifier, rntm *Runtime) Object {
-	return NewDataBaseClass(id, parent, rntm)
+func NewData(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
+	return NewDataBaseClass(id, parent, rntm), nil
 }
 
 func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) *DataImpl {

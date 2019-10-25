@@ -27,7 +27,7 @@ type graph struct {
 	edgeData *datastore.MapVersioned
 }
 
-func NewGraph(id Identifier, parent Identifier, rntm *Runtime) Object {
+func NewGraph(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
 	base := NewDataBaseClass(id, parent, rntm)
 
@@ -68,7 +68,7 @@ func NewGraph(id Identifier, parent Identifier, rntm *Runtime) Object {
 	gr.AddMethod("Sorted", MustNewMethod(gr.Sorted))
 	gr.AddMethod("Cycles", MustNewMethod(gr.Cycles))
 
-	return gr
+	return gr, nil
 }
 
 //							Graph helpers 

@@ -22,7 +22,7 @@ type Raw struct {
 	value *datastore.ValueVersioned
 }
 
-func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) dml.Object {
+func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) (dml.Object, error) {
 
 	base := dml.NewDataBaseClass(id, parent, rntm)
 
@@ -43,7 +43,7 @@ func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) dml.Object {
 	raw.AddMethod("IsSet", dml.MustNewMethod(raw.IsSet))
 	raw.AddMethod("Clear", dml.MustNewMethod(raw.Clear))
 
-	return raw
+	return raw, nil
 }
 
 //adds the path, either file or directory, to the Raw object

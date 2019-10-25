@@ -38,7 +38,7 @@ func (self astObject) Print() {
 
 type astImport struct {
 	File  string `"import" @String`
-	Alias string `[ "as" @String ]`
+	Alias string `[ "as" @Ident ]`
 }
 
 type astAssignment struct {

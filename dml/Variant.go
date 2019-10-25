@@ -14,7 +14,7 @@ type variant struct {
 	value  *datastore.ValueVersioned
 }
 
-func NewVariant(id Identifier, parent Identifier, rntm *Runtime) Object {
+func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
 	base := NewDataBaseClass(id, parent, rntm)
 
@@ -38,7 +38,7 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) Object {
 	vari.AddMethod("SetValue", MustNewMethod(vari.SetValue))
 	vari.AddMethod("GetValue", MustNewMethod(vari.GetValue))
 
-	return vari
+	return vari, nil
 }
 
 //implement DynamicData interface

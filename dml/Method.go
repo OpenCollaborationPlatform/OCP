@@ -89,16 +89,24 @@ type jsMethod struct {
 	jsobj *goja.Object
 }
 
-func (self *jsMethod) Call(args ...interface{}) interface{} {
+func (self *jsMethod) Call(args ...interface{}) (result interface{}) {
 
+	//goja panics as form of error reporting...
+	defer func() {
+        if err := recover(); err != nil {
+            result = fmt.Errorf("%v", err)
+        }
+    }()
 
 	//build the function call argument
 	jsargs := make([]goja.Value, len(args))
 	for i, arg := range args {
 		jsargs[i] = self.jsvm.ToValue(arg)
 	}
+
 	res := self.fnc(goja.FunctionCall{Arguments: jsargs, This: self.jsobj})
-	return res.Export()
+	result = res.Export()
+	return
 }
 
 func (self *jsMethod) CallBoolReturn(args ...interface{}) (bool, error) {

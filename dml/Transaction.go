@@ -459,14 +459,14 @@ type transactionBehaviour struct {
 	current       datastore.Value
 }
 
-func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) Object {
+func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
 	behaviour, _ := NewBehaviour(id, parent, rntm)
 
 	//get the datastores
 	set, err := rntm.datastore.GetOrCreateSet(datastore.ValueType, false, behaviour.Id().Hash())
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	vset := set.(*datastore.ValueSet)
 	inTrans, _ := vset.GetOrCreateValue([]byte("__inTransaction"))
@@ -488,7 +488,7 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) Ob
 	//add the user usable methods
 	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction))
 
-	return tbhvr
+	return tbhvr, nil
 }
 
 func (self *transactionBehaviour) InTransaction() bool {

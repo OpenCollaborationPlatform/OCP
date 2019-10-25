@@ -9,9 +9,15 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 	cid "github.com/ipfs/go-cid"
 	"strings"
+	"encoding/gob"
 )
 
-//Async datastructure whcih encapsulates synchronous DML runtime and a datastore.
+func init() {
+	//[]interface{} may be a valid wamp argument 
+	gob.Register(new([]interface{}))
+}
+
+//Async datastructure which encapsulates synchronous DML runtime and a datastore.
 //It works operation based: All operations are carried out ordered
 type Datastructure struct {
 
@@ -146,7 +152,12 @@ func (self Datastructure) createWampPublishFunction(path string, event string) d
 func (self Datastructure) executeOperation(ctx context.Context, op Operation) *nxclient.InvokeResult {
 
 	//execute the operation!
-	res, err := self.swarm.State.AddCommand(ctx, "dmlState", op.ToData())
+	data, err := op.ToData()
+	if err != nil {
+		return &nxclient.InvokeResult{Err: wamp.URI(utils.StackError(err, "Unable to parse operation for shared state").Error())}
+	}
+
+	res, err := self.swarm.State.AddCommand(ctx, "dmlState", data)
 	if err != nil {
 		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
 	}

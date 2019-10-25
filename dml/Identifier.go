@@ -58,5 +58,5 @@ func (self Identifier) Equal(id Identifier) bool {
 }
 
 func (self Identifier) Valid() bool {
-	return self.Type != "" && self.Name != ""
+	return self.Type != "" || self.Name != "" || self.Uuid != ""
 }
