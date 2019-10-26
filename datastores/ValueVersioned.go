@@ -33,11 +33,11 @@ Definitions:
 */
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 	"math"
 
 	"github.com/boltdb/bolt"

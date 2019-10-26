@@ -12,10 +12,10 @@ bucket(SetKey) [
 */
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
 )
@@ -307,7 +307,7 @@ func (self *Value) Read() (interface{}, error) {
 		if data == nil {
 			return fmt.Errorf("Value was not set before read")
 		}
-		var err error 
+		var err error
 		res, err = getInterface(data)
 		return err
 	})
@@ -403,13 +403,13 @@ func getBytes(data interface{}) ([]byte, error) {
 func getInterface(bts []byte) (interface{}, error) {
 
 	var res interface{}
-	
+
 	buf := bytes.NewBuffer(bts)
 	dec := gob.NewDecoder(buf)
 
 	if err := dec.Decode(&res); err != nil {
 		return nil, err
 	}
-	
+
 	return res, nil
 }

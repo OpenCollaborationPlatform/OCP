@@ -16,9 +16,9 @@ Note:
 package dml
 
 import (
+	"fmt"
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
-	"fmt"
 	"io"
 	"math"
 	"os"
@@ -95,7 +95,7 @@ type Runtime struct {
 	mutex     *sync.Mutex
 
 	//internal state
-	importPath 		  string
+	importPath         string
 	ready              Boolean //True if a datastructure was read and setup, false if no dml file was parsed
 	currentUser        User    //user that currently access the runtime
 	objects            map[Identifier]Data
@@ -117,15 +117,15 @@ func (self *Runtime) ParseFolder(path string) error {
 		return err
 	}
 	defer file.Close()
-	
+
 	//set the import path
 	self.importPath = path
-	
+
 	//parse the file!
-	return self.Parse(file)	
+	return self.Parse(file)
 }
 
-//Parses the dml code and setups the full structure. Note: Cannot handle local 
+//Parses the dml code and setups the full structure. Note: Cannot handle local
 //imports
 func (self *Runtime) Parse(reader io.Reader) error {
 
@@ -153,7 +153,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	self.initialObjRefcount = uint64(math.MaxUint64 / 2)
 
 	//first import everything needed
-	
+
 	for _, imp := range ast.Imports {
 		err := self.importDML(imp)
 		if err != nil {
@@ -186,11 +186,11 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	return err
 }
 
-//calls setup on all Data Objects. The string is the path up to the object, 
+//calls setup on all Data Objects. The string is the path up to the object,
 //e.g. for object Toplevel.Sublevel.MyObject path ist Toplevel.Sublevel
 //th epath is empty for the main object as well as all dynamic data, e.g. vector entries
 func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
-	
+
 	//check if setup is possible
 	if !self.ready {
 		return fmt.Errorf("Unable to setup objects: Runtime not initialized")
@@ -198,7 +198,7 @@ func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
 
 	//iterate all data object in the hirarchy
 	has := make(map[Identifier]struct{}, 0)
-	path := "" 
+	path := ""
 	err := setupDataChildren(path, self.mainObj, has, setup)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup all objects")
@@ -216,26 +216,25 @@ func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
 			continue
 		}
 		err := setup("", dataobj)
-		if err != nil { 
+		if err != nil {
 			return utils.StackError(err, "Unable to setup all dynamic objects")
 		}
 	}
-	
+
 	return nil
 }
 
 //Function to extend the available data and behaviour types for this runtime
 func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 
-/*	_, ok := self.creators[name]
-	if ok {
-		return fmt.Errorf("Object name '%v' already registered", name)
-	}
-*/
+	/*	_, ok := self.creators[name]
+		if ok {
+			return fmt.Errorf("Object name '%v' already registered", name)
+		}
+	*/
 	self.creators[name] = fnc
 	return nil
 }
-
 
 // 						Accessing / executing Methods
 //*********************************************************************************
@@ -361,18 +360,18 @@ func (self *Runtime) WriteProperty(user User, path string, property string, val 
 //*********************************************************************************
 
 func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup func(string, Data) error) error {
-	
+
 	//execute on the object itself!
 	err := setup(path, obj)
 	if err != nil {
 		return err
 	}
 	has[obj.Id()] = struct{}{}
-	
+
 	//advance path and execute all children
 	path = path + "." + obj.Id().Name
 	for _, child := range obj.GetChildren() {
-		
+
 		datachild, ok := child.(Data)
 		if ok {
 			err := setupDataChildren(path, datachild, has, setup)
@@ -381,7 +380,7 @@ func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -408,13 +407,13 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 			return nil, fmt.Errorf("First identifier %v cannot be found", names[0])
 		}
 		listobj, ok := self.objects[id]
-		if !ok{
+		if !ok {
 			return nil, fmt.Errorf("First identifier %v cannot be found", names[0])
 		}
 		obj = listobj
-	
+
 	} else {
-		obj = self.mainObj	
+		obj = self.mainObj
 	}
 
 	for _, name := range names[1:] {
@@ -428,11 +427,11 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 				return nil, fmt.Errorf("Identifier %v cannot be found", name)
 			}
 			listobj, ok := self.objects[id]
-			if !ok{
+			if !ok {
 				return nil, fmt.Errorf("Identifier %v cannot be found", name)
 			}
 			obj = listobj
-		
+
 		} else {
 			obj = child
 		}
@@ -533,7 +532,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to parse %v", astImp.File)
 	}
-	
+
 	//first import everything needed
 	for _, imp := range ast.Imports {
 		err := self.importDML(imp)
@@ -544,7 +543,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 
 	//we now register the imported ast as a creator
 	creator := func(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
-			
+
 		//to assgn the correct object name we need to override the ID pasignment. This must be available
 		//on object build time as the identifier is created with it
 		idSet := false
@@ -594,7 +593,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 			objName = *astAssign.Value.String
 		}
 	}
-	
+
 	//create the object ID and check for uniqueness
 	var phash [32]byte
 	if parent.Valid() {
@@ -602,7 +601,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 	}
 	id := Identifier{Parent: phash, Name: objName, Type: astObj.Identifier, Uuid: uuid}
 	_, has := self.objects[id]
-	if has {	
+	if has {
 		return nil, fmt.Errorf("Object with same type (%s) and ID (%s) already exists", id.Type, id.Name)
 	}
 

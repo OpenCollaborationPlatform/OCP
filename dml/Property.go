@@ -1,9 +1,9 @@
 package dml
 
 import (
+	"fmt"
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
-	"fmt"
 	"log"
 
 	"github.com/dop251/goja"
@@ -31,9 +31,9 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 	var prop Property
 
 	if !constprop {
-			
+
 		if dtype.IsPOD() {
-		
+
 			//setup default value if needed
 			value, _ := set.GetOrCreateValue([]byte(name))
 			res, err := value.HoldsValue()
@@ -42,7 +42,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 			}
 			if !res {
 				value.Write(default_value)
-			}	
+			}
 			prop = &dataProperty{NewEventHandler(), dtype, *value}
 
 		} else if dtype.IsType() {
@@ -55,7 +55,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 			if !res {
 				dt := default_value.(DataType)
 				value.Write(dt.AsString())
-			}	
+			}
 			prop = &typeProperty{NewEventHandler(), *value}
 
 		} else {
@@ -110,8 +110,8 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	if !self.db.IsValid() {
 		return fmt.Errorf("Invalid database entry")
 	}
-	
-	self.GetEvent("onBeforeChange").Emit(val)	
+
+	self.GetEvent("onBeforeChange").Emit(val)
 	err = self.db.Write(val)
 	if err != nil {
 		return err
@@ -133,10 +133,9 @@ func (self *dataProperty) GetValue() interface{} {
 	return val
 }
 
-
 type typeProperty struct {
 	eventHandler
-	db           datastore.ValueVersioned
+	db datastore.ValueVersioned
 }
 
 func (self typeProperty) Type() DataType {
@@ -166,7 +165,7 @@ func (self *typeProperty) SetValue(val interface{}) error {
 
 //we only return basic information, mailny for JS accessibility
 func (self *typeProperty) GetValue() interface{} {
-	
+
 	data, err := self.db.Read()
 	if err != nil {
 		log.Printf("Error reading value: %s", err)
@@ -176,7 +175,7 @@ func (self *typeProperty) GetValue() interface{} {
 }
 
 func (self *typeProperty) GetDataType() DataType {
-	
+
 	data, err := self.db.Read()
 	if err != nil {
 		log.Printf("Cannot access datastore: %v", err)

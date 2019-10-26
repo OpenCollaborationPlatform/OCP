@@ -1,8 +1,8 @@
 package datastore
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 	"math"
 
 	"github.com/boltdb/bolt"

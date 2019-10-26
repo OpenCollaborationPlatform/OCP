@@ -37,31 +37,31 @@ func TestPODVariant(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		Convey("Adding to int variant should work", func() {
-			
+
 			code = `toplevel.Variant.SetValue(10)`
 			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
-			
+
 			res, err := rntm.CallMethod("", "toplevel.Variant", "GetValue")
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
-			
+
 			Convey("but setting wrong type should fail", func() {
-			
+
 				code = `toplevel.Variant.SetValue("hello")`
 				_, err := rntm.RunJavaScript("", code)
-				So(err, ShouldNotBeNil)			
+				So(err, ShouldNotBeNil)
 				res, err := rntm.CallMethod("", "toplevel.Variant", "GetValue")
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 10)
 			})
-			
+
 			Convey("Changeing the datatype works", func() {
-				
+
 				code = `toplevel.Variant.type = toplevel.other`
 				_, err := rntm.RunJavaScript("", code)
-				So(err, ShouldBeNil)	
-				
+				So(err, ShouldBeNil)
+
 				Convey("and initialized the value to the default of the new datatype", func() {
 					res, err := rntm.CallMethod("", "toplevel.Variant", "GetValue")
 					So(err, ShouldBeNil)
@@ -104,9 +104,9 @@ func TestTypeVariant(t *testing.T) {
 			`
 			_, err := rntm.RunJavaScript("user3", code)
 			So(err, ShouldBeNil)
-			
+
 			Convey("and the value should be a nicely initialized object", func() {
-				
+
 				code = `
 					obj = toplevel.Variant.GetValue()
 					if (obj == null) {

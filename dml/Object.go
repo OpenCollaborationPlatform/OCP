@@ -1,9 +1,8 @@
 package dml
 
 import (
-	
-	datastore "github.com/ickby/CollaborationNode/datastores"
 	"fmt"
+	datastore "github.com/ickby/CollaborationNode/datastores"
 
 	"github.com/dop251/goja"
 )
@@ -33,7 +32,7 @@ type Object interface {
 	//type handling (full type desciption)
 	DataType() DataType
 	SetDataType(DataType)
-	
+
 	//Genertic
 	GetRuntime() *Runtime
 }
@@ -96,7 +95,7 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
 
 	//add default methods
 	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode))
-	
+
 	//add default events
 	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm, MustNewDataType("string")))
 
@@ -185,12 +184,12 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	}
 
 	self.propertyHandler.properties[name] = prop
-	
+
 	//register change event
 	prop.GetEvent("onChanged").RegisterCallback(func(...interface{}) error {
 		return self.GetEvent("onPropertyChanged").Emit(name)
 	})
-	
+
 	return nil
 }
 

@@ -2,16 +2,16 @@
 package dml
 
 import (
+	"fmt"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
-	"fmt"
 )
 
 //variant type: stores any kind of data, dependend on type property
 type variant struct {
 	*DataImpl
 
-	value  *datastore.ValueVersioned
+	value *datastore.ValueVersioned
 }
 
 func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
@@ -33,7 +33,7 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 	vari.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), false)
 	vari.GetProperty("type").GetEvent("onBeforeChange").RegisterCallback(vari.beforeChangeCallback)
 	vari.GetProperty("type").GetEvent("onChanged").RegisterCallback(vari.changedCallback)
-	
+
 	//add methods
 	vari.AddMethod("SetValue", MustNewMethod(vari.SetValue))
 	vari.AddMethod("GetValue", MustNewMethod(vari.GetValue))
@@ -45,7 +45,7 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 func (self *variant) Load() error {
 
 	//if the value was never set we don't need to load anything...
-	has, err := self.value.HoldsValue() 
+	has, err := self.value.HoldsValue()
 	if err != nil {
 		return utils.StackError(err, "Unable to access database to load variant value")
 	}
@@ -56,34 +56,34 @@ func (self *variant) Load() error {
 	dt := self.getDataType()
 	if dt.IsObject() || dt.IsComplex() {
 
-			res, err := self.value.Read()
-			if err == nil {
-				id, err := IdentifierFromEncoded(res.(string))
-				if err != nil {
-					return utils.StackError(err, "Unable to load variant: Stored identifier is invalid")
-				}
-				existing, ok := self.rntm.objects[id]
-				if !ok {
-
-					//we made sure the object does not exist. We need to load it
-					obj, err := LoadObject(self.rntm, dt, id)
-					if err != nil {
-						return utils.StackError(err, "Unable to load object for variant: construction failed")
-					}
-					obj.IncreaseRefcount()
-					self.rntm.objects[id] = obj.(Data)
-				} else {
-					existing.IncreaseRefcount()
-				}
-			} else {
-				return utils.StackError(err, "Unable to load variant: entry cannot be read")
+		res, err := self.value.Read()
+		if err == nil {
+			id, err := IdentifierFromEncoded(res.(string))
+			if err != nil {
+				return utils.StackError(err, "Unable to load variant: Stored identifier is invalid")
 			}
+			existing, ok := self.rntm.objects[id]
+			if !ok {
+
+				//we made sure the object does not exist. We need to load it
+				obj, err := LoadObject(self.rntm, dt, id)
+				if err != nil {
+					return utils.StackError(err, "Unable to load object for variant: construction failed")
+				}
+				obj.IncreaseRefcount()
+				self.rntm.objects[id] = obj.(Data)
+			} else {
+				existing.IncreaseRefcount()
+			}
+		} else {
+			return utils.StackError(err, "Unable to load variant: entry cannot be read")
+		}
 	}
 	return nil
 }
 
 func (self *variant) SetValue(value interface{}) error {
-	
+
 	//check if the type of the value is correct
 	dt := self.getDataType()
 	err := dt.MustBeTypeOf(value)
@@ -108,7 +108,7 @@ func (self *variant) SetValue(value interface{}) error {
 				data.DecreaseRefcount()
 			}
 		}
-		
+
 	} else if dt.IsType() {
 
 		val, _ := value.(DataType)
@@ -126,16 +126,16 @@ func (self *variant) SetValue(value interface{}) error {
 }
 
 func (self *variant) GetValue() (interface{}, error) {
-		
-	dt := self.getDataType()	
-		
+
+	dt := self.getDataType()
+
 	//if no value waas set before we just return the default values!
 	if holds, _ := self.value.HoldsValue(); !holds {
 		return dt.GetDefaultValue(), nil
 	}
-		
+
 	var result interface{}
-	
+
 	if dt.IsObject() || dt.IsComplex() {
 		res, err := self.value.Read()
 		if err == nil {
@@ -149,7 +149,7 @@ func (self *variant) GetValue() (interface{}, error) {
 				}
 				result = res
 			}
-		
+
 		} else {
 			return nil, utils.StackError(err, "Unable to read object id from deatabase")
 		}
@@ -158,10 +158,10 @@ func (self *variant) GetValue() (interface{}, error) {
 
 		res, err := self.value.Read()
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to read type from database")	
+			return nil, utils.StackError(err, "Unable to read type from database")
 		}
 		result, err = NewDataType(res.(string))
-		
+
 	} else {
 		//plain types remain
 		var err error
@@ -170,7 +170,7 @@ func (self *variant) GetValue() (interface{}, error) {
 			return nil, utils.StackError(err, "Unable to read variant value from database")
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -178,8 +178,8 @@ func (self *variant) GetValue() (interface{}, error) {
 //			Internal functions
 //*****************************************************************************
 
-func (self *variant) beforeChangeCallback(args ... interface{}) error {
-	
+func (self *variant) beforeChangeCallback(args ...interface{}) error {
+
 	//check if we have a object already, and decrease refcount if so
 	//we do this before the change as afterwards we don't know if the value
 	//was a object or not, as .type property was already changed
@@ -189,19 +189,18 @@ func (self *variant) beforeChangeCallback(args ... interface{}) error {
 		if err != nil {
 			return err
 		}
-	
+
 		obj, ok := oldval.(Object)
 		if ok && obj != nil {
 			obj.DecreaseRefcount()
 		}
-	}	
+	}
 	return nil
-} 
+}
 
 func (self *variant) changedCallback(args ...interface{}) error {
 
-
-	//build the default values! And set the value. Don't use SetValue as this 
+	//build the default values! And set the value. Don't use SetValue as this
 	//assumes old and new value have same datatype
 	dt := self.getDataType()
 	if dt.IsComplex() {
@@ -217,11 +216,11 @@ func (self *variant) changedCallback(args ...interface{}) error {
 		val, _ := dt.GetDefaultValue().(DataType)
 		return self.value.Write(val.AsString())
 
-	}else {
+	} else {
 		result := dt.GetDefaultValue()
 		return self.value.Write(result)
 	}
-		
+
 	return fmt.Errorf("Something went wrong")
 }
 
@@ -238,7 +237,7 @@ func (self *variant) IncreaseRefcount() error {
 	//increase also object refcount if we store one...
 	dt := self.getDataType()
 	if dt.IsObject() || dt.IsComplex() {
-		
+
 		res, err := self.value.Read()
 		if err == nil {
 			id, e := IdentifierFromEncoded(res.(string))
@@ -262,7 +261,7 @@ func (self *variant) DecreaseRefcount() error {
 	//decrease child refcount
 	dt := self.getDataType()
 	if dt.IsObject() || dt.IsComplex() {
-		
+
 		res, err := self.value.Read()
 		if err == nil {
 			id, e := IdentifierFromEncoded(res.(string))
@@ -280,7 +279,6 @@ func (self *variant) DecreaseRefcount() error {
 	//now decrease our own
 	return self.object.DecreaseRefcount()
 }
-
 
 // func (self *vector) buildNew() (interface{}, error) {
 

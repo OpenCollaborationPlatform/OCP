@@ -212,11 +212,11 @@ func TestListVersionedData(t *testing.T) {
 			entries, err := list.GetEntries()
 			So(err, ShouldBeNil)
 			So(len(entries), ShouldEqual, 2)
-			
+
 			So(entry1.Remove(), ShouldBeNil)
 			_, err = entry1.Read()
 			So(err, ShouldNotBeNil)
-			
+
 			entries, err = list.GetEntries()
 			So(err, ShouldBeNil)
 			So(len(entries), ShouldEqual, 1)

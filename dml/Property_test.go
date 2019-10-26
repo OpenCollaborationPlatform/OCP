@@ -51,14 +51,14 @@ func TestTypeProperty(t *testing.T) {
 			dt, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
 
-			val, err := rntm.RunJavaScript( "", "toplevel.test")
+			val, err := rntm.RunJavaScript("", "toplevel.test")
 			So(err, ShouldBeNil)
 			dtJs, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
 			So(dtJs.IsEqual(dt), ShouldBeTrue)
-			
-			Convey("and return a usable DataType object", func() { 
-			
+
+			Convey("and return a usable DataType object", func() {
+
 				code = `
 					if !toplevel.test2.IsString() {
 						throw "expected string, is different datatype"
@@ -67,7 +67,7 @@ func TestTypeProperty(t *testing.T) {
 						throw "Should be POD, but is not"
 					}
 					`
-				_, err := rntm.RunJavaScript( "", "toplevel.test")
+				_, err := rntm.RunJavaScript("", "toplevel.test")
 				So(err, ShouldBeNil)
 			})
 		})
@@ -82,7 +82,7 @@ func TestTypeProperty(t *testing.T) {
 				if (obj.test != 10) {
 					throw "object properties not correctly created"
 				}`
-			_, err := rntm.RunJavaScript( "", code)
+			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 		})
 
@@ -94,10 +94,10 @@ func TestTypeProperty(t *testing.T) {
 				if (!(id in Objects)) {
 					throw "object is not accessible, but should be"
 				}`
-			_, err := rntm.RunJavaScript( "", code)
+			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 		})
-		
+
 		Convey("Non-const type property is changeable", func() {
 			code = `
 				toplevel.test2 = toplevel.dtAsInt()
@@ -108,10 +108,10 @@ func TestTypeProperty(t *testing.T) {
 					throw "Should be POD, but is not"
 				}
 			`
-			_, err := rntm.RunJavaScript( "", code)
+			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 		})
-		
+
 		Convey("When set to a complex datatype", func() {
 			code = `
 				toplevel.test2 = toplevel.dtAsComplex()
@@ -122,7 +122,7 @@ func TestTypeProperty(t *testing.T) {
 					throw "Should not be POD, but is"
 				}
 			`
-			_, err := rntm.RunJavaScript( "", code)
+			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 		})
 

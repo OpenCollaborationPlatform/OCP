@@ -1,9 +1,9 @@
 package dml
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"encoding/json"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/mr-tron/base58/base58"
 )
@@ -40,7 +40,7 @@ func NewDataType(val interface{}) (DataType, error) {
 		} else {
 			result = DataType{ast.Pod}
 		}
-		
+
 	case *astObject:
 
 		ast := val.(*astObject)
@@ -67,7 +67,7 @@ func (self DataType) IsValid() bool {
 	//as every else strange string is interpretet as complex datatype and we cannot
 	//easily check it is a valid complex, hence we only check if string is empty
 	return self.value != ""
-	
+
 }
 
 func (self DataType) IsEqual(dt DataType) bool {
@@ -105,14 +105,14 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 		if self.IsObject() {
 			return nil
 		}
-		
+
 		//or if the object is exactly the complex type we store
 		if obj.DataType().IsEqual(self) {
 			return nil
 		}
 		return fmt.Errorf("wrong object type, expected vs. received\n %v\n%v", self.AsString(), obj.DataType().AsString())
 	}
-	
+
 	//check if the type is correct
 	switch val.(type) {
 	case int, int32, int64:
@@ -161,7 +161,7 @@ func (self DataType) complexAsAst() (*astObject, error) {
 	return astObj, nil
 }
 
-func (self DataType) IsNone() bool { return self.value == "none" }
+func (self DataType) IsNone() bool   { return self.value == "none" }
 func (self DataType) IsString() bool { return self.value == "string" }
 func (self DataType) IsInt() bool    { return self.value == "int" }
 func (self DataType) IsFloat() bool  { return self.value == "float" }
@@ -179,7 +179,7 @@ func (self DataType) IsComplex() bool {
 }
 
 func (self DataType) GetDefaultValue() interface{} {
-	
+
 	switch self.value {
 	case "string":
 		return string("")
@@ -193,6 +193,6 @@ func (self DataType) GetDefaultValue() interface{} {
 		return MustNewDataType("none")
 	}
 
-	//object and complex return "none" object	
+	//object and complex return "none" object
 	return nil
 }

@@ -2,7 +2,7 @@ package document
 
 import (
 	"encoding/gob"
-	
+
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"

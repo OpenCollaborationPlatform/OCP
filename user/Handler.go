@@ -5,17 +5,17 @@ import (
 	"time"
 )
 
-import(
+import (
 	"context"
-	
-	"github.com/ickby/CollaborationNode/utils"
-	"github.com/ickby/CollaborationNode/connection"
-	"github.com/ickby/CollaborationNode/p2p"
+
 	nxclient "github.com/gammazero/nexus/client"
 	wamp "github.com/gammazero/nexus/wamp"
+	"github.com/ickby/CollaborationNode/connection"
+	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/utils"
 )
 
-/*extremely simple user handling... no authorisation, identification etc... just 
+/*extremely simple user handling... no authorisation, identification etc... just
   something to make finding easy!
 */
 type UserHandler struct {
@@ -25,7 +25,7 @@ type UserHandler struct {
 	host   *p2p.Host
 
 	//user handling
-	user UserID
+	user   UserID
 	ticker *time.Ticker
 }
 
@@ -37,15 +37,15 @@ func NewUserHandler(router *connection.Router, host *p2p.Host) (*UserHandler, er
 	}
 
 	uh := &UserHandler{
-		client:    client,
-		host:      host,
-		user: 	   UserID(""),
-		ticker:	   time.NewTicker(20*time.Hour),
+		client: client,
+		host:   host,
+		user:   UserID(""),
+		ticker: time.NewTicker(20 * time.Hour),
 	}
-	
+
 	//reannouncement or our user name!
 	go func() {
-		
+
 		for {
 			select {
 			case _, more := <-uh.ticker.C:
@@ -54,14 +54,14 @@ func NewUserHandler(router *connection.Router, host *p2p.Host) (*UserHandler, er
 				}
 				for {
 					ctx, _ := context.WithTimeout(context.Background(), 1*time.Minute)
-					err := host.Provide(ctx, uh.user.Cid())	
+					err := host.Provide(ctx, uh.user.Cid())
 					if err == nil {
 						break
 					}
-					time.Sleep(1*time.Minute)
+					time.Sleep(1 * time.Minute)
 				}
 			}
-		}			
+		}
 	}()
 
 	//here we create all general document related RPCs and Topic
@@ -80,7 +80,7 @@ func (self *UserHandler) ID() UserID {
 }
 
 func (self *UserHandler) SetUser(ctx context.Context, id UserID) error {
-	
+
 	err := self.host.Provide(ctx, id.Cid())
 	if err != nil {
 		return utils.StackError(err, "Unable to set username")
@@ -91,20 +91,20 @@ func (self *UserHandler) SetUser(ctx context.Context, id UserID) error {
 
 func (self *UserHandler) setUser(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
-	if len(args)	 != 1 {
+	if len(args) != 1 {
 		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name"}, Err: wamp.URI("ocp.error")}
 	}
-	
+
 	name, ok := args[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")} 
+		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")}
 	}
-	
+
 	//create user and provide!
 	id := UserID(name)
 	err := self.SetUser(ctx, id)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")} 
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 	return &nxclient.InvokeResult{}
 }
@@ -118,22 +118,21 @@ func (self *UserHandler) FindUser(ctx context.Context, id UserID, num int) (p2p.
 	if len(result) == 0 {
 		return p2p.PeerID(""), fmt.Errorf("Unable to find user. Are both of you conencted to the network?")
 	}
-	
+
 	return result[0], nil
 }
 
-
 func (self *UserHandler) findUser(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
-	if len(args)	 < 1 {
+	if len(args) < 1 {
 		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name, optional amount of nodes to find"}, Err: wamp.URI("ocp.error")}
 	}
-	
+
 	name, ok := args[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")} 
+		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")}
 	}
-	
+
 	num := 1
 	if len(args) == 2 {
 		n, ok := args[1].(int)
@@ -141,13 +140,13 @@ func (self *UserHandler) findUser(ctx context.Context, args wamp.List, kwargs, d
 			num = n
 		}
 	}
-	
+
 	//create user and provide!
 	id := UserID(name)
 	result, err := self.FindUser(ctx, id, num)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")} 
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
-	
+
 	return &nxclient.InvokeResult{Args: wamp.List{result.Pretty()}}
 }

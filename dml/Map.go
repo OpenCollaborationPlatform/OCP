@@ -2,9 +2,9 @@
 package dml
 
 import (
+	"fmt"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
-	"fmt"
 )
 
 //map type: stores requested data type by index (0-based)
@@ -53,40 +53,40 @@ func NewMap(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 //convert all possible key types to something usable in the DB
 func (self *mapImpl) keyToDB(key interface{}) interface{} {
 	dt := self.keyDataType()
-	
+
 	if dt.IsObject() || dt.IsComplex() {
 
 		obj, _ := key.(Object)
 		return obj.Id().Encode()
-		
+
 	} else if dt.IsType() {
 
 		val, _ := key.(DataType)
 		return val.AsString()
 	}
-	
+
 	//numeric types should be unified!
 	switch key.(type) {
-		case int:
-			key = int64(key.(int))
-		case int8:
-			key = int64(key.(int8))
-		case int16:
-			key = int64(key.(int16))
-		case int32:
-			key = int64(key.(int32))
-		case uint:
-			key = uint64(key.(uint))
-		case uint8:
-			key = uint64(key.(uint8))
-		case uint16:
-			key = uint64(key.(uint16))
-		case uint32:
-			key = uint64(key.(uint32))
-		case float32:
-			key = float64(key.(float32))
+	case int:
+		key = int64(key.(int))
+	case int8:
+		key = int64(key.(int8))
+	case int16:
+		key = int64(key.(int16))
+	case int32:
+		key = int64(key.(int32))
+	case uint:
+		key = uint64(key.(uint))
+	case uint8:
+		key = uint64(key.(uint8))
+	case uint16:
+		key = uint64(key.(uint16))
+	case uint32:
+		key = uint64(key.(uint32))
+	case float32:
+		key = float64(key.(float32))
 	}
-	
+
 	//everything else is simply used as key
 	return key
 
@@ -95,18 +95,18 @@ func (self *mapImpl) keyToDB(key interface{}) interface{} {
 //inverse of keyToDB
 func (self *mapImpl) dbToKey(key interface{}) (interface{}, error) {
 	dt := self.keyDataType()
-	
+
 	if dt.IsObject() || dt.IsComplex() {
 
 		encoded, _ := key.(string)
 		return IdentifierFromEncoded(encoded)
-		
+
 	} else if dt.IsType() {
 
 		val, _ := key.(string)
 		return NewDataType(val)
 	}
-	
+
 	//everything else is simply used as key
 	return key, nil
 }
@@ -145,7 +145,7 @@ func (self *mapImpl) Has(key interface{}) (bool, error) {
 	if err != nil {
 		return false, utils.StackError(err, "Key has wrong type")
 	}
-	
+
 	dbkey := self.keyToDB(key)
 	return self.entries.HasKey(dbkey), nil
 }
@@ -228,7 +228,7 @@ func (self *mapImpl) Get(key interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Key has wrong type")
 	}
-	
+
 	//check if key is availbale
 	dbkey := self.keyToDB(key)
 	if !self.entries.HasKey(dbkey) {
@@ -258,7 +258,7 @@ func (self *mapImpl) Get(key interface{}) (interface{}, error) {
 
 		res, err := self.entries.Read(dbkey)
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to get stored type")	
+			return nil, utils.StackError(err, "Unable to get stored type")
 		}
 		result, err = NewDataType(res.(string))
 		if err != nil {
@@ -342,7 +342,7 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Cannot create new map value, key has wrong type")
 	}
-	
+
 	//if we already have it we cannot create new!
 	dbkey := self.keyToDB(key)
 	if self.entries.HasKey(dbkey) {
@@ -368,7 +368,6 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	return result, self.Set(key, result)
 }
 
-
 //remove a entry from the mapImpl
 func (self *mapImpl) Remove(key interface{}) error {
 
@@ -378,7 +377,7 @@ func (self *mapImpl) Remove(key interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Cannot create new map value, key has wrong type")
 	}
-	
+
 	//if we already have it we cannot create new!
 	dbkey := self.keyToDB(key)
 	if !self.entries.HasKey(dbkey) {
@@ -402,7 +401,6 @@ func (self *mapImpl) Remove(key interface{}) error {
 	//and delete the old key
 	return self.entries.Remove(dbkey)
 }
-
 
 //*****************************************************************************
 //			Internal functions
@@ -454,17 +452,17 @@ func (self *mapImpl) IncreaseRefcount() error {
 					return fmt.Errorf("Unable to increase map refcount: Invalid child stored")
 				}
 				existing.IncreaseRefcount()
-			} 
+			}
 		}
 	}
-	
+
 	//now increase our own refcount
 	return self.object.IncreaseRefcount()
 }
 
 //override to handle children refcount additional to our own
 func (self *mapImpl) DecreaseRefcount() error {
-	
+
 	//handle keys!
 	dt := self.keyDataType()
 	if dt.IsObject() || dt.IsComplex() {
@@ -486,7 +484,7 @@ func (self *mapImpl) DecreaseRefcount() error {
 			existing.DecreaseRefcount()
 		}
 	}
-	
+
 	//handle values
 	dt = self.valueDataType()
 	if dt.IsObject() || dt.IsComplex() {
@@ -508,10 +506,10 @@ func (self *mapImpl) DecreaseRefcount() error {
 					return fmt.Errorf("Unable to increase map refcount: Invalid child stored")
 				}
 				existing.DecreaseRefcount()
-			} 
+			}
 		}
 	}
-	
+
 	//now decrease our own refcount
 	return self.object.DecreaseRefcount()
 }

@@ -2,9 +2,9 @@
 package datastore
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
 )
@@ -279,7 +279,7 @@ func (self *List) GetEntries() ([]ListEntry, error) {
 			copy(key, k)
 			value.key = key
 
-			//add to the list			
+			//add to the list
 			entries = append(entries, &listEntry{value})
 			return nil
 		})

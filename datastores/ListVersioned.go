@@ -2,9 +2,9 @@
 package datastore
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
 )
@@ -637,7 +637,7 @@ func (self *ListVersioned) GetEntries() ([]ListEntry, error) {
 		return []ListEntry{}, err
 	}
 
-	entries := make([]ListEntry, len(vals))	
+	entries := make([]ListEntry, len(vals))
 	for i, val := range vals {
 		entries[i] = &listVersionedEntry{val}
 	}
@@ -698,4 +698,3 @@ func (self *listVersionedEntry) Remove() error {
 func (self *listVersionedEntry) Id() uint64 {
 	return btoi(self.value.key)
 }
-

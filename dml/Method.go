@@ -93,10 +93,10 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}) {
 
 	//goja panics as form of error reporting...
 	defer func() {
-        if err := recover(); err != nil {
-            result = fmt.Errorf("%v", err)
-        }
-    }()
+		if err := recover(); err != nil {
+			result = fmt.Errorf("%v", err)
+		}
+	}()
 
 	//build the function call argument
 	jsargs := make([]goja.Value, len(args))

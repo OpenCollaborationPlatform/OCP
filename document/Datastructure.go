@@ -2,6 +2,7 @@ package document
 
 import (
 	"context"
+	"encoding/gob"
 	nxclient "github.com/gammazero/nexus/client"
 	wamp "github.com/gammazero/nexus/wamp"
 	"github.com/ickby/CollaborationNode/dml"
@@ -9,11 +10,10 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 	cid "github.com/ipfs/go-cid"
 	"strings"
-	"encoding/gob"
 )
 
 func init() {
-	//[]interface{} may be a valid wamp argument 
+	//[]interface{} may be a valid wamp argument
 	gob.Register(new([]interface{}))
 }
 
@@ -154,7 +154,7 @@ func (self Datastructure) executeOperation(ctx context.Context, op Operation) *n
 	//execute the operation!
 	data, err := op.ToData()
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{utils.StackError(err, "Unable to parse operation for shared state").Error()}, Err: wamp.URI("ocp.error")} 
+		return &nxclient.InvokeResult{Args: wamp.List{utils.StackError(err, "Unable to parse operation for shared state").Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	res, err := self.swarm.State.AddCommand(ctx, "dmlState", data)

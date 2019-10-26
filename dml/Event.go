@@ -160,12 +160,12 @@ func (self *eventHandler) GetEvent(name string) Event {
 }
 
 func (self *eventHandler) Events() []string {
-	
+
 	res := make([]string, len(self.events))
-	cnt := 0 
+	cnt := 0
 	for key, _ := range self.events {
 		res[cnt] = key
-		cnt = cnt+1
+		cnt = cnt + 1
 	}
 	return res
 }
@@ -181,7 +181,7 @@ func extractArgs(values []goja.Value, rntm *Runtime) []interface{} {
 			res[i] = obj
 			continue
 		}
-		
+
 		//no, normal values!
 		res[i] = val.Export()
 	}

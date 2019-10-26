@@ -123,7 +123,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	if err != nil {
 		return err
 	}
-	
+
 	//setup mdns discovery (careful: the context does control lifetime of some internal mdns things)
 	//--> mdns works fine, but for whatever reason this makes the p2p test fail,
 	/*tag := "_ocp-discovery._udp.local"

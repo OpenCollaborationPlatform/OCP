@@ -59,7 +59,7 @@ func (self BitswapRouting) Provide(ctx context.Context, id cid.Cid, announce boo
 	//check if global is a owner and provide if so!
 	for _, name := range owner {
 		if name == "global" {
-			return self.host.dht.Provide(ctx, id, announce) 
+			return self.host.dht.Provide(ctx, id, announce)
 		}
 	}
 

@@ -1,11 +1,11 @@
 package dml
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 
-	"github.com/dop251/goja"
 	"github.com/alecthomas/participle"
+	"github.com/dop251/goja"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -30,7 +30,7 @@ func SetupGlobals(rntm *Runtime) {
 		}
 		return obj.GetJSObject()
 	})
-	
+
 	//constructor for DML data type
 	rntm.jsvm.Set("DataType", func(call goja.ConstructorCall) *goja.Object {
 
@@ -43,26 +43,26 @@ func SetupGlobals(rntm *Runtime) {
 		if !ok {
 			panic(rntm.jsvm.ToValue("A valid type description must be given as argument"))
 		}
-		
+
 		var dt DataType
 		switch typestr {
-			case "int", "float", "string", "bool", "type", "object":
-				dt, _ = NewDataType(typestr)
-			default:
-				ast := &DML{}
-				parser, err := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
-				if err != nil {
-					panic(utils.StackError(err, "Unable to setup dml parser").Error())
-				}
-			
-				err = parser.ParseString(typestr, ast)
-				if err != nil {
-					panic(utils.StackError(err, "Unable to parse dml code").Error())
-				}
-				dt, err = NewDataType(ast.Object)
-				if err != nil {
-					panic(utils.StackError(err, "Unable to create DataType from DML code").Error())
-				}
+		case "int", "float", "string", "bool", "type", "object":
+			dt, _ = NewDataType(typestr)
+		default:
+			ast := &DML{}
+			parser, err := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
+			if err != nil {
+				panic(utils.StackError(err, "Unable to setup dml parser").Error())
+			}
+
+			err = parser.ParseString(typestr, ast)
+			if err != nil {
+				panic(utils.StackError(err, "Unable to parse dml code").Error())
+			}
+			dt, err = NewDataType(ast.Object)
+			if err != nil {
+				panic(utils.StackError(err, "Unable to create DataType from DML code").Error())
+			}
 		}
 
 		return rntm.jsvm.ToValue(dt).(*goja.Object)
@@ -116,7 +116,7 @@ func LoadObject(rntm *Runtime, dt DataType, id Identifier) (Object, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
 	}
-	
+
 	if !obj.Id().Equal(id) {
 		return nil, fmt.Errorf("Loaded object is faulty: Identifiers do not match")
 	}

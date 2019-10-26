@@ -1,16 +1,16 @@
 package dml
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/json"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/mr-tron/base58/base58"
 )
 
-func init() { 
+func init() {
 	gob.Register(new(Identifier))
 }
 
@@ -18,7 +18,7 @@ type Identifier struct {
 	Parent [32]byte
 	Type   string
 	Name   string
-	Uuid	   string
+	Uuid   string
 }
 
 func IdentifierFromData(data []byte) (Identifier, error) {

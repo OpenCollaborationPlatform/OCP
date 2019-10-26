@@ -2,19 +2,19 @@
 package dml
 
 import (
-	"fmt"
 	"encoding/gob"
-	
-	gonum "gonum.org/v1/gonum/graph"
-	topo "gonum.org/v1/gonum/graph/topo"
-	"gonum.org/v1/gonum/graph/simple"
+	"fmt"
+
 	uuid "github.com/satori/go.uuid"
+	gonum "gonum.org/v1/gonum/graph"
+	"gonum.org/v1/gonum/graph/simple"
+	topo "gonum.org/v1/gonum/graph/topo"
 
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 )
 
-func init() { 
+func init() {
 	gob.Register(new(struct{}))
 	gob.Register(new(graphEdge))
 }
@@ -71,7 +71,7 @@ func NewGraph(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 	return gr, nil
 }
 
-//							Graph helpers 
+//							Graph helpers
 //******************************************************************************
 type graphEdge struct {
 	Source interface{}
@@ -79,29 +79,29 @@ type graphEdge struct {
 }
 
 type graphNode struct {
-	id int64
+	id   int64
 	node interface{}
-} 
+}
 
 func (self graphNode) ID() int64 {
 	return self.id
 }
 
-func (self *graph) getGonumDirected() (gonum.Directed, map[interface{}] gonum.Node) {
-	
+func (self *graph) getGonumDirected() (gonum.Directed, map[interface{}]gonum.Node) {
+
 	directed := simple.NewDirectedGraph()
 	keys, _ := self.nodeData.GetKeys()
-	
+
 	//add all nodes first: keys are nodes!
-	mapper  := make(map[interface{}] gonum.Node, 0)
+	mapper := make(map[interface{}]gonum.Node, 0)
 	for _, key := range keys {
-		
+
 		idx := directed.NewNode().ID()
 		node := graphNode{idx, key}
 		directed.AddNode(node)
 		mapper[key] = node
 	}
-	
+
 	//all edges next
 	keys, _ = self.edgeData.GetKeys()
 	for _, key := range keys {
@@ -113,22 +113,22 @@ func (self *graph) getGonumDirected() (gonum.Directed, map[interface{}] gonum.No
 		graphedge := directed.NewEdge(mapper[edge.Source], mapper[edge.Target])
 		directed.SetEdge(graphedge)
 	}
-	
+
 	return directed, mapper
 }
 
-func (self *graph) getGonumGraph() (gonum.Graph, map[interface{}] gonum.Node) {
+func (self *graph) getGonumGraph() (gonum.Graph, map[interface{}]gonum.Node) {
 	directed, mapper := self.getGonumDirected()
 	if !self.isDirected() {
 		return &gonum.Undirect{directed}, mapper
 	}
-	
+
 	return directed, mapper
 }
 
 //inverse of keyToDB
 func (self *graph) dbToType(key interface{}, dt DataType) (interface{}, error) {
-	
+
 	if dt.IsObject() || dt.IsComplex() {
 
 		encoded, _ := key.(string)
@@ -141,32 +141,31 @@ func (self *graph) dbToType(key interface{}, dt DataType) (interface{}, error) {
 			return nil, utils.StackError(err, "Invalid object stored")
 		}
 		return obj, nil
-		
+
 	} else if dt.IsType() {
 
 		val, _ := key.(string)
 		return NewDataType(val)
 	}
-	
+
 	//everything else is simply used
 	return key, nil
 }
 
-
 //convert all possible types to something usable in the DB
 func (self *graph) typeToDB(input interface{}, dt DataType) interface{} {
-	
+
 	if dt.IsObject() || dt.IsComplex() {
 
 		obj, _ := input.(Object)
 		return obj.Id().Encode()
-		
+
 	} else if dt.IsType() {
 
 		val, _ := input.(DataType)
 		return val.AsString()
 	}
-	
+
 	//everything else is simply used as key
 	return input
 }
@@ -179,12 +178,12 @@ func (self *graph) Nodes() ([]interface{}, error) {
 	}
 	result := make([]interface{}, len(keys))
 	for i, key := range keys {
-		
+
 		typeVal, err := self.dbToType(key, self.nodeDataType())
 		if err != nil {
 			return nil, err
 		}
-		
+
 		result[i] = typeVal
 	}
 	return result, nil
@@ -202,7 +201,6 @@ func (self *graph) HasNode(node interface{}) (bool, error) {
 	dbkey := self.typeToDB(node, dt)
 	return self.nodeData.HasKey(dbkey), nil
 }
-
 
 func (self *graph) AddNode(value interface{}) error {
 
@@ -250,7 +248,7 @@ func (self *graph) RemoveNode(value interface{}) error {
 	if has, _ := self.HasNode(value); !has {
 		return fmt.Errorf("No such node available, cannot remove")
 	}
-	
+
 	dt := self.nodeDataType()
 	if dt.IsComplex() || dt.IsObject() {
 		obj := value.(Object)
@@ -262,7 +260,7 @@ func (self *graph) RemoveNode(value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "unable to remove node from graph")
 	}
-	
+
 	//remove all edges that connect to this node
 	keys, err := self.edgeData.GetKeys()
 	if err != nil {
@@ -276,12 +274,12 @@ func (self *graph) RemoveNode(value interface{}) error {
 			return utils.StackError(err, "Unable to access edge, wrong type stored")
 		}
 		edge := data.(*graphEdge)
-		
-		if 	(edge.Source == value || edge.Target == value) { 
+
+		if edge.Source == value || edge.Target == value {
 			self.edgeData.Remove(key)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -293,7 +291,7 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Cannot add node, has wrong type")
 	}
-	
+
 	//check if we have the two nodes
 	hassource, err := self.HasNode(source)
 	if err != nil {
@@ -318,13 +316,13 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 	fmt.Printf("Add edge %v\n", edge)
 
 	err = self.edgeData.Write(dbentry, edge)
-	
+
 	//handle ref count
 	if err == nil && (dt.IsComplex() || dt.IsObject()) {
 		obj := value.(Object)
 		obj.IncreaseRefcount()
 	}
-	
+
 	return err
 }
 
@@ -361,16 +359,16 @@ func (self *graph) NewEdge(source, target interface{}) (interface{}, error) {
 		result = obj
 
 	} else if dt.IsNone() {
-		
+
 		//use a custom internal scheme
 		result = uuid.NewV4().Bytes()
-	
+
 	} else {
 		//all other type would result in a default value that is always the same,
 		//hence not allowing to add multiple edges. This is stupid!
 		return nil, fmt.Errorf("New edge only workes with complex or none edge type")
 	}
-	
+
 	//write
 	dbentry := self.typeToDB(result, dt)
 	edge := graphEdge{source, target}
@@ -387,13 +385,12 @@ func (self *graph) RemoveEdge(value interface{}) error {
 		return utils.StackError(err, "Cannot remove edge, has wrong type")
 	}
 
-
 	dbentry := self.typeToDB(value, dt)
 	err = self.edgeData.Remove(dbentry)
 	if err == nil && (dt.IsComplex() || dt.IsObject()) {
 		obj := value.(Object)
 		obj.DecreaseRefcount()
-	}	
+	}
 	return err
 }
 
@@ -418,7 +415,7 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 		return utils.StackError(err, "Unable to remove edge")
 	}
 	edt := self.edgeDataType()
-	
+
 	for _, key := range keys {
 
 		//check if this is the edge to remove
@@ -428,8 +425,8 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 		}
 		edge := data.(*graphEdge)
 
-		if 	(edge.Source == source && edge.Target == target) || 
-		 	(!self.isDirected() && (edge.Source == target && edge.Target == source)) { 
+		if (edge.Source == source && edge.Target == target) ||
+			(!self.isDirected() && (edge.Source == target && edge.Target == source)) {
 
 			//remove it!
 			if edt.IsComplex() || edt.IsObject() {
@@ -441,25 +438,25 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 				obj.DecreaseRefcount()
 			}
 			return self.edgeData.Remove(key)
-		}		
+		}
 	}
 
 	return fmt.Errorf("No edge between the two nodes, cannot remove")
 }
 
 func (self *graph) HasEdge(value interface{}) (bool, error) {
-	
+
 	//check key type
 	dt := self.edgeDataType()
 	err := dt.MustBeTypeOf(value)
 	if err != nil {
 		return false, utils.StackError(err, "Edge has wrong type")
 	}
-	
+
 	dbkey := self.typeToDB(value, dt)
 	return self.edgeData.HasKey(dbkey), nil
 }
-	
+
 func (self *graph) HasEdgeBetween(source, target interface{}) (bool, error) {
 
 	//check if we have the two nodes
@@ -480,7 +477,7 @@ func (self *graph) HasEdgeBetween(source, target interface{}) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("Unable to access edges")
 	}
-	
+
 	for _, key := range keys {
 
 		//check if this is the edge
@@ -489,9 +486,9 @@ func (self *graph) HasEdgeBetween(source, target interface{}) (bool, error) {
 			return false, utils.StackError(err, "Unable to access edge, wrong type stored")
 		}
 		edge := data.(*graphEdge)
-		
-		if 	(edge.Source == source && edge.Target == target) || 
-		 	(!self.isDirected() && (edge.Source == target && edge.Target == source) ) { 
+
+		if (edge.Source == source && edge.Target == target) ||
+			(!self.isDirected() && (edge.Source == target && edge.Target == source)) {
 
 			return true, nil
 		}
@@ -518,7 +515,7 @@ func (self *graph) Edge(source, target interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Unable to access edges")
 	}
-	
+
 	for _, key := range keys {
 
 		//check if this is the edge
@@ -527,9 +524,9 @@ func (self *graph) Edge(source, target interface{}) (interface{}, error) {
 			return nil, utils.StackError(err, "Unable to access edge, wrong type stored")
 		}
 		edge := data.(*graphEdge)
-		
-		if 	(edge.Source == source && edge.Target == target) || 
-		 	(!self.isDirected() && (edge.Source == target && edge.Target == source) ) { 
+
+		if (edge.Source == source && edge.Target == target) ||
+			(!self.isDirected() && (edge.Source == target && edge.Target == source)) {
 
 			return self.dbToType(key, self.edgeDataType())
 		}
@@ -553,12 +550,12 @@ func (self *graph) FromNode(node interface{}) (interface{}, error) {
 	if !has {
 		return nil, fmt.Errorf("Not does not exist")
 	}
-	
+
 	gg, mapper := self.getGonumGraph()
 	res := gg.From(mapper[node].ID())
 
 	result := make([]interface{}, 0)
-	for k:= res.Next(); k; k = res.Next() {
+	for k := res.Next(); k; k = res.Next() {
 		gnode := res.Node().(graphNode)
 		result = append(result, gnode.node)
 	}
@@ -581,12 +578,12 @@ func (self *graph) ToNode(node interface{}) (interface{}, error) {
 	if !has {
 		return nil, fmt.Errorf("Not does not exist")
 	}
-	
+
 	gg, mapper := self.getGonumDirected()
 	res := gg.To(mapper[node].ID())
 
 	result := make([]interface{}, 0)
-	for k:= res.Next(); k; k = res.Next() {
+	for k := res.Next(); k; k = res.Next() {
 		gnode := res.Node().(graphNode)
 		result = append(result, gnode.node)
 	}
@@ -594,7 +591,7 @@ func (self *graph) ToNode(node interface{}) (interface{}, error) {
 }
 
 //return a topological sort of all nodes
-//the returned value is a slice of interfaces. The interfaces are nodes or 
+//the returned value is a slice of interfaces. The interfaces are nodes or
 //slices of nodes if they form a circle that cannot be ordered
 func (self *graph) Sorted() ([]interface{}, error) {
 
@@ -604,40 +601,40 @@ func (self *graph) Sorted() ([]interface{}, error) {
 
 	gg, _ := self.getGonumDirected()
 	sorted, err := topo.Sort(gg)
-	
+
 	result := make([]interface{}, len(sorted))
-	
-	//check if there are cycles 
+
+	//check if there are cycles
 	cycles, hascycles := err.(topo.Unorderable)
 	if hascycles {
-		
+
 		cycleCnt := 0
 		for i, node := range sorted {
-			
+
 			if node == nil {
 				//build the cycle node slice
 				cyc := cycles[cycleCnt]
-				cycSlice := make([]interface{}, len(cyc)) 
-				for j, n := range cyc { 
+				cycSlice := make([]interface{}, len(cyc))
+				for j, n := range cyc {
 					gn := n.(graphNode)
 					cycSlice[j] = gn.node
 				}
 				//and store it
 				result[i] = cycSlice
 				cycleCnt++
-			
+
 			} else {
 				gnode := node.(graphNode)
 				result[i] = gnode.node
 			}
-		}		
+		}
 	} else {
 		for i, node := range sorted {
 			gnode := node.(graphNode)
 			result[i] = gnode.node
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -646,14 +643,14 @@ func (self *graph) Cycles() ([][]interface{}, error) {
 
 	gg, _ := self.getGonumDirected()
 	var cycles [][]gonum.Node
-	
-	if self.isDirected() { 
+
+	if self.isDirected() {
 		cycles = topo.DirectedCyclesIn(gg)
-	
+
 	} else {
 		cycles = topo.UndirectedCyclesIn(gonum.Undirect{gg})
 	}
-	
+
 	result := make([][]interface{}, len(cycles))
 	for i, cycle := range cycles {
 		nc := make([]interface{}, len(cycle))
@@ -713,7 +710,7 @@ func (self *graph) Load() error {
 			return utils.StackError(err, "Unable to load graph entries: Edges cannot be accessed")
 		}
 		for _, key := range keys {
-			
+
 			id, err := IdentifierFromEncoded(key.(string))
 			if err != nil {
 				return utils.StackError(err, "Unable to load graph: Stored identifier is invalid")
@@ -735,7 +732,6 @@ func (self *graph) Load() error {
 	}
 	return nil
 }
-
 
 //override to handle children refcount additional to our own
 func (self *graph) IncreaseRefcount() error {
@@ -783,14 +779,14 @@ func (self *graph) IncreaseRefcount() error {
 			existing.IncreaseRefcount()
 		}
 	}
-	
+
 	//now increase our own refcount
 	return self.object.IncreaseRefcount()
 }
 
 //override to handle children refcount additional to our own
 func (self *graph) DecreaseRefcount() error {
-	
+
 	//handle nodes!
 	dt := self.nodeDataType()
 	if dt.IsObject() || dt.IsComplex() {
@@ -812,7 +808,7 @@ func (self *graph) DecreaseRefcount() error {
 			existing.DecreaseRefcount()
 		}
 	}
-	
+
 	//handle edges
 	dt = self.edgeDataType()
 	if dt.IsObject() || dt.IsComplex() {
@@ -834,7 +830,7 @@ func (self *graph) DecreaseRefcount() error {
 			existing.DecreaseRefcount()
 		}
 	}
-	
+
 	//now decrease our own refcount
 	return self.object.DecreaseRefcount()
 }

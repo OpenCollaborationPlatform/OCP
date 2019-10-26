@@ -87,7 +87,7 @@ func (self *DocumentHandler) Close(ctx context.Context) {
 }
 
 func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (Document, error) {
-	
+
 	//add the dml folder to the data exchange!
 	cid, err := self.host.Data.Add(ctx, path)
 	if err != nil {
@@ -108,7 +108,7 @@ func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (D
 	//inform everyone about the new doc... p2p and locally!
 	self.client.Publish("ocp.documents.created", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
 	self.host.Event.Publish("ocp.documents.created", []byte(doc.ID))
-	
+
 	return doc, nil
 }
 
@@ -135,7 +135,7 @@ func (self *DocumentHandler) createDoc(ctx context.Context, args wamp.List, kwar
 }
 
 func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) error {
-	
+
 	//check if already open /unlocka afterwards to not lock during potenially long
 	//swarm operation)
 	self.mutex.RLock()
@@ -173,7 +173,7 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	//inform everyone about the newly opened doc... p2p and locally!
 	self.client.Publish("ocp.documents.opened", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
 	self.host.Event.Publish("ocp.documents.opened", []byte(doc.ID))
-	
+
 	return nil
 }
 
@@ -197,7 +197,7 @@ func (self *DocumentHandler) openDoc(ctx context.Context, args wamp.List, kwargs
 }
 
 func (self *DocumentHandler) CloseDocument(ctx context.Context, docID string) error {
-	
+
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 
@@ -206,15 +206,15 @@ func (self *DocumentHandler) CloseDocument(ctx context.Context, docID string) er
 		if doc.ID == docID {
 			doc.Close(ctx)
 			self.documents = append(self.documents[:i], self.documents[i+1:]...)
-			
+
 			//inform everyone about the closed doc... p2p and locally!
 			self.client.Publish("ocp.documents.closed", wamp.Dict{}, wamp.List{docID}, wamp.Dict{})
 			self.host.Event.Publish("ocp.documents.closed", []byte(docID))
-	
+
 			return nil
 		}
 	}
-	
+
 	return fmt.Errorf("No document for given ID found")
 }
 

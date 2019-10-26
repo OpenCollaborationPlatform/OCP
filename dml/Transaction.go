@@ -4,12 +4,12 @@ package dml
 
 import (
 	"bytes"
-	"fmt"
 	"encoding/gob"
+	"fmt"
 
+	"crypto/sha256"
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
-	"crypto/sha256"
 
 	"github.com/dop251/goja"
 	uuid "github.com/satori/go.uuid"

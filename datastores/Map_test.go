@@ -1,10 +1,10 @@
 package datastore
 
 import (
+	"encoding/gob"
 	"io/ioutil"
 	"os"
 	"testing"
-	"encoding/gob"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -376,9 +376,9 @@ func TestMapVersionedData(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 3)
 		})
-		
+
 		Convey("Complex structs are usable in maps", func() {
-			
+
 			name := makeSetFromString("test")
 			genset, err := db.GetOrCreateSet(name)
 			So(err, ShouldBeNil)
@@ -386,16 +386,16 @@ func TestMapVersionedData(t *testing.T) {
 			mp, _ := mset.GetOrCreateMap([]byte("mymapVersioned"))
 
 			type myMapStruct struct {
-				First interface{}
+				First  interface{}
 				Second interface{}
 			}
 			gob.Register(new(myMapStruct))
-			
+
 			val := myMapStruct{"hello", "world"}
 			So(mp.Write(1, val), ShouldBeNil)
-			
+
 			val2, err := mp.Read(1)
-			So(err,ShouldBeNil)
+			So(err, ShouldBeNil)
 			So(val2, ShouldResemble, &val)
 		})
 	})

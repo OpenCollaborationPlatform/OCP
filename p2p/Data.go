@@ -211,7 +211,7 @@ func (self *hostDataService) basicAddBlockifyer(bl Blockifyer, owner string) (ci
 	if err != nil {
 		return filecid, nil, utils.StackError(err, "Unable to blockify file")
 	}
-	
+
 	//the first block is put in the store to allow setting a owner for all blocks
 	//that is needed in case we need to announce on the dht when adding the blocks
 	//to bitswap
@@ -273,7 +273,7 @@ func (self *hostDataService) basicAddDirectory(path string, owner string) (cid.C
 		self.store.Put(block)
 		self.store.SetOwnership(block, owner)
 	}
-	
+
 	//Make the block available
 	err = self.bitswap.HasBlock(block)
 	if err != nil {

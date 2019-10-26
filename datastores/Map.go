@@ -2,9 +2,9 @@
 package datastore
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
 	"bytes"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
 )

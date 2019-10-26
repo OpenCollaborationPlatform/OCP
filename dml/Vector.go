@@ -2,9 +2,9 @@
 package dml
 
 import (
+	"fmt"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
-	"fmt"
 )
 
 //vector type: stores requested data type by index (0-based)
@@ -26,7 +26,7 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) 
 	set, _ = base.GetDatabaseSet(datastore.ValueType)
 	valueSet := set.(*datastore.ValueVersionedSet)
 	length, _ := valueSet.GetOrCreateValue([]byte("__vector_order"))
-	
+
 	//initial values
 	if holds, _ := length.HoldsValue(); !holds {
 		length.Write(int64(0))
@@ -323,7 +323,7 @@ func (self *vector) Remove(idx int64) error {
 	//deleting means moving each entry after idx one down and shortening the length by 1
 	l, _ := self.Length()
 	for i := idx; i < (l - 1); i++ {
-		data, err := self.entries.Read(i+1)
+		data, err := self.entries.Read(i + 1)
 		if err != nil {
 			return utils.StackError(err, "Unable to move vector entries after deleting entry")
 		}
@@ -400,7 +400,7 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 	} else {
 
 		for i := oldIdx; i > newIdx; i-- {
-			res, err := self.entries.Read(i-1)
+			res, err := self.entries.Read(i - 1)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
 			}

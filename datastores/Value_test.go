@@ -2,11 +2,11 @@ package datastore
 
 import (
 	"bytes"
+	"encoding/gob"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
-	"encoding/gob"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -121,9 +121,9 @@ func TestValueBasic(t *testing.T) {
 
 			So(bytes.Equal(result.([]byte), []byte(data)), ShouldBeTrue)
 		})
-		
+
 		Convey("Complex structs are usable", func() {
-			
+
 			name := makeSetFromString("test")
 			genset, err := db.GetOrCreateSet(name)
 			So(err, ShouldBeNil)
@@ -131,16 +131,16 @@ func TestValueBasic(t *testing.T) {
 			value, _ := set.GetOrCreateValue([]byte("structtest"))
 
 			type myStruct struct {
-				First interface{}
+				First  interface{}
 				Second interface{}
 			}
 			gob.Register(new(myStruct))
-			
+
 			val := myStruct{1, 2}
 			So(value.Write(val), ShouldBeNil)
-			
+
 			val2, err := value.Read()
-			So(err,ShouldBeNil)
+			So(err, ShouldBeNil)
 			So(val2, ShouldResemble, &val)
 		})
 	})
