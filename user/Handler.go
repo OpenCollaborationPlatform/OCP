@@ -92,19 +92,19 @@ func (self *UserHandler) SetUser(ctx context.Context, id UserID) error {
 func (self *UserHandler) setUser(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
 	if len(args)	 != 1 {
-		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be user name")}
+		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name"}, Err: wamp.URI("ocp.error")}
 	}
 	
 	name, ok := args[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be user name as string")} 
+		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")} 
 	}
 	
 	//create user and provide!
 	id := UserID(name)
 	err := self.SetUser(ctx, id)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())} 
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")} 
 	}
 	return &nxclient.InvokeResult{}
 }
@@ -126,12 +126,12 @@ func (self *UserHandler) FindUser(ctx context.Context, id UserID, num int) (p2p.
 func (self *UserHandler) findUser(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
 	if len(args)	 < 1 {
-		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be user name, optional amount of nodes to find")}
+		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name, optional amount of nodes to find"}, Err: wamp.URI("ocp.error")}
 	}
 	
 	name, ok := args[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Err: wamp.URI("Argument must be user name as string")} 
+		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")} 
 	}
 	
 	num := 1
@@ -146,7 +146,7 @@ func (self *UserHandler) findUser(ctx context.Context, args wamp.List, kwargs, d
 	id := UserID(name)
 	result, err := self.FindUser(ctx, id, num)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())} 
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")} 
 	}
 	
 	return &nxclient.InvokeResult{Args: wamp.List{result.Pretty()}}

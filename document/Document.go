@@ -157,12 +157,12 @@ func (self Document) addPeer(ctx context.Context, args wamp.List, kwargs, detail
 
 	pid, auth, err := getPeerAuthData(args)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	err = self.swarm.AddPeer(ctx, pid, auth)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	return &nxclient.InvokeResult{}
@@ -172,12 +172,12 @@ func (self Document) setPeerAuth(ctx context.Context, args wamp.List, kwargs, de
 
 	pid, auth, err := getPeerAuthData(args)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	err = self.swarm.AddPeer(ctx, pid, auth)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	return &nxclient.InvokeResult{}
@@ -187,12 +187,12 @@ func (self Document) removePeer(ctx context.Context, args wamp.List, kwargs, det
 
 	pid, err := getPeer(args)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	err = self.swarm.RemovePeer(ctx, pid)
 	if err != nil {
-		return &nxclient.InvokeResult{Err: wamp.URI(err.Error())}
+		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	return &nxclient.InvokeResult{}

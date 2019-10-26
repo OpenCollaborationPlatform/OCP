@@ -334,14 +334,14 @@ func TestDatastructureData(t *testing.T) {
 			filedata := p2p.RepeatableData(4.2e6)
 			handler := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 				if len(args)!=1 {
-					return &nxclient.InvokeResult{Err: wamp.URI("Wrong number of arguments in binary fetch")}
+					return &nxclient.InvokeResult{Args: wamp.List{"Wrong number of arguments in binary fetch"}, Err: wamp.URI("ocp.error")}
 				}
 				arg, ok := args[0].(int)
 				if !ok {
-					return &nxclient.InvokeResult{Err: wamp.URI("Wrong type sent as argument in binary fetch")}
+					return &nxclient.InvokeResult{Args: wamp.List{"Wrong type sent as argument in binary fetch"}, Err: wamp.URI("ocp.error")}
 				}
 				if arg != 42 {
-					return &nxclient.InvokeResult{Err: wamp.URI("Wrong argument number in binary fetch")}
+					return &nxclient.InvokeResult{Args: wamp.List{"Wrong argument number in binary fetch"}, Err: wamp.URI("ocp.error")}
 				}
 				
 				//send the data
