@@ -71,9 +71,14 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
 		return nil
 	}
 	vvset := set.(*datastore.ValueVersionedSet)
-	vvRecCnt, err := vvset.GetOrCreateValue([]byte("__refcount"))
+	vvRefCnt, err := vvset.GetOrCreateValue([]byte("__refcount"))
 	if err != nil {
 		return nil
+	}
+	
+	//default value
+	if holds, _ := vvRefCnt.HoldsValue(); !holds {
+		vvRefCnt.Write(uint64(0))
 	}
 
 	//build the object
@@ -86,7 +91,7 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
 		parent,
 		id,
 		DataType{},
-		*vvRecCnt,
+		*vvRefCnt,
 		jsobj,
 	}
 
