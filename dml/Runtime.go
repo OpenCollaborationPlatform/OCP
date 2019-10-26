@@ -495,10 +495,7 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 	//garbace collection: which objects can be removed?
 	removers := make([]Identifier, 0)
 	for id, obj := range self.objects {
-		rc, err := obj.GetRefcount()
-		if err != nil {
-			return err
-		}
+		rc, _ := obj.GetRefcount()
 		if rc == 0 {
 			removers = append(removers, id)
 		}

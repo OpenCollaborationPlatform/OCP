@@ -1,6 +1,7 @@
 package dml
 
 import (
+	"fmt"
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
@@ -60,3 +61,10 @@ func (self Identifier) Equal(id Identifier) bool {
 func (self Identifier) Valid() bool {
 	return self.Type != "" || self.Name != "" || self.Uuid != ""
 }
+
+func (self Identifier) String() string {
+
+	var emptyByte [32]byte
+	return fmt.Sprintf("Id{Name: %v; Type: %v; HasParent: %v, Uuid: %v}", self.Name, self.Type, !bytes.Equal(self.Parent[:], emptyByte[:]), self.Uuid)
+}
+

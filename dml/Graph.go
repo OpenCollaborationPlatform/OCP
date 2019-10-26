@@ -29,7 +29,10 @@ type graph struct {
 
 func NewGraph(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
-	base := NewDataBaseClass(id, parent, rntm)
+	base, err := NewDataBaseClass(id, parent, rntm)
+	if err != nil {
+		return nil, err
+	}
 
 	//get the db entries
 	mset, _ := base.GetDatabaseSet(datastore.MapType)

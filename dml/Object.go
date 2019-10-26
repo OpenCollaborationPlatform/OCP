@@ -2,7 +2,8 @@ package dml
 
 import (
 	"fmt"
-	datastore "github.com/ickby/CollaborationNode/datastores"
+	"github.com/ickby/CollaborationNode/datastores"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/dop251/goja"
 )
@@ -58,7 +59,7 @@ type object struct {
 	jsobj *goja.Object
 }
 
-func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
+func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error) {
 
 	jsobj := rntm.jsvm.NewObject()
 
@@ -68,16 +69,20 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
 	//the store for the refcount
 	set, err := versManager.GetDatabaseSet(datastore.ValueType)
 	if err != nil {
-		return nil
+		return nil, utils.StackError(err, "Unable to acess database set")
 	}
 	vvset := set.(*datastore.ValueVersionedSet)
 	vvRefCnt, err := vvset.GetOrCreateValue([]byte("__refcount"))
 	if err != nil {
-		return nil
+		return nil, utils.StackError(err, "Unable to create refcount database entry")
 	}
 	
 	//default value
-	if holds, _ := vvRefCnt.HoldsValue(); !holds {
+	holds, err := vvRefCnt.HoldsValue()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to write ref count default value")
+	}
+	if !holds {
 		vvRefCnt.Write(uint64(0))
 	}
 
@@ -104,7 +109,7 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) *object {
 	//add default events
 	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm, MustNewDataType("string")))
 
-	return &obj
+	return &obj, nil
 }
 
 func (self *object) Id() Identifier {

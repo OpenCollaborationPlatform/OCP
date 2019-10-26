@@ -17,7 +17,10 @@ type vector struct {
 
 func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
-	base := NewDataBaseClass(id, parent, rntm)
+	base, err := NewDataBaseClass(id, parent, rntm)
+	if err != nil {
+		return nil, err
+	}
 
 	//get the db entries
 	set, _ := base.GetDatabaseSet(datastore.MapType)

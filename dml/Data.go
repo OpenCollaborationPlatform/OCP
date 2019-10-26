@@ -27,18 +27,23 @@ type DataImpl struct {
 }
 
 func NewData(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
-	return NewDataBaseClass(id, parent, rntm), nil
+	return NewDataBaseClass(id, parent, rntm)
 }
 
-func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) *DataImpl {
+func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) (*DataImpl, error) {
 
+	obj, err := NewObject(id, parent, rntm)
+	if err != nil {
+		return nil, err
+	}
+	
 	dat := DataImpl{
-		NewObject(id, parent, rntm),
+		obj,
 		NewBehaviourHandler(),
 		make([]Identifier, 0),
 	}
 
-	return &dat
+	return &dat, nil
 }
 
 func (self *DataImpl) AddChild(obj Data) {

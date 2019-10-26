@@ -24,7 +24,10 @@ type Raw struct {
 
 func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) (dml.Object, error) {
 
-	base := dml.NewDataBaseClass(id, parent, rntm)
+	base, err := dml.NewDataBaseClass(id, parent, rntm)
+	if err != nil {
+		return nil, err
+	}
 
 	//get the db entry
 	set, _ := base.GetDatabaseSet(datastore.ValueType)

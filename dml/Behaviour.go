@@ -1,7 +1,10 @@
 // Transaction.go
 package dml
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
+)
 
 /*
  * A Behaviour is a set of methods and events that define a certain way an object reacts on
@@ -20,14 +23,16 @@ type Behaviour interface {
 
 func NewBehaviour(id Identifier, parent Identifier, rntm *Runtime) (*behaviour, error) {
 
-	result := behaviour{
-		NewObject(id, parent, rntm),
+	obj, err := NewObject(id, parent, rntm)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to create base object for behaviour %s", id.String())
 	}
+	result := behaviour{obj,}
 
 	//add default behaviour properties
-	err := result.AddProperty(`recursive`, MustNewDataType("bool"), false, true)
+	err = result.AddProperty(`recursive`, MustNewDataType("bool"), false, true)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to add object to %s", id.String())
 	}
 
 	return &result, nil
