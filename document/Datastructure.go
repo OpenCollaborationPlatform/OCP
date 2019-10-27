@@ -347,23 +347,33 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 					return
 				}
 
-				data, ok := result.Arguments[0].([]byte)
-				if !ok {
-					return
+				switch result.Arguments[0].(type) {
+					case []byte:
+						channel <- result.Arguments[0].([]byte)
+					case string:
+						channel <- []byte(result.Arguments[0].(string))
 				}
-
-				channel <- data
 			}
-			_, err := self.client.CallProgress(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, wamp.CancelModeKill, callback)
+			res, err := self.client.CallProgress(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, wamp.CancelModeKill, callback)
+			if len(res.Arguments)>0 && res.Arguments[0] != nil {	
+				switch res.Arguments[0].(type) {
+					case []byte:
+						channel <- res.Arguments[0].([]byte)
+					case string:
+						channel <- []byte(res.Arguments[0].(string))
+				}
+			}
 			block.Stop()
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				msg := utils.StackError(err, "Cannot call provided URI").Error()
+				return &nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
 			}
 
 			//add the data we received
 			cid, err := self.swarm.Data.AddBlocks(ctx, block)
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				msg := utils.StackError(err, "Unable to distribute data").Error()
+				return &nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
 			}
 			//set the cid to the dml object
 			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()})

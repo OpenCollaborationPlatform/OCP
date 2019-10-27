@@ -271,11 +271,12 @@ func (self FileBlockifyer) GetBlocks() ([]blocks.Block, cid.Cid, error) {
 //streamer for binary data
 type StreamerBlockifyer struct {
 	stream chan []byte
+	done   chan struct{}
 	data   []byte
 }
 
 func NewStreamBlockifyer() *StreamerBlockifyer {
-	return &StreamerBlockifyer{nil, make([]byte, 0)}
+	return &StreamerBlockifyer{nil, make(chan struct{}, 0), make([]byte, 0)}
 }
 
 func (self *StreamerBlockifyer) Start() chan []byte {
@@ -287,6 +288,7 @@ func (self *StreamerBlockifyer) Start() chan []byte {
 			select {
 			case data, more := <-self.stream:
 				if !more {
+					self.done <- struct{}{}
 					return
 				}
 				//store the data!
@@ -304,6 +306,9 @@ func (self *StreamerBlockifyer) Stop() {
 }
 
 func (self *StreamerBlockifyer) GetBlocks() ([]blocks.Block, cid.Cid, error) {
+
+	//wait till we are done (someone called stop and all data was processed!
+	<-self.done
 
 	if len(self.data) == 0 {
 		return nil, Cid{}, fmt.Errorf("No data was provided")

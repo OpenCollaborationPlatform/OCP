@@ -115,8 +115,8 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 
 	//check if the type is correct
 	switch val.(type) {
-	case int, int32, int64:
-		if !self.IsInt() {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		if !self.IsInt() && !self.IsFloat() {
 			return fmt.Errorf(`wrong type, got 'int' and expected '%s'`, self.AsString())
 		}
 	case float32, float64:

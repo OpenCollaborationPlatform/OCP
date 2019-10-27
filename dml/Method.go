@@ -85,7 +85,7 @@ func (self *method) CallBoolReturn(args ...interface{}) (bool, error) {
 //special method type that handles js functions
 type jsMethod struct {
 	fnc   func(goja.FunctionCall) goja.Value
-	jsvm  *goja.Runtime
+	rntm  *Runtime
 	jsobj *goja.Object
 }
 
@@ -101,10 +101,21 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}) {
 	//build the function call argument
 	jsargs := make([]goja.Value, len(args))
 	for i, arg := range args {
-		jsargs[i] = self.jsvm.ToValue(arg)
+		jsargs[i] = self.rntm.jsvm.ToValue(arg)
 	}
 
 	res := self.fnc(goja.FunctionCall{Arguments: jsargs, This: self.jsobj})
+
+	//check if it is a dml object and convert to dml object
+	obj, err := objectFromJSValue(res, self.rntm)
+	if err != nil {
+		return err
+	}
+	if obj != nil {
+		return obj
+	}
+
+	//no object. Just return the default go representation
 	result = res.Export()
 	return
 }
@@ -183,7 +194,7 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 		if isJS {
 			//we only need to setup the runtime and object
 			jsmethod.jsobj = obj
-			jsmethod.jsvm = rntm.jsvm
+			jsmethod.rntm = rntm
 			obj.Set(name, jsmethod.fnc)
 
 		} else {
