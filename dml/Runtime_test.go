@@ -149,8 +149,8 @@ func TestDmlFile(t *testing.T) {
 		Convey("Object hirarchy must be established", func() {
 
 			code := `
-				if (Document.children.length != 2) {
-					throw "It must have exactly 1 child"
+				if (Document.children.length != 3) {
+					throw "It must have exactly 3 child"
 				}
 				if (Document.children[0].name != "DocumentObject") {
 					throw "child access seems not to work"
@@ -223,6 +223,15 @@ func TestDmlFile(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(newchild, ShouldNotBeNil)
 			})
+		})
+
+		Convey("This assignment in functions works as expected", func() {
+			
+			thiscode := `Document.ThisTest.assign()
+						Document.ThisTest.Sub.test.Emit()`
+						
+			_, err := rntm.RunJavaScript("", thiscode)
+			So(err, ShouldBeNil)
 		})
 	})
 }

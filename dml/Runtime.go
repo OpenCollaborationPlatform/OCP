@@ -649,8 +649,8 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to add event %v to object %v", astEvent.Key, objName)
 		}
-		jsobj.Set(astEvent.Key, obj.GetEvent(astEvent.Key).GetJSObject())
 	}
+	obj.SetupJSEvents(jsobj)
 
 	//than all methods (including defaults if required)
 	for _, fnc := range astObj.Functions {

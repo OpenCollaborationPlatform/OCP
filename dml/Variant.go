@@ -41,6 +41,9 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 	vari.AddMethod("SetValue", MustNewMethod(vari.SetValue))
 	vari.AddMethod("GetValue", MustNewMethod(vari.GetValue))
 
+	vari.AddEvent("onTypeChanged", NewEvent(vari.GetJSObject(), rntm))
+	vari.AddEvent("onValueChanged", NewEvent(vari.GetJSObject(), rntm))
+
 	return vari, nil
 }
 
@@ -125,6 +128,8 @@ func (self *variant) SetValue(value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to write variant")
 	}
+	
+	self.GetEvent("onValueChanged").Emit()
 	return nil
 }
 
@@ -198,10 +203,13 @@ func (self *variant) beforeChangeCallback(args ...interface{}) error {
 			obj.DecreaseRefcount()
 		}
 	}
+	
 	return nil
 }
 
 func (self *variant) changedCallback(args ...interface{}) error {
+
+	self.GetEvent("onTypeChanged").Emit()
 
 	//build the default values! And set the value. Don't use SetValue as this
 	//assumes old and new value have same datatype

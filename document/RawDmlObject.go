@@ -46,7 +46,10 @@ func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) (dml.Object, 
 	raw.AddMethod("IsSet", dml.MustNewMethod(raw.IsSet))
 	raw.AddMethod("Clear", dml.MustNewMethod(raw.Clear))
 
-	return raw, nil
+	//add events
+	err = raw.AddEvent("onDataChanged", dml.NewEvent(raw.GetJSObject(), rntm, dml.MustNewDataType("string")))
+
+	return raw, err
 }
 
 //adds the path, either file or directory, to the Raw object
@@ -62,7 +65,11 @@ func (self *Raw) Set(cidstr string) error {
 	//as the dml operation can be finished before we received the block!
 
 	//store the cid!
-	return self.value.Write(id)
+	err = self.value.Write(id)
+	if err != nil {
+		return err
+	}
+	return self.GetEvent("onDataChanged").Emit(cidstr) 
 }
 
 //adds the path, either file or directory, to the Raw object
@@ -90,5 +97,9 @@ func (self *Raw) IsSet() (bool, error) {
 //adds the path, either file or directory, to the Raw object
 func (self *Raw) Clear() error {
 
-	return self.value.Write(p2p.Cid{})
+	err := self.value.Write(p2p.Cid{})
+	if err != nil {
+		return err
+	}
+	return self.GetEvent("onDataChanged").Emit(p2p.Cid{}.String())
 }

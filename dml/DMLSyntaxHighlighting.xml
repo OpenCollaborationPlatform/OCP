@@ -8,10 +8,9 @@
       <item>Data</item>
       <item>Vector</item>
       <item>Map</item>
-      <item>StateMachine</item>
-      <item>State</item>
-      <item>Transition</item>
       <item>Raw</item>
+      <item>Variant</item>
+      <item>Graph</item>
     </list>
 	<list name="behaviour">
       <item>Access</item>
@@ -23,6 +22,9 @@
       <item>int</item>
       <item>bool</item>
       <item>double</item>
+      <item>type</item>
+      <item>object</item>
+      <item>none</item>
      </list>
     <contexts>
       <context attribute="Normal Text" lineEndContext="#stay" name="Normal">

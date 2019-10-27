@@ -355,6 +355,9 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				}
 			}
 			res, err := self.client.CallProgress(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, wamp.CancelModeKill, callback)
+			if err != nil {
+				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+			}
 			if len(res.Arguments)>0 && res.Arguments[0] != nil {	
 				switch res.Arguments[0].(type) {
 					case []byte:

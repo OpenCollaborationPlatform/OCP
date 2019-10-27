@@ -128,6 +128,7 @@ type EventHandler interface {
 	AddEvent(name string, evt Event) error
 	GetEvent(name string) Event
 	Events() []string
+	SetupJSEvents(*goja.Object) error
 }
 
 func NewEventHandler() eventHandler {
@@ -168,6 +169,14 @@ func (self *eventHandler) Events() []string {
 		cnt = cnt + 1
 	}
 	return res
+}
+
+func (self *eventHandler) SetupJSEvents(jsobj *goja.Object) error {
+
+	for key, evt := range self.events {
+		jsobj.Set(key, evt.GetJSObject())
+	}
+	return nil
 }
 
 //little helper to extract the call arguments
