@@ -48,7 +48,7 @@ func NewDatastructure(path string, prefix string, client *nxclient.Client) (Data
 		return Datastructure{}, utils.StackError(err, "Unable to create state for datastructure")
 	}
 
-	//make sure the prefix has a "/" as last charachter
+	//make sure the prefix has a "." as last charachter
 	if prefix[len(prefix)-1] != '.' {
 		prefix = prefix + "."
 	}
@@ -74,10 +74,13 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	rntm.SetupAllObjects(func(objpath string, obj dml.Data) error {
 
 		//build the full path
-		fpath := objpath + obj.Id().Name
+		if objpath != "" {
+			objpath += "."
+		}
+		objpath += obj.Id().Name
 
 		//go over all events and set them up
-		self.setupDmlEvents(obj, fpath)
+		self.setupDmlEvents(obj, objpath)
 		return nil
 	})
 
@@ -138,14 +141,20 @@ func (self Datastructure) createWampPublishFunction(path string, event string) d
 		}
 
 		//connvert the path into wamp style
-		path = self.prefix + "events." + path + "." + event
+		uri := self.prefix + "events." + path + "." + event
 
 		//other arguments we do not need
 		kwargs := make(wamp.Dict, 0)
 		opts := make(wamp.Dict, 0)
+		
+		//check if we should omit a session!
+		session := self.dmlState.GetOperationSession()
+		if session.IsSet() && session.Node == self.swarm.GetHost().ID() {
+			opts["exclude"] = []wamp.ID{session.Session}
+		}
 
 		//publish!
-		return self.client.Publish(path, opts, args, kwargs)
+		return self.client.Publish(uri, opts, args, kwargs)
 	}
 }
 
@@ -175,7 +184,11 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 
 	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
 
-		//get the details: user and path of the call
+		//get session info
+		node := self.swarm.GetHost().ID()
+		session := wamp.OptionID(details, "caller")
+
+		//get the user and path of the call
 		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
 		procedure := wamp.OptionURI(details, "procedure")
 
@@ -189,7 +202,7 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 		fnc := procedure[(idx + 1):]
 
 		//build and excecute the operation arguments
-		op := newFunctionOperation(dml.User(auth), string(path), string(fnc), args)
+		op := newFunctionOperation(dml.User(auth), string(path), string(fnc), args, node, session)
 		return self.executeOperation(ctx, op)
 	}
 
@@ -199,6 +212,9 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 
 	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+		node := self.swarm.GetHost().ID()
+		session := wamp.OptionID(details, "caller")
 
 		//get the user id
 		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
@@ -216,7 +232,7 @@ func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 		}
 
 		//build and execute the operation arguments
-		op := newJsOperation(dml.User(auth), code)
+		op := newJsOperation(dml.User(auth), code, node, session)
 		return self.executeOperation(ctx, op)
 	}
 
@@ -226,6 +242,10 @@ func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 func (self Datastructure) createWampPropertyFunction() nxclient.InvocationHandler {
 
 	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+		//get session info
+		node := self.swarm.GetHost().ID()
+		session := wamp.OptionID(details, "caller")
 
 		//get the user id
 		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
@@ -249,7 +269,7 @@ func (self Datastructure) createWampPropertyFunction() nxclient.InvocationHandle
 
 		} else if len(args) == 1 {
 			//build and execute the operation arguments
-			op := newPropertyOperation(dml.User(auth), string(path), string(prop), args[0])
+			op := newPropertyOperation(dml.User(auth), string(path), string(prop), args[0], node, session)
 			return self.executeOperation(ctx, op)
 		}
 
@@ -262,6 +282,10 @@ func (self Datastructure) createWampPropertyFunction() nxclient.InvocationHandle
 func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 
 	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+
+		//get session info
+		node := self.swarm.GetHost().ID()
+		session := wamp.OptionID(details, "caller")
 
 		//get the user id
 		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
@@ -290,7 +314,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			//set the cid to the dml object
-			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()})
+			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()}, node, session)
 			return self.executeOperation(ctx, op)
 
 		case "WriteIntoPath":
@@ -348,22 +372,22 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				}
 
 				switch result.Arguments[0].(type) {
-					case []byte:
-						channel <- result.Arguments[0].([]byte)
-					case string:
-						channel <- []byte(result.Arguments[0].(string))
+				case []byte:
+					channel <- result.Arguments[0].([]byte)
+				case string:
+					channel <- []byte(result.Arguments[0].(string))
 				}
 			}
 			res, err := self.client.CallProgress(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, wamp.CancelModeKill, callback)
 			if err != nil {
 				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
-			if len(res.Arguments)>0 && res.Arguments[0] != nil {	
+			if len(res.Arguments) > 0 && res.Arguments[0] != nil {
 				switch res.Arguments[0].(type) {
-					case []byte:
-						channel <- res.Arguments[0].([]byte)
-					case string:
-						channel <- []byte(res.Arguments[0].(string))
+				case []byte:
+					channel <- res.Arguments[0].([]byte)
+				case string:
+					channel <- []byte(res.Arguments[0].(string))
 				}
 			}
 			block.Stop()
@@ -379,7 +403,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return &nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
 			}
 			//set the cid to the dml object
-			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()})
+			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()}, node, session)
 			return self.executeOperation(ctx, op)
 
 		case "ReadBinary":

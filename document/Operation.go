@@ -5,6 +5,8 @@ import (
 	"encoding/gob"
 
 	"github.com/ickby/CollaborationNode/dml"
+	"github.com/gammazero/nexus/wamp"
+	"github.com/ickby/CollaborationNode/p2p"
 )
 
 func init() {
@@ -16,6 +18,7 @@ func init() {
 type Operation interface {
 	ApplyTo(*dml.Runtime) interface{}
 	ToData() ([]byte, error)
+	GetSession() (p2p.PeerID, wamp.ID)
 }
 
 func operationFromData(data []byte) (Operation, error) {
@@ -35,11 +38,14 @@ type functionOperation struct {
 	Path      string
 	Function  string
 	Arguments []interface{}
+
+	Node    p2p.PeerID
+	Session wamp.ID
 }
 
-func newFunctionOperation(user dml.User, path string, fnc string, args []interface{}) Operation {
+func newFunctionOperation(user dml.User, path string, fnc string, args []interface{}, node p2p.PeerID, session wamp.ID) Operation {
 
-	return functionOperation{user, path, fnc, args}
+	return functionOperation{user, path, fnc, args, node, session}
 }
 
 func (self functionOperation) ToData() ([]byte, error) {
@@ -67,14 +73,21 @@ func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	return val
 }
 
+func (self functionOperation) GetSession() (p2p.PeerID, wamp.ID) {
+	return self.Node, self.Session
+}
+
 type jsOperation struct {
 	User dml.User
 	Code string
+
+	Node    p2p.PeerID
+	Session wamp.ID
 }
 
-func newJsOperation(user dml.User, code string) Operation {
+func newJsOperation(user dml.User, code string, node p2p.PeerID, session wamp.ID) Operation {
 
-	return jsOperation{user, code}
+	return jsOperation{user, code, node, session}
 }
 
 func (self jsOperation) ToData() ([]byte, error) {
@@ -102,16 +115,23 @@ func (self jsOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	return val
 }
 
+func (self jsOperation) GetSession() (p2p.PeerID, wamp.ID) {
+	return self.Node, self.Session
+}
+
 type propertyOperation struct {
 	User     dml.User
 	Path     string
 	Property string
 	Value    interface{}
+
+	Node    p2p.PeerID
+	Session wamp.ID
 }
 
-func newPropertyOperation(user dml.User, path string, prop string, val interface{}) Operation {
+func newPropertyOperation(user dml.User, path string, prop string, val interface{}, node p2p.PeerID, session wamp.ID) Operation {
 
-	return propertyOperation{user, path, prop, val}
+	return propertyOperation{user, path, prop, val, node, session}
 }
 
 func (self propertyOperation) ToData() ([]byte, error) {
@@ -131,4 +151,8 @@ func (self propertyOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	}
 
 	return self.Value
+}
+
+func (self propertyOperation) GetSession() (p2p.PeerID, wamp.ID) {
+	return self.Node, self.Session
 }

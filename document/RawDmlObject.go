@@ -69,7 +69,7 @@ func (self *Raw) Set(cidstr string) error {
 	if err != nil {
 		return err
 	}
-	return self.GetEvent("onDataChanged").Emit(cidstr) 
+	return self.GetEvent("onDataChanged").Emit(cidstr)
 }
 
 //adds the path, either file or directory, to the Raw object

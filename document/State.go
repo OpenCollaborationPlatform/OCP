@@ -6,11 +6,33 @@ import (
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/p2p"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"github.com/gammazero/nexus/wamp"
 )
+
+//sharing information about the session, that is currently manipulating the state
+type sessionInfo struct {
+	Node    p2p.PeerID
+	Session wamp.ID
+}
+
+func (self *sessionInfo) Set(n p2p.PeerID, s wamp.ID) {
+	self.Node = n
+	self.Session = s
+}
+
+func (self *sessionInfo) Unset() {
+	self.Node = p2p.PeerID("")
+	self.Session = wamp.ID(0)
+}
+
+func (self *sessionInfo) IsSet() bool {
+	return self.Node != p2p.PeerID("") && self.Session != wamp.ID(0)
+}
 
 //shared dmlState data structure
 type dmlState struct {
@@ -18,8 +40,9 @@ type dmlState struct {
 	path string
 
 	//runtime data
-	dml   *dml.Runtime
-	store *datastore.Datastore
+	dml              *dml.Runtime
+	store            *datastore.Datastore
+	operationSession *sessionInfo
 }
 
 func newState(path string) (dmlState, error) {
@@ -42,7 +65,7 @@ func newState(path string) (dmlState, error) {
 		return dmlState{}, utils.StackError(err, "Unable to parse dml file")
 	}
 
-	return dmlState{path, rntm, store}, nil
+	return dmlState{path, rntm, store, &sessionInfo{}}, nil
 }
 
 func (self dmlState) Apply(data []byte) interface{} {
@@ -52,6 +75,10 @@ func (self dmlState) Apply(data []byte) interface{} {
 	if err != nil {
 		return utils.StackError(err, "Provided data is not of Operation type")
 	}
+
+	//ensure the correct session is set
+	self.operationSession.Set(op.GetSession())
+	defer self.operationSession.Unset()
 
 	//apply to runtime
 	return op.ApplyTo(self.dml)
@@ -153,6 +180,10 @@ func (self dmlState) LoadSnapshot(data []byte) error {
 	}
 
 	return nil
+}
+
+func (self dmlState) GetOperationSession() *sessionInfo {
+	return self.operationSession
 }
 
 func (self dmlState) Close() {

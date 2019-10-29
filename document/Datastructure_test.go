@@ -117,7 +117,7 @@ func TestDatastructure(t *testing.T) {
 			_, err = ds.dml.RunJavaScript("TestUser", "Test.TestEventZeroArgs.Emit()")
 			So(err, ShouldBeNil)
 			//wait a bit to be sure it reached us
-			time.Sleep(50 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 			So(called, ShouldBeTrue)
 			So(err, ShouldBeNil)
 

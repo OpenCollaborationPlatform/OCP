@@ -198,8 +198,7 @@ func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
 
 	//iterate all data object in the hirarchy
 	has := make(map[Identifier]struct{}, 0)
-	path := ""
-	err := setupDataChildren(path, self.mainObj, has, setup)
+	err := setupDataChildren("", self.mainObj, has, setup)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup all objects")
 	}
@@ -297,7 +296,7 @@ func (self *Runtime) CallMethod(user User, path string, method string, args ...i
 	err, ok := result.(error)
 	if ok && err != nil {
 		self.postprocess(true)
-		return nil, utils.StackError(err, "Execution of function failed")
+		return nil, utils.StackError(err, "Execution of function %v failed", method)
 	}
 
 	//postprocess correctly
@@ -369,7 +368,10 @@ func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup
 	has[obj.Id()] = struct{}{}
 
 	//advance path and execute all children
-	path = path + "." + obj.Id().Name
+	if path != "" {
+		path += "."
+	}
+	path += obj.Id().Name
 	for _, child := range obj.GetChildren() {
 
 		datachild, ok := child.(Data)
