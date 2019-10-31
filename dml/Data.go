@@ -16,7 +16,8 @@ type Data interface {
 	//Data hirarchy allows childs
 	AddChild(obj Data)
 	GetChildren() []Data
-	GetChildByName(name string) (Data, error)
+	GetChildByName(name string) (Data, error)			//only hirarchy is search
+	GetSubobjectByName(name string) (Object, error) 	//Hirarchy + behaviour + dynamic objects
 }
 
 type DataImpl struct {
@@ -68,6 +69,22 @@ func (self *DataImpl) GetChildByName(name string) (Data, error) {
 		}
 	}
 	return nil, fmt.Errorf("No such object available")
+}
+
+func (self *DataImpl) GetSubobjectByName(name string) (Object, error) {
+	
+	//search hirarchy
+	child, err := self.GetChildByName(name)
+	if err == nil {
+		return child, nil
+	}
+	
+	//search behaviour
+	if self.HasBehaviour(name) { 
+		return self.GetBehaviour(name), nil
+	}
+	
+	return nil, fmt.Errorf("No such name known")
 }
 
 //override to handle children refcount additional to our own

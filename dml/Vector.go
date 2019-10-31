@@ -2,6 +2,7 @@
 package dml
 
 import (
+	"strconv"
 	"fmt"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
@@ -514,4 +515,32 @@ func (self *vector) print() {
 		fmt.Printf("%v ", val)
 	}
 	fmt.Println("]")
+}
+
+
+func (self *vector) GetSubobjectByName(name string) (Object, error) {
+	
+	//default search
+	obj, err := self.DataImpl.GetSubobjectByName(name)
+	if err == nil {
+		return obj, nil
+	}
+	
+	//let's see if it is a index
+	i, err := strconv.ParseInt(name, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("No such idx available")
+	}
+	
+	res, err := self.Get(i)
+	if err != nil {
+		return nil, utils.StackError(err, "No index %v available in %v", name, obj.Id().Name)
+	}
+	
+	obj, ok := res.(Object)
+	if !ok {
+		return nil, fmt.Errorf("Index is %v not a object", name)
+	}
+	
+	return obj, nil
 }

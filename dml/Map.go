@@ -2,6 +2,7 @@
 package dml
 
 import (
+	"strconv"
 	"fmt"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
@@ -53,9 +54,35 @@ func NewMap(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 	return mapI, nil
 }
 
+
+//inverse of keyToDB
+func (self *mapImpl) dbToType(key interface{}, dt DataType) (interface{}, error) {
+
+	if dt.IsObject() || dt.IsComplex() {
+
+		encoded, _ := key.(string)
+		id, err := IdentifierFromEncoded(encoded)
+		if err != nil {
+			return nil, utils.StackError(err, "Invalid identifier stored")
+		}
+		obj, has := self.rntm.objects[id]
+		if !has {
+			return nil, utils.StackError(err, "Invalid object stored")
+		}
+		return obj, nil
+
+	} else if dt.IsType() {
+
+		val, _ := key.(string)
+		return NewDataType(val)
+	}
+
+	//everything else is simply used
+	return key, nil
+}
+
 //convert all possible key types to something usable in the DB
-func (self *mapImpl) keyToDB(key interface{}) interface{} {
-	dt := self.keyDataType()
+func (self *mapImpl) typeToDB(key interface{}, dt DataType) interface{} {
 
 	if dt.IsObject() || dt.IsComplex() {
 
@@ -95,25 +122,6 @@ func (self *mapImpl) keyToDB(key interface{}) interface{} {
 
 }
 
-//inverse of keyToDB
-func (self *mapImpl) dbToKey(key interface{}) (interface{}, error) {
-	dt := self.keyDataType()
-
-	if dt.IsObject() || dt.IsComplex() {
-
-		encoded, _ := key.(string)
-		return IdentifierFromEncoded(encoded)
-
-	} else if dt.IsType() {
-
-		val, _ := key.(string)
-		return NewDataType(val)
-	}
-
-	//everything else is simply used as key
-	return key, nil
-}
-
 func (self *mapImpl) Length() (int64, error) {
 
 	keys, err := self.entries.GetKeys()
@@ -125,13 +133,14 @@ func (self *mapImpl) Length() (int64, error) {
 
 func (self *mapImpl) Keys() ([]interface{}, error) {
 
+	kdt := self.keyDataType()
 	keys, err := self.entries.GetKeys()
 	if err != nil {
 		return nil, err
 	}
 	result := make([]interface{}, len(keys))
 	for i, key := range keys {
-		kdb, err := self.dbToKey(key)
+		kdb, err := self.dbToType(key, kdt)
 		if err != nil {
 			return nil, err
 		}
@@ -149,7 +158,7 @@ func (self *mapImpl) Has(key interface{}) (bool, error) {
 		return false, utils.StackError(err, "Key has wrong type")
 	}
 
-	dbkey := self.keyToDB(key)
+	dbkey := self.typeToDB(key, kdt)
 	return self.entries.HasKey(dbkey), nil
 }
 
@@ -233,50 +242,19 @@ func (self *mapImpl) Get(key interface{}) (interface{}, error) {
 	}
 
 	//check if key is availbale
-	dbkey := self.keyToDB(key)
+	dbkey := self.typeToDB(key, kdt)
 	if !self.entries.HasKey(dbkey) {
 		return nil, fmt.Errorf("Key is not available in Map")
 	}
 
 	//check if the type of the value is correct
 	dt := self.valueDataType()
-	var result interface{}
-
-	if dt.IsObject() || dt.IsComplex() {
-		res, err := self.entries.Read(dbkey)
-		if err == nil {
-			id, err := IdentifierFromEncoded(res.(string))
-			if err != nil {
-				return nil, utils.StackError(err, "Invalid identifier stored in DB")
-			} else {
-				res, ok := self.rntm.objects[id]
-				if !ok {
-					return nil, fmt.Errorf("Map entry is invalid object")
-				}
-				result = res
-			}
-		}
-
-	} else if dt.IsType() {
-
-		res, err := self.entries.Read(dbkey)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to get stored type")
-		}
-		result, err = NewDataType(res.(string))
-		if err != nil {
-			return nil, utils.StackError(err, "Invalid datatype stored")
-		}
-
-	} else {
-		//plain types remain
-		result, err = self.entries.Read(dbkey)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to access database of Map")
-		}
+	res, err := self.entries.Read(dbkey)
+	if err != nil {
+		return nil, utils.StackError(err, "Cannot access db")
 	}
-
-	return result, nil
+	
+	return self.dbToType(res, dt)
 }
 
 func (self *mapImpl) Set(key interface{}, value interface{}) error {
@@ -295,7 +273,7 @@ func (self *mapImpl) Set(key interface{}, value interface{}) error {
 		return utils.StackError(err, "Cannot set map entry, value has wrong type")
 	}
 
-	dbkey := self.keyToDB(key)
+	dbkey := self.typeToDB(key, kdt)
 	if dt.IsObject() || dt.IsComplex() {
 
 		old, olderr := self.Get(dbkey)
@@ -347,7 +325,7 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	}
 
 	//if we already have it we cannot create new!
-	dbkey := self.keyToDB(key)
+	dbkey := self.typeToDB(key, kdt)
 	if self.entries.HasKey(dbkey) {
 		return nil, fmt.Errorf("Key exists already, cannot create new object")
 	}
@@ -382,7 +360,7 @@ func (self *mapImpl) Remove(key interface{}) error {
 	}
 
 	//if we already have it we cannot create new!
-	dbkey := self.keyToDB(key)
+	dbkey := self.typeToDB(key, kdt)
 	if !self.entries.HasKey(dbkey) {
 		return fmt.Errorf("Key does not exist, cannot be removed")
 	}
@@ -515,6 +493,49 @@ func (self *mapImpl) DecreaseRefcount() error {
 
 	//now decrease our own refcount
 	return self.object.DecreaseRefcount()
+}
+
+func (self *mapImpl) GetSubobjectByName(name string) (Object, error) {
+	
+	//default search
+	obj, err := self.DataImpl.GetSubobjectByName(name)
+	if err == nil {
+		return obj, nil
+	}
+	
+	//let's see if it is a map key
+	var key interface{}
+	dt := self.keyDataType()
+	switch dt.AsString() {
+		case "int":
+			i, err := strconv.Atoi(name)
+			if err != nil {
+				return nil, fmt.Errorf("No such key available")
+			}
+			key = self.typeToDB(i, dt) 
+			
+		case "string":
+			key = self.typeToDB(name, dt)
+			
+		default:
+			return nil, fmt.Errorf("Map key type %v does no allow access with %v", dt.AsString(), name)
+	}
+	
+	if !self.entries.HasKey(key) {
+		return nil, fmt.Errorf("No such key available")
+	}
+	val, err := self.entries.Read(key)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to read key")
+	}
+	dt = self.valueDataType()
+	result, _ := self.dbToType(val, dt)
+	if dt.IsObject() || dt.IsComplex() {
+
+		return result.(Object), nil
+	}	
+	
+	return nil, fmt.Errorf("%v is not a subobject", name)
 }
 
 func (self *mapImpl) valueDataType() DataType {

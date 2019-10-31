@@ -317,5 +317,16 @@ func TestTypeVector(t *testing.T) {
 
 			So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
 		})
+		
+		Convey("And accessing as path works", func() {
+			
+			store.Begin()
+			defer store.Rollback()
+
+			obj,  err := rntm.getObjectFromPath("toplevel.TypeVec.0")
+			So(err, ShouldBeNil)
+			
+			So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
+		})
 	})
 }

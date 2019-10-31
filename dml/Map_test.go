@@ -177,11 +177,11 @@ func TestPODMap(t *testing.T) {
 
 func TestComplexTypeMap(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Loading dml code into runtime including complex map types,", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
 
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
@@ -212,7 +212,7 @@ func TestComplexTypeMap(t *testing.T) {
 			store.Begin()
 			child, _ := rntm.mainObj.GetChildByName("TypeMap")
 			vec := child.(*mapImpl)
-			length, _ := vec.Length()
+			length, _ := vec.Length()		
 			So(length, ShouldEqual, 0)
 			store.Commit()
 
@@ -255,6 +255,16 @@ func TestComplexTypeMap(t *testing.T) {
 				So(err, ShouldBeNil)
 				obj = entry.(Object)
 				So(obj.GetProperty("test").GetValue(), ShouldEqual, 2)
+			})
+			
+			Convey("And accessing the object via path is possible", func() {
+	
+				store.Begin()
+				defer store.Rollback()
+				
+				obj, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
+				So(err, ShouldBeNil)
+				So(obj.GetProperty("test").GetValue(), ShouldEqual, 0)
 			})
 		})
 	})

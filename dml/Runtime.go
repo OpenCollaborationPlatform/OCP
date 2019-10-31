@@ -421,22 +421,19 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 	for _, name := range names[1:] {
 
 		//check all childs to find the one with given name
-		child, err := obj.GetChildByName(name)
+		child, err := obj.GetSubobjectByName(name)
 		if err != nil {
-			//maybe its an identifier
-			id, err := IdentifierFromEncoded(name)
-			if err != nil {
-				return nil, fmt.Errorf("Identifier %v cannot be found", name)
-			}
-			listobj, ok := self.objects[id]
-			if !ok {
-				return nil, fmt.Errorf("Identifier %v cannot be found", name)
-			}
-			obj = listobj
-
-		} else {
-			obj = child
+			return nil, utils.StackError(err, "Identifier %v is not available in object %v", name, obj.Id().Name)
 		}
+		
+		//check if it is a behaviour, and if so end here
+		_, isBehaviour := child.(Behaviour)
+		if isBehaviour {
+			return child, nil
+		}
+		
+		obj = child.(Data)
+		
 	}
 	return obj, nil
 }
