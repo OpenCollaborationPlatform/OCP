@@ -186,6 +186,14 @@ func (self dmlState) GetOperationSession() *sessionInfo {
 	return self.operationSession
 }
 
+func (self dmlState) CanCallLocal(path string) (bool, error) {
+	return self.dml.IsConstant(path)
+}
+
+func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) (interface{}, error) {
+	return self.dml.Call(user, path, args...)
+}
+
 func (self dmlState) Close() {
 
 	self.store.Close()

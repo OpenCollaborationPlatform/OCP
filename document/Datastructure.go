@@ -173,7 +173,6 @@ func (self Datastructure) executeOperation(ctx context.Context, op Operation) *n
 	}
 
 	return &nxclient.InvokeResult{Args: wamp.List{res}}
-
 }
 
 func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler {
@@ -194,6 +193,19 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 
 		//build dml path
 		path := procedure[(len(self.prefix) + 5):] // 5 for call.
+		
+		//check if we execute local or globally
+		local, err := self.dmlState.CanCallLocal(string(path))
+		if err != nil {
+			return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		}
+		if local {
+			res, err := self.dmlState.CallLocal(dml.User(auth), string(path), args...)
+			if err != nil {
+				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+			}
+			return &nxclient.InvokeResult{Args: wamp.List{res}}
+		}
 
 		//build and excecute the operation arguments
 		op := newCallOperation(dml.User(auth), string(path), args, node, session)
