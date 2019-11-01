@@ -8,17 +8,20 @@ import (
 	"sync"
 
 	"github.com/hashicorp/raft"
+	uuid "github.com/satori/go.uuid"
 	"github.com/ickby/CollaborationNode/utils"
 )
 
 //a little herlper to ease multi state commands
 type Operation struct {
 	State string
+	OpID  string
 	Op    []byte
 }
 
 func NewOperation(state string, cmd []byte) Operation {
-	return Operation{state, cmd}
+	opID := uuid.NewV4().String()
+	return Operation{state, opID, cmd}
 }
 
 func operationFromBytes(data []byte) (Operation, error) {
@@ -47,12 +50,14 @@ type State interface {
 //implements the raft FSM interface
 type multiState struct {
 	states map[string]State
-	mutex  sync.RWMutex
+	doneChan map[string]chan struct{}
+	mutex  sync.RWMutex	
 }
 
 func newMultiState() multiState {
 	return multiState{
 		states: make(map[string]State, 0),
+		doneChan: make(map[string]chan struct{}, 0),
 		mutex:  sync.RWMutex{},
 	}
 }
@@ -66,6 +71,12 @@ func (self multiState) Add(name string, state State) error {
 	}
 	self.states[name] = state
 	return nil
+}
+
+func (self multiState) SetDoneChan(opid string, c chan struct{}) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+	self.doneChan[opid] = c
 }
 
 func (self multiState) Apply(log *raft.Log) interface{} {
@@ -82,7 +93,14 @@ func (self multiState) Apply(log *raft.Log) interface{} {
 	if !has {
 		return fmt.Errorf("No such state known, cannot apply")
 	}
-	return self.states[op.State].Apply(op.Op)
+	result := self.states[op.State].Apply(op.Op)
+	
+	c, ok := self.doneChan[op.OpID]
+	if ok {
+		c <- struct{}{}
+		delete(self.doneChan, op.OpID)
+	}
+	return result
 }
 
 func (self multiState) Snapshot() (raft.FSMSnapshot, error) {

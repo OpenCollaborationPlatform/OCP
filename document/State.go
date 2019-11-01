@@ -191,7 +191,17 @@ func (self dmlState) CanCallLocal(path string) (bool, error) {
 }
 
 func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) (interface{}, error) {
-	return self.dml.Call(user, path, args...)
+	val, err := self.dml.Call(user, path, args...)
+	if err != nil {
+		return nil, err
+	}	
+	
+	//check if it is a Object, if so we only return the encoded identifier!
+	obj, ok := val.(dml.Object)
+	if ok {
+		return obj.Id().Encode(), nil
+	}
+	return val, nil
 }
 
 func (self dmlState) Close() {
