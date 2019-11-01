@@ -3,7 +3,12 @@ package dml
 
 import (
 	"fmt"
+	"github.com/alecthomas/participle"
 )
+
+func init() {
+	participle.UseLookahead(2)
+}
 
 //the file format
 type DML struct {
@@ -20,11 +25,11 @@ type DML struct {
  */
 type astObject struct {
 	Identifier  string           `@Ident "{"`
-	Assignments []*astAssignment `{ @@ `
+	Assignments []*astAssignment `( @@ `
 	Properties  []*astProperty   `| @@`
 	Events      []*astEvent      `| @@`
 	Functions   []*astFunction   `| @@`
-	Objects     []*astObject     `| @@ } "}"`
+	Objects     []*astObject     `| @@ )* "}"`
 }
 
 func (self astObject) Print() {
@@ -38,11 +43,11 @@ func (self astObject) Print() {
 
 type astImport struct {
 	File  string `"import" @String`
-	Alias string `[ "as" @Ident ]`
+	Alias string `( "as" @Ident )?`
 }
 
 type astAssignment struct {
-	Key      []string     `"." @Ident {"." @Ident} ":"`
+	Key      []string     `"." @Ident ("." @Ident)* ":"`
 	Value    *astValue    `(@@`
 	Function *astFunction `| @@)`
 }
@@ -57,29 +62,29 @@ func (self astAssignment) Print() {
 }
 
 type astProperty struct {
-	Const   string       `(@("const" "property") |`
-	Normal  string       `@"property")`
+	Const   string       `@("const")? "property"`
 	Type    *astDataType `@@`
 	Key     string       `@Ident`
-	Default *astValue    `[":" @@]`
+	Default *astValue    `(":" @@)?`
 }
 
 type astEvent struct {
 	Key     string         `"event" @Ident`
-	Params  []*astDataType `"(" { @@ [","] } ")"`
-	Default *astFunction   `[":" @@]`
+	Params  []*astDataType `"(" ( @@ ","? )* ")"`
+	Default *astFunction   `(":" @@)?`
 }
 
 type astFunction struct {
-	Name       *string  `Function [@Ident]`
-	Parameters []string `"(" {@Ident [","]} ")"`
+	Const      string   `@("const")? Function `
+	Name       *string  `@Ident?`
+	Parameters []string `"(" (@Ident ","?)* ")"`
 	Body       string   `@FunctionBody`
 }
 
 //matching all supported DML datatypes. Note that a astObject is also a datatype.
 //one special datatype is type whichs value is again a DataType
 type astDataType struct {
-	Pod    string     `@("string" | "bool" | "int" | "float" | "type" | "none" )`
+	Pod    string     `@("string" | "bool" | "int" | "float" | "type" | "none" | "object" )`
 	Object *astObject `| @@`
 }
 

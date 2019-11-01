@@ -104,7 +104,7 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error)
 	obj.AddProperty("name", MustNewDataType("string"), "", true)
 
 	//add default methods
-	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode))
+	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode, true))
 
 	//add default events
 	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm, MustNewDataType("string")))

@@ -10,13 +10,14 @@ import (
 type Method interface {
 	Call(args ...interface{}) interface{}
 	CallBoolReturn(args ...interface{}) (bool, error)
+	IsConst() bool
 }
 
-func NewMethod(fnc interface{}) (Method, error) {
+func NewMethod(fnc interface{}, constant bool) (Method, error) {
 
 	jsfnc, isJs := fnc.(func(goja.FunctionCall) goja.Value)
 	if isJs {
-		return &jsMethod{fnc: jsfnc}, nil
+		return &jsMethod{fnc: jsfnc, constant: constant}, nil
 	}
 
 	value := reflect.ValueOf(fnc)
@@ -24,11 +25,11 @@ func NewMethod(fnc interface{}) (Method, error) {
 		return nil, fmt.Errorf("Expected function, not %s", value.Type().String())
 	}
 
-	return &method{value}, nil
+	return &method{value, constant}, nil
 }
 
-func MustNewMethod(fnc interface{}) Method {
-	m, err := NewMethod(fnc)
+func MustNewMethod(fnc interface{}, constant bool) Method {
+	m, err := NewMethod(fnc, constant)
 	if err != nil {
 		panic(err)
 	}
@@ -37,6 +38,7 @@ func MustNewMethod(fnc interface{}) Method {
 
 type method struct {
 	fnc reflect.Value
+	constant bool
 }
 
 func (self *method) Call(args ...interface{}) interface{} {
@@ -82,11 +84,16 @@ func (self *method) CallBoolReturn(args ...interface{}) (bool, error) {
 	return boolean, nil
 }
 
+func (self *method) IsConst() bool {
+	return self.constant
+}
+
 //special method type that handles js functions
 type jsMethod struct {
 	fnc   func(goja.FunctionCall) goja.Value
 	rntm  *Runtime
 	jsobj *goja.Object
+	constant bool
 }
 
 func (self *jsMethod) Call(args ...interface{}) (result interface{}) {
@@ -128,6 +135,10 @@ func (self *jsMethod) CallBoolReturn(args ...interface{}) (bool, error) {
 		return true, fmt.Errorf("Return value must be bool")
 	}
 	return boolean, nil
+}
+
+func (self *jsMethod) IsConst() bool {
+	return self.constant
 }
 
 type MethodHandler interface {

@@ -28,6 +28,10 @@
 		this.testI = a
 	}
 	
+	const function readString() {
+		return this.testS
+	}
+	
 	Data {
 		.name: "DocumentObject"
 		property int test: 10

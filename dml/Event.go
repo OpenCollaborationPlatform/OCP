@@ -27,9 +27,9 @@ func NewEvent(jsparent *goja.Object, rntm *Runtime, args ...DataType) Event {
 	//now the js object
 	evtObj := rntm.jsvm.NewObject()
 
-	emitMethod, _ := NewMethod(evt.Emit)
+	emitMethod, _ := NewMethod(evt.Emit, false)
 	evt.AddMethod("Emit", emitMethod)
-	registerMethod, _ := NewMethod(evt.RegisterJSCallback)
+	registerMethod, _ := NewMethod(evt.RegisterJSCallback, false)
 	evt.AddMethod("RegisterCallback", registerMethod)
 
 	evt.jsobj = evtObj

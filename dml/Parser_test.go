@@ -58,7 +58,6 @@ func TestSimpleObject(t *testing.T) {
 			So(newprop.Key, ShouldEqual, "myprop")
 			So(*newprop.Default.Int, ShouldEqual, 1)
 			So(newprop.Const, ShouldEqual, "")
-			So(newprop.Normal, ShouldNotEqual, "")
 		})
 		Convey("with const value being read only.", func() {
 
@@ -68,7 +67,6 @@ func TestSimpleObject(t *testing.T) {
 			So(newprop.Key, ShouldEqual, "myconst")
 			So(*newprop.Default.Int, ShouldEqual, 2)
 			So(newprop.Const, ShouldNotEqual, "")
-			So(newprop.Normal, ShouldEqual, "")
 		})
 	})
 }
@@ -169,6 +167,10 @@ func TestJavascriptFunctions(t *testing.T) {
 				could be annything
 			}
 			
+			const function MyConstFunc() {
+				could be annything
+			}
+			
 			.name: 1
 		}`
 
@@ -185,10 +187,17 @@ func TestJavascriptFunctions(t *testing.T) {
 			So(obj.Identifier, ShouldEqual, "Test")
 			So(len(obj.Assignments), ShouldEqual, 2)
 			So(len(obj.Objects), ShouldEqual, 1)
+			So(len(obj.Functions), ShouldEqual, 2)
 
+			//check function constness
+			So(obj.Functions[0].Const, ShouldEqual, "")
+			So(obj.Functions[1].Const, ShouldEqual, "const")
+
+			//check subobject
 			obj = obj.Objects[0]
 			So(obj.Identifier, ShouldEqual, "SubObject")
 			So(len(obj.Assignments), ShouldEqual, 1)
+			So(len(obj.Functions), ShouldEqual, 1)
 			prop := obj.Assignments[0]
 			So(prop.Key[0], ShouldEqual, "name")
 			So(*prop.Value.Number, ShouldAlmostEqual, 1.1)

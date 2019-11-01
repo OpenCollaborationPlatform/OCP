@@ -38,8 +38,8 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 	vari.GetProperty("type").GetEvent("onChanged").RegisterCallback(vari.changedCallback)
 
 	//add methods
-	vari.AddMethod("SetValue", MustNewMethod(vari.SetValue))
-	vari.AddMethod("GetValue", MustNewMethod(vari.GetValue))
+	vari.AddMethod("SetValue", MustNewMethod(vari.SetValue, false))
+	vari.AddMethod("GetValue", MustNewMethod(vari.GetValue, true))
 
 	vari.AddEvent("onTypeChanged", NewEvent(vari.GetJSObject(), rntm))
 	vari.AddEvent("onValueChanged", NewEvent(vari.GetJSObject(), rntm))

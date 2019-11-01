@@ -41,10 +41,10 @@ func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) (dml.Object, 
 	}
 
 	//add methods
-	raw.AddMethod("Set", dml.MustNewMethod(raw.Set))
-	raw.AddMethod("Get", dml.MustNewMethod(raw.Get))
-	raw.AddMethod("IsSet", dml.MustNewMethod(raw.IsSet))
-	raw.AddMethod("Clear", dml.MustNewMethod(raw.Clear))
+	raw.AddMethod("Set", dml.MustNewMethod(raw.Set, false))
+	raw.AddMethod("Get", dml.MustNewMethod(raw.Get, true))
+	raw.AddMethod("IsSet", dml.MustNewMethod(raw.IsSet, true))
+	raw.AddMethod("Clear", dml.MustNewMethod(raw.Clear, false))
 
 	//add events
 	err = raw.AddEvent("onDataChanged", dml.NewEvent(raw.GetJSObject(), rntm, dml.MustNewDataType("string")))

@@ -48,28 +48,28 @@ func NewGraph(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 	}
 
 	//add properties
-	gr.AddProperty("directed", MustNewDataType("bool"), false, true)
+	gr.AddProperty("directed", MustNewDataType("bool"), true, true)
 	gr.AddProperty("node", MustNewDataType("type"), MustNewDataType("int"), true)
 	gr.AddProperty("edge", MustNewDataType("type"), MustNewDataType("none"), true)
 
 	//add methods
-	gr.AddMethod("AddNode", MustNewMethod(gr.AddNode))
-	gr.AddMethod("NewNode", MustNewMethod(gr.NewNode))
-	gr.AddMethod("RemoveNode", MustNewMethod(gr.RemoveNode))
-	gr.AddMethod("HasNode", MustNewMethod(gr.HasNode))
-	gr.AddMethod("Nodes", MustNewMethod(gr.Nodes))
-	gr.AddMethod("AddEdge", MustNewMethod(gr.AddEdge))
-	gr.AddMethod("NewEdge", MustNewMethod(gr.NewEdge))
-	gr.AddMethod("RemoveEdge", MustNewMethod(gr.RemoveEdge))
-	gr.AddMethod("RemoveEdgeBetween", MustNewMethod(gr.RemoveEdgeBetween))
-	gr.AddMethod("HasEdge", MustNewMethod(gr.HasEdge))
-	gr.AddMethod("HasEdgeBetween", MustNewMethod(gr.HasEdgeBetween))
-	gr.AddMethod("Edge", MustNewMethod(gr.Edge))
+	gr.AddMethod("AddNode", MustNewMethod(gr.AddNode, false))
+	gr.AddMethod("NewNode", MustNewMethod(gr.NewNode, false))
+	gr.AddMethod("RemoveNode", MustNewMethod(gr.RemoveNode, false))
+	gr.AddMethod("HasNode", MustNewMethod(gr.HasNode, true))
+	gr.AddMethod("Nodes", MustNewMethod(gr.Nodes, true))
+	gr.AddMethod("AddEdge", MustNewMethod(gr.AddEdge, false))
+	gr.AddMethod("NewEdge", MustNewMethod(gr.NewEdge, false))
+	gr.AddMethod("RemoveEdge", MustNewMethod(gr.RemoveEdge, false))
+	gr.AddMethod("RemoveEdgeBetween", MustNewMethod(gr.RemoveEdgeBetween, false))
+	gr.AddMethod("HasEdge", MustNewMethod(gr.HasEdge, true))
+	gr.AddMethod("HasEdgeBetween", MustNewMethod(gr.HasEdgeBetween, true))
+	gr.AddMethod("Edge", MustNewMethod(gr.Edge, true))
 
-	gr.AddMethod("FromNode", MustNewMethod(gr.FromNode))
-	gr.AddMethod("ToNode", MustNewMethod(gr.ToNode))
-	gr.AddMethod("Sorted", MustNewMethod(gr.Sorted))
-	gr.AddMethod("Cycles", MustNewMethod(gr.Cycles))
+	gr.AddMethod("FromNode", MustNewMethod(gr.FromNode, true))
+	gr.AddMethod("ToNode", MustNewMethod(gr.ToNode, true))
+	gr.AddMethod("Sorted", MustNewMethod(gr.Sorted, true))
+	gr.AddMethod("Cycles", MustNewMethod(gr.Cycles, true))
 
 	return gr, nil
 }

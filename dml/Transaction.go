@@ -205,9 +205,9 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 	mngr := &TransactionManager{NewMethodHandler(), rntm, mapSet, map_, nil}
 
 	//setup default methods
-	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen))
-	mngr.AddMethod("Open", MustNewMethod(mngr.Open))
-	mngr.AddMethod("Close", MustNewMethod(mngr.Close))
+	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen, true))
+	mngr.AddMethod("Open", MustNewMethod(mngr.Open, false))
+	mngr.AddMethod("Close", MustNewMethod(mngr.Close, false))
 
 	//build js object
 	mngr.jsobj = rntm.jsvm.NewObject()
@@ -475,9 +475,9 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	tbhvr := &transactionBehaviour{behaviour, *inTrans, *curTrans}
 
 	//add default methods for overriding by the user
-	tbhvr.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable))                //return true/false if object can be used in current transaction
-	tbhvr.AddMethod("CanBeClosed", MustNewMethod(tbhvr.defaultCloseable))             //return true/false if transaction containing the object can be closed
-	tbhvr.AddMethod("DependendObjects", MustNewMethod(tbhvr.defaultDependendObjects)) //return array of objects that need also to be added to transaction
+	tbhvr.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable, true))                //return true/false if object can be used in current transaction
+	tbhvr.AddMethod("CanBeClosed", MustNewMethod(tbhvr.defaultCloseable, true))             //return true/false if transaction containing the object can be closed
+	tbhvr.AddMethod("DependendObjects", MustNewMethod(tbhvr.defaultDependendObjects, true)) //return array of objects that need also to be added to transaction
 
 	//add default events
 	tbhvr.AddEvent(`onOpen`, NewEvent(behaviour.GetJSObject(), rntm))          //called when a new transaction was opened
@@ -486,7 +486,7 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	tbhvr.AddEvent(`onFailure`, NewEvent(behaviour.GetJSObject(), rntm))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
-	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction))
+	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))
 
 	return tbhvr, nil
 }

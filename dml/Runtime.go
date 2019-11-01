@@ -271,6 +271,43 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 	return val.Export(), err
 }
 
+func (self *Runtime) IsConstant(fullpath string) (bool, error) {
+	
+	self.datastore.Begin()
+	self.datastore.Rollback()
+	
+	//get path and accessor
+	idx := strings.LastIndex(string(fullpath), ".")
+	path := fullpath[:idx]
+	accessor := fullpath[(idx + 1):]
+	
+	//the relevant object
+	obj, err := self.getObjectFromPath(path)
+	if err != nil {
+		return false, err
+	}
+	
+	//check if it is a method that could be const
+	if obj.HasMethod(accessor) {
+		fnc := obj.GetMethod(accessor)
+		return fnc.IsConst(), nil
+	}
+	
+	//check if it is a proprty that could be const
+	if obj.HasProperty(accessor) {
+		prop := obj.GetProperty(accessor)
+		return prop.IsConst(), nil
+	}
+	
+	//events are always non-const
+	if obj.HasEvent(accessor) {
+		return false, nil
+	}
+	
+	//the only alternative left is a direct value access. This is always const
+	return true, nil
+}
+
 func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
 
 	self.datastore.Begin()
@@ -305,13 +342,22 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		if ok {
 			err = e
 		}
+		
+		if fnc.IsConst() {
+			self.datastore.Rollback()
+			return result, nil
+		}
 	}
 	
 	//a property maybe?
 	if obj.HasProperty(accessor) {
 		prop := obj.GetProperty(accessor)
+		
 		if len(args) == 0 {
+			//read only
 			result = prop.GetValue()
+			self.datastore.Rollback()
+			return result, nil
 		
 		} else {
 			err = prop.SetValue(args[0])
@@ -331,8 +377,9 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	if ok {
 		val := dat.GetValueByName(accessor)
 		if val != nil {
-			result = val
-			handled = true
+			//read only
+			self.datastore.Rollback()
+			return result, nil
 		}
 	}
 	
@@ -854,7 +901,7 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 		return nil, err
 	}
 
-	return NewMethod(val.Export())
+	return NewMethod(val.Export(), astFnc.Const == "const")
 }
 
 //func (self *Runtime) registerEvtFunction

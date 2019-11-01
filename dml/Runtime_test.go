@@ -233,5 +233,16 @@ func TestDmlFile(t *testing.T) {
 			_, err := rntm.RunJavaScript("", thiscode)
 			So(err, ShouldBeNil)
 		})
+		
+		Convey("and const functions are recognized", func() {
+								
+			c, err := rntm.IsConstant("Document.readString")
+			So(err, ShouldBeNil)
+			So(c, ShouldBeTrue)
+
+			c, err = rntm.IsConstant("Document.testFnc")
+			So(err, ShouldBeNil)
+			So(c, ShouldBeFalse)
+		})
 	})
 }
