@@ -150,7 +150,7 @@ func TestDatastructure(t *testing.T) {
 		Convey("methods are callable by clients,", func() {
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "ocp.test.methods.Test.TestFncZeroArgs", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			res, err := testClient.Call(ctx, "ocp.test.call.Test.TestFncZeroArgs", opts, wamp.List{}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -158,14 +158,14 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ := ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
+			val, _ := ds.dml.Call(dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 0)
 
-			_, err = testClient.Call(ctx, "ocp.test.methods.Test.TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, `kill`)
+			_, err = testClient.Call(ctx, "ocp.test.call.Test.TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ = ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
+			val, _ = ds.dml.Call(dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 3)
 		})
 
@@ -182,14 +182,14 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ := ds.dml.ReadProperty(dml.User("test"), "Test", "testI")
+			val, _ := ds.dml.Call(dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 120)
 		})
 
 		Convey("and properties are read/writable,", func() {
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "ocp.test.properties.Test.testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			res, err := testClient.Call(ctx, "ocp.test.call.Test.testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -197,7 +197,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 1)
 
-			res, err = testClient.Call(ctx, "ocp.test.properties.Test.testI", opts, wamp.List{42}, wamp.Dict{}, `kill`)
+			res, err = testClient.Call(ctx, "ocp.test.call.Test.testI", opts, wamp.List{42}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok = res.Arguments[0].(error)
@@ -205,7 +205,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 42)
 
-			res, err = testClient.Call(ctx, "ocp.test.properties.Test.testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			res, err = testClient.Call(ctx, "ocp.test.call.Test.testI", opts, wamp.List{}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok = res.Arguments[0].(error)
@@ -217,11 +217,11 @@ func TestDatastructure(t *testing.T) {
 		Convey("Also access via identifier work", func() {
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "ocp.test.methods.Test.Vector.AppendNew", opts, wamp.List{}, wamp.Dict{}, `kill`)
+			res, err := testClient.Call(ctx, "ocp.test.call.Test.Vector.AppendNew", opts, wamp.List{}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 
 			id := res.Arguments[0].(string)
-			uri := "ocp.test.properties." + id + ".testI"
+			uri := "ocp.test.call." + id + ".testI"
 			res, err = testClient.Call(ctx, uri, opts, wamp.List{20}, wamp.Dict{}, `kill`)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
@@ -230,7 +230,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 20)
 
-			val, _ := ds.dml.ReadProperty(dml.User("test"), id, "testI")
+			val, _ := ds.dml.Call(dml.User("test"), id+".testI")
 			So(val, ShouldEqual, 20)
 		})
 	})
@@ -294,7 +294,7 @@ func TestDatastructureData(t *testing.T) {
 
 			Convey("which markes the object \"set\" in dml", func() {
 
-				res, err := testClient.Call(ctx, "ocp.test.methods.Test.RawData.IsSet", opts, wamp.List{}, wamp.Dict{}, `kill`)
+				res, err := testClient.Call(ctx, "ocp.test.call.Test.RawData.IsSet", opts, wamp.List{}, wamp.Dict{}, `kill`)
 				So(err, ShouldBeNil)
 				So(res.Arguments[0], ShouldBeTrue)
 			})
@@ -305,9 +305,9 @@ func TestDatastructureData(t *testing.T) {
 				_, err := testClient.Call(ctx, "ocp.test.execute", opts, wamp.List{code}, wamp.Dict{}, `kill`)
 				So(err, ShouldBeNil)
 
-				res1, err := testClient.Call(ctx, "ocp.test.methods.Test.RawData.Get", opts, wamp.List{}, wamp.Dict{}, `kill`)
+				res1, err := testClient.Call(ctx, "ocp.test.call.Test.RawData.Get", opts, wamp.List{}, wamp.Dict{}, `kill`)
 				So(err, ShouldBeNil)
-				res2, err := testClient.Call(ctx, "ocp.test.methods.Test.RawData2.Get", opts, wamp.List{}, wamp.Dict{}, `kill`)
+				res2, err := testClient.Call(ctx, "ocp.test.call.Test.RawData2.Get", opts, wamp.List{}, wamp.Dict{}, `kill`)
 				So(err, ShouldBeNil)
 				So(res1.Arguments[0], ShouldEqual, res2.Arguments[0])
 				So(res1.Arguments, ShouldNotEqual, "")
@@ -365,7 +365,7 @@ func TestDatastructureData(t *testing.T) {
 
 			Convey("which markes the object \"set\" in dml", func() {
 
-				res, err := testClient.Call(ctx, "ocp.test.methods.Test.RawData.IsSet", opts, wamp.List{}, wamp.Dict{}, `kill`)
+				res, err := testClient.Call(ctx, "ocp.test.call.Test.RawData.IsSet", opts, wamp.List{}, wamp.Dict{}, `kill`)
 				So(err, ShouldBeNil)
 				So(res.Arguments[0], ShouldBeTrue)
 			})
@@ -376,9 +376,9 @@ func TestDatastructureData(t *testing.T) {
 				_, err := testClient.Call(ctx, "ocp.test.execute", opts, wamp.List{code}, wamp.Dict{}, `kill`)
 				So(err, ShouldBeNil)
 
-				res1, err := testClient.Call(ctx, "ocp.test.methods.Test.RawData.Get", opts, wamp.List{}, wamp.Dict{}, `kill`)
+				res1, err := testClient.Call(ctx, "ocp.test.call.Test.RawData.Get", opts, wamp.List{}, wamp.Dict{}, `kill`)
 				So(err, ShouldBeNil)
-				res2, err := testClient.Call(ctx, "ocp.test.methods.Test.RawData2.Get", opts, wamp.List{}, wamp.Dict{}, `kill`)
+				res2, err := testClient.Call(ctx, "ocp.test.call.Test.RawData2.Get", opts, wamp.List{}, wamp.Dict{}, `kill`)
 				So(err, ShouldBeNil)
 				So(res1.Arguments[0], ShouldEqual, res2.Arguments[0])
 				So(res1.Arguments, ShouldNotEqual, "")

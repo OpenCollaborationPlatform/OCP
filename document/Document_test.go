@@ -98,7 +98,7 @@ func TestDocumentSingleNode(t *testing.T) {
 
 			Convey("and makes the document editable", func() {
 
-				uri := "ocp.documents.edit." + docID + ".properties.Test.testI"
+				uri := "ocp.documents.edit." + docID + ".call.Test.testI"
 				res, err := client.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
 				So(err, ShouldBeNil)
 				So(len(res.Arguments), ShouldEqual, 1)
@@ -199,7 +199,7 @@ func TestDocumentTwoNodes(t *testing.T) {
 
 					Convey("and editable by both hosts", func() {
 
-						uri := "ocp.documents.edit." + docID + ".properties.Test.testI"
+						uri := "ocp.documents.edit." + docID + ".call.Test.testI"
 						_, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{10}, wamp.Dict{}, wamp.CancelModeKill)
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)

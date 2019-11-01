@@ -508,7 +508,7 @@ func (self *mapImpl) GetSubobjectByName(name string) (Object, error) {
 	dt := self.keyDataType()
 	switch dt.AsString() {
 		case "int":
-			i, err := strconv.Atoi(name)
+			i, err := strconv.ParseInt(name, 10, 64)
 			if err != nil {
 				return nil, fmt.Errorf("No such key available")
 			}
@@ -536,6 +536,35 @@ func (self *mapImpl) GetSubobjectByName(name string) (Object, error) {
 	}	
 	
 	return nil, fmt.Errorf("%v is not a subobject", name)
+}
+
+func (self *mapImpl) GetValueByName(name string) interface{} {
+	
+	
+	//let's see if it is a valid key
+	var key interface{}
+	dt := self.keyDataType()
+	switch dt.AsString() {
+		case "int":
+			i, err := strconv.ParseInt(name, 10, 64)
+			if err != nil {
+				return nil
+			}
+			key = self.typeToDB(i, dt) 
+			
+		case "string":
+			key = self.typeToDB(name, dt)
+			
+		default:
+			return nil
+	}
+	
+	res, err := self.Get(key)
+	if err != nil {
+		return nil
+	} 
+	
+	return res
 }
 
 func (self *mapImpl) valueDataType() DataType {

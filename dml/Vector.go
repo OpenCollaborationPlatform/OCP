@@ -544,3 +544,20 @@ func (self *vector) GetSubobjectByName(name string) (Object, error) {
 	
 	return obj, nil
 }
+
+func (self *vector) GetValueByName(name string) interface{} {
+	
+	
+	//let's see if it is a index
+	i, err := strconv.ParseInt(name, 10, 64)
+	if err != nil {
+		return nil
+	}
+	
+	res, err := self.Get(i)
+	if err != nil {
+		return nil
+	}
+	
+	return res
+}

@@ -89,12 +89,8 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	options = wamp.SetOption(options, wamp.OptDiscloseCaller, true)
 
 	//register the function handler
-	uri := self.prefix + "methods"
+	uri := self.prefix + "call"
 	self.client.Register(uri, self.createWampInvokeFunction(), options)
-
-	//register property handler
-	uri = self.prefix + "properties"
-	self.client.Register(uri, self.createWampPropertyFunction(), options)
 
 	//register raw data handler
 	uri = self.prefix + "rawdata"
@@ -196,13 +192,11 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 			return &nxclient.InvokeResult{Args: wamp.List{"No authid disclosed"}, Err: wamp.URI("ocp.error")}
 		}
 
-		//build dml path and function
-		idx := strings.LastIndex(string(procedure), ".")
-		path := procedure[(len(self.prefix) + 8):idx] // 8 for methods.
-		fnc := procedure[(idx + 1):]
+		//build dml path
+		path := procedure[(len(self.prefix) + 5):] // 5 for call.
 
 		//build and excecute the operation arguments
-		op := newFunctionOperation(dml.User(auth), string(path), string(fnc), args, node, session)
+		op := newCallOperation(dml.User(auth), string(path), args, node, session)
 		return self.executeOperation(ctx, op)
 	}
 
@@ -234,46 +228,6 @@ func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 		//build and execute the operation arguments
 		op := newJsOperation(dml.User(auth), code, node, session)
 		return self.executeOperation(ctx, op)
-	}
-
-	return res
-}
-
-func (self Datastructure) createWampPropertyFunction() nxclient.InvocationHandler {
-
-	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
-
-		//get session info
-		node := self.swarm.GetHost().ID()
-		session := wamp.OptionID(details, "caller")
-
-		//get the user id
-		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
-		if auth == "" {
-			return &nxclient.InvokeResult{Args: wamp.List{"No authid disclosed"}, Err: wamp.URI("ocp.error")}
-		}
-
-		//get the paths
-		procedure := wamp.OptionURI(details, "procedure")
-		idx := strings.LastIndex(string(procedure), ".")
-		path := procedure[(len(self.prefix) + 11):idx] //11 for .properties
-		prop := procedure[(idx + 1):]
-
-		//get the arguments: if provided it is a write, otherwise read
-		if len(args) == 0 {
-			val, err := self.dml.ReadProperty(dml.User(auth), string(path), string(prop))
-			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
-			}
-			return &nxclient.InvokeResult{Args: wamp.List{val}}
-
-		} else if len(args) == 1 {
-			//build and execute the operation arguments
-			op := newPropertyOperation(dml.User(auth), string(path), string(prop), args[0], node, session)
-			return self.executeOperation(ctx, op)
-		}
-
-		return &nxclient.InvokeResult{Args: wamp.List{"Only non or one argument supportet"}, Err: wamp.URI("ocp.error")}
 	}
 
 	return res
@@ -314,7 +268,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			//set the cid to the dml object
-			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()}, node, session)
+			op := newCallOperation(dml.User(auth), string(path) + ".Set", wamp.List{cid.String()}, node, session)
 			return self.executeOperation(ctx, op)
 
 		case "WriteIntoPath":
@@ -327,7 +281,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			}
 
 			//get the cid from the data object!
-			val, err := self.dml.CallMethod(dml.User(auth), string(path), "Get")
+			val, err := self.dml.Call(dml.User(auth), string(path)+".Get")
 			if err != nil {
 				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
@@ -403,13 +357,13 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return &nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
 			}
 			//set the cid to the dml object
-			op := newFunctionOperation(dml.User(auth), string(path), "Set", wamp.List{cid.String()}, node, session)
+			op := newCallOperation(dml.User(auth), string(path)+".Set", wamp.List{cid.String()}, node, session)
 			return self.executeOperation(ctx, op)
 
 		case "ReadBinary":
 
 			//get the cid from the data object!
-			val, err := self.dml.CallMethod(dml.User(auth), string(path), "Get")
+			val, err := self.dml.Call(dml.User(auth), string(path)+".Get")
 			if err != nil {
 				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}

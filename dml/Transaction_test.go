@@ -190,7 +190,7 @@ func TestTransactionBehaviour(t *testing.T) {
 			store.Commit()
 
 			Convey("all objects with transaction behaviour must be called", func() {
-				res, err := rntm.ReadProperty("User1", "Document.result", "value")
+				res, err := rntm.Call("User1", "Document.result.value")
 				So(err, ShouldBeNil)
 				str := res.(string)
 				//note: ordering of calls is undefined
@@ -222,7 +222,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 			Convey("only its participation event must have been called", func() {
 
-				res, err := rntm.ReadProperty("User1", "Document.result", "value")
+				res, err := rntm.Call("User1", "Document.result.value")
 				So(err, ShouldBeNil)
 				str := res.(string)
 				So(str, ShouldEqual, "p1")

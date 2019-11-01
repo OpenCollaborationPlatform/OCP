@@ -42,7 +42,7 @@ func TestPODVariant(t *testing.T) {
 			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 
-			res, err := rntm.CallMethod("", "toplevel.Variant", "GetValue")
+			res, err := rntm.Call("", "toplevel.Variant.GetValue")
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
 
@@ -51,7 +51,7 @@ func TestPODVariant(t *testing.T) {
 				code = `toplevel.Variant.SetValue("hello")`
 				_, err := rntm.RunJavaScript("", code)
 				So(err, ShouldNotBeNil)
-				res, err := rntm.CallMethod("", "toplevel.Variant", "GetValue")
+				res, err := rntm.Call("", "toplevel.Variant.GetValue")
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 10)
 			})
@@ -63,7 +63,7 @@ func TestPODVariant(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				Convey("and initialized the value to the default of the new datatype", func() {
-					res, err := rntm.CallMethod("", "toplevel.Variant", "GetValue")
+					res, err := rntm.Call("", "toplevel.Variant.GetValue")
 					So(err, ShouldBeNil)
 					So(res, ShouldBeFalse)
 				})

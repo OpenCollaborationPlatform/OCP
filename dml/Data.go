@@ -12,6 +12,9 @@ import (
 type Data interface {
 	Object
 	BehaviourHandler
+	
+	//Access a value by name. Coul be overriden by some objects, e.g. maps and vectors
+	GetValueByName(name string) interface{}
 
 	//Data hirarchy allows childs
 	AddChild(obj Data)
@@ -85,6 +88,10 @@ func (self *DataImpl) GetSubobjectByName(name string) (Object, error) {
 	}
 	
 	return nil, fmt.Errorf("No such name known")
+}
+
+func (self *DataImpl) GetValueByName(name string) interface{} {
+	return nil
 }
 
 //override to handle children refcount additional to our own

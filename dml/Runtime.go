@@ -271,88 +271,87 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 	return val.Export(), err
 }
 
-func (self *Runtime) CallMethod(user User, path string, method string, args ...interface{}) (interface{}, error) {
+func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
 
 	self.datastore.Begin()
 
 	//save the user for processing
 	self.currentUser = user
+	
+	//get path and accessor
+	idx := strings.LastIndex(string(fullpath), ".")
+	path := fullpath[:idx]
+	accessor := fullpath[(idx + 1):]
 
-	//first check if path is correct and method available
-	obj, err := self.getObjectFromPath(path)
+	//first check if path is correct and object available
+	obj, e := self.getObjectFromPath(path)
+	if e != nil {
+		self.datastore.Rollback()
+		return nil, utils.StackError(e, "Unable to find object %v", path)
+	}
+	
+	handled := false
+	var result interface{} = nil
+	var err error = nil
+	
+	//check if it is a method
+	if obj.HasMethod(accessor) {
+		fnc := obj.GetMethod(accessor)
+		result = fnc.Call(args...)
+		handled = true
+
+		//did somethign go wrong?
+		e, ok := result.(error)
+		if ok {
+			err = e
+		}
+	}
+	
+	//a property maybe?
+	if obj.HasProperty(accessor) {
+		prop := obj.GetProperty(accessor)
+		if len(args) == 0 {
+			result = prop.GetValue()
+		
+		} else {
+			err = prop.SetValue(args[0])
+			result = args[0]
+		}
+		handled = true
+	}
+	
+	//an event?
+	if obj.HasEvent(accessor) {
+		err = obj.GetEvent(accessor).Emit(args...)
+		handled = true
+	} 
+	
+	//or a simple value?
+	dat, ok := obj.(Data)
+	if ok {
+		val := dat.GetValueByName(accessor)
+		if val != nil {
+			result = val
+			handled = true
+		}
+	}
+	
+	//was it handled? If not no change to db was done
+	if !handled {
+		self.datastore.Rollback()
+		return nil, fmt.Errorf("No accessor %v known in object %v", accessor, path)
+	}
+	
+	//did an error occure?
 	if err != nil {
-		self.datastore.Rollback()
-		return nil, utils.StackError(err, "Unable to find object %v", path)
-	}
-	if !obj.HasMethod(method) {
-		self.datastore.Rollback()
-		return nil, fmt.Errorf("No method %v available in object %v", method, obj.Id().String())
-	}
-
-	fnc := obj.GetMethod(method)
-	result := fnc.Call(args...)
-
-	//did somethign go wrong?
-	err, ok := result.(error)
-	if ok && err != nil {
-		self.postprocess(true)
-		return nil, utils.StackError(err, "Execution of function %v failed", method)
+		err = self.postprocess(true)
+		return nil, err
 	}
 
 	//postprocess correctly
 	err = self.postprocess(false)
 
 	return result, err
-}
-
-func (self *Runtime) ReadProperty(user User, path string, property string) (interface{}, error) {
-
-	self.datastore.Begin()
-	defer self.datastore.Rollback()
-
-	//save the user for processing
-	self.currentUser = user
-
-	//first check if path is correct and method available
-	obj, err := self.getObjectFromPath(path)
-	if err != nil {
-		return nil, err
-	}
-	if !obj.HasProperty(property) {
-		return nil, fmt.Errorf("No property %v available in object %v", property, path)
-	}
-
-	prop := obj.GetProperty(property)
-	return prop.GetValue(), nil
-}
-
-func (self *Runtime) WriteProperty(user User, path string, property string, val interface{}) error {
-
-	self.datastore.Begin()
-
-	//save the user for processing
-	self.currentUser = user
-
-	//first check if path is correct and method available
-	obj, err := self.getObjectFromPath(path)
-	if err != nil {
-		self.datastore.Rollback()
-		return err
-	}
-	if !obj.HasProperty(property) {
-		self.datastore.Rollback()
-		return fmt.Errorf("No property %v available in object %v", property, path)
-	}
-
-	prop := obj.GetProperty(property)
-	err = prop.SetValue(val)
-	if err != nil {
-		self.postprocess(true)
-		return utils.StackError(err, "Setting property failed")
-	}
-
-	//postprocess correctly
-	return self.postprocess(false)
 }
 
 // 							Internal Functions

@@ -10,9 +10,8 @@ import (
 )
 
 func init() {
-	gob.Register(functionOperation{})
+	gob.Register(callOperation{})
 	gob.Register(jsOperation{})
-	gob.Register(propertyOperation{})
 }
 
 type Operation interface {
@@ -33,22 +32,21 @@ func operationFromData(data []byte) (Operation, error) {
 	return op, nil
 }
 
-type functionOperation struct {
+type callOperation struct {
 	User      dml.User
 	Path      string
-	Function  string
 	Arguments []interface{}
 
 	Node    p2p.PeerID
 	Session wamp.ID
 }
 
-func newFunctionOperation(user dml.User, path string, fnc string, args []interface{}, node p2p.PeerID, session wamp.ID) Operation {
+func newCallOperation(user dml.User, path string, args []interface{}, node p2p.PeerID, session wamp.ID) Operation {
 
-	return functionOperation{user, path, fnc, args, node, session}
+	return callOperation{user, path, args, node, session}
 }
 
-func (self functionOperation) ToData() ([]byte, error) {
+func (self callOperation) ToData() ([]byte, error) {
 
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
@@ -57,9 +55,9 @@ func (self functionOperation) ToData() ([]byte, error) {
 	return b.Bytes(), err
 }
 
-func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
+func (self callOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 
-	val, err := rntm.CallMethod(self.User, self.Path, self.Function, self.Arguments...)
+	val, err := rntm.Call(self.User, self.Path, self.Arguments...)
 	if err != nil {
 		return err
 	}
@@ -73,7 +71,7 @@ func (self functionOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 	return val
 }
 
-func (self functionOperation) GetSession() (p2p.PeerID, wamp.ID) {
+func (self callOperation) GetSession() (p2p.PeerID, wamp.ID) {
 	return self.Node, self.Session
 }
 
@@ -116,43 +114,5 @@ func (self jsOperation) ApplyTo(rntm *dml.Runtime) interface{} {
 }
 
 func (self jsOperation) GetSession() (p2p.PeerID, wamp.ID) {
-	return self.Node, self.Session
-}
-
-type propertyOperation struct {
-	User     dml.User
-	Path     string
-	Property string
-	Value    interface{}
-
-	Node    p2p.PeerID
-	Session wamp.ID
-}
-
-func newPropertyOperation(user dml.User, path string, prop string, val interface{}, node p2p.PeerID, session wamp.ID) Operation {
-
-	return propertyOperation{user, path, prop, val, node, session}
-}
-
-func (self propertyOperation) ToData() ([]byte, error) {
-
-	var b bytes.Buffer
-	e := gob.NewEncoder(&b)
-	var op Operation = self
-	err := e.Encode(&op)
-	return b.Bytes(), err
-}
-
-func (self propertyOperation) ApplyTo(rntm *dml.Runtime) interface{} {
-
-	err := rntm.WriteProperty(self.User, self.Path, self.Property, self.Value)
-	if err != nil {
-		return err
-	}
-
-	return self.Value
-}
-
-func (self propertyOperation) GetSession() (p2p.PeerID, wamp.ID) {
 	return self.Node, self.Session
 }
