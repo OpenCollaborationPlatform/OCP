@@ -10,6 +10,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/client"
 	nxrouter "github.com/gammazero/nexus/router"
+	nxserialize "github.com/gammazero/nexus/transport/serialize"
 	"github.com/gammazero/nexus/wamp"
 	"github.com/spf13/viper"
 )
@@ -69,6 +70,7 @@ func (ls *Router) GetLocalClient(name string) (*nxclient.Client, error) {
 		Realm:        "ocp",
 		HelloDetails: wamp.Dict{"authid": name, "role": "local"},
 		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": authFunc},
+		Serialization: nxserialize.MSGPACK,
 	}
 	c, err := nxclient.ConnectLocal(ls.router, cfg)
 

@@ -54,15 +54,15 @@ type multiState struct {
 	mutex  sync.RWMutex	
 }
 
-func newMultiState() multiState {
-	return multiState{
+func newMultiState() *multiState {
+	return &multiState{
 		states: make(map[string]State, 0),
 		doneChan: make(map[string]chan struct{}, 0),
 		mutex:  sync.RWMutex{},
 	}
 }
 
-func (self multiState) Add(name string, state State) error {
+func (self *multiState) Add(name string, state State) error {
 
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
@@ -73,13 +73,13 @@ func (self multiState) Add(name string, state State) error {
 	return nil
 }
 
-func (self multiState) SetDoneChan(opid string, c chan struct{}) {
+func (self *multiState) SetDoneChan(opid string, c chan struct{}) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	self.doneChan[opid] = c
 }
 
-func (self multiState) Apply(log *raft.Log) interface{} {
+func (self *multiState) Apply(log *raft.Log) interface{} {
 
 	op, err := operationFromBytes(log.Data)
 	if err != nil {
@@ -103,7 +103,7 @@ func (self multiState) Apply(log *raft.Log) interface{} {
 	return result
 }
 
-func (self multiState) Snapshot() (raft.FSMSnapshot, error) {
+func (self *multiState) Snapshot() (raft.FSMSnapshot, error) {
 
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
@@ -130,7 +130,7 @@ func (self multiState) Snapshot() (raft.FSMSnapshot, error) {
 
 }
 
-func (self multiState) Restore(reader io.ReadCloser) error {
+func (self *multiState) Restore(reader io.ReadCloser) error {
 
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()

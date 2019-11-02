@@ -30,7 +30,7 @@ type PeerProvider interface {
 type Replica struct {
 	host  p2phost.Host
 	dht   *kaddht.IpfsDHT
-	state multiState
+	state *multiState
 	rep   *raft.Raft
 	logs  raft.LogStore
 	confs raft.StableStore

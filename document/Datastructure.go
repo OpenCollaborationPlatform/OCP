@@ -1,6 +1,7 @@
 package document
 
 import (
+	"fmt"
 	"context"
 	"encoding/gob"
 	nxclient "github.com/gammazero/nexus/client"
@@ -334,14 +335,16 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			callback := func(result *wamp.Result) {
 				//get the data block
 				if len(result.Arguments) != 1 {
+					fmt.Printf("Progress called but no data in %v\n", result)
 					return
 				}
 
-				switch result.Arguments[0].(type) {
-				case []byte:
-					channel <- result.Arguments[0].([]byte)
-				case string:
-					channel <- []byte(result.Arguments[0].(string))
+				res := result.Arguments[0]
+				switch res.(type) {				
+					case []byte:
+						channel <- res.([]byte)
+					case string:
+						channel <- []byte(res.(string))
 				}
 			}
 			res, err := self.client.CallProgress(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, wamp.CancelModeKill, callback)
@@ -349,11 +352,16 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			if len(res.Arguments) > 0 && res.Arguments[0] != nil {
-				switch res.Arguments[0].(type) {
-				case []byte:
-					channel <- res.Arguments[0].([]byte)
-				case string:
-					channel <- []byte(res.Arguments[0].(string))
+				
+				data := res.Arguments[0]
+				switch data.(type) {				
+					case []byte:
+						channel <- data.([]byte)
+					case string:
+						channel <- []byte(data.(string))
+					default:
+						msg := fmt.Sprintf("Binary data not received as binary but %T", res.Arguments[0])
+						return &nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
 				}
 			}
 			block.Stop()

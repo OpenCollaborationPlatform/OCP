@@ -310,8 +310,6 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 
 func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
 
-	fmt.Printf("Call %v with %v\n", fullpath, args)
-
 	err := self.datastore.Begin()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access database")
@@ -404,7 +402,6 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	//postprocess correctly
 	err = self.postprocess(false)
 
-	fmt.Printf("Sucessfull finish with %v and err %v\n", result, err)
 	return result, err
 }
 
