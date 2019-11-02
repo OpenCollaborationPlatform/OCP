@@ -28,6 +28,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"sync"
 
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -83,7 +84,7 @@ func NewDatastore(path string) (*Datastore, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to open bolt db: %s", path)
 	}
-	bolt := boltWrapper{db_, nil}
+	bolt := boltWrapper{db_, nil, sync.Mutex{}}
 
 	//open to allow creation of default setups
 	bolt.Begin()
@@ -176,6 +177,10 @@ func (self *Datastore) Commit() error {
 
 func (self *Datastore) Rollback() error {
 	return self.boltdb.Rollback()
+}
+
+func (self *Datastore) RollbackKeepOpen() error {
+	return self.boltdb.RollbackKeepOpen()
 }
 
 func (self *Datastore) Close() {

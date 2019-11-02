@@ -5,6 +5,7 @@ package datastore
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/boltdb/bolt"
 )
@@ -12,9 +13,12 @@ import (
 type boltWrapper struct {
 	db *bolt.DB
 	tx *bolt.Tx
+	mutex sync.Mutex
 }
 
 func (self *boltWrapper) Begin() error {
+
+	self.mutex.Lock()
 
 	if self.tx != nil {
 		return fmt.Errorf("Transaction already open")
@@ -33,6 +37,8 @@ func (self *boltWrapper) Commit() error {
 
 	err := self.tx.Commit()
 	self.tx = nil
+	
+	self.mutex.Unlock()
 	return err
 }
 
@@ -44,6 +50,25 @@ func (self *boltWrapper) Rollback() error {
 
 	err := self.tx.Rollback()
 	self.tx = nil
+
+	self.mutex.Unlock()
+	return err
+}
+
+func (self *boltWrapper) RollbackKeepOpen() error {
+
+	if self.tx == nil {
+		return fmt.Errorf("No transaction open to rollback")
+	}
+
+	err := self.tx.Rollback()
+	if err != nil {
+		return err
+	}
+	
+	tx, err := self.db.Begin(true)
+	self.tx = tx
+	
 	return err
 }
 

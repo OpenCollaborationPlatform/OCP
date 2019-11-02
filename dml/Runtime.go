@@ -274,7 +274,7 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 	
 	self.datastore.Begin()
-	self.datastore.Rollback()
+	defer self.datastore.Rollback()
 	
 	//get path and accessor
 	idx := strings.LastIndex(string(fullpath), ".")
@@ -310,7 +310,12 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 
 func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
 
-	self.datastore.Begin()
+	fmt.Printf("Call %v with %v\n", fullpath, args)
+
+	err := self.datastore.Begin()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access database")
+	}
 
 	//save the user for processing
 	self.currentUser = user
@@ -323,13 +328,14 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	//first check if path is correct and object available
 	obj, e := self.getObjectFromPath(path)
 	if e != nil {
-		self.datastore.Rollback()
-		return nil, utils.StackError(e, "Unable to find object %v", path)
+		e = utils.StackError(e, "Unable to find object %v", path)
+		err := self.datastore.Rollback()
+		return nil, utils.StackError(e, "%v", err.Error())
 	}
 	
 	handled := false
 	var result interface{} = nil
-	var err error = nil
+	err = nil
 	
 	//check if it is a method
 	if obj.HasMethod(accessor) {
@@ -344,8 +350,8 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		}
 		
 		if fnc.IsConst() {
-			self.datastore.Rollback()
-			return result, nil
+			err := self.datastore.Rollback()
+			return result, err
 		}
 	}
 	
@@ -378,8 +384,8 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		val := dat.GetValueByName(accessor)
 		if val != nil {
 			//read only
-			self.datastore.Rollback()
-			return result, nil
+			err := self.datastore.Rollback()
+			return result, err
 		}
 	}
 	
@@ -398,6 +404,7 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	//postprocess correctly
 	err = self.postprocess(false)
 
+	fmt.Printf("Sucessfull finish with %v and err %v\n", result, err)
 	return result, err
 }
 
@@ -503,7 +510,9 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 		for _, obj := range self.objects {
 			has, err := obj.HasUpdates()
 			if err != nil {
-				return utils.StackError(err, "Unable to check object for new updates")
+				postError = utils.StackError(err, "Unable to check object for updates")
+				rollback = true
+				break
 			}
 			if has {
 
@@ -533,8 +542,7 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 
 	//rollback if required (caller requested or behaviours failed)
 	if rollback {
-		self.datastore.Rollback()
-		self.datastore.Begin() //reopen to allow GetRefCount()
+		self.datastore.RollbackKeepOpen()
 	}
 
 	//garbace collection: which objects can be removed?
