@@ -324,11 +324,10 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	accessor := fullpath[(idx + 1):]
 
 	//first check if path is correct and object available
-	obj, e := self.getObjectFromPath(path)
-	if e != nil {
-		e = utils.StackError(e, "Unable to find object %v", path)
-		err := self.datastore.Rollback()
-		return nil, utils.StackError(e, "%v", err.Error())
+	obj, err := self.getObjectFromPath(path)
+	if err != nil {
+		self.datastore.Rollback()
+		return nil, err
 	}
 	
 	handled := false
@@ -345,16 +344,15 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		e, ok := result.(error)
 		if ok {
 			err = e
-		}
 		
-		if fnc.IsConst() {
+		} else if fnc.IsConst() {
 			err := self.datastore.Rollback()
 			return result, err
 		}
 	}
 	
 	//a property maybe?
-	if obj.HasProperty(accessor) {
+	if !handled && obj.HasProperty(accessor) {
 		prop := obj.GetProperty(accessor)
 		
 		if len(args) == 0 {
@@ -371,7 +369,7 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	}
 	
 	//an event?
-	if obj.HasEvent(accessor) {
+	if !handled && obj.HasEvent(accessor) {
 		err = obj.GetEvent(accessor).Emit(args...)
 		handled = true
 	} 
@@ -379,8 +377,8 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	//or a simple value?
 	dat, ok := obj.(Data)
 	if ok {
-		val := dat.GetValueByName(accessor)
-		if val != nil {
+		result = dat.GetValueByName(accessor)
+		if result != nil {
 			//read only
 			err := self.datastore.Rollback()
 			return result, err
@@ -395,7 +393,7 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	
 	//did an error occure?
 	if err != nil {
-		err = self.postprocess(true)
+		self.postprocess(true)
 		return nil, err
 	}
 
@@ -456,11 +454,11 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 	if names[0] != self.mainObj.Id().Name {
 		id, err := IdentifierFromEncoded(names[0])
 		if err != nil {
-			return nil, fmt.Errorf("First identifier %v cannot be found", names[0])
+			return nil, fmt.Errorf("First identifier in %v cannot be found", path)
 		}
 		listobj, ok := self.objects[id]
 		if !ok {
-			return nil, fmt.Errorf("First identifier %v cannot be found", names[0])
+			return nil, fmt.Errorf("First identifier in %v cannot be found", path)
 		}
 		obj = listobj
 
