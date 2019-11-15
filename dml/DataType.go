@@ -92,7 +92,7 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 
 	//nil is special
 	if val == nil {
-		if self.IsNone() {
+		if self.IsNone() || self.IsObject() {
 			return nil
 		}
 		return fmt.Errorf("wrong object type, got '%T' and expected 'nil'", val)

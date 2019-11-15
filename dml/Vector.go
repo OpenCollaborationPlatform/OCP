@@ -49,6 +49,7 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) 
 	//add methods
 	vec.AddMethod("Length", MustNewMethod(vec.Length, true))
 	vec.AddMethod("Get", MustNewMethod(vec.Get, true))
+	vec.AddMethod("GetAll", MustNewMethod(vec.GetAll, true))
 	vec.AddMethod("Set", MustNewMethod(vec.Set, false))
 	vec.AddMethod("Append", MustNewMethod(vec.Append, false))
 	vec.AddMethod("AppendNew", MustNewMethod(vec.AppendNew, false))
@@ -59,8 +60,8 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) 
 
 	//events of a vector
 	vec.AddEvent("onNewEntry", NewEvent(vec.GetJSObject(), rntm, MustNewDataType("int")))
-	vec.AddEvent("onChangedEntry", NewEvent(vec.GetJSObject(), rntm, MustNewDataType("int")))
-	vec.AddEvent("onDeletedEntry", NewEvent(vec.GetJSObject(), rntm, MustNewDataType("int")))
+	vec.AddEvent("onChange", NewEvent(vec.GetJSObject(), rntm))
+	vec.AddEvent("onDeleteEntry", NewEvent(vec.GetJSObject(), rntm, MustNewDataType("int")))
 
 	return vec, nil
 }
@@ -163,6 +164,24 @@ func (self *vector) Get(idx int64) (interface{}, error) {
 	return result, nil
 }
 
+func (self *vector) GetAll() (interface{}, error) {
+
+	length, _ := self.Length()
+	list := make([]interface{}, length)
+	
+	for idx:=int64(0); idx<length; idx++ {
+
+		result, err := self.Get(idx)	
+		if err != nil {
+			return nil, err
+		}		
+		list[idx] = result
+	}
+
+	return list, nil
+}
+
+
 func (self *vector) Set(idx int64, value interface{}) error {
 
 	length, _ := self.Length()
@@ -208,6 +227,8 @@ func (self *vector) Set(idx int64, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to write vector at idx %v", idx)
 	}
+	
+	self.GetEvent("onChange").Emit()
 	return nil
 }
 
@@ -235,6 +256,7 @@ func (self *vector) Append(value interface{}) (int64, error) {
 	//and set value
 	err = self.Set(newIdx, value)
 
+	self.GetEvent("onNewEntry").Emit(newIdx)
 	return newIdx, err
 }
 
@@ -260,6 +282,7 @@ func (self *vector) AppendNew() (interface{}, error) {
 	//and increase length
 	self.length.Write(length + 1)
 
+	self.GetEvent("onNewEntry").Emit(length)
 	return result, nil
 }
 
@@ -280,6 +303,7 @@ func (self *vector) Insert(idx int64, value interface{}) error {
 		return utils.StackError(err, "Unable to insert value into vector")
 	}
 
+	self.GetEvent("onNewEntry").Emit(idx)
 	return nil
 }
 
@@ -300,6 +324,7 @@ func (self *vector) InsertNew(idx int64) (interface{}, error) {
 		return nil, utils.StackError(err, "Unable to insert value into vector")
 	}
 
+	self.GetEvent("onNewEntry").Emit(idx)
 	return res, nil
 }
 
@@ -323,6 +348,9 @@ func (self *vector) Remove(idx int64) error {
 			data.DecreaseRefcount()
 		}
 	}
+	
+	//inform that we are going to remove
+	self.GetEvent("onDeleteEntry").Emit(idx)
 
 	//deleting means moving each entry after idx one down and shortening the length by 1
 	l, _ := self.Length()
@@ -369,6 +397,7 @@ func (self *vector) Swap(idx1 int64, idx2 int64) error {
 		return utils.StackError(err, "Unable to swap vector entries")
 	}
 
+	self.GetEvent("onChange").Emit()
 	return nil
 }
 
@@ -416,7 +445,11 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 	}
 
 	//write the data into the correct location
-	return self.entries.Write(newIdx, data)
+	err = self.entries.Write(newIdx, data)
+	if err == nil {
+		self.GetEvent("onChange").Emit()
+	}
+	return err
 }
 
 //*****************************************************************************

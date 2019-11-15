@@ -151,6 +151,7 @@ func (self Datastructure) createWampPublishFunction(path string, event string) d
 		}
 
 		//publish!
+		//fmt.Printf("Publish event %v with args %v\n", uri, args)
 		return self.client.Publish(uri, opts, args, kwargs)
 	}
 }

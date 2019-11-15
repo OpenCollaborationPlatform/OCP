@@ -681,7 +681,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 			return nil, utils.StackError(err, "Unable to create property %v in object %v", astProp.Key, objName)
 		}
 	}
-	err = obj.SetupJSProperties(self.jsvm, jsobj)
+	err = obj.SetupJSProperties(self, jsobj)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create javascript property interface for %v", objName)
 	}
@@ -970,6 +970,8 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 		dt = MustNewDataType("bool")
 	case "type":
 		dt = MustNewDataType("type")
+	case "object":
+		dt = MustNewDataType("object")
 	}
 
 	var constprop bool = false
