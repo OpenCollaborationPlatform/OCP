@@ -75,8 +75,8 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 	}
 
 	//add all required events
-	prop.AddEvent("onBeforeChange", NewEvent(rntm.jsvm.NewObject(), rntm, dtype))
-	prop.AddEvent("onChanged", NewEvent(rntm.jsvm.NewObject(), rntm, dtype))
+	prop.AddEvent("onBeforeChange", NewEvent(rntm.jsvm.NewObject(), rntm))
+	prop.AddEvent("onChanged", NewEvent(rntm.jsvm.NewObject(), rntm))
 
 	return prop, nil
 }

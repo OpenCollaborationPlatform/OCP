@@ -18,10 +18,9 @@ type Event interface {
 	RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error
 }
 
-func NewEvent(jsparent *goja.Object, rntm *Runtime, args ...DataType) Event {
+func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
 
 	evt := &event{methodHandler: NewMethodHandler(),
-		parameterTypes: args,
 		callbacks:      make([]EventCallback, 0)}
 
 	//now the js object
@@ -43,7 +42,6 @@ func NewEvent(jsparent *goja.Object, rntm *Runtime, args ...DataType) Event {
 type event struct {
 	methodHandler
 
-	parameterTypes []DataType
 	callbacks      []EventCallback
 
 	jsvm     *goja.Runtime
@@ -53,18 +51,7 @@ type event struct {
 
 func (self *event) Emit(args ...interface{}) error {
 
-	//check if all required types are given
-	if len(args) != len(self.parameterTypes) {
-		return fmt.Errorf("Not enough types provided, expected %v, received %v", len(self.parameterTypes), len(args))
-	}
-	for i, pt := range self.parameterTypes {
-		err := pt.MustBeTypeOf(args[i])
-		if err != nil {
-			return err
-		}
-	}
-
-	//now call all registered functions
+	//call all registered functions
 	var err error
 	for _, fnc := range self.callbacks {
 		err = fnc(args...)

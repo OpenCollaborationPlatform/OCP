@@ -70,7 +70,6 @@ type astProperty struct {
 
 type astEvent struct {
 	Key     string         `"event" @Ident`
-	Params  []*astDataType `"(" ( @@ ","? )* ")"`
 	Default *astFunction   `(":" @@)?`
 }
 

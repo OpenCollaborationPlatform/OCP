@@ -911,19 +911,8 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 
 func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) {
 
-	//build the arguements slice
-	args := make([]DataType, len(astEvt.Params))
-	for i, ptype := range astEvt.Params {
-		//only pod types allowd
-		if ptype.Object != nil {
-			return nil, fmt.Errorf("event arguments can only be POD types")
-		}
-		ptype := MustNewDataType(ptype.Pod)
-		args[i] = ptype
-	}
-
 	//build the event
-	evt := NewEvent(parent.GetJSObject(), self, args...)
+	evt := NewEvent(parent.GetJSObject(), self)
 
 	//and see if we should add a default callback
 	if astEvt.Default != nil {

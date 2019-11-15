@@ -16,12 +16,12 @@
 	
 	.onPropertyChanged: function(name) {}
 	
-	event testE(int, string): function(a,b) {
+	event testE: function(a,b) {
 		Document.testB = false
 	}
 	
 	//event which uses this which should be supported (this means the parent object)
-	event testE2(): function() {
+	event testE2: function() {
 		this.testB = true
 	}
 	
@@ -57,7 +57,7 @@
 		
 		Data {
 			.name: "Sub"
-			event test()
+			event test
 		}
 		
 		function assign() {

@@ -59,9 +59,9 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) 
 	vec.AddMethod("Move", MustNewMethod(vec.Move, false))
 
 	//events of a vector
-	vec.AddEvent("onNewEntry", NewEvent(vec.GetJSObject(), rntm, MustNewDataType("int")))
+	vec.AddEvent("onNewEntry", NewEvent(vec.GetJSObject(), rntm))
 	vec.AddEvent("onChange", NewEvent(vec.GetJSObject(), rntm))
-	vec.AddEvent("onDeleteEntry", NewEvent(vec.GetJSObject(), rntm, MustNewDataType("int")))
+	vec.AddEvent("onDeleteEntry", NewEvent(vec.GetJSObject(), rntm))
 
 	return vec, nil
 }

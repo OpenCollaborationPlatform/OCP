@@ -107,7 +107,7 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error)
 	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode, true))
 
 	//add default events
-	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm, MustNewDataType("string")))
+	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm))
 
 	return &obj, nil
 }
