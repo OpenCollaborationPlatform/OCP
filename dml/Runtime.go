@@ -338,6 +338,7 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	if obj.HasMethod(accessor) {
 		fnc := obj.GetMethod(accessor)
 		result = fnc.Call(args...)
+		//fmt.Printf("\nCall method %v result: %v\n", accessor, result)
 		handled = true
 
 		//did somethign go wrong?
@@ -375,13 +376,15 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	} 
 	
 	//or a simple value?
-	dat, ok := obj.(Data)
-	if ok {
-		result = dat.GetValueByName(accessor)
-		if result != nil {
-			//read only
-			err := self.datastore.Rollback()
-			return result, err
+	if !handled {
+		dat, ok := obj.(Data)
+		if ok {
+			result = dat.GetValueByName(accessor)
+			if result != nil {
+				//read only
+				err := self.datastore.Rollback()
+				return result, err
+			}
 		}
 	}
 	

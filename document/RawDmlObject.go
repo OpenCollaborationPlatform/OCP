@@ -47,7 +47,7 @@ func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) (dml.Object, 
 	raw.AddMethod("Clear", dml.MustNewMethod(raw.Clear, false))
 
 	//add events
-	err = raw.AddEvent("onDataChanged", dml.NewEvent(raw.GetJSObject(), rntm, dml.MustNewDataType("string")))
+	err = raw.AddEvent("onDataChanged", dml.NewEvent(raw.GetJSObject(), rntm))
 
 	return raw, err
 }

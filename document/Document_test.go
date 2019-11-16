@@ -22,8 +22,8 @@ const (
 			    property string 	testS: "Hallo"
 			    property int 	testI: 1
 				
-				event TestEventZeroArgs()
-				event TestEventTwoArgs(string, int)
+				event TestEventZeroArgs
+				event TestEventTwoArgs
 				
 				function TestFncZeroArgs() {
 					this.testI = 0
