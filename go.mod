@@ -118,5 +118,4 @@ require (
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/src-d/go-cli.v0 v0.0.0-20190821111025-f9dec40d74d8 // indirect
 	gopkg.in/src-d/go-log.v1 v1.0.2 // indirect
-	rsc.io/binaryregexp v0.2.0 // indirect
 )

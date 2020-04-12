@@ -313,6 +313,7 @@ type PropertyHandler interface {
 	HasProperty(name string) bool
 	AddProperty(name string, dtype DataType, defaultVal interface{}, constprop bool) error
 	GetProperty(name string) Property
+	GetProperties() []string
 
 	SetupJSProperties(rntm *Runtime, obj *goja.Object) error
 }
@@ -337,6 +338,17 @@ func (self *propertyHandler) HasProperty(name string) bool {
 func (self *propertyHandler) GetProperty(name string) Property {
 
 	return self.properties[name]
+}
+
+func (self *propertyHandler) GetProperties() []string {
+
+	result := make([]string, len(self.properties))
+	cnt := 0
+	for name, _ := range self.properties {
+		result[cnt] = name
+		cnt++
+	}
+	return result
 }
 
 func (self *propertyHandler) SetupJSProperties(rntm *Runtime, obj *goja.Object) error {

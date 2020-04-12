@@ -19,8 +19,12 @@ type Data interface {
 	//Data hirarchy allows childs
 	AddChild(obj Data)
 	GetChildren() []Data
-	GetChildByName(name string) (Data, error)			//only hirarchy is search
-	GetSubobjectByName(name string) (Object, error) 	//Hirarchy + behaviour + dynamic objects
+	GetChildByName(name string) (Data, error)								
+	
+	//Subobject handling is more than only childres
+	//Hirarchy + dynamic objects, optional behaviour + object properties
+	GetSubobjects(bhvr bool, prop bool) []Object
+	GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error)
 }
 
 type DataImpl struct {
@@ -74,7 +78,45 @@ func (self *DataImpl) GetChildByName(name string) (Data, error) {
 	return nil, fmt.Errorf("No such object available")
 }
 
-func (self *DataImpl) GetSubobjectByName(name string) (Object, error) {
+func (self *DataImpl) GetSubobjects(bhvr bool, prop bool) []Object {
+	
+	result := make([]Object, 0)
+	
+	//add hirarchy
+	children := self.GetChildren()
+	for _, child := range children {
+		result = append(result, child)
+	}
+	
+	
+	//add behaviour
+	if bhvr {
+		bhvrs := self.Behaviours()
+		for _, name := range bhvrs {
+			result = append(result, self.GetBehaviour(name))
+		}
+	}
+	
+	//search object properties
+	if prop {
+		props := self.GetProperties()
+		for _, name := range props {
+			prop := self.GetProperty(name)
+			if prop.Type().IsObject() {
+				val := prop.GetValue()
+				if val != nil {
+					obj := val.(Object)
+					result = append(result, obj)
+				}
+			}
+		}
+	}
+	
+	return result
+}
+
+
+func (self *DataImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
 	
 	//search hirarchy
 	child, err := self.GetChildByName(name)
@@ -83,8 +125,27 @@ func (self *DataImpl) GetSubobjectByName(name string) (Object, error) {
 	}
 	
 	//search behaviour
-	if self.HasBehaviour(name) { 
-		return self.GetBehaviour(name), nil
+	if bhvr {
+		if self.HasBehaviour(name) { 
+			return self.GetBehaviour(name), nil
+		}
+	}
+	
+	//search object properties
+	if prop {
+		props := self.GetProperties()
+		for _, name := range props {
+			prop := self.GetProperty(name)
+			if prop.Type().IsObject() {
+				val := prop.GetValue()
+				if val != nil {
+					obj := val.(Object)
+					if obj.Id().Name == name {
+						return obj, nil
+					}
+				}
+			}
+		}
 	}
 	
 	return nil, fmt.Errorf("No such name known")

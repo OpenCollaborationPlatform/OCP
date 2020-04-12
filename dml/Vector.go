@@ -550,11 +550,36 @@ func (self *vector) print() {
 	fmt.Println("]")
 }
 
+func (self *vector) GetSubobjects(bhvr bool, prop bool) []Object {
+	
+	//get default objects
+	res := self.DataImpl.GetSubobjects(bhvr, prop)
+	
+	dt := self.entryDataType()
+	if dt.IsObject() || dt.IsComplex() {
+		//iterate over all entries and add them
+		length, _ := self.Length()
+		for i := int64(0); i < length; i++ {
+			read, err := self.entries.Read(i)
+			if err == nil {
+				id, e := IdentifierFromEncoded(read.(string))
+				if e == nil {
+					obj, ok := self.rntm.objects[id]
+					if ok {
+						res = append(res, obj)
+					}
+				}
+			}
+		}
+	}
+	
+	return res
+}
 
-func (self *vector) GetSubobjectByName(name string) (Object, error) {
+func (self *vector) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
 	
 	//default search
-	obj, err := self.DataImpl.GetSubobjectByName(name)
+	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr, prop)
 	if err == nil {
 		return obj, nil
 	}

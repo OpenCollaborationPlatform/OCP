@@ -6,14 +6,99 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"context"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
+//flag variables
+var (
+	online bool
+	onlineReadConf func(*cobra.Command, []string)
+)
+
+func readConf(args []string) string {
+	
+	result := ""
+			
+	var keys []string
+	if len(args) == 0 {
+		result = fmt.Sprintf("Config file: %v\n", viper.ConfigFileUsed())
+		keys = viper.AllKeys()
+
+	} else {
+		//first check if it is a valid accessor
+		if !viper.IsSet(args[0]) {
+			result = fmt.Sprintf("Not a valid config entry")
+			return result
+		}
+
+		entry := viper.Get(args[0])
+		switch entry.(type) {
+		case map[string]interface{}:
+			keys = viper.Sub(args[0]).AllKeys()
+		default:
+			result = fmt.Sprintf("%v", entry)
+			return result
+		}
+	}
+
+	var groups []string
+	sort.Strings(keys)
+	for _, key := range keys {
+
+		parts := strings.Split(key, ".")
+
+		//get the first entry that is different than our current group
+		firstChanged := len(groups)
+		for i, v := range groups {
+			if v != parts[i] {
+				firstChanged = i
+				break
+			}
+		}
+
+		//groups got a newine for better visual separation, do the same for ungrouped entries
+		if len(parts) == 1 && len(groups) >= 1 {
+			result += fmt.Sprintf("\n")
+		}
+
+		//write the groups
+		groups = groups[:firstChanged]
+		for i := firstChanged; i < len(parts)-1; i++ {
+			groups = append(groups, parts[i])
+			indent := strings.Repeat("   ", i)
+			result += fmt.Sprintf("\n%s%s\n", indent, parts[i])
+		}
+
+		//write the value
+		indent := strings.Repeat("   ", len(parts)-1)
+		result += fmt.Sprintf("%s%s: %v", indent, parts[len(parts)-1], viper.Get(key))
+
+		conf, err := utils.GetConfigEntry(key)
+		if err == nil {
+			default_ := conf.Default
+			if default_ != nil && fmt.Sprintf("%v", viper.Get(key)) != fmt.Sprintf("%v", default_) {
+				result += fmt.Sprintf(" (default: %v)", default_)
+			}
+		}
+		result += fmt.Sprintf("\n")
+	}
+	
+	return result
+}
+
 func init() {
 
+	//to be able to get the config of the running node we need to register a 
+	//online command
+	onlineReadConf = onlineCommand("config", func(ctx context.Context, args []string, flags map[string]interface{}) string {
+			return readConf(args)
+	})
+
 	cmdConfig.AddCommand(cmdConfigWrite, cmdConfigCreate, cmdConfigRemove)
+	cmdConfig.Flags().BoolVarP(&online, "online", "o", false, "Check the config of the running node, which could be different due to use of command line flags")
 }
 
 var cmdConfig = &cobra.Command{
@@ -27,68 +112,11 @@ var cmdConfig = &cobra.Command{
 
 	Run: func(cmd *cobra.Command, args []string) {
 
-		var keys []string
-		if len(args) == 0 {
-			fmt.Printf("Config file: %v\n", viper.ConfigFileUsed())
-			keys = viper.AllKeys()
-
+		if online {
+			onlineReadConf(cmd, args)
+		
 		} else {
-			//first check if it is a valid accessor
-			if !viper.IsSet(args[0]) {
-				fmt.Println("Not a valid config entry")
-				return
-			}
-
-			entry := viper.Get(args[0])
-			switch entry.(type) {
-			case map[string]interface{}:
-				keys = viper.Sub(args[0]).AllKeys()
-			default:
-				fmt.Printf("%v\n", entry)
-				return
-			}
-		}
-
-		var groups []string
-		sort.Strings(keys)
-		for _, key := range keys {
-
-			parts := strings.Split(key, ".")
-
-			//get the first entry that is different than our current group
-			firstChanged := len(groups)
-			for i, v := range groups {
-				if v != parts[i] {
-					firstChanged = i
-					break
-				}
-			}
-
-			//groups got a newine for better visual separation, do the same for ungrouped entries
-			if len(parts) == 1 && len(groups) >= 1 {
-				fmt.Println("")
-			}
-
-			//write the groups
-			groups = groups[:firstChanged]
-			for i := firstChanged; i < len(parts)-1; i++ {
-				groups = append(groups, parts[i])
-				indent := strings.Repeat("   ", i)
-				fmt.Printf("\n%s%s\n", indent, parts[i])
-			}
-
-			//write the value
-			indent := strings.Repeat("   ", len(parts)-1)
-			fmt.Printf("%s%s: %v", indent, parts[len(parts)-1], viper.Get(key))
-
-			conf, err := utils.GetConfigEntry(key)
-			if err == nil {
-				default_ := conf.Default
-				if default_ != nil && fmt.Sprintf("%v", viper.Get(key)) != fmt.Sprintf("%v", default_) {
-					fmt.Printf(" (default: %v)", default_)
-				}
-			}
-			fmt.Println("")
+			println(readConf(args))
 		}
 	},
 }
@@ -159,6 +187,6 @@ var cmdConfigRemove = &cobra.Command{
 			fmt.Println(err.Error())
 			return
 		}
-		fmt.Printf("Successfully removed config file")
+		fmt.Printf("Successfully removed config file\n")
 	},
 }

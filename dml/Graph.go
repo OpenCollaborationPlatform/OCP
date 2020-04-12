@@ -8,6 +8,7 @@ import (
 	uuid "github.com/satori/go.uuid"
 	gonum "gonum.org/v1/gonum/graph"
 	"gonum.org/v1/gonum/graph/simple"
+	trav "gonum.org/v1/gonum/graph/traverse"
 	topo "gonum.org/v1/gonum/graph/topo"
 
 	"github.com/ickby/CollaborationNode/datastores"
@@ -70,6 +71,7 @@ func NewGraph(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 	gr.AddMethod("ToNode", MustNewMethod(gr.ToNode, true))
 	gr.AddMethod("Sorted", MustNewMethod(gr.Sorted, true))
 	gr.AddMethod("Cycles", MustNewMethod(gr.Cycles, true))
+	gr.AddMethod("ReachableNodes", MustNewMethod(gr.ReachableNodes, true))
 
 	return gr, nil
 }
@@ -667,6 +669,40 @@ func (self *graph) Cycles() ([][]interface{}, error) {
 	return result, nil
 }
 
+func (self *graph) ReachableNodes(node interface{}) ([]interface{}, error) {
+	
+	//check if node exists
+	has, err := self.HasNode(node)
+	if err != nil {
+		return nil, err
+	}
+	if !has {
+		return nil, fmt.Errorf("Node does not exist")
+	}
+
+	//get the graph
+	graph, mapper := self.getGonumGraph()
+	
+	//build the search fnc
+	nodes := make([]gonum.Node, 0)
+	search := trav.BreadthFirst{
+			Visit: func(node gonum.Node) {
+				nodes = append(nodes, node)
+			},
+	}
+	
+	//run the search
+	search.Walk(graph, mapper[node], nil)
+
+	//convert the result nodes to dml interface values
+	result := make([]interface{}, 0)
+	for _, node := range nodes {
+		gnode := node.(graphNode)
+		result = append(result, gnode.node)
+	}
+	return result, nil
+}
+
 //*****************************************************************************
 //			Internal functions
 //*****************************************************************************
@@ -837,6 +873,58 @@ func (self *graph) DecreaseRefcount() error {
 	//now decrease our own refcount
 	return self.object.DecreaseRefcount()
 }
+
+
+func (self *graph) GetSubobjects(bhvr bool, prop bool) []Object {
+	
+	//get default objects
+	res := self.DataImpl.GetSubobjects(bhvr, prop)
+	
+	//handle nodes
+	dt := self.nodeDataType()
+	if dt.IsObject() || dt.IsComplex() {
+
+		keys, err := self.nodeData.GetKeys()
+		if err == nil {
+
+			for _, key := range keys {
+	
+				id, err := IdentifierFromEncoded(key.(string))
+				if err == nil {
+			
+					existing, ok := self.rntm.objects[id]
+					if ok {
+						res = append(res, existing)
+					}
+				}
+			}
+		}
+	}
+
+	//handle edges
+	dt = self.edgeDataType()
+	if dt.IsObject() || dt.IsComplex() {
+
+		keys, err := self.edgeData.GetKeys()
+		if err == nil {
+	
+			for _, key := range keys {
+	
+				id, err := IdentifierFromEncoded(key.(string))
+				if err != nil {
+	
+					existing, ok := self.rntm.objects[id]
+					if ok {
+						res = append(res, existing)
+					}
+				}
+			}
+		}
+	}
+	
+	return res
+}
+
 
 func (self *graph) nodeDataType() DataType {
 

@@ -495,10 +495,61 @@ func (self *mapImpl) DecreaseRefcount() error {
 	return self.object.DecreaseRefcount()
 }
 
-func (self *mapImpl) GetSubobjectByName(name string) (Object, error) {
+func (self *mapImpl) GetSubobjects(bhvr bool, prop bool) []Object {
+	
+	//get default objects
+	res := self.DataImpl.GetSubobjects(bhvr, prop)
+	
+	//handle key objects!
+	dt := self.keyDataType()
+	if dt.IsObject() || dt.IsComplex() {
+
+		keys, err := self.entries.GetKeys()
+		if err != nil {
+			return res
+		}
+		for _, key := range keys {
+
+			id, err := IdentifierFromEncoded(key.(string))
+			if err == nil {
+				existing, ok := self.rntm.objects[id]
+				if ok {
+					res = append(res, existing)
+				}
+			}
+		}
+	}
+
+	//handle value objects!
+	dt = self.valueDataType()
+	if dt.IsObject() || dt.IsComplex() {
+
+		keys, err := self.entries.GetKeys()
+		if err != nil {
+			return res
+		}
+		for _, key := range keys {
+
+			read, err := self.entries.Read(key)
+			if err == nil {
+				id, err := IdentifierFromEncoded(read.(string))
+				if err == nil {
+					existing, ok := self.rntm.objects[id]
+					if ok {
+						res = append(res, existing)
+					}
+				}			
+			}
+		}
+	}
+	
+	return res
+}
+
+func (self *mapImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
 	
 	//default search
-	obj, err := self.DataImpl.GetSubobjectByName(name)
+	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr, prop)
 	if err == nil {
 		return obj, nil
 	}

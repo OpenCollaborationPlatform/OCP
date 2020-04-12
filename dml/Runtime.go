@@ -162,7 +162,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 
 	//process the AST into usable objects
-	obj, err := self.buildObject(ast.Object, Identifier{}, "", make([]*astObject, 0))
+	obj, err := self.buildObject(ast.Object, Identifier{}, "")
 	if err != nil {
 		return utils.StackError(err, "Unable to parse dml code")
 		//TODO clear the database entries...
@@ -346,7 +346,8 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		if ok {
 			err = e
 		
-		} else if fnc.IsConst() {
+		} 
+		if fnc.IsConst() {
 			err := self.datastore.Rollback()
 			return result, err
 		}
@@ -472,7 +473,7 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 	for _, name := range names[1:] {
 
 		//check all childs to find the one with given name
-		child, err := obj.GetSubobjectByName(name)
+		child, err := obj.GetSubobjectByName(name, true, false)
 		if err != nil {
 			return nil, utils.StackError(err, "Identifier %v is not available in object %v", name, obj.Id().Name)
 		}
@@ -504,37 +505,22 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 
 	if !rollbackOnly {
 
-		//check all objects if anything has changed
+		//handle all behaviours!
 		for _, obj := range self.objects {
-			has, err := obj.HasUpdates()
-			if err != nil {
-				postError = utils.StackError(err, "Unable to check object for updates")
-				rollback = true
-				break
-			}
-			if has {
 
-				//handle transaction behaviour
-				if obj.HasBehaviour("Transaction") {
-					err := self.transactions.Add(obj)
-					if err != nil {
-						postError = utils.StackError(err, "Adding to Transaction failed: Rollback")
-						rollback = true
-						break
-					}
-				}
-
-				//fix the data
-				_, err := obj.FixStateAsVersion()
+			//handle transactions
+			if obj.HasBehaviour("Transaction") {
+				err := self.transactions.Handle(obj.GetBehaviour("Transaction"))
 				if err != nil {
-					postError = utils.StackError(err, "Fixing version failed: Rollback")
+					postError = utils.StackError(err, "Adding to Transaction failed: Rollback")
 					rollback = true
 					break
 				}
-
-				//handle the versioning
-
 			}
+
+
+			//handle the versioning
+
 		}
 	}
 
@@ -608,7 +594,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 			ast.Object.Assignments = append(ast.Object.Assignments, asgn)
 		}
 
-		return rntm.buildObject(ast.Object, parent, id.Uuid, make([]*astObject, 0))
+		return rntm.buildObject(ast.Object, parent, id.Uuid)
 	}
 
 	//build the name, file or alias
@@ -626,7 +612,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 }
 
 //due to recursive nature of objects we need an extra function
-func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid string, recBehaviours []*astObject) (Object, error) {
+func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid string) (Object, error) {
 
 	//see if we can build it, and do so if possible
 	creator, ok := self.creators[astObj.Identifier]
@@ -716,36 +702,19 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 
 	//go on with all subobjects (if not behaviour)
 	if !isBehaviour {
-		//create our local version of the recursive behaviour map to allow adding values for children
-		localRecBehaviours := make([]*astObject, len(recBehaviours))
-		copy(localRecBehaviours, recBehaviours)
-
-		//sort children to process behaviours first, so that recursive ones are
-		//ready for all children
-		objectToFrontIfAvailable(&astObj.Objects, `Transaction`)
-		objectToFrontIfAvailable(&astObj.Objects, `Version`)
-
-		//add the recursive Behaviours
-		for _, bvr := range localRecBehaviours {
-			addFrontIfNotAvailable(&astObj.Objects, bvr)
-		}
 
 		jsChildren := make([]goja.Value, 0)
 
 		for _, astChild := range astObj.Objects {
+			
 			//build the child
-			child, err := self.buildObject(astChild, obj.Id(), "", localRecBehaviours)
+			child, err := self.buildObject(astChild, obj.Id(), "")
 			if err != nil {
 				return nil, err
 			}
 
-			//check if this child is a behaviour, and if so if it is recursive
+			//check if this child is a behaviour, and handle accordingly
 			behaviour, isBehaviour := child.(Behaviour)
-			if isBehaviour && behaviour.GetProperty(`recursive`).GetValue().(bool) {
-				localRecBehaviours = append(localRecBehaviours, astChild)
-			}
-
-			//handle hirarchy
 			if isBehaviour {
 				obj.(Data).AddBehaviour(behaviour.Id().Type, behaviour)
 			} else {
@@ -1006,36 +975,4 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 	}
 
 	return nil
-}
-
-//helper to move certain object to the front ob the objectlist if they are in the list
-func objectToFrontIfAvailable(objects *[]*astObject, name string) {
-
-	if len((*objects)) == 0 || (*objects)[0].Identifier == name {
-		return
-	}
-	if (*objects)[len(*objects)-1].Identifier == name {
-		(*objects) = append([]*astObject{(*objects)[len(*objects)-1]}, (*objects)[:len(*objects)-1]...)
-		return
-	}
-	for p, x := range *objects {
-		if x.Identifier == name {
-			(*objects) = append([]*astObject{x}, append((*objects)[:p], (*objects)[p+1:]...)...)
-			break
-		}
-	}
-}
-
-//helper to add a astObject in the front of the slice if not yet in the slice
-func addFrontIfNotAvailable(objects *[]*astObject, obj *astObject) {
-
-	//check if already available
-	for _, x := range *objects {
-		if x.Identifier == obj.Identifier {
-			return
-		}
-	}
-
-	//add front
-	*objects = append([]*astObject{obj}, (*objects)...)
 }

@@ -14,8 +14,10 @@ import (
 )
 
 func init() {
-	//[]interface{} may be a valid wamp argument
+	//a few types that may be a valid wamp arguments
 	gob.Register(new([]interface{}))
+	gob.Register(new(map[string]interface{}))
+	gob.Register(new(map[int64]interface{}))
 }
 
 //Async datastructure which encapsulates synchronous DML runtime and a datastore.

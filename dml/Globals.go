@@ -88,7 +88,7 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 	uid := uuid.NewV4().String()
 
 	//build the object (without parent, but with uuid)
-	obj, err := rntm.buildObject(astObj, Identifier{}, uid, make([]*astObject, 0))
+	obj, err := rntm.buildObject(astObj, Identifier{}, uid)
 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
@@ -111,7 +111,7 @@ func LoadObject(rntm *Runtime, dt DataType, id Identifier) (Object, error) {
 	}
 
 	//build the object (without parent, but with uuid)
-	obj, err := rntm.buildObject(astObj, Identifier{}, id.Uuid, make([]*astObject, 0))
+	obj, err := rntm.buildObject(astObj, Identifier{}, id.Uuid)
 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")

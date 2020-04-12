@@ -208,6 +208,7 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen, true))
 	mngr.AddMethod("Open", MustNewMethod(mngr.Open, false))
 	mngr.AddMethod("Close", MustNewMethod(mngr.Close, false))
+	mngr.AddMethod("Add", MustNewMethod(mngr.Add, false))
 
 	//build js object
 	mngr.jsobj = rntm.jsvm.NewObject()
@@ -321,10 +322,17 @@ func (self *TransactionManager) Add(obj Data) error {
 	}
 
 	//check if object is not already in annother transaction
-	if bhvr.InTransaction() && !bhvr.GetTransaction().Equal(trans) {
-		err = fmt.Errorf("Object already part of different transaction")
-		bhvr.GetEvent("onFailure").Emit(err.Error())
-		return err
+	if bhvr.InTransaction() {
+		
+		objTrans,  err := bhvr.GetTransaction()
+		if err != nil {
+			return err
+		}
+		if !objTrans.Equal(trans) {
+			err = fmt.Errorf("Object already part of different transaction")
+			bhvr.GetEvent("onFailure").Emit(err.Error())
+			return err
+		}
 	}
 
 	//check if we are already in this transaction
@@ -440,6 +448,40 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 	return trans, err
 }
 
+func (self *TransactionManager) Handle(bhvr Behaviour) error {
+	
+	obj := bhvr.GetParent()
+	if recursiveHasUpdates(obj) {
+		trans, err := self.getTransaction()
+		if err != nil {
+			return err
+		}
+		return trans.AddObject(obj.Id())
+	}
+	
+	return nil
+}
+
+func recursiveHasUpdates(obj Object) bool {
+	
+	if has, _ := obj.HasUpdates(); has {
+		return true
+	}
+	
+	data, isData := obj.(Data)
+	if isData {
+		objs := data.GetSubobjects(true, true)
+		
+		for _, obj := range objs {
+			if recursiveHasUpdates(obj) {
+				return true
+			}
+		}		
+	}
+	
+	return false
+}
+
 func getTransactionBehaviour(obj Data) *transactionBehaviour {
 	//must have the transaction behaviour
 	if !obj.HasBehaviour("Transaction") {
@@ -487,6 +529,7 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 
 	//add the user usable methods
 	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))
+	tbhvr.AddMethod("InCurrentTransaction", MustNewMethod(tbhvr.InCurrentTransaction, true))
 
 	return tbhvr, nil
 }
@@ -504,14 +547,24 @@ func (self *transactionBehaviour) InTransaction() bool {
 	return res.(bool)
 }
 
-func (self *transactionBehaviour) GetTransaction() transaction {
+func (self *transactionBehaviour) InCurrentTransaction() bool {
+
+	trans, err := self.GetTransaction()
+	if err != nil {
+		return false
+	}
+	
+	return trans.HasObject(self.GetParent().Id())
+}
+
+func (self *transactionBehaviour) GetTransaction() (transaction, error) {
 
 	key, _ := self.current.Read()
 	trans, err := loadTransaction(*(key.(*[32]byte)), self.rntm)
 	if err != nil {
-		panic(err.Error())
+		return transaction{}, err
 	}
-	return trans
+	return trans, nil
 }
 
 func (self *transactionBehaviour) Copy() Behaviour {
