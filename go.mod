@@ -44,6 +44,7 @@ require (
 	github.com/ipfs/go-ipfs-exchange-interface v0.0.1
 	github.com/ipfs/go-log v0.0.1
 	github.com/jbenet/goprocess v0.1.3
+	github.com/kardianos/service v1.0.0 // indirect
 	github.com/kkdai/bstream v1.0.0 // indirect
 	github.com/konsorten/go-windows-terminal-sequences v1.0.2 // indirect
 	github.com/kr/pty v1.1.8 // indirect
@@ -95,6 +96,7 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.4.0
 	github.com/stretchr/objx v0.2.0 // indirect
+	github.com/takama/daemon v0.12.0 // indirect
 	github.com/visualfc/gocode v0.0.0-20190715051449-5e8ed360a181 // indirect
 	github.com/visualfc/gotools v0.0.0-20190715142037-64c955ca5eea // indirect
 	github.com/whyrusleeping/go-logging v0.0.0-20170515211332-0457bb6b88fc
@@ -107,7 +109,6 @@ require (
 	golang.org/x/image v0.0.0-20190910094157-69e4b8554b2a // indirect
 	golang.org/x/mobile v0.0.0-20190923204409-d3ece3b6da5f // indirect
 	golang.org/x/net v0.0.0-20190923162816-aa69164e4478 // indirect
-	golang.org/x/sys v0.0.0-20190924154521-2837fb4f24fe // indirect
 	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
 	golang.org/x/tools v0.0.0-20190925020647-22afafe3322a // indirect
 	gonum.org/v1/gonum v0.0.0-20191012094511-9fd3ad46a789

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/libp2p/go-libp2p-crypto"
@@ -19,12 +20,14 @@ import (
 //flag variables
 var (
 	force bool
+	detach bool
 )
 
 func init() {
 
 	//add flags
 	cmdInit.Flags().BoolVarP(&force, "force", "f", false, "Reinitialize even if already initialized or used otherwise")
+	cmdStart.Flags().BoolVarP(&detach, "detach", "d", false, "Detach process and return from call")
 
 	utils.AddConfigFlag(cmdStart, "connection.port")
 }
@@ -52,19 +55,41 @@ var cmdStart = &cobra.Command{
 			return
 		}
 
-		//start the node
-		ocpNode = node.NewNode()
-		err := ocpNode.Start()
-		if err != nil {
-			fmt.Println(err.Error())
-			return
+		if detach {
+			
+			//we simply run a new process that is not detached 
+			//this will have a system parent
+			fmt.Printf("Args %v\n", os.Args)
+			
+			//filter the -d out of the args: everything else we want to keep
+			args := make([]string,0)
+			for _, arg := range os.Args {
+				if arg != "-d" && arg != "--detach" {
+					args = append(args, arg)
+				}
+			}
+			cmd := exec.Command(args[0], args[1:]...)
+            	err := cmd.Start()
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+			}
+			
+		}  else {
+
+			//start the node
+			ocpNode = node.NewNode()
+			err := ocpNode.Start()
+			if err != nil {
+				fmt.Println(err.Error())
+				return
+			}
+	
+			//setup all online commands
+			initOnlineCommands()
+	
+			//wait till someone wants to stop...
+			ocpNode.WaitForStop()
 		}
-
-		//setup all online commands
-		initOnlineCommands()
-
-		//wait till someone wants to stop...
-		ocpNode.WaitForStop()
 	},
 }
 
