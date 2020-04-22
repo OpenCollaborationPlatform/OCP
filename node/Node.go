@@ -44,6 +44,8 @@ func NewNode() *Node {
 
 func (n *Node) Start() error {
 
+	log.Printf("Sartup OCP Node %s\n", n.Version)
+
 	//setup the p2p network
 	n.Host = p2p.NewHost()
 	err := n.Host.Start(true)
@@ -82,6 +84,8 @@ func (n *Node) Start() error {
 	if err != nil {
 		return utils.StackError(err, "Unable to write pid/port file")
 	}
+
+	log.Println("OCP node ready")
 	
 	return nil
 }

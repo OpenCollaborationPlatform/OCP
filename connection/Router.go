@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/http"
+	"context"
+	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -17,7 +21,7 @@ import (
 
 type Router struct {
 	router nxrouter.Router
-	wamp   *nxrouter.WebsocketServer
+	server *http.Server
 	closer io.Closer
 }
 
@@ -41,21 +45,33 @@ func (ls *Router) Start(quit chan string) error {
 
 	ls.router = nxr
 	wss := nxrouter.NewWebsocketServer(nxr)
-	ls.wamp = wss
 
+	//start connecting. We use our own listener to be sure that we really listen once this function returns
 	wsAddr := fmt.Sprintf("%v:%v", viper.GetString("connection.uri"), viper.GetInt("connection.port"))
-	wsCloser, err := wss.ListenAndServe(wsAddr)
+	listener, err := net.Listen("tcp", wsAddr)
 	if err != nil {
-		return utils.StackError(err, "Unable to setup router")
+	    return utils.StackError(err, "Unable to setup router: Cannot listen on %v", wsAddr)
 	}
+	
+	//now all requests will be handled, as the listener is up. Start serving it to the router
+	ls.server = &http.Server{Handler: wss}
+	go func(){
+		// always returns error. ErrServerClosed on graceful close
+        if err := ls.server.Serve(listener); err != http.ErrServerClosed {
+            // unexpected error. port in use?
+            log.Fatalf("Router shut down: %v", err)
+        }
+	}()
+	
+	log.Println("Local wamp server started")
 
-	ls.closer = wsCloser
 	return nil
 }
 
 func (ls *Router) Stop() {
 
-	ls.closer.Close()
+	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
+	ls.server.Shutdown(ctx)
 	ls.router.Close()
 	log.Println("Local wamp server has shut down")
 }
