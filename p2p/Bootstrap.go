@@ -62,33 +62,34 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 		ConnectionTimeout: (30 * time.Second) / 3, // Perod / 3
 	}
 
-	addrs := make([]peer.AddrInfo, 0)
-	only := viper.GetBool("p2p.only")
-	if !only {
-		for _, addr := range kaddht.DefaultBootstrapPeers {
+	DefaultBootstrapConfig.BootstrapPeers = func() []peer.AddrInfo {
+		
+		addrs := make([]peer.AddrInfo, 0)
+	
+		nodes := viper.GetStringSlice("p2p.bootstrap.nodes")
+		for _, value := range nodes {
+			addr, err := ma.NewMultiaddr(value)
+			if err != nil {
+				log.Errorf("Invalid bootstrap address provided: %v", value)
+				continue
+			}
 			info, err := peer.AddrInfoFromP2pAddr(addr)
-			if err == nil {
-				addrs = append(addrs, *info)
+			if err != nil {
+				log.Errorf("Invalid bootstrap address provided: %v", value)
+				continue
+			}
+			addrs = append(addrs, *info)
+		}
+		
+		if viper.GetBool("p2p.bootstrap.defaults") {
+			for _, addr := range kaddht.DefaultBootstrapPeers {
+				info, err := peer.AddrInfoFromP2pAddr(addr)
+				if err == nil {
+					addrs = append(addrs, *info)
+				}
 			}
 		}
-	}
-
-	nodes := viper.GetStringSlice("p2p.bootstrap")
-	for _, value := range nodes {
-		addr, err := ma.NewMultiaddr(value)
-		if err != nil {
-			log.Errorf("Invalid bootstrap address provided: %v", value)
-			continue
-		}
-		info, err := peer.AddrInfoFromP2pAddr(addr)
-		if err != nil {
-			log.Errorf("Invalid bootstrap address provided: %v", value)
-			continue
-		}
-		addrs = append(addrs, *info)
-	}
-
-	DefaultBootstrapConfig.BootstrapPeers = func() []peer.AddrInfo {
+		fmt.Printf("Bootstraps: %v", addrs)
 		return addrs
 	}
 

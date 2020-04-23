@@ -46,16 +46,16 @@ func (n *Node) Start() error {
 
 	log.Printf("Sartup OCP Node %s\n", n.Version)
 
+	//start up our local router
+	n.Router = connection.NewRouter()
+	n.Router.Start(n.quit)
+
 	//setup the p2p network
-	n.Host = p2p.NewHost()
+	n.Host = p2p.NewHost(n.Router)
 	err := n.Host.Start(true)
 	if err != nil {
 		return utils.StackError(err, "Cannot startup Node")
 	}
-
-	//start up our local router
-	n.Router = connection.NewRouter()
-	n.Router.Start(n.quit)
 
 	//load the document component
 	dh, err := document.NewDocumentHandler(n.Router, n.Host) 

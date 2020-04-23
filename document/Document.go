@@ -10,8 +10,8 @@ import (
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
 
-	nxclient "github.com/gammazero/nexus/client"
-	wamp "github.com/gammazero/nexus/wamp"
+	nxclient "github.com/gammazero/nexus/v3/client"
+	wamp "github.com/gammazero/nexus/v3/wamp"
 )
 
 type Document struct {
@@ -153,52 +153,52 @@ func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
 	return pid, pidauth, nil
 }
 
-func (self Document) addPeer(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self Document) addPeer(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
-	pid, auth, err := getPeerAuthData(args)
+	pid, auth, err := getPeerAuthData(inv.Arguments)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	err = self.swarm.AddPeer(ctx, pid, auth)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	return &nxclient.InvokeResult{}
+	return nxclient.InvokeResult{}
 }
 
-func (self Document) setPeerAuth(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self Document) setPeerAuth(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
-	pid, auth, err := getPeerAuthData(args)
+	pid, auth, err := getPeerAuthData(inv.Arguments)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	err = self.swarm.AddPeer(ctx, pid, auth)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	return &nxclient.InvokeResult{}
+	return nxclient.InvokeResult{}
 }
 
-func (self Document) removePeer(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
-	pid, err := getPeer(args)
+	pid, err := getPeer(inv.Arguments)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	err = self.swarm.RemovePeer(ctx, pid)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	return &nxclient.InvokeResult{}
+	return nxclient.InvokeResult{}
 }
 
-func (self Document) listPeers(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	peers := self.swarm.GetPeers(p2p.AUTH_NONE)
 	resargs := make(wamp.List, len(peers))
@@ -206,7 +206,7 @@ func (self Document) listPeers(ctx context.Context, args wamp.List, kwargs, deta
 		resargs[i] = p
 	}
 
-	return &nxclient.InvokeResult{Args: resargs}
+	return nxclient.InvokeResult{Args: resargs}
 }
 
 //							Data Handling

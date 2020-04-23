@@ -5,7 +5,7 @@ import (
 	"encoding/gob"
 
 	"github.com/ickby/CollaborationNode/dml"
-	"github.com/gammazero/nexus/wamp"
+	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/p2p"
 )
 

@@ -8,8 +8,8 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 	"sync"
 
-	nxclient "github.com/gammazero/nexus/client"
-	"github.com/gammazero/nexus/wamp"
+	nxclient "github.com/gammazero/nexus/v3/client"
+	"github.com/gammazero/nexus/v3/wamp"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -112,26 +112,26 @@ func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (D
 	return doc, nil
 }
 
-func (self *DocumentHandler) createDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self *DocumentHandler) createDoc(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	//the user needs to provide the dml folder!
-	if len(args) != 1 {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be path to dml folder"}, Err: wamp.URI("ocp.error")}
+	if len(inv.Arguments) != 1 {
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to dml folder"}, Err: wamp.URI("ocp.error")}
 	}
-	dmlpath, ok := args[0].(string)
+	dmlpath, ok := inv.Arguments[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be path to dml folder"}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to dml folder"}, Err: wamp.URI("ocp.error")}
 	}
 	if dmlpath[(len(dmlpath)-3):] != "Dml" {
-		return &nxclient.InvokeResult{Args: wamp.List{"Path is not valid Dml folder"}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{"Path is not valid Dml folder"}, Err: wamp.URI("ocp.error")}
 	}
 
 	doc, err := self.CreateDocument(ctx, dmlpath)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	return &nxclient.InvokeResult{Args: wamp.List{doc.ID}}
+	return nxclient.InvokeResult{Args: wamp.List{doc.ID}}
 }
 
 func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) error {
@@ -177,23 +177,23 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	return nil
 }
 
-func (self *DocumentHandler) openDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self *DocumentHandler) openDoc(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	//the user needs to provide the doc id!
-	if len(args) != 1 {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be document id"}, Err: wamp.URI("ocp.error")}
+	if len(inv.Arguments) != 1 {
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be document id"}, Err: wamp.URI("ocp.error")}
 	}
-	docID, ok := args[0].(string)
+	docID, ok := inv.Arguments[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be document id"}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be document id"}, Err: wamp.URI("ocp.error")}
 	}
 
 	err := self.OpenDocument(ctx, docID)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	return &nxclient.InvokeResult{}
+	return nxclient.InvokeResult{}
 }
 
 func (self *DocumentHandler) CloseDocument(ctx context.Context, docID string) error {
@@ -218,23 +218,23 @@ func (self *DocumentHandler) CloseDocument(ctx context.Context, docID string) er
 	return fmt.Errorf("No document for given ID found")
 }
 
-func (self *DocumentHandler) closeDoc(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self *DocumentHandler) closeDoc(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	//the user needs to provide the doc id!
-	if len(args) != 1 {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be document id"}, Err: wamp.URI("ocp.error")}
+	if len(inv.Arguments) != 1 {
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be document id"}, Err: wamp.URI("ocp.error")}
 	}
-	docID, ok := args[0].(string)
+	docID, ok := inv.Arguments[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be document id"}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be document id"}, Err: wamp.URI("ocp.error")}
 	}
 
 	err := self.CloseDocument(ctx, docID)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	return &nxclient.InvokeResult{}
+	return nxclient.InvokeResult{}
 }
 
 func (self *DocumentHandler) ListDocuments() []string {
@@ -250,10 +250,10 @@ func (self *DocumentHandler) ListDocuments() []string {
 	return res
 }
 
-func (self *DocumentHandler) listDocs(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self *DocumentHandler) listDocs(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
-	if len(args) != 0 {
-		return &nxclient.InvokeResult{Args: wamp.List{"Function does not take arguments"}, Err: wamp.URI("ocp.error")}
+	if len(inv.Arguments) != 0 {
+		return nxclient.InvokeResult{Args: wamp.List{"Function does not take arguments"}, Err: wamp.URI("ocp.error")}
 	}
 
 	self.mutex.RLock()
@@ -264,5 +264,5 @@ func (self *DocumentHandler) listDocs(ctx context.Context, args wamp.List, kwarg
 		res[i] = doc.ID
 	}
 
-	return &nxclient.InvokeResult{Args: res}
+	return nxclient.InvokeResult{Args: res}
 }

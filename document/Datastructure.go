@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"context"
 	"encoding/gob"
-	nxclient "github.com/gammazero/nexus/client"
-	wamp "github.com/gammazero/nexus/wamp"
+	nxclient "github.com/gammazero/nexus/v3/client"
+	wamp "github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
@@ -158,41 +158,41 @@ func (self Datastructure) createWampPublishFunction(path string, event string) d
 	}
 }
 
-func (self Datastructure) executeOperation(ctx context.Context, op Operation) *nxclient.InvokeResult {
+func (self Datastructure) executeOperation(ctx context.Context, op Operation) nxclient.InvokeResult {
 
 	//execute the operation!
 	data, err := op.ToData()
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{utils.StackError(err, "Unable to parse operation for shared state").Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{utils.StackError(err, "Unable to parse operation for shared state").Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	res, err := self.swarm.State.AddCommand(ctx, "dmlState", data)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	//check if the returned value is an error
 	if err, ok := res.(error); ok {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	return &nxclient.InvokeResult{Args: wamp.List{res}}
+	return nxclient.InvokeResult{Args: wamp.List{res}}
 }
 
 func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler {
 
-	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+	res := func(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 		//get session info
 		node := self.swarm.GetHost().ID()
-		session := wamp.OptionID(details, "caller")
+		session := wamp.OptionID(inv.Details, "caller")
 
 		//get the user and path of the call
-		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
-		procedure := wamp.OptionURI(details, "procedure")
+		auth := wamp.OptionString(inv.Details, "caller_authid") //authid, for session id use "caller"
+		procedure := wamp.OptionURI(inv.Details, "procedure")
 
 		if auth == "" || procedure == "" {
-			return &nxclient.InvokeResult{Args: wamp.List{"No authid disclosed"}, Err: wamp.URI("ocp.error")}
+			return nxclient.InvokeResult{Args: wamp.List{"No authid disclosed"}, Err: wamp.URI("ocp.error")}
 		}
 
 		//build dml path
@@ -201,18 +201,18 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 		//check if we execute local or globally
 		local, err := self.dmlState.CanCallLocal(string(path))
 		if err != nil {
-			return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+			return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 		}
 		if local {
-			res, err := self.dmlState.CallLocal(dml.User(auth), string(path), args...)
+			res, err := self.dmlState.CallLocal(dml.User(auth), string(path), inv.Arguments...)
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
-			return &nxclient.InvokeResult{Args: wamp.List{res}}
+			return nxclient.InvokeResult{Args: wamp.List{res}}
 		}
 
 		//build and excecute the operation arguments
-		op := newCallOperation(dml.User(auth), string(path), args, node, session)
+		op := newCallOperation(dml.User(auth), string(path), inv.Arguments, node, session)
 		return self.executeOperation(ctx, op)
 	}
 
@@ -221,24 +221,24 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 
 func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 
-	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+	res := func(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 		node := self.swarm.GetHost().ID()
-		session := wamp.OptionID(details, "caller")
+		session := wamp.OptionID(inv.Details, "caller")
 
 		//get the user id
-		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
+		auth := wamp.OptionString(inv.Details, "caller_authid") //authid, for session id use "caller"
 		if auth == "" {
-			return &nxclient.InvokeResult{Args: wamp.List{"No authid disclosed"}, Err: wamp.URI("ocp.error")}
+			return nxclient.InvokeResult{Args: wamp.List{"No authid disclosed"}, Err: wamp.URI("ocp.error")}
 		}
 
 		//get the js code
-		if len(args) != 1 {
-			return &nxclient.InvokeResult{Args: wamp.List{"JS code needs to be provided as single argument"}, Err: wamp.URI("ocp.error")}
+		if len(inv.Arguments) != 1 {
+			return nxclient.InvokeResult{Args: wamp.List{"JS code needs to be provided as single argument"}, Err: wamp.URI("ocp.error")}
 		}
-		code, ok := args[0].(string)
+		code, ok := inv.Arguments[0].(string)
 		if !ok {
-			return &nxclient.InvokeResult{Args: wamp.List{"Argument is not valid JS code"}, Err: wamp.URI("ocp.error")}
+			return nxclient.InvokeResult{Args: wamp.List{"Argument is not valid JS code"}, Err: wamp.URI("ocp.error")}
 		}
 
 		//build and execute the operation arguments
@@ -251,86 +251,86 @@ func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 
 func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 
-	res := func(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+	res := func(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 		//get session info
 		node := self.swarm.GetHost().ID()
-		session := wamp.OptionID(details, "caller")
+		session := wamp.OptionID(inv.Details, "caller")
 
 		//get the user id
-		auth := wamp.OptionString(details, "caller_authid") //authid, for session id use "caller"
+		auth := wamp.OptionString(inv.Details, "caller_authid") //authid, for session id use "caller"
 		if auth == "" {
-			return &nxclient.InvokeResult{Args: wamp.List{"No authid disclosed"}, Err: wamp.URI("ocp.error")}
+			return nxclient.InvokeResult{Args: wamp.List{"No authid disclosed"}, Err: wamp.URI("ocp.error")}
 		}
 
 		//get the paths
-		procedure := wamp.OptionURI(details, "procedure")
+		procedure := wamp.OptionURI(inv.Details, "procedure")
 		idx := strings.LastIndex(string(procedure), ".")
 		path := procedure[(len(self.prefix) + 8):idx] //11 for .rawdata
 		fnc := procedure[(idx + 1):]
 
 		switch fnc {
 		case "SetByPath":
-			if len(args) != 1 {
-				return &nxclient.InvokeResult{Args: wamp.List{"Argument must be path to file or directory"}, Err: wamp.URI("ocp.error")}
+			if len(inv.Arguments) != 1 {
+				return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to file or directory"}, Err: wamp.URI("ocp.error")}
 			}
-			filepath, ok := args[0].(string)
+			filepath, ok := inv.Arguments[0].(string)
 			if !ok {
-				return &nxclient.InvokeResult{Args: wamp.List{"Argument must be path to file or directory"}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to file or directory"}, Err: wamp.URI("ocp.error")}
 			}
 			//add the file!
 			cid, err := self.swarm.Data.Add(ctx, filepath)
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			//set the cid to the dml object
 			op := newCallOperation(dml.User(auth), string(path) + ".Set", wamp.List{cid.String()}, node, session)
 			return self.executeOperation(ctx, op)
 
 		case "WriteIntoPath":
-			if len(args) != 1 {
-				return &nxclient.InvokeResult{Args: wamp.List{"Argument must be path to directory"}, Err: wamp.URI("ocp.error")}
+			if len(inv.Arguments) != 1 {
+				return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to directory"}, Err: wamp.URI("ocp.error")}
 			}
-			dirpath, ok := args[0].(string)
+			dirpath, ok := inv.Arguments[0].(string)
 			if !ok {
-				return &nxclient.InvokeResult{Args: wamp.List{"Argument must be path to directory"}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to directory"}, Err: wamp.URI("ocp.error")}
 			}
 
 			//get the cid from the data object!
 			val, err := self.dml.Call(dml.User(auth), string(path)+".Get")
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			sval, ok := val.(string)
 			if !ok {
-				return &nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
 			}
 			id, err := cid.Decode(sval)
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
 			}
 
 			//write the data
 			filepath, err := self.swarm.Data.Write(ctx, id, dirpath)
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 
 			//return the exact path of new file
-			return &nxclient.InvokeResult{Args: wamp.List{filepath}}
+			return nxclient.InvokeResult{Args: wamp.List{filepath}}
 
 		case "SetByBinary":
 			//as progressive results are only possible when calling, not when
 			//get called, we call back and get the data progressivly
 			//the arguments is the uri to call, and the arg to identify the data!
-			if len(args) != 2 {
-				return &nxclient.InvokeResult{Args: wamp.List{"Arguments must be URI to call for progressive data and the argsument for that uri"}, Err: wamp.URI("ocp.error")}
+			if len(inv.Arguments) != 2 {
+				return nxclient.InvokeResult{Args: wamp.List{"Arguments must be URI to call for progressive data and the argsument for that uri"}, Err: wamp.URI("ocp.error")}
 			}
-			uri, ok := args[0].(string)
+			uri, ok := inv.Arguments[0].(string)
 			if !ok {
-				return &nxclient.InvokeResult{Args: wamp.List{"First argument must be URI"}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{"First argument must be URI"}, Err: wamp.URI("ocp.error")}
 			}
-			arg := args[1] //Arg is allowed to be everything
+			arg := inv.Arguments[1] //Arg is allowed to be everything
 
 			//make the progressive call!
 			block := p2p.NewStreamBlockifyer()
@@ -350,9 +350,9 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 						channel <- []byte(res.(string))
 				}
 			}
-			res, err := self.client.CallProgress(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, wamp.CancelModeKill, callback)
+			res, err := self.client.Call(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, callback)
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			if len(res.Arguments) > 0 && res.Arguments[0] != nil {
 				
@@ -364,20 +364,20 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 						channel <- []byte(data.(string))
 					default:
 						msg := fmt.Sprintf("Binary data not received as binary but %T", res.Arguments[0])
-						return &nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
+						return nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
 				}
 			}
 			block.Stop()
 			if err != nil {
 				msg := utils.StackError(err, "Cannot call provided URI").Error()
-				return &nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
 			}
 
 			//add the data we received
 			cid, err := self.swarm.Data.AddBlocks(ctx, block)
 			if err != nil {
 				msg := utils.StackError(err, "Unable to distribute data").Error()
-				return &nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{msg}, Err: wamp.URI("ocp.error")}
 			}
 			//set the cid to the dml object
 			op := newCallOperation(dml.User(auth), string(path)+".Set", wamp.List{cid.String()}, node, session)
@@ -388,35 +388,35 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			//get the cid from the data object!
 			val, err := self.dml.Call(dml.User(auth), string(path)+".Get")
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			sval, ok := val.(string)
 			if !ok {
-				return &nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
 			}
 			id, err := cid.Decode(sval)
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
 			}
 
 			// Read and send chunks of data
 			channel, err := self.swarm.Data.ReadChannel(ctx, id)
 			if err != nil {
-				return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			for data := range channel {
 				// Send a chunk of data.
 				err := self.client.SendProgress(ctx, wamp.List{data}, nil)
 				if err != nil {
 					close(channel)
-					return &nxclient.InvokeResult{Err: wamp.ErrCanceled}
+					return nxclient.InvokeResult{Err: wamp.ErrCanceled}
 				}
 			}
 
-			return &nxclient.InvokeResult{}
+			return nxclient.InvokeResult{}
 		}
 
-		return &nxclient.InvokeResult{Args: wamp.List{"Unknown function"}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{"Unknown function"}, Err: wamp.URI("ocp.error")}
 	}
 
 	return res

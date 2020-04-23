@@ -64,7 +64,7 @@ var cmdDocClose = &cobra.Command{
 var cmdDocOpen = &cobra.Command{
 	Use:   "open [id]",
 	Short: "Open a arbitrary documents that is currently not opened in the node",
-	Long: `Finds and connects other peers for the given documents and opens the doc. Note that it must be allowed 
+	Long: `Finds and connects other peers for the given document and opens the doc. Note that it must be allowed 
 			for us to join the document, meaning the other document peers must have called addPeer for us`,
 	Args: cobra.ExactArgs(1),
 	Run: onlineCommand("documents.open", func(ctx context.Context, args []string, flags map[string]interface{}) string {

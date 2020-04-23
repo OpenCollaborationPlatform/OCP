@@ -12,10 +12,10 @@ import (
 
 	"github.com/ickby/CollaborationNode/utils"
 
-	nxclient "github.com/gammazero/nexus/client"
-	nxrouter "github.com/gammazero/nexus/router"
-	nxserialize "github.com/gammazero/nexus/transport/serialize"
-	"github.com/gammazero/nexus/wamp"
+	nxclient "github.com/gammazero/nexus/v3/client"
+	nxrouter "github.com/gammazero/nexus/v3/router"
+	nxserialize "github.com/gammazero/nexus/v3/transport/serialize"
+	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/spf13/viper"
 )
 
@@ -32,7 +32,7 @@ func NewRouter() *Router {
 
 func (ls *Router) Start(quit chan string) error {
 
-	routerConfig := &nxrouter.RouterConfig{
+	routerConfig := &nxrouter.Config{
 		RealmConfigs: []*nxrouter.RealmConfig{
 			&nxrouter.RealmConfig{
 				URI:           wamp.URI("ocp"),
@@ -82,7 +82,7 @@ func (ls *Router) GetLocalClient(name string) (*nxclient.Client, error) {
 	authFunc := func(c *wamp.Challenge) (string, wamp.Dict) {
 		return "", wamp.Dict{}
 	}
-	cfg := nxclient.ClientConfig{
+	cfg := nxclient.Config{
 		Realm:        "ocp",
 		HelloDetails: wamp.Dict{"authid": name, "role": "local"},
 		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": authFunc},

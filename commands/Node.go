@@ -57,9 +57,8 @@ var cmdStart = &cobra.Command{
 
 		if detach {
 			
-			//we simply run a new process that is not detached 
-			//this will have a system parent
-			fmt.Printf("Args %v\n", os.Args)
+			//we simply run a new process without detach argument,
+			//which will than have a system parent
 			
 			//filter the -d out of the args: everything else we want to keep
 			args := make([]string,0)

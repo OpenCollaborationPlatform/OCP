@@ -4,12 +4,11 @@ package connection
 import (
 	"context"
 	"fmt"
-	"github.com/ickby/CollaborationNode/p2p"
 	"log"
 	"sync"
 
-	nxclient "github.com/gammazero/nexus/client"
-	"github.com/gammazero/nexus/wamp"
+	nxclient "github.com/gammazero/nexus/v3/client"
+	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/spf13/viper"
 )
 
@@ -39,17 +38,15 @@ func newWampGroup() *wampGroup {
 //************************************
 
 type Server struct {
-	nodeID     p2p.PeerID
 	connection *nxclient.Client
 	clients    []*Client
 	groups     map[string]*wampGroup
 	mutex      *sync.RWMutex
 }
 
-func NewServer(id p2p.PeerID) *Server {
+func NewServer() *Server {
 
 	return &Server{
-		nodeID:  id,
 		mutex:   &sync.RWMutex{},
 		clients: make([]*Client, 0),
 		groups:  make(map[string]*wampGroup)}
@@ -61,9 +58,9 @@ func (s *Server) Start(quit chan string) error {
 	uri := viper.GetString("server.uri")
 	port := viper.GetInt("server.port")
 
-	cfg := nxclient.ClientConfig{
+	cfg := nxclient.Config{
 		Realm:        "ocp",
-		HelloDetails: wamp.Dict{"authid": s.nodeID},
+		HelloDetails: wamp.Dict{},
 		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": s.authFunc},
 	}
 	var adress string
@@ -73,7 +70,7 @@ func (s *Server) Start(quit chan string) error {
 		adress = fmt.Sprintf("ws://%v/ws", uri)
 	}
 	log.Printf("Connect to server: %s", adress)
-	c, err := nxclient.ConnectNet(adress, cfg)
+	c, err := nxclient.ConnectNet(context.Background(), adress, cfg)
 	if err != nil {
 		return err
 	}
@@ -135,7 +132,7 @@ func (s *Server) ConnectClient(name, token string) (*Client, error) {
 	}
 
 	ctx := context.Background()
-	_, err := s.connection.Call(ctx, "ocp.nodes.registerUser", wamp.Dict{}, wamp.List{name, token}, wamp.Dict{}, "")
+	_, err := s.connection.Call(ctx, "ocp.nodes.registerUser", wamp.Dict{}, wamp.List{name, token}, wamp.Dict{}, nil)
 
 	if err != nil {
 		log.Printf("Connecting client %s failed: %s", name, err)
@@ -190,7 +187,7 @@ func (s *Server) GroupRegister(group string, uri string, fn nxclient.InvocationH
 func (s *Server) Call(uri string, options wamp.Dict, args wamp.List, kwargs wamp.Dict) (*wamp.Result, error) {
 
 	ctx := context.Background()
-	return s.connection.Call(ctx, uri, options, args, kwargs, "")
+	return s.connection.Call(ctx, uri, options, args, kwargs, nil)
 }
 
 func (s *Server) Subscribe(uri string, fn nxclient.EventHandler, options wamp.Dict) error {

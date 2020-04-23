@@ -11,7 +11,10 @@ import (
 	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
+	"github.com/ickby/CollaborationNode/connection"
 
+	nxclient "github.com/gammazero/nexus/v3/client"
+	"github.com/gammazero/nexus/v3/wamp"
 	libp2p "github.com/libp2p/go-libp2p"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -72,12 +75,18 @@ type Host struct {
 
 	//some internal data
 	path string
+	wamp *nxclient.Client
 }
 
 //Host creates p2p host which manages all peer connections
-func NewHost() *Host {
+func NewHost(router *connection.Router) *Host {
 
-	return &Host{swarms: make([]*Swarm, 0)}
+	var client *nxclient.Client =  nil
+	if router != nil  {
+		client, _ = router.GetLocalClient("p2p")
+	}
+	
+	return &Host{swarms: make([]*Swarm, 0), wamp: client}
 }
 
 // Starts the listening for connections and the bootstrap prozess
@@ -163,6 +172,13 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	h.Event, err = newHostEventService(h)
 	if err != nil {
 		return utils.StackError(err, "Unable to startup event service")
+	}
+	
+	//add the wamp functions
+	if h.wamp != nil {
+		h.wamp.Register("ocp.p2p.id", h._id, wamp.Dict{})
+		h.wamp.Register("ocp.p2p.addresses", h._addresses, wamp.Dict{})
+		h.wamp.Register("ocp.p2p.peers", h._peers, wamp.Dict{})
 	}
 
 	return nil
@@ -546,4 +562,55 @@ func (self *Host) findSwarmPeersAsync(ctx context.Context, id SwarmID, num int) 
 	}()
 
 	return ret
+}
+
+
+/*		Wamp API: wamp functions for normal Host ones
+*********************************************************** */
+
+func (self *Host) _id(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 0 {
+		return nxclient.InvokeResult{Args: wamp.List{"No arguments allowed for this function"}, Err: wamp.URI("ocp.error")}
+	}
+
+	return nxclient.InvokeResult{Args:  wamp.List{self.ID().Pretty()}}
+}
+
+func (self *Host) _addresses(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 1 {
+		return nxclient.InvokeResult{Args: wamp.List{"Argument required: shortened adresses true/false"}, Err: wamp.URI("ocp.error")}
+	}
+	
+	short, ok := inv.Arguments[0].(bool)
+	if !ok {
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be boolean"}, Err: wamp.URI("ocp.error")}
+	}
+	
+	addrs := make(wamp.List, 0)
+	for _, addr := range self.OwnAddresses() {
+		result := addr.String()
+		if !short {
+			result += "/ipfs/" + self.ID().Pretty()
+		} 
+		addrs = append(addrs,  result)
+	}
+
+	return nxclient.InvokeResult{Args: addrs}
+}
+
+func (self *Host) _peers(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 0 {
+		return nxclient.InvokeResult{Args: wamp.List{"No arguments allowed for this function"}, Err: wamp.URI("ocp.error")}
+	}
+	
+	peers := make(wamp.List, len(self.Peers(true)))
+	for i, peer := range self.Peers(true) {
+
+		peers[i] = peer.Pretty()
+	}
+
+	return nxclient.InvokeResult{Args: peers}
 }

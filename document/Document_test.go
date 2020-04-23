@@ -11,7 +11,7 @@ import (
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"
 
-	wamp "github.com/gammazero/nexus/wamp"
+	wamp "github.com/gammazero/nexus/v3/wamp"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -74,14 +74,14 @@ func TestDocumentSingleNode(t *testing.T) {
 
 		Convey("initially the list of documents is empty", func() {
 
-			res, err := client.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+			res, err := client.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 0)
 		})
 
 		Convey("creating a document is possible", func() {
 
-			res, err := client.Call(ctx, "ocp.documents.create", wamp.Dict{}, wamp.List{dmlpath}, wamp.Dict{}, wamp.CancelModeKill)
+			res, err := client.Call(ctx, "ocp.documents.create", wamp.Dict{}, wamp.List{dmlpath}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldNotBeNil)
 
@@ -90,7 +90,7 @@ func TestDocumentSingleNode(t *testing.T) {
 
 			Convey("which raises the document list count", func() {
 
-				res, err := client.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+				res, err := client.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
 				So(len(res.Arguments), ShouldEqual, 1)
 				So(res.Arguments[0], ShouldEqual, docID)
@@ -99,17 +99,17 @@ func TestDocumentSingleNode(t *testing.T) {
 			Convey("and makes the document editable", func() {
 
 				uri := "ocp.documents.edit." + docID + ".call.Test.testI"
-				res, err := client.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+				res, err := client.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
 				So(len(res.Arguments), ShouldEqual, 1)
 				So(res.Arguments[0], ShouldEqual, 1)
 
-				res, err = client.Call(ctx, uri, wamp.Dict{}, wamp.List{20}, wamp.Dict{}, wamp.CancelModeKill)
+				res, err = client.Call(ctx, uri, wamp.Dict{}, wamp.List{20}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
 				So(len(res.Arguments), ShouldEqual, 1)
 				So(res.Arguments[0], ShouldEqual, 20)
 
-				res, err = client.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+				res, err = client.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
 				So(len(res.Arguments), ShouldEqual, 1)
 				So(res.Arguments[0], ShouldEqual, 20)
@@ -156,7 +156,7 @@ func TestDocumentTwoNodes(t *testing.T) {
 
 		Convey("creating a document is possible on host 1", func() {
 
-			res, err := client1.Call(ctx, "ocp.documents.create", wamp.Dict{}, wamp.List{dmlpath}, wamp.Dict{}, wamp.CancelModeKill)
+			res, err := client1.Call(ctx, "ocp.documents.create", wamp.Dict{}, wamp.List{dmlpath}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldNotBeNil)
 
@@ -168,18 +168,18 @@ func TestDocumentTwoNodes(t *testing.T) {
 
 			Convey("but is not joinable by host2 directly to due missing authorisation", func() {
 
-				_, err := client2.Call(ctx, "ocp.documents.open", wamp.Dict{}, wamp.List{docID}, wamp.Dict{}, wamp.CancelModeKill)
+				_, err := client2.Call(ctx, "ocp.documents.open", wamp.Dict{}, wamp.List{docID}, wamp.Dict{}, nil)
 				So(err, ShouldNotBeNil)
 			})
 
 			Convey("Adding the second host as peer to the document", func() {
 
 				uri := "ocp.documents." + docID + ".addPeer"
-				_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{host2.ID().Pretty(), "write"}, wamp.Dict{}, wamp.CancelModeKill)
+				_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{host2.ID().Pretty(), "write"}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
 
 				uri = "ocp.documents." + docID + ".listPeers"
-				res, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+				res, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
 				So(len(res.Arguments), ShouldEqual, 2)
 				So(res.Arguments, ShouldContain, host1.ID())
@@ -187,11 +187,11 @@ func TestDocumentTwoNodes(t *testing.T) {
 
 				Convey("makes the document joinable by host2", func() {
 
-					_, err := client2.Call(ctx, "ocp.documents.open", wamp.Dict{}, wamp.List{docID}, wamp.Dict{}, wamp.CancelModeKill)
+					_, err := client2.Call(ctx, "ocp.documents.open", wamp.Dict{}, wamp.List{docID}, wamp.Dict{}, nil)
 					So(err, ShouldBeNil)
 
 					Convey("which adds it to its document list", func() {
-						res, err := client2.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+						res, err := client2.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 						So(err, ShouldBeNil)
 						So(len(res.Arguments), ShouldEqual, 1)
 						So(res.Arguments[0], ShouldEqual, docID)
@@ -200,30 +200,30 @@ func TestDocumentTwoNodes(t *testing.T) {
 					Convey("and editable by both hosts", func() {
 
 						uri := "ocp.documents.edit." + docID + ".call.Test.testI"
-						_, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{10}, wamp.Dict{}, wamp.CancelModeKill)
+						_, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{10}, wamp.Dict{}, nil)
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)
 
 						//check if set on both nodes
-						res, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+						res, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 						So(err, ShouldBeNil)
 						So(len(res.Arguments), ShouldEqual, 1)
 						So(res.Arguments[0], ShouldEqual, 10)
-						res, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+						res, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 						So(err, ShouldBeNil)
 						So(len(res.Arguments), ShouldEqual, 1)
 						So(res.Arguments[0], ShouldEqual, 10)
 
-						_, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{20}, wamp.Dict{}, wamp.CancelModeKill)
+						_, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{20}, wamp.Dict{}, nil)
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)
 
 						//check if set on both nodes
-						res, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+						res, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 						So(err, ShouldBeNil)
 						So(len(res.Arguments), ShouldEqual, 1)
 						So(res.Arguments[0], ShouldEqual, 20)
-						res, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, wamp.CancelModeKill)
+						res, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 						So(err, ShouldBeNil)
 						So(len(res.Arguments), ShouldEqual, 1)
 						So(res.Arguments[0], ShouldEqual, 20)

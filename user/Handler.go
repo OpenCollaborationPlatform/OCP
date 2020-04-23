@@ -8,8 +8,8 @@ import (
 import (
 	"context"
 
-	nxclient "github.com/gammazero/nexus/client"
-	wamp "github.com/gammazero/nexus/wamp"
+	nxclient "github.com/gammazero/nexus/v3/client"
+	wamp "github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
@@ -89,24 +89,24 @@ func (self *UserHandler) SetUser(ctx context.Context, id UserID) error {
 	return nil
 }
 
-func (self *UserHandler) setUser(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self *UserHandler) setUser(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
-	if len(args) != 1 {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name"}, Err: wamp.URI("ocp.error")}
+	if len(inv.Arguments) != 1 {
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be user name"}, Err: wamp.URI("ocp.error")}
 	}
 
-	name, ok := args[0].(string)
+	name, ok := inv.Arguments[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")}
 	}
 
 	//create user and provide!
 	id := UserID(name)
 	err := self.SetUser(ctx, id)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
-	return &nxclient.InvokeResult{}
+	return nxclient.InvokeResult{}
 }
 
 func (self *UserHandler) FindUser(ctx context.Context, id UserID, num int) (p2p.PeerID, error) {
@@ -122,20 +122,20 @@ func (self *UserHandler) FindUser(ctx context.Context, id UserID, num int) (p2p.
 	return result[0], nil
 }
 
-func (self *UserHandler) findUser(ctx context.Context, args wamp.List, kwargs, details wamp.Dict) *nxclient.InvokeResult {
+func (self *UserHandler) findUser(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
-	if len(args) < 1 {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name, optional amount of nodes to find"}, Err: wamp.URI("ocp.error")}
+	if len(inv.Arguments) < 1 {
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be user name, optional amount of nodes to find"}, Err: wamp.URI("ocp.error")}
 	}
 
-	name, ok := args[0].(string)
+	name, ok := inv.Arguments[0].(string)
 	if !ok {
-		return &nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{"Argument must be user name as string"}, Err: wamp.URI("ocp.error")}
 	}
 
 	num := 1
-	if len(args) == 2 {
-		n, ok := args[1].(int)
+	if len(inv.Arguments) == 2 {
+		n, ok := inv.Arguments[1].(int)
 		if ok {
 			num = n
 		}
@@ -145,8 +145,8 @@ func (self *UserHandler) findUser(ctx context.Context, args wamp.List, kwargs, d
 	id := UserID(name)
 	result, err := self.FindUser(ctx, id, num)
 	if err != nil {
-		return &nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	return &nxclient.InvokeResult{Args: wamp.List{result.Pretty()}}
+	return nxclient.InvokeResult{Args: wamp.List{result.Pretty()}}
 }

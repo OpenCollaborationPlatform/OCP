@@ -103,7 +103,7 @@ func temporaryHost(dir string) (*Host, error) {
 	testport = testport + 1
 
 	//start the host
-	h := NewHost()
+	h := NewHost(nil)
 	err = h.Start(false)
 	if err != nil {
 		return nil, err

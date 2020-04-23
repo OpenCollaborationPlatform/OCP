@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"log"
 
-	nxclient "github.com/gammazero/nexus/client"
-	"github.com/gammazero/nexus/wamp"
+	nxclient "github.com/gammazero/nexus/v3/client"
+	"github.com/gammazero/nexus/v3/wamp"
 	golog "github.com/ipfs/go-log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -63,19 +63,19 @@ func onlineCommand(name string, f func(context.Context, []string, map[string]int
 		}
 
 		//make a wrapper function that is WAMP callable
-		wrapper := func(ctx context.Context, wampargs wamp.List, wampkwargs wamp.Dict, wampdetails wamp.Dict) *nxclient.InvokeResult {
+		wrapper := func(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 			//a string argument list
-			slice := make([]string, len(wampargs))
-			for i, value := range wampargs {
+			slice := make([]string, len(inv.Arguments))
+			for i, value := range inv.Arguments {
 				slice[i] = value.(string)
 			}
 
 			//call the function
-			result := f(ctx, slice, wampkwargs)
+			result := f(ctx, slice, inv.ArgumentsKw)
 
 			//postprocess the result
-			return &nxclient.InvokeResult{Args: wamp.List{result}}
+			return nxclient.InvokeResult{Args: wamp.List{result}}
 		}
 
 		//register it to be callable
@@ -120,7 +120,7 @@ func onlineCommand(name string, f func(context.Context, []string, map[string]int
 
 		//call the node command
 		ctx,_ := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
-		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, flags, "kill")
+		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, flags, nil)
 		if err != nil {
 			fmt.Println("Error:", err)
 			return
@@ -159,12 +159,12 @@ func setup(pidPortPanic bool) {
 	//authFunc := func(c *wamp.Challenge) (string, wamp.Dict) {
 	//	return "", wamp.Dict{}
 	//}
-	cfg := nxclient.ClientConfig{
+	cfg := nxclient.Config{
 		Realm:        "ocp",
 		HelloDetails: wamp.Dict{"authid": "command", "role": "local"},
 		//AuthHandlers: map[string]nxclient.AuthFunc{"ticket": authFunc},
 	}
-	c, err := nxclient.ConnectNet(fmt.Sprintf("ws://localhost:%v/", port), cfg)
+	c, err := nxclient.ConnectNet(context.Background(), fmt.Sprintf("ws://localhost:%v/", port), cfg)
 
 	if err != nil { //cannot connect means PID is wrong or process hangs
 		err := utils.ClearPidPort()

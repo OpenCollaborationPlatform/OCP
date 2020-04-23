@@ -11,7 +11,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"github.com/gammazero/nexus/wamp"
+	"github.com/gammazero/nexus/v3/wamp"
 )
 
 //sharing information about the session, that is currently manipulating the state
