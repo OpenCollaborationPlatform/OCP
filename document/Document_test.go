@@ -76,7 +76,9 @@ func TestDocumentSingleNode(t *testing.T) {
 
 			res, err := client.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
-			So(len(res.Arguments), ShouldEqual, 0)
+			list, ok := res.Arguments[0].([]string)
+			So(ok, ShouldBeTrue)
+			So(len(list), ShouldEqual, 0)
 		})
 
 		Convey("creating a document is possible", func() {
@@ -92,8 +94,10 @@ func TestDocumentSingleNode(t *testing.T) {
 
 				res, err := client.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				So(len(res.Arguments), ShouldEqual, 1)
-				So(res.Arguments[0], ShouldEqual, docID)
+				list, ok := res.Arguments[0].([]string)
+				So(ok, ShouldBeTrue)
+				So(len(list), ShouldEqual, 1)
+				So(list[0], ShouldEqual, docID)
 			})
 
 			Convey("and makes the document editable", func() {
@@ -193,8 +197,10 @@ func TestDocumentTwoNodes(t *testing.T) {
 					Convey("which adds it to its document list", func() {
 						res, err := client2.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 						So(err, ShouldBeNil)
-						So(len(res.Arguments), ShouldEqual, 1)
-						So(res.Arguments[0], ShouldEqual, docID)
+						list, ok := res.Arguments[0].([]string)
+						So(ok, ShouldBeTrue)
+						So(len(list), ShouldEqual, 1)
+						So(list[0], ShouldEqual, docID)
 					})
 
 					Convey("and editable by both hosts", func() {

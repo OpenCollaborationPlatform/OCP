@@ -259,10 +259,10 @@ func (self *DocumentHandler) listDocs(ctx context.Context, inv *wamp.Invocation)
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
 
-	res := make(wamp.List, len(self.documents))
+	res := make([]string, len(self.documents))
 	for i, doc := range self.documents {
 		res[i] = doc.ID
 	}
 
-	return nxclient.InvokeResult{Args: res}
+	return nxclient.InvokeResult{Args: wamp.List{res}}
 }
