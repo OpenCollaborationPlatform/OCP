@@ -201,12 +201,12 @@ func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxcli
 func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	peers := self.swarm.GetPeers(p2p.AUTH_NONE)
-	resargs := make(wamp.List, len(peers))
+	resargs := make([]string, len(peers))
 	for i, p := range peers {
-		resargs[i] = p
+		resargs[i] = p.Pretty()
 	}
 
-	return nxclient.InvokeResult{Args: resargs}
+	return nxclient.InvokeResult{Args: wamp.List{resargs}}
 }
 
 //							Data Handling

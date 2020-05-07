@@ -89,7 +89,6 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 				}
 			}
 		}
-		fmt.Printf("Bootstraps: %v", addrs)
 		return addrs
 	}
 

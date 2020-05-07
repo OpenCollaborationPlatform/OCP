@@ -188,7 +188,7 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	if !ok {
 		return fmt.Errorf("Unable to create database set")
 	}
-	prop, err := NewProperty(name, dtype, default_val, vSet, self.GetRuntime(), constprop)
+	prop, err := NewProperty(name, dtype, default_val, vSet, self.GetRuntime(), self.GetJSObject(), constprop)
 	if err != nil {
 		return err
 	}

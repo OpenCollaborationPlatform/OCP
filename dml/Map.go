@@ -359,10 +359,10 @@ func (self *mapImpl) Remove(key interface{}) error {
 		return utils.StackError(err, "Cannot create new map value, key has wrong type")
 	}
 
-	//if we already have it we cannot create new!
+	//if we already have it we cannot remove it!
 	dbkey := self.typeToDB(key, kdt)
 	if !self.entries.HasKey(dbkey) {
-		return fmt.Errorf("Key does not exist, cannot be removed")
+		return fmt.Errorf("Key does not exist (%v), cannot be removed", key)
 	}
 
 	//decrease refcount if required

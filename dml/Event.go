@@ -15,13 +15,17 @@ type Event interface {
 
 	Emit(args ...interface{}) error
 	RegisterCallback(cb EventCallback) error
+	Enable() error
+	Disable() error
 	RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error
 }
 
 func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
 
-	evt := &event{methodHandler: NewMethodHandler(),
-		callbacks:      make([]EventCallback, 0)}
+	evt := &event{
+		methodHandler:	NewMethodHandler(),
+		callbacks:    	make([]EventCallback, 0),
+		enabled: 		true}
 
 	//now the js object
 	evtObj := rntm.jsvm.NewObject()
@@ -30,6 +34,10 @@ func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
 	evt.AddMethod("Emit", emitMethod)
 	registerMethod, _ := NewMethod(evt.RegisterJSCallback, false)
 	evt.AddMethod("RegisterCallback", registerMethod)
+	enableMethod, _ := NewMethod(evt.Enable, false)
+	evt.AddMethod("Enable", enableMethod)
+	disableMethod, _ := NewMethod(evt.Disable, false)
+	evt.AddMethod("Disable", disableMethod)
 
 	evt.jsobj = evtObj
 	evt.jsvm = rntm.jsvm
@@ -42,7 +50,8 @@ func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
 type event struct {
 	methodHandler
 
-	callbacks      []EventCallback
+	callbacks 	[]EventCallback
+	enabled 		bool
 
 	jsvm     *goja.Runtime
 	jsobj    *goja.Object
@@ -50,6 +59,10 @@ type event struct {
 }
 
 func (self *event) Emit(args ...interface{}) error {
+
+	if !self.enabled {
+		return nil
+	}
 
 	//call all registered functions
 	var err error
@@ -66,6 +79,18 @@ func (self *event) Emit(args ...interface{}) error {
 func (self *event) RegisterCallback(cb EventCallback) error {
 
 	self.callbacks = append(self.callbacks, cb)
+	return nil
+}
+
+func (self *event) Enable() error {
+
+	self.enabled = true
+	return nil
+}
+
+func (self *event) Disable() error {
+
+	self.enabled = false
 	return nil
 }
 

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 
-	"github.com/ickby/CollaborationNode/dml"
 	"github.com/gammazero/nexus/v3/wamp"
+	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 )
 

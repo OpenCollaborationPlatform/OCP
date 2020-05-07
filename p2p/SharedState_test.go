@@ -35,6 +35,11 @@ func (self *testState) LoadSnapshot(snap []byte) error {
 	return nil
 }
 
+func (self *testState) ReceiveSync(string) error {
+	
+	return nil
+}
+
 func toByte(val int64) []byte {
 	buf := make([]byte, binary.MaxVarintLen64)
 	binary.PutVarint(buf, val)

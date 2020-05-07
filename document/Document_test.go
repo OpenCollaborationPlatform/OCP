@@ -185,9 +185,11 @@ func TestDocumentTwoNodes(t *testing.T) {
 				uri = "ocp.documents." + docID + ".listPeers"
 				res, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				So(len(res.Arguments), ShouldEqual, 2)
-				So(res.Arguments, ShouldContain, host1.ID())
-				So(res.Arguments, ShouldContain, host2.ID())
+				peers, ok := res.Arguments[0].([]string)
+				So(ok, ShouldBeTrue)
+				So(len(peers), ShouldEqual, 2)
+				So(peers, ShouldContain, host1.ID().Pretty())
+				So(peers, ShouldContain, host2.ID().Pretty())
 
 				Convey("makes the document joinable by host2", func() {
 

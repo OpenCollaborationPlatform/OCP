@@ -3,15 +3,15 @@ package document
 import (
 	"archive/zip"
 	"bytes"
+	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
-	"github.com/ickby/CollaborationNode/utils"
 	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/utils"
 	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"github.com/gammazero/nexus/v3/wamp"
 )
 
 //sharing information about the session, that is currently manipulating the state
@@ -194,8 +194,8 @@ func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) 
 	val, err := self.dml.Call(user, path, args...)
 	if err != nil {
 		return nil, err
-	}	
-	
+	}
+
 	//check if it is a Object, if so we only return the encoded identifier!
 	obj, ok := val.(dml.Object)
 	if ok {
