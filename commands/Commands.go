@@ -11,10 +11,10 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"
-	golog "github.com/ipfs/go-log"
+//	golog "github.com/ipfs/go-log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	gologging "github.com/whyrusleeping/go-logging"
+//	gologging "github.com/whyrusleeping/go-logging"
 )
 
 var (
@@ -143,7 +143,7 @@ func setup(pidPortPanic bool) {
 
 	//output from flag
 	if verbose {
-		golog.SetAllLoggers(gologging.DEBUG)
+//		golog.SetAllLoggers(gologging.DEBUG)
 	}
 
 	//try to get the client to our running node

@@ -6,7 +6,6 @@ import (
 	"encoding/gob"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,10 +14,17 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 
 	bs "github.com/ipfs/go-bitswap"
-	blocks "github.com/ipfs/go-block-format"
+	"github.com/ipfs/go-datastore"
+	ds "github.com/ipfs/go-ds-badger2"
+	blockDS "github.com/ipfs/go-ipfs-blockstore"
 	cid "github.com/ipfs/go-cid"
-	exchange "github.com/ipfs/go-ipfs-exchange-interface"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+	bsnetwork "github.com/ipfs/go-bitswap/network"
+	ipld "github.com/ipfs/go-ipld-format"
+	files "github.com/ipfs/go-ipfs-files"
+	unixfile "github.com/ipfs/go-unixfs/file"
+	
+	"github.com/ipfs/go-datastore/query"
 )
 
 //condent identifier
@@ -27,16 +33,188 @@ type Cid = cid.Cid
 //the data service interface!
 type DataService interface {
 	Add(ctx context.Context, path string) (Cid, error)              //adds a file or directory
-	AddBlocks(ctx context.Context, blocks Blockifyer) (Cid, error)  //adds a Blockifyer
+	AddData(ctx context.Context, data []byte) (Cid, error)          //adds a Blockifyer
 	AddAsync(path string) (Cid, error)                              //adds a file or directory, but returns when the local operation is done
 	Drop(ctx context.Context, id Cid) error                         //removes a file or directory
 	Fetch(ctx context.Context, id Cid) error                        //Fetches the given data
 	FetchAsync(id Cid) error                                        //Fetches the given data async
-	GetFile(ctx context.Context, id Cid) (*os.File, error)          //gets the file described by the id (fetches if needed)
+	Get(ctx context.Context, id Cid) (io.Reader, error)             //gets the file described by the id (fetches if needed)
 	Write(ctx context.Context, id Cid, path string) (string, error) //writes the file or directory to the given path (fetches if needed)
 	ReadChannel(ctx context.Context, id Cid) (chan []byte, error)   //reads the data in individual binary blocks (does not work for directory)
+	HasLocal(id Cid) bool  										  //checks if the given id is available locally
 	Close()
 }
+
+//Helper for implementation of DataService interface ontop of a merkle DAG
+//Note: does not implement Close()
+type dagHelper struct {
+	dag ipld.DAGService
+}
+
+
+func (self *dagHelper) Add(ctx context.Context, path string) (Cid, error) {
+
+	stat, _ :=os.Stat(path)
+	file, err := files.NewSerialFile(path, false, stat)
+	if err != nil { 
+		return cid.Cid{}, err
+	}
+	adder, err := NewAdder(ctx, self.dag)
+	if err != nil { 
+		return cid.Cid{}, err
+	}
+	
+	node, err := adder.Add(file)
+	if err != nil { 
+		return cid.Cid{}, err
+	}
+
+	//return
+	return node.Cid(), nil
+}
+
+func (self *dagHelper) AddData(ctx context.Context, data []byte) (Cid, error) {
+
+	file := files.NewBytesFile(data)
+
+	adder, err := NewAdder(ctx, self.dag)
+	if err != nil { 
+		return cid.Cid{}, err
+	}
+	
+	node, err := adder.Add(file)
+	if err != nil { 
+		return cid.Cid{}, err
+	}
+
+	//return
+	return node.Cid(), nil
+}
+
+func (self *dagHelper) AddAsync(path string) (Cid, error) {
+
+	//we don't do any network operation...
+	ctx, _ := context.WithTimeout(context.Background(), 1*time.Hour)
+	return self.Add(ctx, path)
+}
+
+func (self *dagHelper) Drop(ctx context.Context, id Cid) error {
+
+	return self.dag.Remove(ctx, id)
+}
+
+func (self *dagHelper) Fetch(ctx context.Context, id Cid) error {
+
+	resnode, err := self.dag.Get(ctx, id)
+	if err != nil {
+	 	return err
+	}
+	
+	//make sure we have the whole dag fetched by visiting it
+	navnode := ipld.NewNavigableIPLDNode(resnode, self.dag)
+	walker :=  ipld.NewWalker(ctx, navnode)
+	err = walker.Iterate(func(node ipld.NavigableNode) error {return nil})
+	
+	//End Of Dag is default error when iteration has finished
+	if err != ipld.EndOfDag {
+		return err 
+	}
+	return nil
+}
+
+func (self *dagHelper) FetchAsync(id Cid) error {
+
+	go func() {
+		ctx, _ := context.WithTimeout(context.Background(), 1*time.Hour)
+		self.Fetch(ctx, id)
+	}()
+	return nil
+}
+
+func (self *dagHelper) Get(ctx context.Context, id Cid) (io.Reader, error) {
+
+	resnode, err := self.dag.Get(ctx, id)
+	if err != nil {
+	 	return nil, err
+	}
+	filenode, err := unixfile.NewUnixfsFile(ctx, self.dag, resnode)
+	if err != nil {
+		return nil, err
+	}
+	return files.ToFile(filenode), nil
+}
+
+func (self *dagHelper) Write(ctx context.Context, id Cid, path string) (string, error) {
+
+	resnode, err := self.dag.Get(ctx, id)
+	if err != nil {
+	 	return "", err
+	}
+	resfile, err := unixfile.NewUnixfsFile(ctx, self.dag, resnode)
+	if err != nil {
+	 	return "", err
+	}
+	
+	fullpath := filepath.Join(path, id.String())
+	if err != nil {
+		return "", err
+	}
+	err = files.WriteTo(resfile, fullpath)
+	return fullpath, err
+	
+}
+
+
+func (self *dagHelper) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
+
+	reader, err := self.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	
+	result := make(chan []byte, 0)
+	go func() {
+		data := make([]byte, 1e3)
+		for {
+			n, err := reader.Read(data)
+			if n>0 {
+				time.Sleep(500*time.Millisecond)
+				local  :=  make([]byte, n)
+				copy(local, data[:n])
+				result <- local
+			}
+
+			if err != nil {
+				break
+			}
+		}
+
+		close(result)
+	}()
+	
+	return result, nil
+}
+
+
+/******************************************************************************
+							HostDataService
+*******************************************************************************/
+
+//Basically uses exposes dagHelper for functionality, and additional stores all
+//the stuff needed to create a mekrle dag
+
+type hostDataService struct {
+	dagHelper
+	
+	datapath 	string
+	bitswap 		*bs.Bitswap
+	ownerStore  	datastore.TxnDatastore
+	blockStore	blockDS.Blockstore
+	ticker   	*time.Ticker
+	dht     	 	*kaddht.IpfsDHT
+	ctx			context.Context
+}
+
 
 func NewDataService(host *Host) (DataService, error) {
 
@@ -46,20 +224,25 @@ func NewDataService(host *Host) (DataService, error) {
 		os.Mkdir(path, os.ModePerm)
 	}
 
-	//build the blockstore
-	bstore, err := NewBitswapStore(path)
+	//create the stores (blocks and owners)
+	dstore, err := ds.NewDatastore(path, &ds.DefaultOptions)
 	if err != nil {
 		return nil, err
 	}
+	bstore := blockDS.NewBlockstore(dstore)
+	
+	//create bitswap and default global DAG service
+	routing, err := NewOwnerAwareRouting(host, dstore)
+	if err != nil {
+		return nil, err
+	}
+	network := bsnetwork.NewFromIpfsHost(host.host, routing)
+	bitswap := bs.New(host.serviceCtx, network, bstore).(*bs.Bitswap)
+	dag := NewDAGService("global", bitswap, dstore, bstore)
 
-	//build the blockservice from a blockstore and a bitswap
-	bitswap, err := NewBitswap(bstore, host)
-	if err != nil {
-		return nil, err
-	}
 
 	//start the service
-	service := &hostDataService{path, bitswap, bstore, time.NewTicker(20 * time.Hour), host.dht}
+	service := &hostDataService{dagHelper{dag}, path, bitswap, dstore, bstore, time.NewTicker(20 * time.Hour), host.dht, host.serviceCtx}
 
 	//handle announcement: once initially and than periodically
 	service.announceAllGlobal()
@@ -78,523 +261,50 @@ func NewDataService(host *Host) (DataService, error) {
 	return service, nil
 }
 
-type hostDataService struct {
-	datapath string
-	bitswap  *bs.Bitswap
-	store    BitswapStore
-	ticker   *time.Ticker
-	dht      *kaddht.IpfsDHT
+func (self *hostDataService) HasLocal(id Cid) bool  {
+	val, _ := self.blockStore.Has(id)
+	return val
 }
 
-func (self *hostDataService) Add(ctx context.Context, path string) (Cid, error) {
-
-	filecid, _, err := self.basicAdd(path, "global")
-	if err != nil {
-		return cid.Cid{}, utils.StackError(err, "Unable to add path")
-	}
-
-	//return
-	return filecid, err
-}
-
-func (self *hostDataService) AddBlocks(ctx context.Context, blocks Blockifyer) (Cid, error) {
-
-	filecid, _, err := self.basicAddBlocks(blocks, "global")
-	if err != nil {
-		return cid.Cid{}, utils.StackError(err, "Unable to add path")
-	}
-
-	//return
-	return filecid, err
-}
-
-func (self *hostDataService) AddAsync(path string) (Cid, error) {
-
-	//we don't do any network operation...
-	ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
-	return self.Add(ctx, path)
-}
-
-func (self *hostDataService) Drop(ctx context.Context, id Cid) error {
-
-	err := self.basicDrop(id, "global")
-	if err != nil {
-		return utils.StackError(err, "Unable to drop id")
-	}
-
-	return nil
-}
-
-func (self *hostDataService) Fetch(ctx context.Context, id Cid) error {
-
-	err := self.basicFetch(ctx, id, self.bitswap, "global")
-	if err != nil {
-		return utils.StackError(err, "Unable to fetch id %v", id.String())
-	}
-
-	return nil
-}
-
-func (self *hostDataService) FetchAsync(id Cid) error {
-
-	go func() {
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
-		self.basicFetch(ctx, id, self.bitswap, "global")
-	}()
-	return nil
-}
-
-func (self *hostDataService) GetFile(ctx context.Context, id Cid) (*os.File, error) {
-
-	_, file, err := self.basicGetFile(ctx, id, self.bitswap, "global")
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to get file %v", id.String())
-	}
-
-	return file, err
-}
-
-func (self *hostDataService) Write(ctx context.Context, id Cid, path string) (string, error) {
-
-	//make sure we have the data!
-	return self.basicWrite(ctx, id, path, self.bitswap, "global")
+func (self *hostDataService) Close() {
+	self.bitswap.Close()
+	self.ownerStore.Close()
 }
 
 func (self *hostDataService) announceAllGlobal() {
 
-	globals, _ := self.store.GetCidsForOwner("global")
+	//we need to check all owners and fetch out the globals
+	filter := query.FilterValueCompare{Op:query.Equal, Value: []byte("global")}
+	q := query.Query{Prefix: "/Owners/", Filters: []query.Filter{filter}}
+	qr, err := self.ownerStore.Query(q)
+	if err != nil {
+		return
+	}
+	
+	//get the cids
+	globals := make([]string, 0)
+	for result := range qr.Next() { 
+	
+		if result.Error != nil {
+			continue	
+		}
+		
+		key := datastore.NewKey(result.Entry.Key)
+		globals = append(globals, key.List()[1])
+	}
+	
+	//take our time to announce the cids
 	go func() {
-		for {
-			repeats := make([]cid.Cid, 0)
-			for _, id := range globals {
-				ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
-				err := self.dht.Provide(ctx, id, true)
-				if err != nil {
-					repeats = append(repeats, id)
-				}
-			}
-			//check if done
-			if len(repeats) == 0 {
-				return
-			}
-			//repeat all we not have been able to announce
-			globals = repeats
+		for _, id := range globals {
+			ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
+			parsed, _ := cid.Decode(id)
+			self.dht.Provide(ctx, parsed, true)
 		}
 	}()
-}
-
-func (self *hostDataService) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
-
-	return self.basicReadChannel(ctx, id, self.bitswap, "global")
-}
-
-func (self *hostDataService) Close() {
-
-	self.ticker.Stop()
-	self.bitswap.Close()
-	self.store.Close()
-}
-
-/*************************** Internal Functions ******************************/
-
-func (self *hostDataService) basicAddFile(path string, owner string) (cid.Cid, []blocks.Block, error) {
-
-	return self.basicAddBlockifyer(NewFileBlockifyer(path), owner)
-}
-
-func (self *hostDataService) basicAddBlockifyer(bl Blockifyer, owner string) (cid.Cid, []blocks.Block, error) {
-
-	//we first blockify the file bevore moving it into our store.
-	//This is done to know the cid after which we name the file in the store
-	//to avoid having problems with same filenames for different files
-	blocks, filecid, err := bl.GetBlocks()
-	if err != nil {
-		return filecid, nil, utils.StackError(err, "Unable to blockify file")
-	}
-
-	//the first block is put in the store to allow setting a owner for all blocks
-	//that is needed in case we need to announce on the dht when adding the blocks
-	//to bitswap
-	//set ownership
-	if owner != "" {
-		self.store.Put(blocks[0])
-		self.store.SetOwnership(blocks[0], owner)
-		err := self.bitswap.HasBlock(blocks[0])
-		if err != nil {
-			return cid.Undef, nil, utils.StackError(err, "Unable to add file")
-		}
-	}
-
-	//make the badditional  blocks available
-	for _, block := range blocks {
-		if has, _ := self.store.Has(block.Cid()); !has {
-			err = self.bitswap.HasBlock(block)
-			if err != nil {
-				return cid.Undef, nil, utils.StackError(err, "Unable to add file")
-			}
-		}
-	}
-
-	return filecid, blocks, err
-}
-
-func (self *hostDataService) basicAddDirectory(path string, owner string) (cid.Cid, []blocks.Block, error) {
-
-	//the result
-	result := make([]blocks.Block, 0)
-	subcids := make([]cid.Cid, 0)
-
-	//we iterate through all files and subdirs in the directory
-	files, err := ioutil.ReadDir(path)
-	if err != nil {
-		return cid.Undef, nil, utils.StackError(err, "Unable to add directory")
-	}
-	for _, file := range files {
-		newpath := filepath.Join(path, file.Name())
-		subcid, blocks, err := self.basicAdd(newpath, "") //no owner needed as parent has set ownership!
-		if err != nil {
-			return cid.Undef, nil, utils.StackError(err, "Unable to add directory")
-		}
-		result = append(result, blocks...) //collect all blocks
-		subcids = append(subcids, subcid)  //collect all directory entry cids
-	}
-
-	//build the directory block
-	name := filepath.Base(path)
-	dirblock := P2PDirectoryBlock{name, subcids}
-	dirblock.Sort()
-	block := dirblock.ToBlock()
-
-	//the dir block is put in the store to allow setting a owner for all blocks
-	//that is needed in case we need to announce on the dht when adding the blocks
-	//to bitswap
-	//set ownership
-	if owner != "" {
-		self.store.Put(block)
-		self.store.SetOwnership(block, owner)
-	}
-
-	//Make the block available
-	err = self.bitswap.HasBlock(block)
-	if err != nil {
-		return cid.Undef, nil, utils.StackError(err, "Unable to add directory")
-	}
-
-	//and the final list of all blocks with the prepended directory
-	result = append([]blocks.Block{block}, result...)
-
-	return block.Cid(), result, nil
-}
-
-func (self *hostDataService) basicAdd(path string, owner string) (cid.Cid, []blocks.Block, error) {
-
-	//check if we have a directory or a file
-	info, err := os.Stat(path)
-	if err != nil {
-		return cid.Undef, nil, utils.StackError(err, "Unable to add path")
-	}
-
-	var resCid cid.Cid
-	var resBlocks []blocks.Block
-
-	switch mode := info.Mode(); {
-	case mode.IsDir():
-		resCid, resBlocks, err = self.basicAddDirectory(path, owner)
-	case mode.IsRegular():
-		resCid, resBlocks, err = self.basicAddFile(path, owner)
-	}
-
-	if err != nil {
-		self.basicDrop(resCid, owner)
-		return resCid, nil, utils.StackError(err, "Unable to add path")
-	}
-
-	return resCid, resBlocks, err
-}
-
-func (self *hostDataService) basicAddBlocks(blockifyer Blockifyer, owner string) (cid.Cid, []blocks.Block, error) {
-
-	resCid, resBlocks, err := self.basicAddBlockifyer(blockifyer, owner)
-
-	if err != nil {
-		self.basicDrop(resCid, owner)
-		return resCid, nil, utils.StackError(err, "Unable to add path")
-	}
-
-	return resCid, resBlocks, err
-}
-
-//we start requesting a cid async, e.g. non blocking
-func (self *hostDataService) basicFetch(ctx context.Context, id cid.Cid, fetcher exchange.Fetcher, owner string) error {
-
-	//get the root block
-	block, err := self.store.Get(id)
-	if err != nil {
-		//set expected owner to make sure bitswap knows where to look
-		self.store.SetExpectedOwnership(id, owner)
-		var err error
-		block, err = fetcher.GetBlock(ctx, id)
-		if err != nil {
-			self.store.ClearExpectedOwner(id)
-			return utils.StackError(err, "Unable to get root node")
-		}
-	}
-
-	if block.Cid() != id {
-		return fmt.Errorf("Received wrong block from exchange service")
-	}
-
-	//check if we need additional blocks (e.g. it's a multifile)
-	p2pblock, err := getP2PBlock(block)
-	if err != nil {
-		return utils.StackError(err, "Node is not expected type")
-	}
-
-	switch p2pblock.Type() {
-	case BlockRaw:
-		//we are done
-
-	case BlockDirectory:
-		//we go over all sub-cids and request them!
-		dirblock := p2pblock.(P2PDirectoryBlock)
-		needed, err := self.store.DoesNotHave(dirblock.Blocks)
-		if err != nil {
-			return err
-		}
-		//as we do not know which kind of block this cid is we use the normal request
-		//as this are subblocks we do not need to add the owner
-		for _, sub := range needed {
-			err := self.basicFetch(ctx, sub, fetcher, "")
-			if err != nil {
-				return utils.StackError(err, "Unable to fetch id %v", id.String())
-			}
-		}
-
-	case BlockFile:
-		//we are done
-
-	case BlockMultiFile:
-		//get the rest of the needed blocks
-		mfileblock := p2pblock.(P2PMultiFileBlock)
-		needed, err := self.store.DoesNotHave(mfileblock.Blocks)
-		if err != nil {
-			return utils.StackError(err, "Unable to fetch id %v", id.String())
-		}
-
-		num := len(needed)
-		channel, err := fetcher.GetBlocks(ctx, needed)
-		if err != nil {
-			return utils.StackError(err, "Unable to fetch id %v", id.String())
-		}
-		for range channel {
-			num--
-		}
-
-		if num != 0 {
-			return fmt.Errorf("Not all blocks could be fetched")
-		}
-
-	default:
-		return fmt.Errorf("Unknown block type")
-	}
-
-	//set ownership
-	if owner != "" {
-		err = self.store.SetOwnership(block, owner)
-		if err != nil {
-			utils.StackError(err, "Unable to set correct owner for id %v", id.String())
-		}
-	}
-
-	return nil
-}
-
-func (self *hostDataService) basicGetFile(ctx context.Context, id cid.Cid, fetcher exchange.Fetcher, owner string) (blocks.Block, *os.File, error) {
-
-	//make sure we have all blocks
-	if err := self.basicFetch(ctx, id, fetcher, owner); err != nil {
-		return nil, nil, utils.StackError(err, "Unable to get file %v", id.String())
-	}
-
-	//get the root
-	block, err := self.store.Get(id)
-	if err != nil {
-		return nil, nil, utils.StackError(err, "Unable to get file %v", id.String())
-	}
-
-	//see what we need to return
-	p2pblock, err := getP2PBlock(block)
-	if err != nil {
-		return nil, nil, utils.StackError(err, "Node is not expected type")
-	}
-
-	switch p2pblock.Type() {
-	case BlockRaw, BlockDirectory:
-		return nil, nil, fmt.Errorf("cid does not belong to a file")
-
-	case BlockFile, BlockMultiFile:
-		path := filepath.Join(self.datapath, block.Cid().String())
-		file, err := os.Open(path)
-
-		if err != nil {
-			return nil, nil, utils.StackError(err, "Unable to get file %v", id.String())
-		}
-		return block, file, nil
-
-	default:
-		return nil, nil, fmt.Errorf("Unknown block type")
-	}
-
-	return nil, nil, fmt.Errorf("Something got wrong")
-}
-
-func (self *hostDataService) basicWrite(ctx context.Context, id cid.Cid, path string, fetcher exchange.Fetcher, owner string) (string, error) {
-
-	//make sure we have the data!
-	if err := self.basicFetch(ctx, id, fetcher, owner); err != nil {
-		return "", utils.StackError(err, "Unable to get write %v", id.String())
-	}
-
-	//get the root node
-	block, err := self.store.Get(id)
-	if err != nil {
-		return "", utils.StackError(err, "Unable to get write %v", id.String())
-	}
-
-	//see what we need to do!
-	p2pblock, err := getP2PBlock(block)
-	if err != nil {
-		return "", utils.StackError(err, "Node is not expected type: Must be P2PDataBlock")
-	}
-
-	switch p2pblock.Type() {
-	case BlockRaw:
-		return "", fmt.Errorf("Cid does not belong to a raw block, which cannot be written")
-
-	case BlockDirectory:
-		//make sure we have the directory
-		dirblock := p2pblock.(P2PDirectoryBlock)
-		newpath := filepath.Join(path, dirblock.Name)
-		os.MkdirAll(newpath, os.ModePerm)
-		//we write every subfile to the directory!
-		for _, sub := range dirblock.Blocks {
-			_, err := self.basicWrite(ctx, sub, newpath, fetcher, owner)
-			if err != nil {
-				return "", utils.StackError(err, "Cannot write directory entry %v", sub.String())
-			}
-		}
-
-		return newpath, nil
-
-	case BlockFile, BlockMultiFile:
-
-		fpath := filepath.Join(self.datapath, block.Cid().String())
-		file, err := os.Open(fpath)
-		if err != nil {
-			return "", utils.StackError(err, "Unable to write %v", id.String())
-		}
-		defer file.Close()
-
-		namedblock := p2pblock.(P2PNamedBlock)
-		newpath := filepath.Join(path, namedblock.FileName())
-		destination, err := os.Create(newpath)
-		if err != nil {
-			return "", utils.StackError(err, "Unable to write %v", id.String())
-		}
-		defer destination.Close()
-		io.Copy(destination, file)
-
-		return newpath, nil
-
-	default:
-		return "", fmt.Errorf("Unknown block type")
-	}
-
-	return "", fmt.Errorf("Shoudn't be here...")
-}
-
-func (self *hostDataService) basicReadChannel(ctx context.Context, id cid.Cid, fetcher exchange.Fetcher, owner string) (chan []byte, error) {
-
-	_, file, err := self.basicGetFile(ctx, id, fetcher, owner)
-	if err != nil {
-		return nil, err
-	}
-
-	res := make(chan []byte, 0)
-	go func() {
-		defer file.Close()
-		defer close(res)
-
-		buf := make([]byte, blocksize)
-		for {
-			n, err := file.Read(buf)
-			if n == 0 {
-				return
-			}
-			res <- buf[:n]
-
-			//eof handled after roving the last data
-			if err != nil {
-				return
-			}
-
-			//check if context still open
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-		}
-	}()
-
-	return res, nil
-}
-
-func (self *hostDataService) basicDrop(id cid.Cid, owner string) error {
-
-	//get the root block
-	block, err := self.store.Get(id)
-	if err != nil {
-		return utils.StackError(err, "Unable to drop %v", id.String())
-	}
-	//release ownership
-	last, err := self.store.ReleaseOwnership(block, owner)
-	if err != nil {
-		return utils.StackError(err, "Unable to drop %v", id.String())
-	}
-
-	//there maybe someone else that needs this file, than we are done!
-	if !last {
-		return nil
-	}
-
-	//get all blocks to be deleted
-	p2pblock, err := getP2PBlock(block)
-	if err != nil {
-		return utils.StackError(err, "Unable to drop %v", id.String())
-	}
-
-	switch p2pblock.Type() {
-	case BlockRaw:
-		return fmt.Errorf("cid does not belong to a file or directory: cannot be dropped")
-
-	case BlockDirectory, BlockFile, BlockMultiFile:
-		//we need to do a garbage collect, as it may be that subfiles need deletion too
-		files, err := self.store.GarbageCollect()
-		if err != nil {
-			return utils.StackError(err, "Unable to drop %v", id.String())
-		}
-		self.store.DeleteBlocks(files)
-
-	default:
-		return fmt.Errorf("Unknown block type")
-	}
-
-	return nil
 }
 
 /******************************************************************************
-							SwarmDataService
+							SwarmhostDataService
 *******************************************************************************/
 
 //This dataservice behaves sligthly different than the normal one:
@@ -695,33 +405,23 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 	if err != nil {
 		return err
 	}
-
-	//drop ownership of all old files
-	for _, file := range self.files {
-		//release ownership
-		if block, err := self.service.data.store.Get(file); err != nil {
-
-			_, err = self.service.data.store.ReleaseOwnership(block, string(self.service.id))
-			if err != nil {
-				return err
-			}
-		}
+	
+	txn, err := self.service.owner.NewTransaction(false)
+	if err != nil {
+		return err
 	}
 
-	//grab ownership of new files
+	//drop ownership of all old files (blocks are handled by garbage collect)
+	for _, file := range self.files {
+		key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", file.String(), self.service.swarm.ID))
+		txn.Delete(key)
+	}
+
+	//get new files
 	for _, file := range list {
-		self.service.internalFetchAsync(file)
+		self.service.FetchAsync(file)
 	}
 	self.files = list
-
-	//garbage collect
-	files, err := self.service.data.store.GarbageCollect()
-	if err != nil {
-		return utils.StackError(err, "Unable to collect ownerless files during snapshot loading")
-	}
-	for _, file := range files {
-		self.service.internalDrop(file)
-	}
 
 	return nil
 }
@@ -741,23 +441,29 @@ func (self *dataState) HasFile(id cid.Cid) bool {
 }
 
 type swarmDataService struct {
-	data         *hostDataService
-	stateService *sharedStateService
+	dag 			dagHelper
+	swarm		*Swarm
+	owner 		datastore.TxnDatastore
 	state        *dataState
-	session      exchange.Fetcher
-	id           SwarmID
 	ctx          context.Context
 	cancel       context.CancelFunc
 }
 
 func newSwarmDataService(swarm *Swarm) DataService {
 
-	ctx, cncl := context.WithCancel(context.Background())
+	//create the merkle dag helper
+	hostService := swarm.host.Data.(*hostDataService)
+	dag := NewDAGService(string(swarm.ID), hostService.bitswap, hostService.ownerStore, hostService.blockStore)
 
-	data := swarm.host.Data.(*hostDataService)
-	session := data.bitswap.NewSession(ctx)
-
-	service := &swarmDataService{data, swarm.State, nil, session, swarm.ID, ctx, cncl}
+	//create the service
+	ctx, cncl := context.WithCancel(swarm.ctx)
+	service := &swarmDataService{dag: dagHelper{dag}, 
+								swarm:swarm,
+								owner: hostService.ownerStore,
+								ctx: ctx,
+								cancel: cncl}
+	
+	//handle the data state
 	service.state = newDataState(service)
 	swarm.State.share(service.state)
 
@@ -767,19 +473,19 @@ func newSwarmDataService(swarm *Swarm) DataService {
 func (self *swarmDataService) Add(ctx context.Context, path string) (Cid, error) {
 
 	//add the file
-	filecid, _, err := self.data.basicAdd(path, string(self.id))
+	filecid, err := self.dag.Add(ctx, path)
 	if err != nil {
 		return cid.Undef, err
 	}
-
+	
 	//store in shared state
 	cmd, err := dataStateCommand{filecid, false}.toByte()
 	if err != nil {
 		return cid.Undef, utils.StackError(err, "Unable to create command")
 	}
-	_, err = self.stateService.AddCommand(ctx, "dataState", cmd)
+	_, err = self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	if err != nil {
-		self.data.Drop(ctx, filecid)
+		self.dag.Drop(ctx, filecid)
 		return cid.Undef, utils.StackError(err, "Unable to share file with swarm members")
 	}
 
@@ -787,21 +493,21 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (Cid, error)
 	return filecid, nil
 }
 
-func (self *swarmDataService) AddBlocks(ctx context.Context, blocks Blockifyer) (Cid, error) {
+func (self *swarmDataService) AddData(ctx context.Context, data []byte) (Cid, error) {
 
-	filecid, _, err := self.data.basicAddBlocks(blocks, string(self.id))
+	filecid, err := self.dag.AddData(ctx, data)
 	if err != nil {
-		return cid.Cid{}, utils.StackError(err, "Unable to add blockifyer")
+		return cid.Undef, err
 	}
-
+	
 	//store in shared state
 	cmd, err := dataStateCommand{filecid, false}.toByte()
 	if err != nil {
 		return cid.Undef, utils.StackError(err, "Unable to create command")
 	}
-	_, err = self.stateService.AddCommand(ctx, "dataState", cmd)
+	_, err = self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	if err != nil {
-		self.data.Drop(ctx, filecid)
+		self.dag.Drop(ctx, filecid)
 		return cid.Undef, utils.StackError(err, "Unable to share blocks with swarm members")
 	}
 
@@ -812,7 +518,7 @@ func (self *swarmDataService) AddBlocks(ctx context.Context, blocks Blockifyer) 
 func (self *swarmDataService) AddAsync(path string) (Cid, error) {
 
 	//add the file
-	filecid, _, err := self.data.basicAdd(path, string(self.id))
+	filecid, err := self.dag.AddAsync(path)
 	if err != nil {
 		return cid.Undef, err
 	}
@@ -821,7 +527,7 @@ func (self *swarmDataService) AddAsync(path string) (Cid, error) {
 		//store in shared state
 		cmd, _ := dataStateCommand{filecid, false}.toByte()
 		ctx, _ := context.WithTimeout(self.ctx, 10*time.Hour)
-		self.stateService.AddCommand(ctx, "dataState", cmd)
+		self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	}()
 
 	//return
@@ -830,12 +536,12 @@ func (self *swarmDataService) AddAsync(path string) (Cid, error) {
 
 func (self *swarmDataService) Drop(ctx context.Context, id Cid) error {
 
-	//drop the file in the swarm.
+	//drop the file in the swarm (real drop handled in state handler)
 	cmd, err := dataStateCommand{id, true}.toByte()
 	if err != nil {
 		return utils.StackError(err, "Unable to create drop command")
 	}
-	_, err = self.stateService.AddCommand(ctx, "dataState", cmd)
+	_, err = self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	if err != nil {
 		utils.StackError(err, "Unable to drop file within swarm")
 	}
@@ -851,7 +557,7 @@ func (self *swarmDataService) Fetch(ctx context.Context, id Cid) error {
 	}
 	//even if we have it in the state list, we fetch it anyway to make sure all blocks are received after the fetch call
 	//(we could be in fetching phase)
-	return self.data.basicFetch(ctx, id, self.session, string(self.id))
+	return self.dag.Fetch(ctx, id)
 }
 
 func (self *swarmDataService) FetchAsync(id Cid) error {
@@ -862,12 +568,13 @@ func (self *swarmDataService) FetchAsync(id Cid) error {
 	}
 
 	//we don't need to start a fetch, as it is to be expected that after this call the data may not be fully fetched yet
+	//and if it is in the state fetching already takes place
 	return nil
 }
 
-func (self *swarmDataService) GetFile(ctx context.Context, id Cid) (*os.File, error) {
+func (self *swarmDataService) Get(ctx context.Context, id Cid) (io.Reader, error) {
 
-	_, file, err := self.data.basicGetFile(ctx, id, self.session, string(self.id))
+	reader, err := self.dag.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -876,16 +583,16 @@ func (self *swarmDataService) GetFile(ctx context.Context, id Cid) (*os.File, er
 	if !self.state.HasFile(id) {
 		//store in shared state
 		cmd, _ := dataStateCommand{id, false}.toByte()
-		self.stateService.AddCommand(ctx, "dataState", cmd)
+		self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	}
 
-	return file, err
+	return reader, err
 }
 
 func (self *swarmDataService) Write(ctx context.Context, id Cid, path string) (string, error) {
 
 	//see if we can get the data
-	path, err := self.data.basicWrite(ctx, id, path, self.session, string(self.id))
+	path, err := self.dag.Write(ctx, id, path)
 	if err != nil {
 		return "", err
 	}
@@ -894,7 +601,7 @@ func (self *swarmDataService) Write(ctx context.Context, id Cid, path string) (s
 	if !self.state.HasFile(id) {
 		//store in shared state
 		cmd, _ := dataStateCommand{id, false}.toByte()
-		self.stateService.AddCommand(ctx, "dataState", cmd)
+		self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	}
 
 	return path, nil
@@ -902,7 +609,7 @@ func (self *swarmDataService) Write(ctx context.Context, id Cid, path string) (s
 
 func (self *swarmDataService) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
 
-	c, err := self.data.basicReadChannel(ctx, id, self.session, string(self.id))
+	c, err := self.dag.ReadChannel(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -911,21 +618,26 @@ func (self *swarmDataService) ReadChannel(ctx context.Context, id Cid) (chan []b
 	if !self.state.HasFile(id) {
 		//store in shared state
 		cmd, _ := dataStateCommand{id, false}.toByte()
-		self.stateService.AddCommand(ctx, "dataState", cmd)
+		self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	}
 
 	return c, nil
 }
 
-func (self *swarmDataService) Close() {
+func (self *swarmDataService) HasLocal(id Cid) bool  {
+	return self.state.HasFile(id)
+}
 
+func (self *swarmDataService) Close() {
+	self.cancel()
 }
 
 //internal data service functions to be called by data state
+//(without adding stuff to the state)
 
 func (self *swarmDataService) internalFetch(ctx context.Context, id cid.Cid) error {
 
-	err := self.data.basicFetch(ctx, id, self.session, string(self.id))
+	err := self.dag.Fetch(ctx, id)
 	if err != nil {
 		return utils.StackError(err, "Unable to fetch id %v", id.String())
 	}
@@ -937,14 +649,15 @@ func (self *swarmDataService) internalFetchAsync(id cid.Cid) error {
 
 	go func() {
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
-		self.data.basicFetch(ctx, id, self.session, string(self.id))
+		self.dag.Fetch(ctx, id)
 	}()
 	return nil
 }
 
 func (self *swarmDataService) internalDrop(id cid.Cid) error {
 
-	err := self.data.basicDrop(id, string(self.id))
+	ctx, _ := context.WithTimeout(self.ctx, 1*time.Hour)
+	err := self.dag.Drop(ctx, id)
 	if err != nil {
 		return utils.StackError(err, "Unable to drop id %v", id.String())
 	}

@@ -148,7 +148,8 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to setup distributed hash table")
 	}
-
+	
+	
 	//bootstrap if required (means connect to online nodes)
 	conf := GetDefaultBootstrapConfig()
 	if !shouldBootstrap {

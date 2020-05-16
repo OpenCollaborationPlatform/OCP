@@ -163,7 +163,7 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	//create the document by joining it
 	doc, err := NewDocument(ctx, self.router, self.host, cid, docID, true)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to open document")
 	}
 
 	self.mutex.Lock()

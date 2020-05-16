@@ -13,8 +13,8 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 
 	blocks "github.com/ipfs/go-block-format"
-	ipfslog "github.com/ipfs/go-log"
-	ipfswriter "github.com/ipfs/go-log/writer"
+//	ipfslog "github.com/ipfs/go-log"
+//	ipfswriter "github.com/ipfs/go-log/writer"
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
@@ -29,9 +29,9 @@ func init() {
 	//disable logging for this tests
 	//log.SetOutput(ioutil.Discard)
 
-	ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"
-	ipfswriter.LevelInfo()
-	ipfslog.GetSubsystems() //just to not need to remove import
+//	ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"#
+//	ipfswriter.LevelInfo()
+//	ipfslog.GetSubsystems() //just to not need to remove import
 	//ipfslog.SetDebugLogging()
 
 }
@@ -145,15 +145,13 @@ func randomBlock(size int) blocks.Block {
 	data := make([]byte, size)
 	rand.Read(data)
 
-	block := P2PFileBlock{"RandomBlock", data}
-	return block.ToBlock()
+	return blocks.NewBlock(data)
 }
 
 func repeatableBlock(size int) blocks.Block {
 
 	data := RepeatableData(size)
-	block := P2PFileBlock{"RepeatableBlock", data}
-	return block.ToBlock()
+	return blocks.NewBlock(data)
 }
 
 func RepeatableData(size int) []byte {
