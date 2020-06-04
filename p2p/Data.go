@@ -144,6 +144,7 @@ func (self *dagHelper) Get(ctx context.Context, id Cid) (io.Reader, error) {
 	return files.ToFile(filenode), nil
 }
 
+//write result into path (including file/dir name)
 func (self *dagHelper) Write(ctx context.Context, id Cid, path string) (string, error) {
 
 	resnode, err := self.dag.Get(ctx, id)
@@ -155,12 +156,11 @@ func (self *dagHelper) Write(ctx context.Context, id Cid, path string) (string, 
 	 	return "", err
 	}
 	
-	fullpath := filepath.Join(path, id.String())
 	if err != nil {
 		return "", err
 	}
-	err = files.WriteTo(resfile, fullpath)
-	return fullpath, err
+	err = files.WriteTo(resfile, path)
+	return path, err
 	
 }
 
@@ -174,7 +174,7 @@ func (self *dagHelper) ReadChannel(ctx context.Context, id Cid) (chan []byte, er
 	
 	result := make(chan []byte, 0)
 	go func() {
-		data := make([]byte, 1e3)
+		data := make([]byte, 1e6)
 		for {
 			n, err := reader.Read(data)
 			if n>0 {

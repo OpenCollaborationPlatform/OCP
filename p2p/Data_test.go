@@ -285,7 +285,6 @@ func TestDataService(t *testing.T) {
 				Convey("as well as accessing it from ourself", func() {
 					//try write it to the original path
 					newpath := filepath.Join(path, "results")
-					os.MkdirAll(newpath,  os.ModePerm)
 
 					res2path, err := h1.Data.Write(ctx, res2, newpath)
 					defer os.RemoveAll(newpath)
@@ -300,7 +299,6 @@ func TestDataService(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					newpath := filepath.Join(path, "results2")
-					os.MkdirAll(newpath, os.ModePerm)
 					res2path, err := h2.Data.Write(ctx, res2, newpath)
 					defer os.RemoveAll(newpath)
 
@@ -653,7 +651,6 @@ func TestSwarmDataService(t *testing.T) {
 				Convey("as well as accessing it from ourself", func() {
 					//try write it to the original path
 					newpath := filepath.Join(path, "results")
-					os.MkdirAll(newpath, os.ModePerm)
 					res2path, err := sw1.Data.Write(ctx, res2, newpath)
 					defer os.RemoveAll(newpath)
 
@@ -667,7 +664,6 @@ func TestSwarmDataService(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					newpath := filepath.Join(path, "results2")
-					os.MkdirAll(newpath, os.ModePerm)
 					res2path, err := sw2.Data.Write(ctx, res2, newpath)
 					defer os.RemoveAll(newpath)
 

@@ -264,8 +264,7 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 	arg := inv.Arguments[1] //Arg is allowed to be everything
 
 	//make the progressive call!
-	block := p2p.NewStreamBlockifyer()
-	channel := block.Start()
+	block := make([]byte, 0)
 	callback := func(result *wamp.Result) {
 		//get the data block
 		if len(result.Arguments) != 1 {
@@ -276,9 +275,9 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 		res := result.Arguments[0]
 		switch res.(type) {
 		case []byte:
-			channel <- res.([]byte)
+			block  =  append(block, res.([]byte)...)
 		case string:
-			channel <- []byte(res.(string))
+			block =  append(block, []byte(res.(string))...)
 		}
 	}
 	res, err := self.client.Call(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, callback)
@@ -290,22 +289,21 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 		data := res.Arguments[0]
 		switch data.(type) {
 		case []byte:
-			channel <- data.([]byte)
+			block  =  append(block, data.([]byte)...)
 		case string:
-			channel <- []byte(data.(string))
+			block =  append(block, []byte(data.(string))...)
 		default:
 			msg := fmt.Sprintf("Binary data not received as binary but %T", res.Arguments[0])
 			return p2p.Cid{}, fmt.Errorf(msg)
 		}
 	}
-	block.Stop()
 	if err != nil {
 		msg := utils.StackError(err, "Cannot call provided URI").Error()
 		return p2p.Cid{}, fmt.Errorf(msg)
 	}
 
 	//add the data we received
-	cid, err := self.swarm.Data.AddBlocks(ctx, block)
+	cid, err := self.swarm.Data.AddData(ctx, block)
 	if err != nil {
 		msg := utils.StackError(err, "Unable to distribute data").Error()
 		return p2p.Cid{}, fmt.Errorf(msg)
@@ -447,7 +445,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return self.executeOperation(ctx, op)
 
 			case "ReadBinary":
-
+			
 				//get the cid from the data object!
 				val, err := self.dml.Call(dml.User(auth), string(path)+".Get")
 				if err != nil {

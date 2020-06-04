@@ -278,7 +278,7 @@ func TestDatastructureData(t *testing.T) {
 		ds.Start(swarm)
 		defer swarm.Close(context.Background())
 
-		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
 		Convey("RawData object can load file data", func() {
 
@@ -316,11 +316,11 @@ func TestDatastructureData(t *testing.T) {
 			Convey("The data can be taken out of the datastructure into a file again", func() {
 
 				os.Remove(testfilepath)
-				res, err := testClient.Call(ctx, "ocp.test.rawdata.Test.RawData.WriteIntoPath", opts, wamp.List{path}, wamp.Dict{}, nil)
+				filepath := filepath.Join(path, "resultfile")
+				res, err := testClient.Call(ctx, "ocp.test.rawdata.Test.RawData.WriteIntoPath", opts, wamp.List{filepath}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				So(res.Arguments[0], ShouldEqual, testfilepath)
 
-				stat, err := os.Stat(testfilepath)
+				stat, err := os.Stat(res.Arguments[0].(string))
 				So(err, ShouldBeNil)
 				So(stat.Size(), ShouldEqual, 555)
 			})

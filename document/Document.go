@@ -36,7 +36,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	}
 
 	//add the dml file
-	_, err = host.Data.Write(ctx, dml, path)
+	_, err = host.Data.Write(ctx, dml, filepath.Join(path, "Dml"))
 	if err != nil {
 		os.RemoveAll(path)
 		return Document{}, utils.StackError(err, "Unable to fetch document data description (dml file)")
