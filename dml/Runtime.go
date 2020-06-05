@@ -58,6 +58,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 		mainObj:            nil,
 		initialObjRefcount: 0,
 		transactions:       &TransactionManager{},
+		gcObjects:          make([]Identifier, 0),
 	}
 
 	//build the managers and expose
@@ -538,6 +539,7 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 			self.jsObjMap.Set(id.Encode(), nil)
 		}
 	}
+	self.gcObjects = self.gcObjects[:0]
 
 	return postError
 }
