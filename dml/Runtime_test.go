@@ -60,11 +60,11 @@ func TestDmlFile(t *testing.T) {
 			code = `Document.testConst = 1`
 			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldNotBeNil)
-			
+
 			code = `Document.testConst = 1`
 			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldNotBeNil)
-			
+
 			code = `Document.testO = Document.ThisTest`
 			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
@@ -237,16 +237,16 @@ func TestDmlFile(t *testing.T) {
 		})
 
 		Convey("This assignment in functions works as expected", func() {
-			
+
 			thiscode := `Document.ThisTest.assign()
 						Document.ThisTest.Sub.test.Emit()`
-						
+
 			_, err := rntm.RunJavaScript("", thiscode)
 			So(err, ShouldBeNil)
 		})
-		
+
 		Convey("and const functions are recognized", func() {
-								
+
 			c, err := rntm.IsConstant("Document.readString")
 			So(err, ShouldBeNil)
 			So(c, ShouldBeTrue)

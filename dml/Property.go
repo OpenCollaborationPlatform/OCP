@@ -88,7 +88,7 @@ type dataProperty struct {
 	eventHandler
 	propertyType DataType
 	db           datastore.ValueVersioned
-	rntm 		*Runtime
+	rntm         *Runtime
 }
 
 func (self dataProperty) Type() DataType {
@@ -106,7 +106,7 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	if err != nil {
 		return err
 	}
-	
+
 	//check if it is a object and handle it accordingly
 	obj, isobj := val.(Object)
 	if isobj {
@@ -116,8 +116,8 @@ func (self *dataProperty) SetValue(val interface{}) error {
 			return utils.StackError(err, "Unable to increase refcount")
 		}
 	}
-	
-	//check if the old, currently stored type is a object, as than we need to 
+
+	//check if the old, currently stored type is a object, as than we need to
 	//decrease refcount
 	if self.propertyType.IsObject() || self.propertyType.IsComplex() {
 		val, err := self.db.Read()
@@ -125,11 +125,11 @@ func (self *dataProperty) SetValue(val interface{}) error {
 			return utils.StackError(err, "Unable to read current value")
 		}
 		str, ok := val.(string)
-		if ok {	
+		if ok {
 			id, err := IdentifierFromEncoded(str)
 			if err == nil {
 				obj, ok := self.rntm.objects[id]
-				if (ok) {
+				if ok {
 					obj.DecreaseRefcount()
 				}
 			}
@@ -144,7 +144,7 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	self.GetEvent("onBeforeChange").Emit(val)
 	if isobj {
 		err = self.db.Write(obj.Id().Encode())
-	
+
 	} else {
 		err = self.db.Write(val)
 	}
@@ -165,7 +165,7 @@ func (self *dataProperty) GetValue() interface{} {
 		log.Printf("Error reading value: %s", err)
 		return nil
 	}
-	
+
 	//check if the type is a object
 	if self.propertyType.IsObject() || self.propertyType.IsComplex() {
 		str, ok := val.(string)
@@ -179,12 +179,12 @@ func (self *dataProperty) GetValue() interface{} {
 				}
 				return obj
 			}
-		
-		} else  {
+
+		} else {
 			return nil
 		}
 	}
-	
+
 	return val
 }
 
@@ -371,30 +371,30 @@ func (self *propertyHandler) SetupJSProperties(rntm *Runtime, obj *goja.Object) 
 
 		var propname string = name
 		getter := rntm.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
-			
+
 			//return ob object is different than POD
 			val := self.GetProperty(propname).GetValue()
 			obj, ok := val.(Object)
 			if ok {
 				return obj.GetJSObject()
 			}
-			
+
 			return rntm.jsvm.ToValue(val)
 		})
 
 		setter := rntm.jsvm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
-			
+
 			if len(call.Arguments) != 1 {
 				//panic becomes exception in JS
 				panic(rntm.jsvm.ToValue(fmt.Sprintf("Property setting requires exactly one argument")))
 			}
-			
+
 			p := self.GetProperty(propname)
 			if p.IsConst() {
 				//panic becomes exception in JS
 				panic(rntm.jsvm.ToValue(fmt.Sprintf("Property %s is constant", propname)))
 			}
-			
+
 			//convert goja args to go ones
 			args := extractArgs(call.Arguments, rntm)
 			err := p.SetValue(args[0])

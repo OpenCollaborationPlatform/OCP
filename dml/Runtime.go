@@ -101,6 +101,7 @@ type Runtime struct {
 	objects            map[Identifier]Data
 	mainObj            Data
 	initialObjRefcount uint64
+	gcObjects          []Identifier //garbage collection objects
 
 	//managers
 	transactions *TransactionManager
@@ -272,38 +273,38 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 }
 
 func (self *Runtime) IsConstant(fullpath string) (bool, error) {
-	
+
 	self.datastore.Begin()
 	defer self.datastore.Rollback()
-	
+
 	//get path and accessor
 	idx := strings.LastIndex(string(fullpath), ".")
 	path := fullpath[:idx]
 	accessor := fullpath[(idx + 1):]
-	
+
 	//the relevant object
 	obj, err := self.getObjectFromPath(path)
 	if err != nil {
 		return false, err
 	}
-	
+
 	//check if it is a method that could be const
 	if obj.HasMethod(accessor) {
 		fnc := obj.GetMethod(accessor)
 		return fnc.IsConst(), nil
 	}
-	
+
 	//check if it is a proprty that could be const
 	if obj.HasProperty(accessor) {
 		prop := obj.GetProperty(accessor)
 		return prop.IsConst(), nil
 	}
-	
+
 	//events are always non-const
 	if obj.HasEvent(accessor) {
 		return false, nil
 	}
-	
+
 	//the only alternative left is a direct value access. This is always const
 	return true, nil
 }
@@ -317,7 +318,7 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 
 	//save the user for processing
 	self.currentUser = user
-	
+
 	//get path and accessor
 	idx := strings.LastIndex(string(fullpath), ".")
 	path := fullpath[:idx]
@@ -329,11 +330,11 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		self.datastore.Rollback()
 		return nil, err
 	}
-	
+
 	handled := false
 	var result interface{} = nil
 	err = nil
-	
+
 	//check if it is a method
 	if obj.HasMethod(accessor) {
 		fnc := obj.GetMethod(accessor)
@@ -345,37 +346,37 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		e, ok := result.(error)
 		if ok {
 			err = e
-		
-		} 
+
+		}
 		if fnc.IsConst() {
 			err := self.datastore.Rollback()
 			return result, err
 		}
 	}
-	
+
 	//a property maybe?
 	if !handled && obj.HasProperty(accessor) {
 		prop := obj.GetProperty(accessor)
-		
+
 		if len(args) == 0 {
 			//read only
 			result = prop.GetValue()
 			self.datastore.Rollback()
 			return result, nil
-		
+
 		} else {
 			err = prop.SetValue(args[0])
 			result = args[0]
 		}
 		handled = true
 	}
-	
+
 	//an event?
 	if !handled && obj.HasEvent(accessor) {
 		err = obj.GetEvent(accessor).Emit(args...)
 		handled = true
-	} 
-	
+	}
+
 	//or a simple value?
 	if !handled {
 		dat, ok := obj.(Data)
@@ -388,13 +389,13 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 			}
 		}
 	}
-	
+
 	//was it handled? If not no change to db was done
 	if !handled {
 		self.datastore.Rollback()
 		return nil, fmt.Errorf("No accessor %v known in object %v", accessor, path)
 	}
-	
+
 	//did an error occure?
 	if err != nil {
 		self.postprocess(true)
@@ -477,15 +478,15 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Identifier %v is not available in object %v", name, obj.Id().Name)
 		}
-		
+
 		//check if it is a behaviour, and if so end here
 		_, isBehaviour := child.(Behaviour)
 		if isBehaviour {
 			return child, nil
 		}
-		
+
 		obj = child.(Data)
-		
+
 	}
 	return obj, nil
 }
@@ -518,7 +519,6 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 				}
 			}
 
-
 			//handle the versioning
 
 		}
@@ -530,16 +530,13 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 	}
 
 	//garbace collection: which objects can be removed?
-	removers := make([]Identifier, 0)
-	for id, obj := range self.objects {
-		rc, _ := obj.GetRefcount()
+	for _, id := range self.gcObjects {
+		//we do check the refcount, just to double check (could be decreased to 0 and than increased again)
+		rc, _ := self.objects[id].GetRefcount()
 		if rc == 0 {
-			removers = append(removers, id)
+			delete(self.objects, id)
+			self.jsObjMap.Set(id.Encode(), nil)
 		}
-	}
-	for _, id := range removers {
-		delete(self.objects, id)
-		self.jsObjMap.Set(id.Encode(), nil)
 	}
 
 	return postError
@@ -706,7 +703,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 		jsChildren := make([]goja.Value, 0)
 
 		for _, astChild := range astObj.Objects {
-			
+
 			//build the child
 			child, err := self.buildObject(astChild, obj.Id(), "")
 			if err != nil {

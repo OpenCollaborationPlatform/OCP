@@ -4,8 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ickby/CollaborationNode/utils"
-
-	"github.com/mr-tron/base58/base58"
+	//"github.com/mr-tron/base58/base58"
 )
 
 //a datatype can be either a pod type or any complex dml object
@@ -35,7 +34,7 @@ func NewDataType(val interface{}) (DataType, error) {
 			if err != nil {
 				return DataType{}, utils.StackError(err, "Unable to marshal AST type representation into DataType")
 			}
-			result = DataType{base58.Encode(data)}
+			result = DataType{string(data)} //DataType{base58.Encode(data)}
 
 		} else {
 			result = DataType{ast.Pod}
@@ -48,7 +47,7 @@ func NewDataType(val interface{}) (DataType, error) {
 		if err != nil {
 			return DataType{}, utils.StackError(err, "Unable to marshal AST type representation into DataType")
 		}
-		result = DataType{base58.Encode(data)}
+		result = DataType{string(data)} //DataType{base58.Encode(data)}
 	}
 
 	return result, nil
@@ -149,12 +148,12 @@ func (self DataType) complexAsAst() (*astObject, error) {
 		return nil, fmt.Errorf("DataType is not complex, convertion into AST not possible")
 	}
 
-	data, err := base58.Decode(self.value)
+	/*data, err := base58.Decode(self.value)
 	if err != nil {
 		return nil, utils.StackError(err, "Passed string is not a valid type description: unable to decode")
-	}
+	}*/
 	var astObj *astObject
-	err = json.Unmarshal(data, &astObj)
+	err := json.Unmarshal([]byte(self.value), &astObj)
 	if err != nil {
 		return nil, utils.StackError(err, "Passed string is not a valid type desciption: unable to unmarshal")
 	}

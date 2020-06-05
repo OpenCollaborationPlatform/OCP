@@ -323,8 +323,8 @@ func (self *TransactionManager) Add(obj Data) error {
 
 	//check if object is not already in annother transaction
 	if bhvr.InTransaction() {
-		
-		objTrans,  err := bhvr.GetTransaction()
+
+		objTrans, err := bhvr.GetTransaction()
 		if err != nil {
 			return err
 		}
@@ -449,7 +449,7 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 }
 
 func (self *TransactionManager) Handle(bhvr Behaviour) error {
-	
+
 	obj := bhvr.GetParent()
 	if recursiveHasUpdates(obj) {
 		trans, err := self.getTransaction()
@@ -458,27 +458,27 @@ func (self *TransactionManager) Handle(bhvr Behaviour) error {
 		}
 		return trans.AddObject(obj.Id())
 	}
-	
+
 	return nil
 }
 
 func recursiveHasUpdates(obj Object) bool {
-	
+
 	if has, _ := obj.HasUpdates(); has {
 		return true
 	}
-	
+
 	data, isData := obj.(Data)
 	if isData {
 		objs := data.GetSubobjects(true, true)
-		
+
 		for _, obj := range objs {
 			if recursiveHasUpdates(obj) {
 				return true
 			}
-		}		
+		}
 	}
-	
+
 	return false
 }
 
@@ -553,7 +553,7 @@ func (self *transactionBehaviour) InCurrentTransaction() bool {
 	if err != nil {
 		return false
 	}
-	
+
 	return trans.HasObject(self.GetParent().Id())
 }
 

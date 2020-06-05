@@ -8,8 +8,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 	gonum "gonum.org/v1/gonum/graph"
 	"gonum.org/v1/gonum/graph/simple"
-	trav "gonum.org/v1/gonum/graph/traverse"
 	topo "gonum.org/v1/gonum/graph/topo"
+	trav "gonum.org/v1/gonum/graph/traverse"
 
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
@@ -670,7 +670,7 @@ func (self *graph) Cycles() ([][]interface{}, error) {
 }
 
 func (self *graph) ReachableNodes(node interface{}) ([]interface{}, error) {
-	
+
 	//check if node exists
 	has, err := self.HasNode(node)
 	if err != nil {
@@ -682,15 +682,15 @@ func (self *graph) ReachableNodes(node interface{}) ([]interface{}, error) {
 
 	//get the graph
 	graph, mapper := self.getGonumGraph()
-	
+
 	//build the search fnc
 	nodes := make([]gonum.Node, 0)
 	search := trav.BreadthFirst{
-			Visit: func(node gonum.Node) {
-				nodes = append(nodes, node)
-			},
+		Visit: func(node gonum.Node) {
+			nodes = append(nodes, node)
+		},
 	}
-	
+
 	//run the search
 	search.Walk(graph, mapper[node], nil)
 
@@ -874,12 +874,11 @@ func (self *graph) DecreaseRefcount() error {
 	return self.object.DecreaseRefcount()
 }
 
-
 func (self *graph) GetSubobjects(bhvr bool, prop bool) []Object {
-	
+
 	//get default objects
 	res := self.DataImpl.GetSubobjects(bhvr, prop)
-	
+
 	//handle nodes
 	dt := self.nodeDataType()
 	if dt.IsObject() || dt.IsComplex() {
@@ -888,10 +887,10 @@ func (self *graph) GetSubobjects(bhvr bool, prop bool) []Object {
 		if err == nil {
 
 			for _, key := range keys {
-	
+
 				id, err := IdentifierFromEncoded(key.(string))
 				if err == nil {
-			
+
 					existing, ok := self.rntm.objects[id]
 					if ok {
 						res = append(res, existing)
@@ -907,12 +906,12 @@ func (self *graph) GetSubobjects(bhvr bool, prop bool) []Object {
 
 		keys, err := self.edgeData.GetKeys()
 		if err == nil {
-	
+
 			for _, key := range keys {
-	
+
 				id, err := IdentifierFromEncoded(key.(string))
 				if err != nil {
-	
+
 					existing, ok := self.rntm.objects[id]
 					if ok {
 						res = append(res, existing)
@@ -921,10 +920,9 @@ func (self *graph) GetSubobjects(bhvr bool, prop bool) []Object {
 			}
 		}
 	}
-	
+
 	return res
 }
-
 
 func (self *graph) nodeDataType() DataType {
 

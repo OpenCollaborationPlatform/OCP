@@ -1,11 +1,11 @@
 package dml
 
 import (
-	"fmt"
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
 	"encoding/json"
+	"fmt"
 	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/mr-tron/base58/base58"
@@ -67,4 +67,3 @@ func (self Identifier) String() string {
 	var emptyByte [32]byte
 	return fmt.Sprintf("Id{Name: %v; Type: %v; HasParent: %v, Uuid: %v}", self.Name, self.Type, !bytes.Equal(self.Parent[:], emptyByte[:]), self.Uuid)
 }
-

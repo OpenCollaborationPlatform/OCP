@@ -76,7 +76,7 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create refcount database entry")
 	}
-	
+
 	//default value
 	holds, err := vvRefCnt.HoldsValue()
 	if err != nil {
@@ -144,6 +144,11 @@ func (self *object) DecreaseRefcount() error {
 		return err
 	}
 	self.refCount.Write(current - 1)
+
+	//register for deletion if refcount == 0
+	if current == 1 {
+		self.rntm.gcObjects = append(self.rntm.gcObjects, self.id)
+	}
 	return nil
 }
 

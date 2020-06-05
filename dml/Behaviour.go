@@ -27,7 +27,7 @@ func NewBehaviour(id Identifier, parent Identifier, rntm *Runtime) (*behaviour, 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create base object for behaviour %s", id.String())
 	}
-	result := behaviour{obj,}
+	result := behaviour{obj}
 
 	//add default behaviour properties
 	err = result.AddProperty(`recursive`, MustNewDataType("bool"), false, true)

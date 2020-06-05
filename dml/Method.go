@@ -37,7 +37,7 @@ func MustNewMethod(fnc interface{}, constant bool) Method {
 }
 
 type method struct {
-	fnc reflect.Value
+	fnc      reflect.Value
 	constant bool
 }
 
@@ -90,9 +90,9 @@ func (self *method) IsConst() bool {
 
 //special method type that handles js functions
 type jsMethod struct {
-	fnc   func(goja.FunctionCall) goja.Value
-	rntm  *Runtime
-	jsobj *goja.Object
+	fnc      func(goja.FunctionCall) goja.Value
+	rntm     *Runtime
+	jsobj    *goja.Object
 	constant bool
 }
 

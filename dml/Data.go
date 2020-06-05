@@ -12,15 +12,15 @@ import (
 type Data interface {
 	Object
 	BehaviourHandler
-	
+
 	//Access a value by name. Coul be overriden by some objects, e.g. maps and vectors
 	GetValueByName(name string) interface{}
 
 	//Data hirarchy allows childs
 	AddChild(obj Data)
 	GetChildren() []Data
-	GetChildByName(name string) (Data, error)								
-	
+	GetChildByName(name string) (Data, error)
+
 	//Subobject handling is more than only childres
 	//Hirarchy + dynamic objects, optional behaviour + object properties
 	GetSubobjects(bhvr bool, prop bool) []Object
@@ -44,7 +44,7 @@ func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) (*DataImp
 	if err != nil {
 		return nil, err
 	}
-	
+
 	dat := DataImpl{
 		obj,
 		NewBehaviourHandler(),
@@ -79,16 +79,15 @@ func (self *DataImpl) GetChildByName(name string) (Data, error) {
 }
 
 func (self *DataImpl) GetSubobjects(bhvr bool, prop bool) []Object {
-	
+
 	result := make([]Object, 0)
-	
+
 	//add hirarchy
 	children := self.GetChildren()
 	for _, child := range children {
 		result = append(result, child)
 	}
-	
-	
+
 	//add behaviour
 	if bhvr {
 		bhvrs := self.Behaviours()
@@ -96,7 +95,7 @@ func (self *DataImpl) GetSubobjects(bhvr bool, prop bool) []Object {
 			result = append(result, self.GetBehaviour(name))
 		}
 	}
-	
+
 	//search object properties
 	if prop {
 		props := self.GetProperties()
@@ -111,26 +110,25 @@ func (self *DataImpl) GetSubobjects(bhvr bool, prop bool) []Object {
 			}
 		}
 	}
-	
+
 	return result
 }
 
-
 func (self *DataImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
-	
+
 	//search hirarchy
 	child, err := self.GetChildByName(name)
 	if err == nil {
 		return child, nil
 	}
-	
+
 	//search behaviour
 	if bhvr {
-		if self.HasBehaviour(name) { 
+		if self.HasBehaviour(name) {
 			return self.GetBehaviour(name), nil
 		}
 	}
-	
+
 	//search object properties
 	if prop {
 		props := self.GetProperties()
@@ -147,7 +145,7 @@ func (self *DataImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Obj
 			}
 		}
 	}
-	
+
 	return nil, fmt.Errorf("No such name known")
 }
 

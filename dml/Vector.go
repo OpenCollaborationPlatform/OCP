@@ -2,10 +2,10 @@
 package dml
 
 import (
-	"strconv"
 	"fmt"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
+	"strconv"
 )
 
 //vector type: stores requested data type by index (0-based)
@@ -168,19 +168,18 @@ func (self *vector) GetAll() (interface{}, error) {
 
 	length, _ := self.Length()
 	list := make([]interface{}, length)
-	
-	for idx:=int64(0); idx<length; idx++ {
 
-		result, err := self.Get(idx)	
+	for idx := int64(0); idx < length; idx++ {
+
+		result, err := self.Get(idx)
 		if err != nil {
 			return nil, err
-		}		
+		}
 		list[idx] = result
 	}
 
 	return list, nil
 }
-
 
 func (self *vector) Set(idx int64, value interface{}) error {
 
@@ -227,7 +226,7 @@ func (self *vector) Set(idx int64, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to write vector at idx %v", idx)
 	}
-	
+
 	self.GetEvent("onChange").Emit()
 	return nil
 }
@@ -348,7 +347,7 @@ func (self *vector) Remove(idx int64) error {
 			data.DecreaseRefcount()
 		}
 	}
-	
+
 	//inform that we are going to remove
 	self.GetEvent("onDeleteEntry").Emit(idx)
 
@@ -551,10 +550,10 @@ func (self *vector) print() {
 }
 
 func (self *vector) GetSubobjects(bhvr bool, prop bool) []Object {
-	
+
 	//get default objects
 	res := self.DataImpl.GetSubobjects(bhvr, prop)
-	
+
 	dt := self.entryDataType()
 	if dt.IsObject() || dt.IsComplex() {
 		//iterate over all entries and add them
@@ -572,50 +571,49 @@ func (self *vector) GetSubobjects(bhvr bool, prop bool) []Object {
 			}
 		}
 	}
-	
+
 	return res
 }
 
 func (self *vector) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
-	
+
 	//default search
 	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr, prop)
 	if err == nil {
 		return obj, nil
 	}
-	
+
 	//let's see if it is a index
 	i, err := strconv.ParseInt(name, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("No such idx available")
 	}
-	
+
 	res, err := self.Get(i)
 	if err != nil {
 		return nil, utils.StackError(err, "No index %v available in %v", name, obj.Id().Name)
 	}
-	
+
 	obj, ok := res.(Object)
 	if !ok {
 		return nil, fmt.Errorf("Index is %v not a object", name)
 	}
-	
+
 	return obj, nil
 }
 
 func (self *vector) GetValueByName(name string) interface{} {
-	
-	
+
 	//let's see if it is a index
 	i, err := strconv.ParseInt(name, 10, 64)
 	if err != nil {
 		return nil
 	}
-	
+
 	res, err := self.Get(i)
 	if err != nil {
 		return nil
 	}
-	
+
 	return res
 }

@@ -2,10 +2,10 @@
 package dml
 
 import (
-	"strconv"
 	"fmt"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
+	"strconv"
 )
 
 //map type: stores requested data type by index (0-based)
@@ -53,7 +53,6 @@ func NewMap(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
 	return mapI, nil
 }
-
 
 //inverse of keyToDB
 func (self *mapImpl) dbToType(key interface{}, dt DataType) (interface{}, error) {
@@ -253,7 +252,7 @@ func (self *mapImpl) Get(key interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Cannot access db")
 	}
-	
+
 	return self.dbToType(res, dt)
 }
 
@@ -496,10 +495,10 @@ func (self *mapImpl) DecreaseRefcount() error {
 }
 
 func (self *mapImpl) GetSubobjects(bhvr bool, prop bool) []Object {
-	
+
 	//get default objects
 	res := self.DataImpl.GetSubobjects(bhvr, prop)
-	
+
 	//handle key objects!
 	dt := self.keyDataType()
 	if dt.IsObject() || dt.IsComplex() {
@@ -538,40 +537,40 @@ func (self *mapImpl) GetSubobjects(bhvr bool, prop bool) []Object {
 					if ok {
 						res = append(res, existing)
 					}
-				}			
+				}
 			}
 		}
 	}
-	
+
 	return res
 }
 
 func (self *mapImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
-	
+
 	//default search
 	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr, prop)
 	if err == nil {
 		return obj, nil
 	}
-	
+
 	//let's see if it is a map key
 	var key interface{}
 	dt := self.keyDataType()
 	switch dt.AsString() {
-		case "int":
-			i, err := strconv.ParseInt(name, 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("No such key available")
-			}
-			key = self.typeToDB(i, dt) 
-			
-		case "string":
-			key = self.typeToDB(name, dt)
-			
-		default:
-			return nil, fmt.Errorf("Map key type %v does no allow access with %v", dt.AsString(), name)
+	case "int":
+		i, err := strconv.ParseInt(name, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("No such key available")
+		}
+		key = self.typeToDB(i, dt)
+
+	case "string":
+		key = self.typeToDB(name, dt)
+
+	default:
+		return nil, fmt.Errorf("Map key type %v does no allow access with %v", dt.AsString(), name)
 	}
-	
+
 	if !self.entries.HasKey(key) {
 		return nil, fmt.Errorf("No such key available")
 	}
@@ -584,37 +583,36 @@ func (self *mapImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Obje
 	if dt.IsObject() || dt.IsComplex() {
 
 		return result.(Object), nil
-	}	
-	
+	}
+
 	return nil, fmt.Errorf("%v is not a subobject", name)
 }
 
 func (self *mapImpl) GetValueByName(name string) interface{} {
-	
-	
+
 	//let's see if it is a valid key
 	var key interface{}
 	dt := self.keyDataType()
 	switch dt.AsString() {
-		case "int":
-			i, err := strconv.ParseInt(name, 10, 64)
-			if err != nil {
-				return nil
-			}
-			key = self.typeToDB(i, dt) 
-			
-		case "string":
-			key = self.typeToDB(name, dt)
-			
-		default:
+	case "int":
+		i, err := strconv.ParseInt(name, 10, 64)
+		if err != nil {
 			return nil
+		}
+		key = self.typeToDB(i, dt)
+
+	case "string":
+		key = self.typeToDB(name, dt)
+
+	default:
+		return nil
 	}
-	
+
 	res, err := self.Get(key)
 	if err != nil {
 		return nil
-	} 
-	
+	}
+
 	return res
 }
 

@@ -138,7 +138,7 @@ func (self *OwnerAwareBlockService)		AddBlocks(bs []blocks.Block) error {
 
 	for _, o := range bs {
 		key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", o.Cid().String(), self.owner))
-		if err := self.datastore.Put(key, []byte(self.owner)); err != nil {
+		if err := txn.Put(key, []byte(self.owner)); err != nil {
 			txn.Discard()
 			return err
 		}

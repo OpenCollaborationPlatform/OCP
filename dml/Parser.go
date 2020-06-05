@@ -69,8 +69,8 @@ type astProperty struct {
 }
 
 type astEvent struct {
-	Key     string         `"event" @Ident`
-	Default *astFunction   `(":" @@)?`
+	Key     string       `"event" @Ident`
+	Default *astFunction `(":" @@)?`
 }
 
 type astFunction struct {

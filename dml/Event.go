@@ -23,9 +23,9 @@ type Event interface {
 func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
 
 	evt := &event{
-		methodHandler:	NewMethodHandler(),
-		callbacks:    	make([]EventCallback, 0),
-		enabled: 		true}
+		methodHandler: NewMethodHandler(),
+		callbacks:     make([]EventCallback, 0),
+		enabled:       true}
 
 	//now the js object
 	evtObj := rntm.jsvm.NewObject()
@@ -50,8 +50,8 @@ func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
 type event struct {
 	methodHandler
 
-	callbacks 	[]EventCallback
-	enabled 		bool
+	callbacks []EventCallback
+	enabled   bool
 
 	jsvm     *goja.Runtime
 	jsobj    *goja.Object

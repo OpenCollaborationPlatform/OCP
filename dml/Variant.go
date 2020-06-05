@@ -128,7 +128,7 @@ func (self *variant) SetValue(value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to write variant")
 	}
-	
+
 	self.GetEvent("onValueChanged").Emit()
 	return nil
 }
@@ -203,7 +203,7 @@ func (self *variant) beforeChangeCallback(args ...interface{}) error {
 			obj.DecreaseRefcount()
 		}
 	}
-	
+
 	return nil
 }
 
