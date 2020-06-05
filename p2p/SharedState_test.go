@@ -36,7 +36,7 @@ func (self *testState) LoadSnapshot(snap []byte) error {
 }
 
 func (self *testState) ReceiveSync(string) error {
-	
+
 	return nil
 }
 

@@ -275,9 +275,9 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 		res := result.Arguments[0]
 		switch res.(type) {
 		case []byte:
-			block  =  append(block, res.([]byte)...)
+			block = append(block, res.([]byte)...)
 		case string:
-			block =  append(block, []byte(res.(string))...)
+			block = append(block, []byte(res.(string))...)
 		}
 	}
 	res, err := self.client.Call(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, callback)
@@ -289,9 +289,9 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 		data := res.Arguments[0]
 		switch data.(type) {
 		case []byte:
-			block  =  append(block, data.([]byte)...)
+			block = append(block, data.([]byte)...)
 		case string:
-			block =  append(block, []byte(data.(string))...)
+			block = append(block, []byte(data.(string))...)
 		default:
 			msg := fmt.Sprintf("Binary data not received as binary but %T", res.Arguments[0])
 			return p2p.Cid{}, fmt.Errorf(msg)
@@ -308,7 +308,7 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 		msg := utils.StackError(err, "Unable to distribute data").Error()
 		return p2p.Cid{}, fmt.Errorf(msg)
 	}
-	
+
 	return cid, nil
 }
 
@@ -328,13 +328,13 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 
 		//get the paths
 		procedure := string(wamp.OptionURI(inv.Details, "procedure"))
-		procedure = procedure[(len(self.prefix)+8):]
+		procedure = procedure[(len(self.prefix) + 8):]
 
 		if !strings.Contains(procedure, ".") {
 			//generall, non-object raw methods
 
 			switch procedure {
-				
+
 			case "CidByBinary":
 				//get the cid
 				cid, err := self.cidByBinary(ctx, inv)
@@ -343,9 +343,9 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				}
 				//return the cid (no operation started, this is just to setup the data!
 				return nxclient.InvokeResult{Args: wamp.List{cid.String()}}
-				
+
 			case "BinaryByCid":
-				
+
 				if len(inv.Arguments) != 1 {
 					return nxclient.InvokeResult{Args: wamp.List{"Argument must be Cid"}, Err: wamp.URI("ocp.error")}
 				}
@@ -353,7 +353,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				if !ok {
 					return nxclient.InvokeResult{Args: wamp.List{"Argument must be Cid"}, Err: wamp.URI("ocp.error")}
 				}
-				
+
 				id, err := cid.Decode(strcid)
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{"Argument seems not to be a Cid"}, Err: wamp.URI("ocp.error")}
@@ -377,10 +377,10 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 
 		} else {
 			//object raw methods
-			
+
 			idx := strings.LastIndex(string(procedure), ".")
 			path := procedure[:idx]
-			fnc  := procedure[(idx + 1):]
+			fnc := procedure[(idx + 1):]
 
 			switch fnc {
 			case "SetByPath":
@@ -445,7 +445,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return self.executeOperation(ctx, op)
 
 			case "ReadBinary":
-			
+
 				//get the cid from the data object!
 				val, err := self.dml.Call(dml.User(auth), string(path)+".Get")
 				if err != nil {

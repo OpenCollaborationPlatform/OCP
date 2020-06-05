@@ -8,8 +8,8 @@ import (
 	"sync"
 
 	"github.com/hashicorp/raft"
-	uuid "github.com/satori/go.uuid"
 	"github.com/ickby/CollaborationNode/utils"
+	uuid "github.com/satori/go.uuid"
 )
 
 //a little herlper to ease multi state commands
@@ -49,16 +49,16 @@ type State interface {
 
 //implements the raft FSM interface
 type multiState struct {
-	states map[string]State
+	states   map[string]State
 	doneChan map[string]chan struct{}
-	mutex  sync.RWMutex	
+	mutex    sync.RWMutex
 }
 
 func newMultiState() *multiState {
 	return &multiState{
-		states: make(map[string]State, 0),
+		states:   make(map[string]State, 0),
 		doneChan: make(map[string]chan struct{}, 0),
-		mutex:  sync.RWMutex{},
+		mutex:    sync.RWMutex{},
 	}
 }
 
@@ -94,7 +94,7 @@ func (self *multiState) Apply(log *raft.Log) interface{} {
 		return fmt.Errorf("No such state known, cannot apply")
 	}
 	result := self.states[op.State].Apply(op.Op)
-	
+
 	c, ok := self.doneChan[op.OpID]
 	if ok {
 		c <- struct{}{}

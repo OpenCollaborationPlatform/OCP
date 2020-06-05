@@ -14,16 +14,16 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 
 	bs "github.com/ipfs/go-bitswap"
+	bsnetwork "github.com/ipfs/go-bitswap/network"
+	cid "github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
 	ds "github.com/ipfs/go-ds-badger2"
 	blockDS "github.com/ipfs/go-ipfs-blockstore"
-	cid "github.com/ipfs/go-cid"
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
-	bsnetwork "github.com/ipfs/go-bitswap/network"
-	ipld "github.com/ipfs/go-ipld-format"
 	files "github.com/ipfs/go-ipfs-files"
+	ipld "github.com/ipfs/go-ipld-format"
 	unixfile "github.com/ipfs/go-unixfs/file"
-	
+	kaddht "github.com/libp2p/go-libp2p-kad-dht"
+
 	"github.com/ipfs/go-datastore/query"
 )
 
@@ -41,7 +41,7 @@ type DataService interface {
 	Get(ctx context.Context, id Cid) (io.Reader, error)             //gets the file described by the id (fetches if needed)
 	Write(ctx context.Context, id Cid, path string) (string, error) //writes the file or directory to the given path (fetches if needed)
 	ReadChannel(ctx context.Context, id Cid) (chan []byte, error)   //reads the data in individual binary blocks (does not work for directory)
-	HasLocal(id Cid) bool  										  //checks if the given id is available locally
+	HasLocal(id Cid) bool                                           //checks if the given id is available locally
 	Close()
 }
 
@@ -51,21 +51,20 @@ type dagHelper struct {
 	dag ipld.DAGService
 }
 
-
 func (self *dagHelper) Add(ctx context.Context, path string) (Cid, error) {
 
-	stat, _ :=os.Stat(path)
+	stat, _ := os.Stat(path)
 	file, err := files.NewSerialFile(path, false, stat)
-	if err != nil { 
+	if err != nil {
 		return cid.Cid{}, err
 	}
 	adder, err := NewAdder(ctx, self.dag)
-	if err != nil { 
+	if err != nil {
 		return cid.Cid{}, err
 	}
-	
+
 	node, err := adder.Add(file)
-	if err != nil { 
+	if err != nil {
 		return cid.Cid{}, err
 	}
 
@@ -78,12 +77,12 @@ func (self *dagHelper) AddData(ctx context.Context, data []byte) (Cid, error) {
 	file := files.NewBytesFile(data)
 
 	adder, err := NewAdder(ctx, self.dag)
-	if err != nil { 
+	if err != nil {
 		return cid.Cid{}, err
 	}
-	
+
 	node, err := adder.Add(file)
-	if err != nil { 
+	if err != nil {
 		return cid.Cid{}, err
 	}
 
@@ -107,17 +106,17 @@ func (self *dagHelper) Fetch(ctx context.Context, id Cid) error {
 
 	resnode, err := self.dag.Get(ctx, id)
 	if err != nil {
-	 	return err
+		return err
 	}
-	
+
 	//make sure we have the whole dag fetched by visiting it
 	navnode := ipld.NewNavigableIPLDNode(resnode, self.dag)
-	walker :=  ipld.NewWalker(ctx, navnode)
-	err = walker.Iterate(func(node ipld.NavigableNode) error {return nil})
-	
+	walker := ipld.NewWalker(ctx, navnode)
+	err = walker.Iterate(func(node ipld.NavigableNode) error { return nil })
+
 	//End Of Dag is default error when iteration has finished
 	if err != ipld.EndOfDag {
-		return err 
+		return err
 	}
 	return nil
 }
@@ -135,7 +134,7 @@ func (self *dagHelper) Get(ctx context.Context, id Cid) (io.Reader, error) {
 
 	resnode, err := self.dag.Get(ctx, id)
 	if err != nil {
-	 	return nil, err
+		return nil, err
 	}
 	filenode, err := unixfile.NewUnixfsFile(ctx, self.dag, resnode)
 	if err != nil {
@@ -149,21 +148,20 @@ func (self *dagHelper) Write(ctx context.Context, id Cid, path string) (string, 
 
 	resnode, err := self.dag.Get(ctx, id)
 	if err != nil {
-	 	return "", err
+		return "", err
 	}
 	resfile, err := unixfile.NewUnixfsFile(ctx, self.dag, resnode)
 	if err != nil {
-	 	return "", err
+		return "", err
 	}
-	
+
 	if err != nil {
 		return "", err
 	}
 	err = files.WriteTo(resfile, path)
 	return path, err
-	
-}
 
+}
 
 func (self *dagHelper) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
 
@@ -171,15 +169,15 @@ func (self *dagHelper) ReadChannel(ctx context.Context, id Cid) (chan []byte, er
 	if err != nil {
 		return nil, err
 	}
-	
+
 	result := make(chan []byte, 0)
 	go func() {
 		data := make([]byte, 1e6)
 		for {
 			n, err := reader.Read(data)
-			if n>0 {
-				time.Sleep(500*time.Millisecond)
-				local  :=  make([]byte, n)
+			if n > 0 {
+				time.Sleep(500 * time.Millisecond)
+				local := make([]byte, n)
 				copy(local, data[:n])
 				result <- local
 			}
@@ -191,10 +189,9 @@ func (self *dagHelper) ReadChannel(ctx context.Context, id Cid) (chan []byte, er
 
 		close(result)
 	}()
-	
+
 	return result, nil
 }
-
 
 /******************************************************************************
 							HostDataService
@@ -205,16 +202,15 @@ func (self *dagHelper) ReadChannel(ctx context.Context, id Cid) (chan []byte, er
 
 type hostDataService struct {
 	dagHelper
-	
-	datapath 	string
-	bitswap 		*bs.Bitswap
-	ownerStore  	datastore.TxnDatastore
-	blockStore	blockDS.Blockstore
-	ticker   	*time.Ticker
-	dht     	 	*kaddht.IpfsDHT
-	ctx			context.Context
-}
 
+	datapath   string
+	bitswap    *bs.Bitswap
+	ownerStore datastore.TxnDatastore
+	blockStore blockDS.Blockstore
+	ticker     *time.Ticker
+	dht        *kaddht.IpfsDHT
+	ctx        context.Context
+}
 
 func NewDataService(host *Host) (DataService, error) {
 
@@ -230,7 +226,7 @@ func NewDataService(host *Host) (DataService, error) {
 		return nil, err
 	}
 	bstore := blockDS.NewBlockstore(dstore)
-	
+
 	//create bitswap and default global DAG service
 	routing, err := NewOwnerAwareRouting(host, dstore)
 	if err != nil {
@@ -239,7 +235,6 @@ func NewDataService(host *Host) (DataService, error) {
 	network := bsnetwork.NewFromIpfsHost(host.host, routing)
 	bitswap := bs.New(host.serviceCtx, network, bstore).(*bs.Bitswap)
 	dag := NewDAGService("global", bitswap, dstore, bstore)
-
 
 	//start the service
 	service := &hostDataService{dagHelper{dag}, path, bitswap, dstore, bstore, time.NewTicker(20 * time.Hour), host.dht, host.serviceCtx}
@@ -261,7 +256,7 @@ func NewDataService(host *Host) (DataService, error) {
 	return service, nil
 }
 
-func (self *hostDataService) HasLocal(id Cid) bool  {
+func (self *hostDataService) HasLocal(id Cid) bool {
 	val, _ := self.blockStore.Has(id)
 	return val
 }
@@ -274,25 +269,25 @@ func (self *hostDataService) Close() {
 func (self *hostDataService) announceAllGlobal() {
 
 	//we need to check all owners and fetch out the globals
-	filter := query.FilterValueCompare{Op:query.Equal, Value: []byte("global")}
+	filter := query.FilterValueCompare{Op: query.Equal, Value: []byte("global")}
 	q := query.Query{Prefix: "/Owners/", Filters: []query.Filter{filter}}
 	qr, err := self.ownerStore.Query(q)
 	if err != nil {
 		return
 	}
-	
+
 	//get the cids
 	globals := make([]string, 0)
-	for result := range qr.Next() { 
-	
+	for result := range qr.Next() {
+
 		if result.Error != nil {
-			continue	
+			continue
 		}
-		
+
 		key := datastore.NewKey(result.Entry.Key)
 		globals = append(globals, key.List()[1])
 	}
-	
+
 	//take our time to announce the cids
 	go func() {
 		for _, id := range globals {
@@ -405,7 +400,7 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 	if err != nil {
 		return err
 	}
-	
+
 	txn, err := self.service.owner.NewTransaction(false)
 	if err != nil {
 		return err
@@ -441,12 +436,12 @@ func (self *dataState) HasFile(id cid.Cid) bool {
 }
 
 type swarmDataService struct {
-	dag 			dagHelper
-	swarm		*Swarm
-	owner 		datastore.TxnDatastore
-	state        *dataState
-	ctx          context.Context
-	cancel       context.CancelFunc
+	dag    dagHelper
+	swarm  *Swarm
+	owner  datastore.TxnDatastore
+	state  *dataState
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func newSwarmDataService(swarm *Swarm) DataService {
@@ -457,12 +452,12 @@ func newSwarmDataService(swarm *Swarm) DataService {
 
 	//create the service
 	ctx, cncl := context.WithCancel(swarm.ctx)
-	service := &swarmDataService{dag: dagHelper{dag}, 
-								swarm:swarm,
-								owner: hostService.ownerStore,
-								ctx: ctx,
-								cancel: cncl}
-	
+	service := &swarmDataService{dag: dagHelper{dag},
+		swarm:  swarm,
+		owner:  hostService.ownerStore,
+		ctx:    ctx,
+		cancel: cncl}
+
 	//handle the data state
 	service.state = newDataState(service)
 	swarm.State.share(service.state)
@@ -477,7 +472,7 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (Cid, error)
 	if err != nil {
 		return cid.Undef, err
 	}
-	
+
 	//store in shared state
 	cmd, err := dataStateCommand{filecid, false}.toByte()
 	if err != nil {
@@ -499,7 +494,7 @@ func (self *swarmDataService) AddData(ctx context.Context, data []byte) (Cid, er
 	if err != nil {
 		return cid.Undef, err
 	}
-	
+
 	//store in shared state
 	cmd, err := dataStateCommand{filecid, false}.toByte()
 	if err != nil {
@@ -624,7 +619,7 @@ func (self *swarmDataService) ReadChannel(ctx context.Context, id Cid) (chan []b
 	return c, nil
 }
 
-func (self *swarmDataService) HasLocal(id Cid) bool  {
+func (self *swarmDataService) HasLocal(id Cid) bool {
 	return self.state.HasFile(id)
 }
 

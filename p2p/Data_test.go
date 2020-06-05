@@ -12,15 +12,14 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
-	
+
 	bs "github.com/ipfs/go-bitswap"
+	bsnetwork "github.com/ipfs/go-bitswap/network"
 	ds "github.com/ipfs/go-ds-badger2"
 	blockDS "github.com/ipfs/go-ipfs-blockstore"
-	bsnetwork "github.com/ipfs/go-bitswap/network"
-
 )
 
-var blocksize = 1<< (10 * 2); //1MB
+var blocksize = 1 << (10 * 2) //1MB
 
 func TestBitswap(t *testing.T) {
 
@@ -39,7 +38,6 @@ func TestBitswap(t *testing.T) {
 		dstore1, err := ds.NewDatastore(filepath.Join(path, "store1"), &ds.DefaultOptions)
 		So(err, ShouldBeNil)
 		bstore1 := blockDS.NewBlockstore(dstore1)
-		
 
 		os.MkdirAll(filepath.Join(path, "store2"), os.ModePerm)
 		dstore2, err := ds.NewDatastore(filepath.Join(path, "store2"), &ds.DefaultOptions)
@@ -49,19 +47,19 @@ func TestBitswap(t *testing.T) {
 		Convey("Setting up Bitswaps for two random hosts,", func() {
 
 			ctx := context.Background()
-			
+
 			h1, err := randomHostWithoutDataSerivce()
 			So(err, ShouldBeNil)
 			routing1, err := NewOwnerAwareRouting(h1, dstore1)
 			So(err, ShouldBeNil)
 			network1 := bsnetwork.NewFromIpfsHost(h1.host, routing1)
 			bitswap1 := bs.New(ctx, network1, bstore1)
-	
+
 			defer bitswap1.Close()
 			defer h1.Stop(context.Background())
 
 			h2, err := randomHostWithoutDataSerivce()
-			So(err,  ShouldBeNil)
+			So(err, ShouldBeNil)
 			routing2, err := NewOwnerAwareRouting(h2, dstore2)
 			So(err, ShouldBeNil)
 			network2 := bsnetwork.NewFromIpfsHost(h2.host, routing2)
@@ -133,7 +131,6 @@ func TestDataService(t *testing.T) {
 			So(n, ShouldEqual, 555)
 			So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 
-
 			Convey("and retreiving from the other shall be possible too.", func() {
 
 				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
@@ -201,7 +198,6 @@ func TestDataService(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(n, ShouldEqual, filesize)
 				So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
-
 
 				Convey("and retreiving from the other shall be possible too.", func() {
 
@@ -311,7 +307,6 @@ func TestDataService(t *testing.T) {
 					res1, err := h2.Data.Add(ctx, dirpath1)
 					So(err, ShouldBeNil)
 
-
 					Convey("Dropping the subdirectory should keep all files", func() {
 
 						err := h1.Data.Drop(ctx, res2)
@@ -320,16 +315,16 @@ func TestDataService(t *testing.T) {
 						So(err, ShouldBeNil)
 
 						Convey("and keep the whole directory accassible from the other node", func() {
-							
+
 							//we know this failes. It is a bug, but changing it makes too much effort.
 							/*
-							newpath := filepath.Join(path, "results3")
-							os.MkdirAll(newpath, os.ModePerm)
-							res1path, err := h1.Data.Write(ctx, res1, newpath)
-							defer os.RemoveAll(newpath)
+								newpath := filepath.Join(path, "results3")
+								os.MkdirAll(newpath, os.ModePerm)
+								res1path, err := h1.Data.Write(ctx, res1, newpath)
+								defer os.RemoveAll(newpath)
 
-							So(err, ShouldBeNil)
-							So(compareDirectories(res1path, dirpath1), ShouldBeNil)
+								So(err, ShouldBeNil)
+								So(compareDirectories(res1path, dirpath1), ShouldBeNil)
 							*/
 							h1.Data.Drop(ctx, res1)
 						})
@@ -511,7 +506,6 @@ func TestSwarmDataService(t *testing.T) {
 			So(n, ShouldEqual, 555)
 			So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
 
-
 			Convey("and distribute the file automatically to the other host", func() {
 
 				has := sw2.Data.(*swarmDataService).HasLocal(res)
@@ -577,7 +571,6 @@ func TestSwarmDataService(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(n, ShouldEqual, filesize)
 				So(bytes.Equal(data[:n], filedata), ShouldBeTrue)
-
 
 				Convey("and retreiving from the other shall be possible too.", func() {
 
@@ -677,25 +670,23 @@ func TestSwarmDataService(t *testing.T) {
 					So(err, ShouldBeNil)
 					time.Sleep(100 * time.Millisecond)
 
-
 					Convey("Dropping the subdirectory should keep all files", func() {
 
 						err := sw1.Data.Drop(ctx, res2)
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)
 
-
 						Convey("and keep the whole directory accassible from the other node", func() {
 
 							//we know this failes. It is a bug, but changing it makes too much effort.
 							/*
-							newpath := filepath.Join(path, "results3")
-							os.MkdirAll(newpath, os.ModePerm)
-							res1path, err := sw1.Data.Write(ctx, res1, newpath)
-							defer os.RemoveAll(newpath)
+								newpath := filepath.Join(path, "results3")
+								os.MkdirAll(newpath, os.ModePerm)
+								res1path, err := sw1.Data.Write(ctx, res1, newpath)
+								defer os.RemoveAll(newpath)
 
-							So(err, ShouldBeNil)
-							So(compareDirectories(res1path, dirpath1), ShouldBeNil)
+								So(err, ShouldBeNil)
+								So(compareDirectories(res1path, dirpath1), ShouldBeNil)
 							*/
 							sw1.Data.Drop(ctx, res1)
 						})
@@ -708,7 +699,6 @@ func TestSwarmDataService(t *testing.T) {
 						err = sw1.Data.Drop(ctx, res1)
 						So(err, ShouldBeNil)
 						time.Sleep(100 * time.Millisecond)
-
 
 						Convey("and neither directory should be accessible", func() {
 

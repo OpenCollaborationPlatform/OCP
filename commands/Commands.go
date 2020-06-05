@@ -2,19 +2,19 @@
 package commands
 
 import (
-	"time"
-	"github.com/ickby/CollaborationNode/node"
-	"github.com/ickby/CollaborationNode/utils"
 	"context"
 	"fmt"
+	"github.com/ickby/CollaborationNode/node"
+	"github.com/ickby/CollaborationNode/utils"
 	"log"
+	"time"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"
-//	golog "github.com/ipfs/go-log"
+	//	golog "github.com/ipfs/go-log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-//	gologging "github.com/whyrusleeping/go-logging"
+	//	gologging "github.com/whyrusleeping/go-logging"
 )
 
 var (
@@ -23,9 +23,9 @@ var (
 	configPath string
 	verbose    bool
 	timeout    int
-	
-	nodeClient *nxclient.Client = nil
-	isConnected bool = false
+
+	nodeClient  *nxclient.Client = nil
+	isConnected bool             = false
 )
 
 func Execute() {
@@ -119,7 +119,7 @@ func onlineCommand(name string, f func(context.Context, []string, map[string]int
 		}
 
 		//call the node command
-		ctx,_ := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
 		result, err := nodeClient.Call(ctx, fmt.Sprintf("ocp.command.%s", name), nil, slice, flags, nil)
 		if err != nil {
 			fmt.Println("Error:", err)
@@ -143,7 +143,7 @@ func setup(pidPortPanic bool) {
 
 	//output from flag
 	if verbose {
-//		golog.SetAllLoggers(gologging.DEBUG)
+		//		golog.SetAllLoggers(gologging.DEBUG)
 	}
 
 	//try to get the client to our running node

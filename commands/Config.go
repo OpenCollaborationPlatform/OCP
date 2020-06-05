@@ -2,11 +2,11 @@
 package commands
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
+	"context"
 	"fmt"
+	"github.com/ickby/CollaborationNode/utils"
 	"sort"
 	"strings"
-	"context"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -14,14 +14,14 @@ import (
 
 //flag variables
 var (
-	online bool
+	online         bool
 	onlineReadConf func(*cobra.Command, []string)
 )
 
 func readConf(args []string) string {
-	
+
 	result := ""
-			
+
 	var keys []string
 	if len(args) == 0 {
 		result = fmt.Sprintf("Config file: %v\n", viper.ConfigFileUsed())
@@ -85,16 +85,16 @@ func readConf(args []string) string {
 		}
 		result += fmt.Sprintf("\n")
 	}
-	
+
 	return result
 }
 
 func init() {
 
-	//to be able to get the config of the running node we need to register a 
+	//to be able to get the config of the running node we need to register a
 	//online command
 	onlineReadConf = onlineCommand("config", func(ctx context.Context, args []string, flags map[string]interface{}) string {
-			return readConf(args)
+		return readConf(args)
 	})
 
 	cmdConfig.AddCommand(cmdConfigWrite, cmdConfigCreate, cmdConfigRemove)
@@ -102,10 +102,10 @@ func init() {
 }
 
 var cmdConfig = &cobra.Command{
-	Use: "config [subconf]",
+	Use:   "config [subconf]",
 	Short: `Create, access and modify the node configuration`,
-	Long: `By default prints the whole currently selected configuration. For subconfigurations provide the chain of keys`,
-	Args: cobra.MaximumNArgs(1),
+	Long:  `By default prints the whole currently selected configuration. For subconfigurations provide the chain of keys`,
+	Args:  cobra.MaximumNArgs(1),
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		setup(false)
 	},
@@ -114,7 +114,7 @@ var cmdConfig = &cobra.Command{
 
 		if online {
 			onlineReadConf(cmd, args)
-		
+
 		} else {
 			println(readConf(args))
 		}
@@ -136,13 +136,13 @@ var cmdConfigWrite = &cobra.Command{
 		}
 
 		entry, err := utils.GetConfigEntry(args[0])
-		if err != nil { 
+		if err != nil {
 			fmt.Printf(err.Error())
 			return
 		}
 
 		val, err := entry.ValueFromString(args[1])
-		if err != nil { 
+		if err != nil {
 			fmt.Printf(err.Error())
 			return
 		}

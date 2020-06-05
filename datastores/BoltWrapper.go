@@ -11,8 +11,8 @@ import (
 )
 
 type boltWrapper struct {
-	db *bolt.DB
-	tx *bolt.Tx
+	db    *bolt.DB
+	tx    *bolt.Tx
 	mutex sync.Mutex
 }
 
@@ -37,7 +37,7 @@ func (self *boltWrapper) Commit() error {
 
 	err := self.tx.Commit()
 	self.tx = nil
-	
+
 	self.mutex.Unlock()
 	return err
 }
@@ -65,10 +65,10 @@ func (self *boltWrapper) RollbackKeepOpen() error {
 	if err != nil {
 		return err
 	}
-	
+
 	tx, err := self.db.Begin(true)
 	self.tx = tx
-	
+
 	return err
 }
 

@@ -292,11 +292,11 @@ func (self *Replica) IsLastPeer(pid peer.ID) (bool, error) {
 func (self *Replica) AddCommand(ctx context.Context, op Operation) (interface{}, error) {
 
 	duration := durationFromContext(ctx)
-	
+
 	//track application of op
 	doneC := make(chan struct{}, 1)
 	self.state.SetDoneChan(op.OpID, doneC)
-	
+
 	//run till success or cancelation
 	for {
 		future := self.rep.Apply(op.ToBytes(), duration)
@@ -304,11 +304,11 @@ func (self *Replica) AddCommand(ctx context.Context, op Operation) (interface{},
 		if err != nil && err != raft.ErrEnqueueTimeout {
 			return nil, err
 		}
-			
+
 		select {
 		case <-doneC:
 			return future.Response(), nil
-		
+
 		case <-ctx.Done():
 			return nil, fmt.Errorf("Timeout on command processing")
 		default:

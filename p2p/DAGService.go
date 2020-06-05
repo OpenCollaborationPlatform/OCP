@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 	"github.com/ickby/CollaborationNode/utils"
-	
-	"github.com/ipfs/go-blockservice"
+
 	blocks "github.com/ipfs/go-block-format"
+	"github.com/ipfs/go-blockservice"
 	"github.com/ipfs/go-cid"
-	"github.com/ipfs/go-ipfs-blockstore"
 	"github.com/ipfs/go-datastore"
 	"github.com/ipfs/go-datastore/query"
-	peerstore "github.com/libp2p/go-libp2p-peerstore"
+	"github.com/ipfs/go-ipfs-blockstore"
 	exchange "github.com/ipfs/go-ipfs-exchange-interface"
 	ipld "github.com/ipfs/go-ipld-format"
 	merkle "github.com/ipfs/go-merkledag"
+	peerstore "github.com/libp2p/go-libp2p-peerstore"
 )
 
 /******************************************************************************
@@ -22,12 +22,10 @@ import (
 ******************************************************************************/
 
 func NewDAGService(owner string, session exchange.Interface, ownerstore datastore.TxnDatastore, blockstore blockstore.Blockstore) ipld.DAGService {
-	
+
 	blksvc := NewOwnerAwareBlockService(owner, ownerstore, blockstore, session)
 	return merkle.NewDAGService(blksvc)
 }
-
-
 
 /******************************************************************************
 						Block handling
@@ -35,30 +33,28 @@ func NewDAGService(owner string, session exchange.Interface, ownerstore datastor
 
 //creates a blockservice with a datastore for ownership data and a blockstore for storing the block data. Note: Could be the same datastore for both
 func NewOwnerAwareBlockService(owner string, ds datastore.TxnDatastore, bs blockstore.Blockstore, service exchange.Interface) *OwnerAwareBlockService {
-	
+
 	blksvc := blockservice.New(bs, service)
-	
+
 	return &OwnerAwareBlockService{owner, ds, bs, blksvc}
 }
-
 
 //implementation of the IPFS Blockservice interface.
 //reason to have our own is to allow ownership of blocks for our swarm implementation
 //it works together with OwnerAwareRouting
 type OwnerAwareBlockService struct {
-	
-	owner 		string
-	datastore	datastore.TxnDatastore
-	blockstore	blockstore.Blockstore
-	blocksvc 	blockservice.BlockService
+	owner      string
+	datastore  datastore.TxnDatastore
+	blockstore blockstore.Blockstore
+	blocksvc   blockservice.BlockService
 }
-	
-func (self *OwnerAwareBlockService)	Close() error {
+
+func (self *OwnerAwareBlockService) Close() error {
 	return self.blocksvc.Close()
 }
-	
-	// GetBlock gets the requested block.
-func (self *OwnerAwareBlockService)		GetBlock(ctx context.Context, c cid.Cid) (blocks.Block, error) {
+
+// GetBlock gets the requested block.
+func (self *OwnerAwareBlockService) GetBlock(ctx context.Context, c cid.Cid) (blocks.Block, error) {
 
 	//we simply add ourself as owner. If already in nothing happens, if not good.
 	//this should be the fastest way of doing it
@@ -68,7 +64,7 @@ func (self *OwnerAwareBlockService)		GetBlock(ctx context.Context, c cid.Cid) (b
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return self.blocksvc.GetBlock(ctx, c)
 }
 
@@ -79,8 +75,8 @@ func (self *OwnerAwareBlockService)		GetBlock(ctx context.Context, c cid.Cid) (b
 // be canceled). In that case, it will close the channel early. It is up
 // to the consumer to detect this situation and keep track which blocks
 // it has received and which it hasn't.
-func (self *OwnerAwareBlockService)		GetBlocks(ctx context.Context, ks []cid.Cid) <-chan blocks.Block {
-	
+func (self *OwnerAwareBlockService) GetBlocks(ctx context.Context, ks []cid.Cid) <-chan blocks.Block {
+
 	//we simply add the new owner. If already in nothing happens, if not good.
 	//this should be the fastest way of doing it
 	//This is needed now so that the routing service knows where to look
@@ -93,24 +89,24 @@ func (self *OwnerAwareBlockService)		GetBlocks(ctx context.Context, ks []cid.Cid
 		if err := self.datastore.Put(key, []byte(self.owner)); err != nil {
 			txn.Discard()
 			return nil
-		}		
+		}
 	}
 	txn.Commit()
 	return self.blocksvc.GetBlocks(ctx, ks)
 }
 
 // Blockstore returns a reference to the underlying blockstore
-func (self *OwnerAwareBlockService)		Blockstore() blockstore.Blockstore {
+func (self *OwnerAwareBlockService) Blockstore() blockstore.Blockstore {
 	return self.blocksvc.Blockstore()
 }
 
 // Exchange returns a reference to the underlying exchange (usually bitswap)
-func (self *OwnerAwareBlockService)		Exchange() exchange.Interface {
+func (self *OwnerAwareBlockService) Exchange() exchange.Interface {
 	return self.blocksvc.Exchange()
 }
 
 // AddBlock puts a given block to the underlying datastore
-func (self *OwnerAwareBlockService)		AddBlock(o blocks.Block) error {
+func (self *OwnerAwareBlockService) AddBlock(o blocks.Block) error {
 
 	c := o.Cid()
 
@@ -118,18 +114,18 @@ func (self *OwnerAwareBlockService)		AddBlock(o blocks.Block) error {
 	//this should be the fastest way of doing it
 	key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", c.String(), self.owner))
 	err := self.datastore.Put(key, []byte(self.owner))
-	
+
 	if err != nil {
 		return err
 	}
-	
-	//add to block service	
+
+	//add to block service
 	return self.blocksvc.AddBlock(o)
 }
 
 // AddBlocks adds a slice of blocks at the same time using batching
 // capabilities of the underlying datastore whenever possible.
-func (self *OwnerAwareBlockService)		AddBlocks(bs []blocks.Block) error {
+func (self *OwnerAwareBlockService) AddBlocks(bs []blocks.Block) error {
 
 	txn, err := self.datastore.NewTransaction(false)
 	if err != nil {
@@ -146,24 +142,24 @@ func (self *OwnerAwareBlockService)		AddBlocks(bs []blocks.Block) error {
 	txn.Commit()
 
 	for _, o := range bs {
-		err :=  self.blocksvc.AddBlock(o) //cannot use add blocks as bader ds does not check transaction size
+		err := self.blocksvc.AddBlock(o) //cannot use add blocks as bader ds does not check transaction size
 		if err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
 // DeleteBlock deletes the given block from the blockservice.
-func (self *OwnerAwareBlockService)		DeleteBlock(c cid.Cid) error {
+func (self *OwnerAwareBlockService) DeleteBlock(c cid.Cid) error {
 
 	key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", c.String(), self.owner))
 	err := self.datastore.Delete(key)
 	if err != nil {
 		return err
 	}
-	
+
 	//check if there is a owner left, delete otherwise
 	q := query.Query{Prefix: fmt.Sprintf("/Owners/%v", c.String()), Limit: 1}
 	qr, err := self.datastore.Query(q)
@@ -175,13 +171,11 @@ func (self *OwnerAwareBlockService)		DeleteBlock(c cid.Cid) error {
 		return err
 	}
 	if len(es) == 0 {
-			return self.blocksvc.DeleteBlock(c)
-    }
-	
+		return self.blocksvc.DeleteBlock(c)
+	}
+
 	return nil
 }
-
-
 
 /******************************************************************************
 						Routing
@@ -210,12 +204,12 @@ func (self OwnerAwareRouting) Provide(ctx context.Context, id cid.Cid, announce 
 	if err != nil {
 		return utils.StackError(err, "Unable to query ownership of block during Provied")
 	}
-	
+
 	//if global we announce it in the dht
 	if isGlobal {
 		return self.host.dht.Provide(ctx, id, announce)
 	}
-	
+
 	return nil
 }
 
@@ -229,32 +223,32 @@ func (self OwnerAwareRouting) FindProvidersAsync(ctx context.Context, id cid.Cid
 		close(res)
 		return res
 	}
-	
+
 	owners := make([]string, 0)
-	for result := range qr.Next() { 
-	
+	for result := range qr.Next() {
+
 		if result.Error != nil {
-			continue	
+			continue
 		}
-		
+
 		key := datastore.NewKey(result.Entry.Key)
 		owners = append(owners, key.Name())
 	}
-	
+
 	//check if global owner and use dht if so
 	for _, owner := range owners {
 		if owner == "global" {
 			return self.host.dht.FindProvidersAsync(ctx, id, num)
 		}
 	}
-	
+
 	//if not we use the swarm owner!
 	infos := make([]peerstore.PeerInfo, 0)
 	for _, owner := range owners {
-		
+
 		swarm, err := self.host.GetSwarm(SwarmID(owner))
 		if err == nil {
-				
+
 			for _, peer := range swarm.GetPeers(AUTH_NONE) {
 				if self.host.IsConnected(peer) {
 					infos = append(infos, self.host.host.Peerstore().PeerInfo(peer))
@@ -262,24 +256,23 @@ func (self OwnerAwareRouting) FindProvidersAsync(ctx context.Context, id cid.Cid
 			}
 		}
 	}
-	
-	//check if we need all peers 
+
+	//check if we need all peers
 	if len(infos) > num {
 		infos = infos[:num-1]
 	}
 
-
 	//provide the data!
-	result := make(chan peerstore.PeerInfo,0)
+	result := make(chan peerstore.PeerInfo, 0)
 	go func() {
 		defer close(result)
 
 		for _, info := range infos {
 			select {
-				case result <-info:
-					continue
-				case <- ctx.Done():
-					return
+			case result <- info:
+				continue
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()

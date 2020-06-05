@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/spf13/cobra"
 	"github.com/libp2p/go-libp2p-core/peer"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/spf13/cobra"
 )
 
 func init() {
@@ -15,12 +15,12 @@ func init() {
 	//flags
 	cmdP2P.Flags().BoolP("full", "f", false, "Print full adress including the identifier")
 	cmdP2PPeers.Flags().BoolP("address", "a", false, "Print full adress instead of ID (only one of possibly multiple)")
-//	cmdP2PSwarmCreate.Flags().IntP("seed", "s", 0, "set a seed for swarm key generation for deterministic outcomes instead of random keys")
-//	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")//
-//	cmdP2PSwarmAdd.Flags().BoolP("readonly", "r", false, "the peer is only allowed to read from the swarm")
+	//	cmdP2PSwarmCreate.Flags().IntP("seed", "s", 0, "set a seed for swarm key generation for deterministic outcomes instead of random keys")
+	//	cmdP2PSwarmCreate.Flags().BoolP("public", "p", false, "make the swarm publically accessible")//
+	//	cmdP2PSwarmAdd.Flags().BoolP("readonly", "r", false, "the peer is only allowed to read from the swarm")
 
-//	cmdP2PSwarmFile.AddCommand(cmdP2PSwarmFileAdd)
-//	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent, cmdP2PSwarmFile)
+	//	cmdP2PSwarmFile.AddCommand(cmdP2PSwarmFileAdd)
+	//	cmdP2PSwarm.AddCommand(cmdP2PSwarmCreate, cmdP2PSwarmAdd, cmdP2PSwarmEvent, cmdP2PSwarmFile)
 	cmdP2P.AddCommand(cmdP2PPeers, cmdP2PConnect)
 	rootCmd.AddCommand(cmdP2P)
 }
@@ -40,7 +40,7 @@ var cmdP2P = &cobra.Command{
 				result += "\n"
 			} else {
 				result += "/ipfs/" + ocpNode.Host.ID().Pretty() + "\n"
-			} 
+			}
 		}
 		return result
 	}),
@@ -88,7 +88,7 @@ var cmdP2PConnect = &cobra.Command{
 			return err.Error()
 		}
 
-		ocpNode.Host.SetMultipleAdress(info.ID, info.Addrs)		
+		ocpNode.Host.SetMultipleAdress(info.ID, info.Addrs)
 		if err := ocpNode.Host.Connect(ctx, info.ID); err != nil {
 			return err.Error()
 		}

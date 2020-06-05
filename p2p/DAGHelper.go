@@ -28,7 +28,7 @@ type syncer interface {
 
 // NewAdder Returns a new Adder used for a file add operation.
 func NewAdder(ctx context.Context, ds ipld.DAGService) (*Adder, error) {
-	
+
 	bufferedDS := ipld.NewBufferedDAG(ctx, ds)
 
 	return &Adder{
@@ -36,7 +36,7 @@ func NewAdder(ctx context.Context, ds ipld.DAGService) (*Adder, error) {
 		dagService: ds,
 		bufferedDS: bufferedDS,
 		CidBuilder: cid.V1Builder{Codec: cid.DagCBOR, MhType: mh.SHA2_256},
-		liveNodes: 0,
+		liveNodes:  0,
 	}, nil
 }
 
@@ -48,7 +48,7 @@ type Adder struct {
 	mroot      *mfs.Root
 	tempRoot   cid.Cid
 	CidBuilder cid.Builder
-	liveNodes uint64
+	liveNodes  uint64
 }
 
 func (self *Adder) mfsRoot() (*mfs.Root, error) {
@@ -68,7 +68,7 @@ func (self *Adder) mfsRoot() (*mfs.Root, error) {
 // Constructs a node from reader's data, and adds it. This constructs a merkle DAG
 // for the given data and returns the root node of that DAG
 func (self *Adder) add(reader io.Reader) (ipld.Node, error) {
-	
+
 	chnk, err := chunker.FromString(reader, "")
 	if err != nil {
 		return nil, err
@@ -85,7 +85,7 @@ func (self *Adder) add(reader io.Reader) (ipld.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	node, err := balanced.Layout(db)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,6 @@ func (self *Adder) add(reader io.Reader) (ipld.Node, error) {
 
 	return node, self.bufferedDS.Commit()
 }
-
 
 //this function takes a node (root of a merkle dag) and puts it into the mfs
 //at the specified path
@@ -226,7 +225,7 @@ func (self *Adder) addFileNode(path string, file files.Node, toplevel bool) erro
 }
 
 func (self *Adder) addSymlink(path string, l *files.Symlink) error {
-	
+
 	sdata, err := unixfs.SymlinkData(l.Target)
 	if err != nil {
 		return err

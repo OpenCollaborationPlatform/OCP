@@ -2,12 +2,12 @@
 package connection
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"context"
 	"time"
 
 	"github.com/ickby/CollaborationNode/utils"
@@ -50,19 +50,19 @@ func (ls *Router) Start(quit chan string) error {
 	wsAddr := fmt.Sprintf("%v:%v", viper.GetString("connection.uri"), viper.GetInt("connection.port"))
 	listener, err := net.Listen("tcp", wsAddr)
 	if err != nil {
-	    return utils.StackError(err, "Unable to setup router: Cannot listen on %v", wsAddr)
+		return utils.StackError(err, "Unable to setup router: Cannot listen on %v", wsAddr)
 	}
-	
+
 	//now all requests will be handled, as the listener is up. Start serving it to the router
 	ls.server = &http.Server{Handler: wss}
-	go func(){
+	go func() {
 		// always returns error. ErrServerClosed on graceful close
-        if err := ls.server.Serve(listener); err != http.ErrServerClosed {
-            // unexpected error. port in use?
-            log.Fatalf("Router shut down: %v", err)
-        }
+		if err := ls.server.Serve(listener); err != http.ErrServerClosed {
+			// unexpected error. port in use?
+			log.Fatalf("Router shut down: %v", err)
+		}
 	}()
-	
+
 	log.Println("Local wamp server started")
 
 	return nil
@@ -83,9 +83,9 @@ func (ls *Router) GetLocalClient(name string) (*nxclient.Client, error) {
 		return "", wamp.Dict{}
 	}
 	cfg := nxclient.Config{
-		Realm:        "ocp",
-		HelloDetails: wamp.Dict{"authid": name, "role": "local"},
-		AuthHandlers: map[string]nxclient.AuthFunc{"ticket": authFunc},
+		Realm:         "ocp",
+		HelloDetails:  wamp.Dict{"authid": name, "role": "local"},
+		AuthHandlers:  map[string]nxclient.AuthFunc{"ticket": authFunc},
 		Serialization: nxserialize.MSGPACK,
 	}
 	c, err := nxclient.ConnectLocal(ls.router, cfg)

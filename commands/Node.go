@@ -3,10 +3,10 @@ package commands
 
 import (
 	"context"
-	"github.com/ickby/CollaborationNode/node"
-	"github.com/ickby/CollaborationNode/utils"
 	"crypto/rand"
 	"fmt"
+	"github.com/ickby/CollaborationNode/node"
+	"github.com/ickby/CollaborationNode/utils"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -15,13 +15,13 @@ import (
 	"github.com/libp2p/go-libp2p-crypto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	
+
 	"runtime/pprof"
 )
 
 //flag variables
 var (
-	force bool
+	force  bool
 	detach bool
 )
 
@@ -58,24 +58,24 @@ var cmdStart = &cobra.Command{
 		}
 
 		if detach {
-			
+
 			//we simply run a new process without detach argument,
 			//which will than have a system parent
-			
+
 			//filter the -d out of the args: everything else we want to keep
-			args := make([]string,0)
+			args := make([]string, 0)
 			for _, arg := range os.Args {
 				if arg != "-d" && arg != "--detach" {
 					args = append(args, arg)
 				}
 			}
 			cmd := exec.Command(args[0], args[1:]...)
-            	err := cmd.Start()
+			err := cmd.Start()
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
 			}
-			
-		}  else {
+
+		} else {
 
 			//start the node
 			ocpNode = node.NewNode()
@@ -84,21 +84,21 @@ var cmdStart = &cobra.Command{
 				fmt.Println(err.Error())
 				return
 			}
-	
+
 			//setup all online commands
 			initOnlineCommands()
-			
+
 			//profiling
 			f, err := os.Create("cpu.profile")
-	        if err != nil {
-	            panic("could not create CPU profile")
-	        }
-	        defer f.Close() // error handling omitted for example
-	        if err := pprof.StartCPUProfile(f); err != nil {
-	            panic("could not start CPU profile")
-	        }
-	        defer pprof.StopCPUProfile()
-	
+			if err != nil {
+				panic("could not create CPU profile")
+			}
+			defer f.Close() // error handling omitted for example
+			if err := pprof.StartCPUProfile(f); err != nil {
+				panic("could not start CPU profile")
+			}
+			defer pprof.StopCPUProfile()
+
 			//wait till someone wants to stop...
 			ocpNode.WaitForStop()
 		}

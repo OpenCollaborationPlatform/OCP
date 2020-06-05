@@ -63,9 +63,9 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 	}
 
 	DefaultBootstrapConfig.BootstrapPeers = func() []peer.AddrInfo {
-		
+
 		addrs := make([]peer.AddrInfo, 0)
-	
+
 		nodes := viper.GetStringSlice("p2p.bootstrap.nodes")
 		for _, value := range nodes {
 			addr, err := ma.NewMultiaddr(value)
@@ -80,7 +80,7 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 			}
 			addrs = append(addrs, *info)
 		}
-		
+
 		if viper.GetBool("p2p.bootstrap.defaults") {
 			for _, addr := range kaddht.DefaultBootstrapPeers {
 				info, err := peer.AddrInfoFromP2pAddr(addr)
