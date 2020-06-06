@@ -20,7 +20,6 @@ import (
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -47,18 +46,16 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 
 	cr := make(map[string]CreatorFunc, 0)
 	rntm := &Runtime{
-		creators:           cr,
-		jsvm:               js,
-		jsObjMap:           js.NewObject(),
-		datastore:          ds,
-		mutex:              &sync.Mutex{},
-		ready:              false,
-		currentUser:        "none",
-		objects:            make(map[Identifier]Data, 0),
-		mainObj:            nil,
-		initialObjRefcount: 0,
-		transactions:       &TransactionManager{},
-		gcObjects:          make([]Identifier, 0),
+		creators:     cr,
+		jsvm:         js,
+		jsObjMap:     js.NewObject(),
+		datastore:    ds,
+		mutex:        &sync.Mutex{},
+		ready:        false,
+		currentUser:  "none",
+		mainObj:      nil,
+		objects:      make(map[Identifier]Data, 0),
+		transactions: &TransactionManager{},
 	}
 
 	//build the managers and expose
@@ -96,13 +93,11 @@ type Runtime struct {
 	mutex     *sync.Mutex
 
 	//internal state
-	importPath         string
-	ready              Boolean //True if a datastructure was read and setup, false if no dml file was parsed
-	currentUser        User    //user that currently access the runtime
-	objects            map[Identifier]Data
-	mainObj            Data
-	initialObjRefcount uint64
-	gcObjects          []Identifier //garbage collection objects
+	importPath  string
+	ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
+	currentUser User    //user that currently access the runtime
+	objects     map[Identifier]Data
+	mainObj     Data
 
 	//managers
 	transactions *TransactionManager
@@ -151,9 +146,6 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		return utils.StackError(err, "Unable to parse dml code")
 	}
 
-	//we now build up the unchangeable object structure, hence set refcount super high
-	self.initialObjRefcount = uint64(math.MaxUint64 / 2)
-
 	//first import everything needed
 
 	for _, imp := range ast.Imports {
@@ -171,9 +163,6 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 	self.mainObj = obj.(Data)
 	self.ready = true
-
-	//all objects created from here on are deletable
-	self.initialObjRefcount = 0
 
 	//set the JS main entry point
 	self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
@@ -440,13 +429,6 @@ func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup
 	return nil
 }
 
-func (self *Runtime) removeObject(obj Object) {
-
-	delete(self.objects, obj.Id())
-	//TODO: unkown how to do it from go
-	self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().Encode()))
-}
-
 //get the object from the identifier path list (e.g. myobj.childname.yourobject)
 //alternatively to names it can include identifiers (e.g. from Object.Identifier())
 func (self *Runtime) getObjectFromPath(path string) (Object, error) {
@@ -475,7 +457,7 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 	for _, name := range names[1:] {
 
 		//check all childs to find the one with given name
-		child, err := obj.GetSubobjectByName(name, true, false)
+		child, err := obj.GetSubobjectByName(name, true)
 		if err != nil {
 			return nil, utils.StackError(err, "Identifier %v is not available in object %v", name, obj.Id().Name)
 		}
@@ -530,17 +512,6 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 		self.datastore.RollbackKeepOpen()
 	}
 
-	//garbace collection: which objects can be removed?
-	for _, id := range self.gcObjects {
-		//we do check the refcount, just to double check (could be decreased to 0 and than increased again)
-		rc, _ := self.objects[id].GetRefcount()
-		if rc == 0 {
-			delete(self.objects, id)
-			self.jsObjMap.Set(id.Encode(), nil)
-		}
-	}
-	self.gcObjects = self.gcObjects[:0]
-
 	return postError
 }
 
@@ -577,7 +548,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	//we now register the imported ast as a creator
 	creator := func(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 
-		//to assgn the correct object name we need to override the ID pasignment. This must be available
+		//to assgn the correct object name we need to override the name asignment. This must be available
 		//on object build time as the identifier is created with it
 		idSet := false
 		for _, astAssign := range ast.Object.Assignments {
@@ -608,6 +579,30 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	}
 
 	return self.RegisterObjectCreator(name, creator)
+}
+
+//recursive remove object from runtime
+func (self *Runtime) removeObject(id Identifier) error {
+
+	obj, ok := self.objects[id]
+	if !ok {
+		return fmt.Errorf("No such obj, cannot remove")
+	}
+
+	//remove from list and javascript
+	delete(self.objects, id)
+	self.jsObjMap.Set(id.Encode(), nil)
+	self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().Encode()))
+
+	//recursive object handling!
+	data, ok := obj.(Data)
+	for _, sub := range data.GetSubobjects(false) {
+		self.removeObject(sub.Id())
+	}
+
+	//TODO: howto handle data store?
+
+	return nil
 }
 
 //due to recursive nature of objects we need an extra function
@@ -644,7 +639,6 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 		return nil, utils.StackError(err, "Unable to create object %v (%v)", id.Name, id.Type)
 	}
 	obj.SetDataType(MustNewDataType(astObj))
-	obj.SetRefcount(self.initialObjRefcount)
 
 	//check if data or behaviour
 	_, isBehaviour := obj.(Behaviour)

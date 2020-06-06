@@ -32,7 +32,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 
 	if !constprop {
 
-		if dtype.IsPOD() || dtype.IsObject() {
+		if dtype.IsPOD() {
 
 			//setup default value if needed
 			value, _ := set.GetOrCreateValue([]byte(name))
@@ -107,47 +107,19 @@ func (self *dataProperty) SetValue(val interface{}) error {
 		return err
 	}
 
-	//check if it is a object and handle it accordingly
-	obj, isobj := val.(Object)
-	if isobj {
-		//increase ref count, as we store it!
-		err := obj.IncreaseRefcount()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase refcount")
-		}
-	}
-
-	//check if the old, currently stored type is a object, as than we need to
-	//decrease refcount
-	if self.propertyType.IsObject() || self.propertyType.IsComplex() {
-		val, err := self.db.Read()
-		if err != nil {
-			return utils.StackError(err, "Unable to read current value")
-		}
-		str, ok := val.(string)
-		if ok {
-			id, err := IdentifierFromEncoded(str)
-			if err == nil {
-				obj, ok := self.rntm.objects[id]
-				if ok {
-					obj.DecreaseRefcount()
-				}
-			}
-		}
-	}
-
 	//store it
 	if !self.db.IsValid() {
 		return fmt.Errorf("Invalid database entry")
 	}
 
 	self.GetEvent("onBeforeChange").Emit(val)
-	if isobj {
+	if obj, isobj := val.(Object); isobj {
 		err = self.db.Write(obj.Id().Encode())
 
 	} else {
 		err = self.db.Write(val)
 	}
+
 	if err != nil {
 		return err
 	}
@@ -164,25 +136,6 @@ func (self *dataProperty) GetValue() interface{} {
 	if err != nil {
 		log.Printf("Error reading value: %s", err)
 		return nil
-	}
-
-	//check if the type is a object
-	if self.propertyType.IsObject() || self.propertyType.IsComplex() {
-		str, ok := val.(string)
-		if ok {
-			id, err := IdentifierFromEncoded(str)
-			if err == nil {
-				obj, ok := self.rntm.objects[id]
-				if !ok {
-					log.Printf("Error reading object value: invalid identifier")
-					return nil
-				}
-				return obj
-			}
-
-		} else {
-			return nil
-		}
 	}
 
 	return val

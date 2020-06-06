@@ -29,10 +29,7 @@ type transaction struct {
 	identification [32]byte
 	rntm           *Runtime
 
-	//dynamic state. We need to be able to commit and reset, hence versiond db entries.
-	//actually it is no state that needs to be stored over multiple versions, but as
-	//transaction gets deleted after closing the storage overhead is minimal and the
-	//easy solution accaptable
+	//dynamic state
 	objects datastore.List
 	user    datastore.Value
 }
@@ -470,7 +467,7 @@ func recursiveHasUpdates(obj Object) bool {
 
 	data, isData := obj.(Data)
 	if isData {
-		objs := data.GetSubobjects(true, true)
+		objs := data.GetSubobjects(true)
 
 		for _, obj := range objs {
 			if recursiveHasUpdates(obj) {

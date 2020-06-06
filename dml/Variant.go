@@ -34,7 +34,6 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 
 	//add properties (with setup callback)
 	vari.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), false)
-	vari.GetProperty("type").GetEvent("onBeforeChange").RegisterCallback(vari.beforeChangeCallback)
 	vari.GetProperty("type").GetEvent("onChanged").RegisterCallback(vari.changedCallback)
 
 	//add methods
@@ -60,7 +59,7 @@ func (self *variant) Load() error {
 	}
 	//we only need to load when we store objects
 	dt := self.getDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		res, err := self.value.Read()
 		if err == nil {
@@ -68,19 +67,12 @@ func (self *variant) Load() error {
 			if err != nil {
 				return utils.StackError(err, "Unable to load variant: Stored identifier is invalid")
 			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
-
-				//we made sure the object does not exist. We need to load it
-				obj, err := LoadObject(self.rntm, dt, id)
-				if err != nil {
-					return utils.StackError(err, "Unable to load object for variant: construction failed")
-				}
-				obj.IncreaseRefcount()
-				self.rntm.objects[id] = obj.(Data)
-			} else {
-				existing.IncreaseRefcount()
+			obj, err := LoadObject(self.rntm, dt, id, self.Id())
+			if err != nil {
+				return utils.StackError(err, "Unable to load object for variant: construction failed")
 			}
+			self.rntm.objects[id] = obj.(Data)
+
 		} else {
 			return utils.StackError(err, "Unable to load variant: entry cannot be read")
 		}
@@ -97,23 +89,9 @@ func (self *variant) SetValue(value interface{}) error {
 		return utils.StackError(err, "Unable to set variant data")
 	}
 
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
-		old, _ := self.GetValue()
-		obj, _ := value.(Object)
-		err = self.value.Write(obj.Id().Encode())
-
-		//handle ref counts
-		if err != nil {
-			data, ok := value.(Data)
-			if ok {
-				data.IncreaseRefcount()
-			}
-			data, ok = old.(Data)
-			if ok {
-				data.DecreaseRefcount()
-			}
-		}
+		return fmt.Errorf("Unable to set value for complex datatypes")
 
 	} else if dt.IsType() {
 
@@ -144,7 +122,7 @@ func (self *variant) GetValue() (interface{}, error) {
 
 	var result interface{}
 
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 		res, err := self.value.Read()
 		if err == nil {
 			id, err := IdentifierFromEncoded(res.(string))
@@ -186,27 +164,6 @@ func (self *variant) GetValue() (interface{}, error) {
 //			Internal functions
 //*****************************************************************************
 
-func (self *variant) beforeChangeCallback(args ...interface{}) error {
-
-	//check if we have a object already, and decrease refcount if so
-	//we do this before the change as afterwards we don't know if the value
-	//was a object or not, as .type property was already changed
-	dt := self.getDataType()
-	if dt.IsObject() || dt.IsComplex() {
-		oldval, err := self.GetValue()
-		if err != nil {
-			return err
-		}
-
-		obj, ok := oldval.(Object)
-		if ok && obj != nil {
-			obj.DecreaseRefcount()
-		}
-	}
-
-	return nil
-}
-
 func (self *variant) changedCallback(args ...interface{}) error {
 
 	self.GetEvent("onTypeChanged").Emit()
@@ -215,11 +172,10 @@ func (self *variant) changedCallback(args ...interface{}) error {
 	//assumes old and new value have same datatype
 	dt := self.getDataType()
 	if dt.IsComplex() {
-		obj, err := ConstructObject(self.rntm, dt, "")
+		obj, err := ConstructObject(self.rntm, dt, "", self.Id())
 		if err != nil {
 			return utils.StackError(err, "Unable to setup variant object: construction failed")
 		}
-		obj.IncreaseRefcount()
 		return self.value.Write(obj.Id().Encode())
 
 	} else if dt.IsType() {
@@ -241,91 +197,3 @@ func (self *variant) getDataType() DataType {
 	dt := prop.GetDataType()
 	return dt
 }
-
-//override to handle children refcount additional to our own
-func (self *variant) IncreaseRefcount() error {
-
-	//increase also object refcount if we store one...
-	dt := self.getDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		res, err := self.value.Read()
-		if err == nil {
-			id, e := IdentifierFromEncoded(res.(string))
-			if e == nil {
-				res, ok := self.rntm.objects[id]
-				if ok {
-					err := res.IncreaseRefcount()
-					if err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-	//now increase our own and children refcount
-	return self.object.IncreaseRefcount()
-}
-
-//override to handle children refcount additional to our own
-func (self *variant) DecreaseRefcount() error {
-	//decrease child refcount
-	dt := self.getDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		res, err := self.value.Read()
-		if err == nil {
-			id, e := IdentifierFromEncoded(res.(string))
-			if e == nil {
-				res, ok := self.rntm.objects[id]
-				if ok {
-					err := res.DecreaseRefcount()
-					if err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
-	//now decrease our own
-	return self.object.DecreaseRefcount()
-}
-
-// func (self *vector) buildNew() (interface{}, error) {
-
-// 	var err error
-// 	var result interface{}
-
-// 	dt := self.entryDataType()
-// 	if dt.IsComplex() {
-// 		obj, err := ConstructObject(self.rntm, dt, "")
-// 		if err != nil {
-// 			return -1, utils.StackError(err, "Unable to append new object to vector: construction failed")
-// 		}
-// 		obj.IncreaseRefcount()
-// 		result = obj
-
-// 	} else if dt.IsType() || dt.IsObject() || dt.IsString() {
-// 		result = ""
-
-// 	} else if dt.IsBool() {
-// 		result = false
-// 	} else if dt.IsInt() {
-// 		result = 0
-// 	} else if dt.IsFloat() {
-// 		result = 0.0
-// 	}
-
-// 	return result, err
-// }
-
-// func (self *vector) print() {
-
-// 	fmt.Printf("[")
-// 	l, _ := self.Length()
-// 	for i := int64(0); i < l; i++ {
-// 		val, _ := self.Get(i)
-// 		fmt.Printf("%v ", val)
-// 	}
-// 	fmt.Println("]")
-// }

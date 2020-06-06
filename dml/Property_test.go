@@ -72,32 +72,6 @@ func TestTypeProperty(t *testing.T) {
 			})
 		})
 
-		Convey("and the the type must be creatable.", func() {
-
-			code = `
-				obj = new Object(toplevel.test)
-				if (obj == null) {
-					throw "object could not be created"
-				}
-				if (obj.test != 10) {
-					throw "object properties not correctly created"
-				}`
-			_, err := rntm.RunJavaScript("", code)
-			So(err, ShouldBeNil)
-		})
-
-		Convey("and afterwards be accessible in the global objects", func() {
-
-			code = `
-				obj = new Object(toplevel.test)
-				id = obj.Identifier()
-				if (!(id in Objects)) {
-					throw "object is not accessible, but should be"
-				}`
-			_, err := rntm.RunJavaScript("", code)
-			So(err, ShouldBeNil)
-		})
-
 		Convey("Non-const type property is changeable", func() {
 			code = `
 				toplevel.test2 = toplevel.dtAsInt()

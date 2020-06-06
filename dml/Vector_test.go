@@ -247,11 +247,11 @@ func TestPODVector(t *testing.T) {
 
 func TestTypeVector(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Loading dml code into runtime including pod vector types,", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
 
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
@@ -281,52 +281,82 @@ func TestTypeVector(t *testing.T) {
 			So(length, ShouldEqual, 0)
 			store.Commit()
 
-			code = `toplevel.TypeVec.AppendNew()`
-			_, err := rntm.RunJavaScript("user3", code)
-			So(err, ShouldBeNil)
-			/*
-				store.Begin()
-				data, ok := val.(Data)
-				So(ok, ShouldBeTrue)
-				So(data.HasProperty("test"), ShouldBeTrue)
-				store.Commit()
-
-				_, ok = rntm.objects[data.Id()]
-				So(ok, ShouldBeTrue)*/
-
-		})
-
-		Convey("Setting data to the new type is supported", func() {
-
-			code = `
-				obj = toplevel.TypeVec.Get(0)
-				obj.test = 1
+			code = `toplevel.TypeVec.AppendNew()
+					toplevel.TypeVec.AppendNew()
 			`
 			_, err := rntm.RunJavaScript("user3", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
-			defer store.Rollback()
+			child, _ = rntm.mainObj.GetChildByName("TypeVec")
+			vec = child.(*vector)
+			length, _ = vec.Length()
+			So(length, ShouldEqual, 2)
+			store.Commit()
 
-			child, _ := rntm.mainObj.GetChildByName("TypeVec")
-			vec := child.(*vector)
+			Convey("Setting data to the new type is supported", func() {
 
-			entry, err := vec.Get(0)
-			So(err, ShouldBeNil)
-			obj := entry.(Object)
+				code = `
+					obj = toplevel.TypeVec.Get(0)
+					obj.test = 1
+				`
+				_, err := rntm.RunJavaScript("user3", code)
+				So(err, ShouldBeNil)
 
-			So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
-		})
+				store.Begin()
+				defer store.Rollback()
 
-		Convey("And accessing as path works", func() {
+				child, _ := rntm.mainObj.GetChildByName("TypeVec")
+				vec := child.(*vector)
 
-			store.Begin()
-			defer store.Rollback()
+				entry, err := vec.Get(0)
+				So(err, ShouldBeNil)
+				obj := entry.(Object)
 
-			obj, err := rntm.getObjectFromPath("toplevel.TypeVec.0")
-			So(err, ShouldBeNil)
+				So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
 
-			So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
+				Convey("and accessing new set value via path works", func() {
+
+					obj, err := rntm.getObjectFromPath("toplevel.TypeVec.0")
+					So(err, ShouldBeNil)
+
+					So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
+				})
+			})
+
+			Convey("but setting complex types is forbidden", func() {
+
+				code = `	toplevel.TypeVec.Set(0, toplevel.TypeVec.Get(1))`
+				_, err = rntm.RunJavaScript("user3", code)
+				So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
+
+			})
+
+			Convey("The hirarchy is set correct", func() {
+
+				code = `
+						obj = toplevel.TypeVec.Get(0)
+						if (obj.parent != toplevel.TypeVec) {
+							throw "parent not set correctly"	
+						}
+					`
+				_, err := rntm.RunJavaScript("user3", code)
+				So(err, ShouldBeNil)
+			})
+
+			Convey("Removing the object works", func() {
+
+				code = `
+						id = toplevel.TypeVec.Get(0).Identifier()
+						toplevel.TypeVec.Remove(0)
+						if (Objects.hasOwnProperty(id)) {
+							throw "Object list still has type vec object, but should not: " + id
+						}
+					`
+				_, err := rntm.RunJavaScript("user3", code)
+				So(err, ShouldBeNil)
+
+			})
 		})
 	})
 }

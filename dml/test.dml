@@ -8,7 +8,6 @@
     property int 	testI: 1
 	property bool 	testB: true
 	property float	testF 
-	property object 	testO
 	
 	const   property int testConst:4
 	
@@ -27,10 +26,6 @@
 	
 	function testFnc(a) {
 		this.testI = a
-	}
-	
-	function testSetObj(obj) {
-		this.testO = obj
 	}
 	
 	const function readString() {

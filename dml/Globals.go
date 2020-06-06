@@ -1,6 +1,7 @@
 package dml
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -10,26 +11,6 @@ import (
 )
 
 func SetupGlobals(rntm *Runtime) {
-
-	//constructor for DML object
-	rntm.jsvm.Set("Object", func(call goja.ConstructorCall) *goja.Object {
-
-		//get the type description, which must be passed as argument
-		if len(call.Arguments) != 1 {
-			panic("Wrong arguments: DataType only must be passed")
-		}
-		typeArg := call.Arguments[0].Export()
-		datatype, ok := typeArg.(DataType)
-		if !ok {
-			panic(rntm.jsvm.ToValue("A valid type description must be given as argument"))
-		}
-
-		obj, err := ConstructObject(rntm, datatype, "")
-		if err != nil {
-			panic(rntm.jsvm.ToValue(utils.StackError(err, "Unable to build object from type desciption").Error()))
-		}
-		return obj.GetJSObject()
-	})
 
 	//constructor for DML data type
 	rntm.jsvm.Set("DataType", func(call goja.ConstructorCall) *goja.Object {
@@ -73,7 +54,7 @@ func SetupGlobals(rntm *Runtime) {
 //Construct a data object from encoded description (as provided by type property)
 //Note that if no name is given a random name is generated to ensure uniqueness. If
 //the object shall be restored instead provide the name to restore
-func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
+func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier) (Object, error) {
 
 	if !dt.IsComplex() {
 		return nil, fmt.Errorf("Not a complex datatype which can be build into Object")
@@ -84,11 +65,11 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 		return nil, utils.StackError(err, "Unable to build object from type description")
 	}
 
-	//set a uuid to ensure unique identifier. Important if there is no parent!
+	//set a uuid to ensure unique identifier
 	uid := uuid.NewV4().String()
 
 	//build the object (without parent, but with uuid)
-	obj, err := rntm.buildObject(astObj, Identifier{}, uid)
+	obj, err := rntm.buildObject(astObj, parent, uid)
 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
@@ -99,10 +80,15 @@ func ConstructObject(rntm *Runtime, dt DataType, name string) (Object, error) {
 
 //Construct a data object from encoded description (as provided by type property)
 //and a given identifier
-func LoadObject(rntm *Runtime, dt DataType, id Identifier) (Object, error) {
+func LoadObject(rntm *Runtime, dt DataType, id Identifier, parent Identifier) (Object, error) {
 
 	if !dt.IsComplex() {
 		return nil, fmt.Errorf("Not a complex datatype which can be build into Object")
+	}
+
+	ph := parent.Hash()
+	if !bytes.Equal(id.Parent[:], ph[:]) {
+		return nil, fmt.Errorf("Cannot load object: Parent it not the one used in identifier")
 	}
 
 	astObj, err := dt.complexAsAst()

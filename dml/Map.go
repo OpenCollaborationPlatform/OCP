@@ -57,7 +57,7 @@ func NewMap(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
 //inverse of keyToDB
 func (self *mapImpl) dbToType(key interface{}, dt DataType) (interface{}, error) {
 
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		encoded, _ := key.(string)
 		id, err := IdentifierFromEncoded(encoded)
@@ -83,7 +83,7 @@ func (self *mapImpl) dbToType(key interface{}, dt DataType) (interface{}, error)
 //convert all possible key types to something usable in the DB
 func (self *mapImpl) typeToDB(key interface{}, dt DataType) interface{} {
 
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		obj, _ := key.(Object)
 		return obj.Id().Encode()
@@ -166,7 +166,7 @@ func (self *mapImpl) Load() error {
 
 	//keys: we only need to load when we store objects
 	dt := self.keyDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.entries.GetKeys()
 		if err != nil {
@@ -178,25 +178,18 @@ func (self *mapImpl) Load() error {
 			if err != nil {
 				return utils.StackError(err, "Unable to load mapImpl: Stored identifier is invalid")
 			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
 
-				//we made sure the object does not exist. We need to load it
-				obj, err := LoadObject(self.rntm, dt, id)
-				if err != nil {
-					return utils.StackError(err, "Unable to load object for mapImpl: construction failed")
-				}
-				obj.IncreaseRefcount()
-				self.rntm.objects[id] = obj.(Data)
-			} else {
-				existing.IncreaseRefcount()
+			obj, err := LoadObject(self.rntm, dt, id, self.Id())
+			if err != nil {
+				return utils.StackError(err, "Unable to load object for mapImpl: construction failed")
 			}
+			self.rntm.objects[id] = obj.(Data)
 		}
 	}
 
 	//values: we only need to load when we store objects
 	dt = self.valueDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.entries.GetKeys()
 		if err != nil {
@@ -210,19 +203,12 @@ func (self *mapImpl) Load() error {
 				if err != nil {
 					return utils.StackError(err, "Unable to load mapImpl: Stored identifier is invalid")
 				}
-				existing, ok := self.rntm.objects[id]
-				if !ok {
-
-					//we made sure the object does not exist. We need to load it
-					obj, err := LoadObject(self.rntm, dt, id)
-					if err != nil {
-						return utils.StackError(err, "Unable to load object for mapImpl: construction failed")
-					}
-					obj.IncreaseRefcount()
-					self.rntm.objects[id] = obj.(Data)
-				} else {
-					existing.IncreaseRefcount()
+				obj, err := LoadObject(self.rntm, dt, id, self.Id())
+				if err != nil {
+					return utils.StackError(err, "Unable to load object for mapImpl: construction failed")
 				}
+				self.rntm.objects[id] = obj.(Data)
+
 			} else {
 				return utils.StackError(err, "Unable to load mapImpl entries: entry cannot be read")
 			}
@@ -272,26 +258,27 @@ func (self *mapImpl) Set(key interface{}, value interface{}) error {
 		return utils.StackError(err, "Cannot set map entry, value has wrong type")
 	}
 
-	dbkey := self.typeToDB(key, kdt)
-	if dt.IsObject() || dt.IsComplex() {
+	//check for complex, we do no set those (keep hirarchy)
+	if dt.IsComplex() {
+		return fmt.Errorf("Complex datatypes cannot be set, use New")
 
-		old, olderr := self.Get(dbkey)
+	}
+
+	return self.set(key, value)
+}
+
+//internal set: careful, no checks!
+func (self *mapImpl) set(key interface{}, value interface{}) error {
+
+	dt := self.valueDataType()
+	dbkey := self.typeToDB(key, self.keyDataType())
+
+	if dt.IsComplex() {
+
 		obj, _ := value.(Object)
 		err := self.entries.Write(dbkey, obj.Id().Encode())
 		if err != nil {
 			return utils.StackError(err, "Cannot set map entry")
-		}
-
-		//handle ref counts
-		data, ok := value.(Data)
-		if ok {
-			data.IncreaseRefcount()
-		}
-		if olderr == nil {
-			data, ok = old.(Data)
-			if ok {
-				data.DecreaseRefcount()
-			}
 		}
 
 	} else if dt.IsType() {
@@ -333,11 +320,10 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	var result interface{}
 	dt := self.valueDataType()
 	if dt.IsComplex() {
-		obj, err := ConstructObject(self.rntm, dt, "")
+		obj, err := ConstructObject(self.rntm, dt, "", self.Id())
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to append new object to mapImpl: construction failed")
 		}
-		obj.IncreaseRefcount()
 		result = obj
 
 	} else {
@@ -345,7 +331,7 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	}
 
 	//write new entry
-	return result, self.Set(key, result)
+	return result, self.set(key, result)
 }
 
 //remove a entry from the mapImpl
@@ -364,17 +350,16 @@ func (self *mapImpl) Remove(key interface{}) error {
 		return fmt.Errorf("Key does not exist (%v), cannot be removed", key)
 	}
 
-	//decrease refcount if required
 	dt := self.valueDataType()
-	if dt.IsComplex() || dt.IsObject() {
+	if dt.IsComplex() {
 		//we have a object stored, hence delete must remove it completely!
 		val, err := self.Get(key)
 		if err != nil {
 			return utils.StackError(err, "Unable to delete entry")
 		}
-		data, ok := val.(Data)
+		obj, ok := val.(Object)
 		if ok {
-			data.DecreaseRefcount()
+			self.rntm.removeObject(obj.Id())
 		}
 	}
 
@@ -386,122 +371,14 @@ func (self *mapImpl) Remove(key interface{}) error {
 //			Internal functions
 //*****************************************************************************
 
-//override to handle children refcount additional to our own
-func (self *mapImpl) IncreaseRefcount() error {
-
-	//handle keys!
-	dt := self.keyDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		keys, err := self.entries.GetKeys()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase map refcount: Keys cannot be accessed")
-		}
-		for _, key := range keys {
-
-			id, err := IdentifierFromEncoded(key.(string))
-			if err != nil {
-				return utils.StackError(err, "Unable to increase map refcount: Invalid child identifier stored")
-			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
-				return fmt.Errorf("Unable to increase map refcount: Invalid child stored")
-			}
-			existing.IncreaseRefcount()
-		}
-	}
-
-	//handle values!
-	dt = self.valueDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		keys, err := self.entries.GetKeys()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase map refcount: Keys cannot be accessed")
-		}
-		for _, key := range keys {
-
-			res, err := self.entries.Read(key)
-			if err == nil {
-				id, err := IdentifierFromEncoded(res.(string))
-				if err != nil {
-					return utils.StackError(err, "Unable to increase map refcount: Invalid child identifier stored")
-				}
-				existing, ok := self.rntm.objects[id]
-				if !ok {
-					return fmt.Errorf("Unable to increase map refcount: Invalid child stored")
-				}
-				existing.IncreaseRefcount()
-			}
-		}
-	}
-
-	//now increase our own refcount
-	return self.object.IncreaseRefcount()
-}
-
-//override to handle children refcount additional to our own
-func (self *mapImpl) DecreaseRefcount() error {
-
-	//handle keys!
-	dt := self.keyDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		keys, err := self.entries.GetKeys()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase map refcount: Keys cannot be accessed")
-		}
-		for _, key := range keys {
-
-			id, err := IdentifierFromEncoded(key.(string))
-			if err != nil {
-				return utils.StackError(err, "Unable to increase map refcount: Invalid child identifier stored")
-			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
-				return fmt.Errorf("Unable to increase map refcount: Invalid child stored")
-			}
-			existing.DecreaseRefcount()
-		}
-	}
-
-	//handle values
-	dt = self.valueDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		keys, err := self.entries.GetKeys()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase map refcount: Keys cannot be accessed")
-		}
-		for _, key := range keys {
-
-			res, err := self.entries.Read(key)
-			if err == nil {
-				id, err := IdentifierFromEncoded(res.(string))
-				if err != nil {
-					return utils.StackError(err, "Unable to increase map refcount: Invalid child identifier stored")
-				}
-				existing, ok := self.rntm.objects[id]
-				if !ok {
-					return fmt.Errorf("Unable to increase map refcount: Invalid child stored")
-				}
-				existing.DecreaseRefcount()
-			}
-		}
-	}
-
-	//now decrease our own refcount
-	return self.object.DecreaseRefcount()
-}
-
-func (self *mapImpl) GetSubobjects(bhvr bool, prop bool) []Object {
+func (self *mapImpl) GetSubobjects(bhvr bool) []Object {
 
 	//get default objects
-	res := self.DataImpl.GetSubobjects(bhvr, prop)
+	res := self.DataImpl.GetSubobjects(bhvr)
 
 	//handle key objects!
 	dt := self.keyDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.entries.GetKeys()
 		if err != nil {
@@ -521,7 +398,7 @@ func (self *mapImpl) GetSubobjects(bhvr bool, prop bool) []Object {
 
 	//handle value objects!
 	dt = self.valueDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.entries.GetKeys()
 		if err != nil {
@@ -545,10 +422,10 @@ func (self *mapImpl) GetSubobjects(bhvr bool, prop bool) []Object {
 	return res
 }
 
-func (self *mapImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
+func (self *mapImpl) GetSubobjectByName(name string, bhvr bool) (Object, error) {
 
 	//default search
-	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr, prop)
+	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr)
 	if err == nil {
 		return obj, nil
 	}
@@ -580,7 +457,7 @@ func (self *mapImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Obje
 	}
 	dt = self.valueDataType()
 	result, _ := self.dbToType(val, dt)
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		return result.(Object), nil
 	}

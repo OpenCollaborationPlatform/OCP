@@ -65,12 +65,6 @@ func TestDmlFile(t *testing.T) {
 			val, err = rntm.RunJavaScript("", code)
 			So(err, ShouldNotBeNil)
 
-			code = `Document.testO = Document.ThisTest`
-			val, err = rntm.RunJavaScript("", code)
-			So(err, ShouldBeNil)
-			obj, ok := val.(Object)
-			So(ok, ShouldBeTrue)
-			So(obj, ShouldNotBeNil)
 		})
 
 		Convey("and event handling should work.", func() {

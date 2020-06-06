@@ -83,7 +83,7 @@ func (self *vector) Load() error {
 
 	//we only need to load when we store objects
 	dt := self.entryDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.entries.GetKeys()
 		if err != nil {
@@ -97,19 +97,13 @@ func (self *vector) Load() error {
 				if err != nil {
 					return utils.StackError(err, "Unable to load vector: Stored identifier is invalid")
 				}
-				existing, ok := self.rntm.objects[id]
-				if !ok {
 
-					//we made sure the object does not exist. We need to load it
-					obj, err := LoadObject(self.rntm, dt, id)
-					if err != nil {
-						return utils.StackError(err, "Unable to load object for vector: construction failed")
-					}
-					obj.IncreaseRefcount()
-					self.rntm.objects[id] = obj.(Data)
-				} else {
-					existing.IncreaseRefcount()
+				obj, err := LoadObject(self.rntm, dt, id, self.Id())
+				if err != nil {
+					return utils.StackError(err, "Unable to load object for vector: construction failed")
 				}
+				self.rntm.objects[id] = obj.(Data)
+
 			} else {
 				return utils.StackError(err, "Unable to load vector entries: entry cannot be read")
 			}
@@ -130,7 +124,7 @@ func (self *vector) Get(idx int64) (interface{}, error) {
 	var result interface{}
 	var err error = nil
 
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 		res, err := self.entries.Read(idx)
 		if err == nil {
 			id, e := IdentifierFromEncoded(res.(string))
@@ -195,23 +189,8 @@ func (self *vector) Set(idx int64, value interface{}) error {
 		return utils.StackError(err, "Unable to set vector entry")
 	}
 
-	if dt.IsObject() || dt.IsComplex() {
-
-		old, _ := self.Get(idx)
-		obj, _ := value.(Object)
-		err = self.entries.Write(idx, obj.Id().Encode())
-
-		//handle ref counts
-		if err != nil {
-			data, ok := value.(Data)
-			if ok {
-				data.IncreaseRefcount()
-			}
-			data, ok = old.(Data)
-			if ok {
-				data.DecreaseRefcount()
-			}
-		}
+	if dt.IsComplex() {
+		fmt.Errorf("Compley datatypes cannot be set")
 
 	} else if dt.IsType() {
 
@@ -241,12 +220,8 @@ func (self *vector) Append(value interface{}) (int64, error) {
 		return -1, utils.StackError(err, "Unable to append vector entry")
 	}
 
-	if dt.IsComplex() || dt.IsObject() {
-		//we have a object here, hence handle refcount!
-		data, ok := value.(Data)
-		if ok {
-			data.IncreaseRefcount()
-		}
+	if dt.IsComplex() {
+		return 0, fmt.Errorf("Complex datatypes cannot be appended, use AppendNew")
 	}
 
 	//now increase length
@@ -336,7 +311,7 @@ func (self *vector) Remove(idx int64) error {
 	}
 
 	dt := self.entryDataType()
-	if dt.IsComplex() || dt.IsObject() {
+	if dt.IsComplex() {
 		//we have a object stored, hence delete must remove it completely!
 		val, err := self.Get(idx)
 		if err != nil {
@@ -344,7 +319,7 @@ func (self *vector) Remove(idx int64) error {
 		}
 		data, ok := val.(Data)
 		if ok {
-			data.DecreaseRefcount()
+			self.rntm.removeObject(data.Id())
 		}
 	}
 
@@ -455,61 +430,6 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 //			Internal functions
 //*****************************************************************************
 
-//override to handle children refcount additional to our own
-func (self *vector) IncreaseRefcount() error {
-
-	//increase entrie refcount
-	dt := self.entryDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		length, _ := self.Length()
-		for i := int64(0); i < length; i++ {
-			res, err := self.entries.Read(i)
-			if err == nil {
-				id, e := IdentifierFromEncoded(res.(string))
-				if e == nil {
-					res, ok := self.rntm.objects[id]
-					if ok {
-						err := res.IncreaseRefcount()
-						if err != nil {
-							return err
-						}
-					}
-				}
-			}
-		}
-	}
-	//now increase our own and children refcount
-	return self.object.IncreaseRefcount()
-}
-
-//override to handle children refcount additional to our own
-func (self *vector) DecreaseRefcount() error {
-	//decrease child refcount
-	dt := self.entryDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		length, _ := self.Length()
-		for i := int64(0); i < length; i++ {
-			res, err := self.entries.Read(i)
-			if err == nil {
-				id, e := IdentifierFromEncoded(res.(string))
-				if e == nil {
-					res, ok := self.rntm.objects[id]
-					if ok {
-						err := res.DecreaseRefcount()
-						if err != nil {
-							return err
-						}
-					}
-				}
-			}
-		}
-	}
-	//now decrease our own
-	return self.object.DecreaseRefcount()
-}
-
 func (self *vector) entryDataType() DataType {
 
 	prop := self.GetProperty("type").(*constTypeProperty)
@@ -524,11 +444,10 @@ func (self *vector) buildNew() (interface{}, error) {
 
 	dt := self.entryDataType()
 	if dt.IsComplex() {
-		obj, err := ConstructObject(self.rntm, dt, "")
+		obj, err := ConstructObject(self.rntm, dt, "", self.Id())
 		if err != nil {
 			return -1, utils.StackError(err, "Unable to append new object to vector: construction failed")
 		}
-		obj.IncreaseRefcount()
 		result = obj
 
 	} else {
@@ -549,13 +468,13 @@ func (self *vector) print() {
 	fmt.Println("]")
 }
 
-func (self *vector) GetSubobjects(bhvr bool, prop bool) []Object {
+func (self *vector) GetSubobjects(bhvr bool) []Object {
 
 	//get default objects
-	res := self.DataImpl.GetSubobjects(bhvr, prop)
+	res := self.DataImpl.GetSubobjects(bhvr)
 
 	dt := self.entryDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 		//iterate over all entries and add them
 		length, _ := self.Length()
 		for i := int64(0); i < length; i++ {
@@ -575,10 +494,10 @@ func (self *vector) GetSubobjects(bhvr bool, prop bool) []Object {
 	return res
 }
 
-func (self *vector) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
+func (self *vector) GetSubobjectByName(name string, bhvr bool) (Object, error) {
 
 	//default search
-	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr, prop)
+	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr)
 	if err == nil {
 		return obj, nil
 	}

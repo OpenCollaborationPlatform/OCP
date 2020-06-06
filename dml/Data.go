@@ -23,8 +23,8 @@ type Data interface {
 
 	//Subobject handling is more than only childres
 	//Hirarchy + dynamic objects, optional behaviour + object properties
-	GetSubobjects(bhvr bool, prop bool) []Object
-	GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error)
+	GetSubobjects(bhvr bool) []Object
+	GetSubobjectByName(name string, bhvr bool) (Object, error)
 }
 
 type DataImpl struct {
@@ -78,7 +78,7 @@ func (self *DataImpl) GetChildByName(name string) (Data, error) {
 	return nil, fmt.Errorf("No such object available")
 }
 
-func (self *DataImpl) GetSubobjects(bhvr bool, prop bool) []Object {
+func (self *DataImpl) GetSubobjects(bhvr bool) []Object {
 
 	result := make([]Object, 0)
 
@@ -96,25 +96,10 @@ func (self *DataImpl) GetSubobjects(bhvr bool, prop bool) []Object {
 		}
 	}
 
-	//search object properties
-	if prop {
-		props := self.GetProperties()
-		for _, name := range props {
-			prop := self.GetProperty(name)
-			if prop.Type().IsObject() {
-				val := prop.GetValue()
-				if val != nil {
-					obj := val.(Object)
-					result = append(result, obj)
-				}
-			}
-		}
-	}
-
 	return result
 }
 
-func (self *DataImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Object, error) {
+func (self *DataImpl) GetSubobjectByName(name string, bhvr bool) (Object, error) {
 
 	//search hirarchy
 	child, err := self.GetChildByName(name)
@@ -129,60 +114,11 @@ func (self *DataImpl) GetSubobjectByName(name string, bhvr bool, prop bool) (Obj
 		}
 	}
 
-	//search object properties
-	if prop {
-		props := self.GetProperties()
-		for _, name := range props {
-			prop := self.GetProperty(name)
-			if prop.Type().IsObject() {
-				val := prop.GetValue()
-				if val != nil {
-					obj := val.(Object)
-					if obj.Id().Name == name {
-						return obj, nil
-					}
-				}
-			}
-		}
-	}
-
 	return nil, fmt.Errorf("No such name known")
 }
 
 func (self *DataImpl) GetValueByName(name string) interface{} {
 	return nil
-}
-
-//override to handle children refcount additional to our own
-func (self *DataImpl) IncreaseRefcount() error {
-	//increase child refcount
-	for _, child := range self.children {
-		res, ok := self.rntm.objects[child]
-		if ok {
-			err := res.IncreaseRefcount()
-			if err != nil {
-				return err
-			}
-		}
-	}
-	//now increase our own
-	return self.object.IncreaseRefcount()
-}
-
-//override to handle children refcount additional to our own
-func (self *DataImpl) DecreaseRefcount() error {
-	//decrease child refcount
-	for _, child := range self.children {
-		res, ok := self.rntm.objects[child]
-		if ok {
-			err := res.DecreaseRefcount()
-			if err != nil {
-				return err
-			}
-		}
-	}
-	//now decrease our own
-	return self.object.DecreaseRefcount()
 }
 
 /*******************************************************************************/

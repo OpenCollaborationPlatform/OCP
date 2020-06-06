@@ -134,7 +134,7 @@ func (self *graph) getGonumGraph() (gonum.Graph, map[interface{}]gonum.Node) {
 //inverse of keyToDB
 func (self *graph) dbToType(key interface{}, dt DataType) (interface{}, error) {
 
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		encoded, _ := key.(string)
 		id, err := IdentifierFromEncoded(encoded)
@@ -160,7 +160,7 @@ func (self *graph) dbToType(key interface{}, dt DataType) (interface{}, error) {
 //convert all possible types to something usable in the DB
 func (self *graph) typeToDB(input interface{}, dt DataType) interface{} {
 
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		obj, _ := input.(Object)
 		return obj.Id().Encode()
@@ -216,11 +216,6 @@ func (self *graph) AddNode(value interface{}) error {
 		return utils.StackError(err, "Cannot add node, has wrong type")
 	}
 
-	if dt.IsComplex() || dt.IsObject() {
-		obj := value.(Object)
-		obj.IncreaseRefcount()
-	}
-
 	dbentry := self.typeToDB(value, dt)
 	return self.nodeData.Write(dbentry, struct{}{})
 }
@@ -234,7 +229,7 @@ func (self *graph) NewNode() (interface{}, error) {
 	//create a new entry
 	var result interface{}
 	if dt.IsComplex() {
-		obj, err := ConstructObject(self.rntm, dt, "")
+		obj, err := ConstructObject(self.rntm, dt, "", self.Id())
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to append new object to graph: construction failed")
 		}
@@ -255,10 +250,6 @@ func (self *graph) RemoveNode(value interface{}) error {
 	}
 
 	dt := self.nodeDataType()
-	if dt.IsComplex() || dt.IsObject() {
-		obj := value.(Object)
-		obj.DecreaseRefcount()
-	}
 
 	dbentry := self.typeToDB(value, dt)
 	err := self.nodeData.Remove(dbentry)
@@ -283,6 +274,12 @@ func (self *graph) RemoveNode(value interface{}) error {
 		if edge.Source == value || edge.Target == value {
 			self.edgeData.Remove(key)
 		}
+	}
+
+	//remove from runtime
+	if dt.IsComplex() {
+		obj := value.(Object)
+		self.rntm.removeObject(obj.Id())
 	}
 
 	return nil
@@ -320,15 +317,7 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 	edge := graphEdge{source, target}
 	fmt.Printf("Add edge %v\n", edge)
 
-	err = self.edgeData.Write(dbentry, edge)
-
-	//handle ref count
-	if err == nil && (dt.IsComplex() || dt.IsObject()) {
-		obj := value.(Object)
-		obj.IncreaseRefcount()
-	}
-
-	return err
+	return self.edgeData.Write(dbentry, edge)
 }
 
 //creates a new entry with a all new type, returns the new node
@@ -356,11 +345,10 @@ func (self *graph) NewEdge(source, target interface{}) (interface{}, error) {
 	dt := self.edgeDataType()
 	var result interface{}
 	if dt.IsComplex() {
-		obj, err := ConstructObject(self.rntm, dt, "")
+		obj, err := ConstructObject(self.rntm, dt, "", self.Id())
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to append new object to graph: construction failed")
 		}
-		obj.IncreaseRefcount()
 		result = obj
 
 	} else if dt.IsNone() {
@@ -392,9 +380,9 @@ func (self *graph) RemoveEdge(value interface{}) error {
 
 	dbentry := self.typeToDB(value, dt)
 	err = self.edgeData.Remove(dbentry)
-	if err == nil && (dt.IsComplex() || dt.IsObject()) {
+	if err == nil && dt.IsComplex() {
 		obj := value.(Object)
-		obj.DecreaseRefcount()
+		self.rntm.removeObject(obj.Id())
 	}
 	return err
 }
@@ -434,13 +422,13 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 			(!self.isDirected() && (edge.Source == target && edge.Target == source)) {
 
 			//remove it!
-			if edt.IsComplex() || edt.IsObject() {
+			if edt.IsComplex() {
 				value, err := self.dbToType(key, edt)
 				if err != nil {
 					return utils.StackError(err, "Faulty edge stored")
 				}
 				obj := value.(Object)
-				obj.DecreaseRefcount()
+				self.rntm.removeObject(obj.Id())
 			}
 			return self.edgeData.Remove(key)
 		}
@@ -712,7 +700,7 @@ func (self *graph) Load() error {
 
 	//nodes: we only need to load when we store objects
 	dt := self.nodeDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.nodeData.GetKeys()
 		if err != nil {
@@ -724,25 +712,19 @@ func (self *graph) Load() error {
 			if err != nil {
 				return utils.StackError(err, "Unable to load graph: Stored identifier is invalid")
 			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
 
-				//we made sure the object does not exist. We need to load it
-				obj, err := LoadObject(self.rntm, dt, id)
-				if err != nil {
-					return utils.StackError(err, "Unable to load object for graph: construction failed")
-				}
-				obj.IncreaseRefcount()
-				self.rntm.objects[id] = obj.(Data)
-			} else {
-				existing.IncreaseRefcount()
+			//we made sure the object does not exist. We need to load it
+			obj, err := LoadObject(self.rntm, dt, id, self.Id())
+			if err != nil {
+				return utils.StackError(err, "Unable to load object for graph: construction failed")
 			}
+			self.rntm.objects[id] = obj.(Data)
 		}
 	}
 
 	//values: we only need to load when we store objects
 	dt = self.edgeDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.edgeData.GetKeys()
 		if err != nil {
@@ -754,134 +736,25 @@ func (self *graph) Load() error {
 			if err != nil {
 				return utils.StackError(err, "Unable to load graph: Stored identifier is invalid")
 			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
 
-				//we made sure the object does not exist. We need to load it
-				obj, err := LoadObject(self.rntm, dt, id)
-				if err != nil {
-					return utils.StackError(err, "Unable to load object for graph: construction failed")
-				}
-				obj.IncreaseRefcount()
-				self.rntm.objects[id] = obj.(Data)
-			} else {
-				existing.IncreaseRefcount()
+			obj, err := LoadObject(self.rntm, dt, id, self.Id())
+			if err != nil {
+				return utils.StackError(err, "Unable to load object for graph: construction failed")
 			}
+			self.rntm.objects[id] = obj.(Data)
 		}
 	}
 	return nil
 }
 
-//override to handle children refcount additional to our own
-func (self *graph) IncreaseRefcount() error {
-
-	//handle nodes!
-	dt := self.nodeDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		keys, err := self.nodeData.GetKeys()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase graph refcount: Nodes cannot be accessed")
-		}
-		for _, key := range keys {
-
-			id, err := IdentifierFromEncoded(key.(string))
-			if err != nil {
-				return utils.StackError(err, "Unable to increase graph refcount: Invalid child identifier stored")
-			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
-				return fmt.Errorf("Unable to increase graph refcount: Invalid child stored")
-			}
-			existing.IncreaseRefcount()
-		}
-	}
-
-	//handle edges!
-	dt = self.edgeDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		keys, err := self.edgeData.GetKeys()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase graph refcount: Edges cannot be accessed")
-		}
-		for _, key := range keys {
-
-			id, err := IdentifierFromEncoded(key.(string))
-			if err != nil {
-				return utils.StackError(err, "Unable to increase graph refcount: Invalid child identifier stored")
-			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
-				return fmt.Errorf("Unable to increase graph refcount: Invalid child stored")
-			}
-			existing.IncreaseRefcount()
-		}
-	}
-
-	//now increase our own refcount
-	return self.object.IncreaseRefcount()
-}
-
-//override to handle children refcount additional to our own
-func (self *graph) DecreaseRefcount() error {
-
-	//handle nodes!
-	dt := self.nodeDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		keys, err := self.nodeData.GetKeys()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase graph refcount: Nodes cannot be accessed")
-		}
-		for _, key := range keys {
-
-			id, err := IdentifierFromEncoded(key.(string))
-			if err != nil {
-				return utils.StackError(err, "Unable to increase graph refcount: Invalid child identifier stored")
-			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
-				return fmt.Errorf("Unable to increase graph refcount: Invalid child stored")
-			}
-			existing.DecreaseRefcount()
-		}
-	}
-
-	//handle edges
-	dt = self.edgeDataType()
-	if dt.IsObject() || dt.IsComplex() {
-
-		keys, err := self.edgeData.GetKeys()
-		if err != nil {
-			return utils.StackError(err, "Unable to increase graph refcount: Edges cannot be accessed")
-		}
-		for _, key := range keys {
-
-			id, err := IdentifierFromEncoded(key.(string))
-			if err != nil {
-				return utils.StackError(err, "Unable to increase graph refcount: Invalid child identifier stored")
-			}
-			existing, ok := self.rntm.objects[id]
-			if !ok {
-				return fmt.Errorf("Unable to increase graph refcount: Invalid child stored")
-			}
-			existing.DecreaseRefcount()
-		}
-	}
-
-	//now decrease our own refcount
-	return self.object.DecreaseRefcount()
-}
-
-func (self *graph) GetSubobjects(bhvr bool, prop bool) []Object {
+func (self *graph) GetSubobjects(bhvr bool) []Object {
 
 	//get default objects
-	res := self.DataImpl.GetSubobjects(bhvr, prop)
+	res := self.DataImpl.GetSubobjects(bhvr)
 
 	//handle nodes
 	dt := self.nodeDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.nodeData.GetKeys()
 		if err == nil {
@@ -902,7 +775,7 @@ func (self *graph) GetSubobjects(bhvr bool, prop bool) []Object {
 
 	//handle edges
 	dt = self.edgeDataType()
-	if dt.IsObject() || dt.IsComplex() {
+	if dt.IsComplex() {
 
 		keys, err := self.edgeData.GetKeys()
 		if err == nil {

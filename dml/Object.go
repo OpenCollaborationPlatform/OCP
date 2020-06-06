@@ -3,7 +3,6 @@ package dml
 import (
 	"fmt"
 	"github.com/ickby/CollaborationNode/datastores"
-	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/dop251/goja"
 )
@@ -19,12 +18,6 @@ type Object interface {
 	EventHandler
 	MethodHandler
 	JSObject
-
-	//garbage collection
-	IncreaseRefcount() error
-	DecreaseRefcount() error
-	GetRefcount() (uint64, error)
-	SetRefcount(uint64) error
 
 	//Object functions
 	Id() Identifier
@@ -52,9 +45,6 @@ type object struct {
 	id       Identifier
 	dataType DataType
 
-	//object dynamic state (hence in db)
-	refCount datastore.ValueVersioned
-
 	//javascript
 	jsobj *goja.Object
 }
@@ -66,26 +56,6 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error)
 	//the versionmanager to access the datastores correctly
 	versManager := datastore.NewVersionManager(id.Hash(), rntm.datastore)
 
-	//the store for the refcount
-	set, err := versManager.GetDatabaseSet(datastore.ValueType)
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to acess database set")
-	}
-	vvset := set.(*datastore.ValueVersionedSet)
-	vvRefCnt, err := vvset.GetOrCreateValue([]byte("__refcount"))
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to create refcount database entry")
-	}
-
-	//default value
-	holds, err := vvRefCnt.HoldsValue()
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to write ref count default value")
-	}
-	if !holds {
-		vvRefCnt.Write(uint64(0))
-	}
-
 	//build the object
 	obj := object{
 		versManager,
@@ -96,7 +66,6 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error)
 		parent,
 		id,
 		DataType{},
-		*vvRefCnt,
 		jsobj,
 	}
 
@@ -127,46 +96,6 @@ func (self *object) DataType() DataType {
 
 func (self *object) SetDataType(t DataType) {
 	self.dataType = t
-}
-
-func (self *object) IncreaseRefcount() error {
-	current, err := self.GetRefcount()
-	if err != nil {
-		return err
-	}
-	self.refCount.Write(current + 1)
-	return nil
-}
-
-func (self *object) DecreaseRefcount() error {
-	current, err := self.GetRefcount()
-	if err != nil {
-		return err
-	}
-	self.refCount.Write(current - 1)
-
-	//register for deletion if refcount == 0
-	if current == 1 {
-		self.rntm.gcObjects = append(self.rntm.gcObjects, self.id)
-	}
-	return nil
-}
-
-func (self *object) GetRefcount() (uint64, error) {
-
-	if !self.refCount.IsValid() {
-		return 0, fmt.Errorf("Unable to access refcount")
-	}
-
-	val, err := self.refCount.Read()
-	if err != nil {
-		return 0, err
-	}
-	return val.(uint64), nil
-}
-
-func (self *object) SetRefcount(val uint64) error {
-	return self.refCount.Write(val)
 }
 
 func (self *object) GetJSObject() *goja.Object {

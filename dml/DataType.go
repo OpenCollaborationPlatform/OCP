@@ -4,8 +4,30 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ickby/CollaborationNode/utils"
-	//"github.com/mr-tron/base58/base58"
 )
+
+/*	DataType: a object which holds all available datatypes in DML. Those include:
+ *
+ *	POD:
+ * 		- The usual supported datatypes of every language
+ * 		- int, float, bool, string
+ *
+ *	Type:
+ * 		- This describes the DataType itself. So a DataType can be a DataType.
+ *		- Type is hence a superset of all types
+ *		- Keyword is "type"
+ * 		- This is used for properties:  property type MyType: Data{}
+ *
+ * 	Complex:
+ *		- The complex composed DML datatypes
+ *		- Anything the user create in DML is a DataType "complex"
+ *		- e.g. Data{ Data{} } is a complex datatype
+ *
+ *	None:
+ *		- Describing nothing. Can be used as DataType, but does not reflect any
+ * 		  type
+ * 		- used for properties: property type MyType: none
+ */
 
 //a datatype can be either a pod type or any complex dml object
 type DataType struct {
@@ -34,7 +56,7 @@ func NewDataType(val interface{}) (DataType, error) {
 			if err != nil {
 				return DataType{}, utils.StackError(err, "Unable to marshal AST type representation into DataType")
 			}
-			result = DataType{string(data)} //DataType{base58.Encode(data)}
+			result = DataType{string(data)}
 
 		} else {
 			result = DataType{ast.Pod}
@@ -47,7 +69,7 @@ func NewDataType(val interface{}) (DataType, error) {
 		if err != nil {
 			return DataType{}, utils.StackError(err, "Unable to marshal AST type representation into DataType")
 		}
-		result = DataType{string(data)} //DataType{base58.Encode(data)}
+		result = DataType{string(data)}
 	}
 
 	return result, nil
@@ -91,25 +113,10 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 
 	//nil is special
 	if val == nil {
-		if self.IsNone() || self.IsObject() {
+		if self.IsNone() {
 			return nil
 		}
 		return fmt.Errorf("wrong object type, got '%T' and expected 'nil'", val)
-	}
-
-	//check first if it is a object (as this includes many subtypes switch does not work)
-	obj, ok := val.(Object)
-	if ok {
-		//a object as value is ok if we store all objects
-		if self.IsObject() {
-			return nil
-		}
-
-		//or if the object is exactly the complex type we store
-		if obj.DataType().IsEqual(self) {
-			return nil
-		}
-		return fmt.Errorf("wrong object type, expected vs. received\n %v\n%v", self.AsString(), obj.DataType().AsString())
 	}
 
 	//check if the type is correct
@@ -148,10 +155,6 @@ func (self DataType) complexAsAst() (*astObject, error) {
 		return nil, fmt.Errorf("DataType is not complex, convertion into AST not possible")
 	}
 
-	/*data, err := base58.Decode(self.value)
-	if err != nil {
-		return nil, utils.StackError(err, "Passed string is not a valid type description: unable to decode")
-	}*/
 	var astObj *astObject
 	err := json.Unmarshal([]byte(self.value), &astObj)
 	if err != nil {
@@ -165,16 +168,11 @@ func (self DataType) IsString() bool { return self.value == "string" }
 func (self DataType) IsInt() bool    { return self.value == "int" }
 func (self DataType) IsFloat() bool  { return self.value == "float" }
 func (self DataType) IsBool() bool   { return self.value == "bool" }
-func (self DataType) IsObject() bool { return self.value == "object" }
 func (self DataType) IsType() bool   { return self.value == "type" }
 func (self DataType) IsComplex() bool {
-	return !self.IsString() &&
-		!self.IsInt() &&
-		!self.IsFloat() &&
-		!self.IsBool() &&
-		!self.IsObject() &&
-		!self.IsType() &&
-		!self.IsNone()
+	return !self.IsPOD() &&
+		!self.IsNone() &&
+		!self.IsType()
 }
 
 func (self DataType) GetDefaultValue() interface{} {
@@ -192,6 +190,5 @@ func (self DataType) GetDefaultValue() interface{} {
 		return MustNewDataType("none")
 	}
 
-	//object and complex return "none" object
 	return nil
 }

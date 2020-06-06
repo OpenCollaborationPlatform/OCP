@@ -224,18 +224,16 @@ func TestComplexTypeMap(t *testing.T) {
 			_, err = rntm.RunJavaScript("user3", code)
 			So(err, ShouldBeNil)
 
-			code = `obj = new Object(toplevel.TypeMap.value)
-					toplevel.TypeMap.Set("new", obj)`
-
+			code = `	toplevel.TypeMap.Set("new", toplevel.TypeMap.Get("test"))`
 			_, err = rntm.RunJavaScript("user3", code)
-			So(err, ShouldBeNil)
+			So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
 
 			Convey("Setting data to the new type is supported", func() {
 
 				code = `
 					obj = toplevel.TypeMap.Get("test")
 					obj.test = 1
-					toplevel.TypeMap.Get("new").test = 2
+					toplevel.TypeMap.Get("test2").test = 2
 				`
 				_, err := rntm.RunJavaScript("user3", code)
 				So(err, ShouldBeNil)
@@ -251,7 +249,7 @@ func TestComplexTypeMap(t *testing.T) {
 				obj := entry.(Object)
 				So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
 
-				entry, err = vec.Get("new")
+				entry, err = vec.Get("test2")
 				So(err, ShouldBeNil)
 				obj = entry.(Object)
 				So(obj.GetProperty("test").GetValue(), ShouldEqual, 2)
@@ -265,6 +263,32 @@ func TestComplexTypeMap(t *testing.T) {
 				obj, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
 				So(err, ShouldBeNil)
 				So(obj.GetProperty("test").GetValue(), ShouldEqual, 0)
+			})
+
+			Convey("The hirarchy is set correctl", func() {
+
+				code = `
+					obj = toplevel.TypeMap.Get("test")
+					if (obj.parent != toplevel.TypeMap) {
+						throw "parent not set correctly"	
+					}
+				`
+				_, err := rntm.RunJavaScript("user3", code)
+				So(err, ShouldBeNil)
+			})
+
+			Convey("Removing the object works", func() {
+
+				code = `
+					id = toplevel.TypeMap.Get("test").Identifier()
+					toplevel.TypeMap.Remove("test")
+					if (Objects.hasOwnProperty(id)) {
+						throw "Object list still has type map object, but should not: " + id
+					}
+				`
+				_, err := rntm.RunJavaScript("user3", code)
+				So(err, ShouldBeNil)
+
 			})
 		})
 	})
