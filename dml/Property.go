@@ -36,7 +36,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 
 			//setup default value if needed
 			value, _ := set.GetOrCreateValue([]byte(name))
-			res, err := value.HoldsValue()
+			res, err := value.WasWrittenOnce()
 			if err != nil {
 				return nil, utils.StackError(err, "Cannot create property, datastore not accessible")
 			}
@@ -48,7 +48,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 		} else if dtype.IsType() {
 			//setup default value if needed
 			value, _ := set.GetOrCreateValue([]byte(name))
-			res, err := value.HoldsValue()
+			res, err := value.WasWrittenOnce()
 			if err != nil {
 				return nil, utils.StackError(err, "Cannot create property, datastore not accessible")
 			}
@@ -112,7 +112,11 @@ func (self *dataProperty) SetValue(val interface{}) error {
 		return fmt.Errorf("Invalid database entry")
 	}
 
-	self.GetEvent("onBeforeChange").Emit(val)
+	err = self.GetEvent("onBeforeChange").Emit(val)
+	if err != nil { 
+		return err
+	}
+	
 	if obj, isobj := val.(Object); isobj {
 		err = self.db.Write(obj.Id().Encode())
 
@@ -123,7 +127,9 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	if err != nil {
 		return err
 	}
-	return self.GetEvent("onChanged").Emit(val)
+	
+	self.GetEvent("onChanged").Emit(val) //no error handling, as value was already changed successfully
+	return nil
 }
 
 func (self *dataProperty) GetValue() interface{} {
@@ -163,12 +169,19 @@ func (self *typeProperty) SetValue(val interface{}) error {
 		return utils.StackError(err, "Cannot set type property: invalid argument")
 	}
 
-	self.GetEvent("onBeforeChange").Emit(val)
+	err = self.GetEvent("onBeforeChange").Emit(val)
+	if err != nil {
+		return err
+	} 
 
 	data := val.(DataType)
-	self.db.Write(data.AsString())
+	err = self.db.Write(data.AsString())
+	if err != nil {
+		return err
+	} 
 
-	return self.GetEvent("onChanged").Emit(val)
+	self.GetEvent("onChanged").Emit(val) //no error handling, as value was already changed successfully
+	return nil
 }
 
 //we only return basic information, mailny for JS accessibility

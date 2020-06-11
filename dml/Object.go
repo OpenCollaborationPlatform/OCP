@@ -76,7 +76,10 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error)
 	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode, true))
 
 	//add default events
+	obj.AddEvent("onBeforePropertyChange", NewEvent(obj.GetJSObject(), rntm))
 	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm))
+	obj.AddEvent("onBeforeChange", NewEvent(obj.GetJSObject(), rntm))
+	obj.AddEvent("onChanged", NewEvent(obj.GetJSObject(), rntm))
 
 	return &obj, nil
 }
@@ -127,12 +130,24 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 		return err
 	}
 
-	self.propertyHandler.properties[name] = prop
-
-	//register change event
-	prop.GetEvent("onChanged").RegisterCallback(func(...interface{}) error {
-		return self.GetEvent("onPropertyChanged").Emit(name)
+	//register change events
+	prop.GetEvent("onBeforeChange").RegisterCallback(func(...interface{}) error {
+		err := self.GetEvent("onBeforePropertyChange").Emit(name)
+		if err != nil {
+			return err
+		}
+		return self.GetEvent("onBeforeChange").Emit(name)
 	})
+	prop.GetEvent("onChanged").RegisterCallback(func(...interface{}) error {
+		err := self.GetEvent("onPropertyChanged").Emit(name)
+		if err != nil {
+			return err
+		}
+		return self.GetEvent("onChanged").Emit(name)
+	})
+
+	//everthing went without error, now we can set this property	
+	self.propertyHandler.properties[name] = prop
 
 	return nil
 }

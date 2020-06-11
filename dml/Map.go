@@ -263,8 +263,20 @@ func (self *mapImpl) Set(key interface{}, value interface{}) error {
 		return fmt.Errorf("Complex datatypes cannot be set, use New")
 
 	}
+	
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return err
+	}
 
-	return self.set(key, value)
+	err = self.set(key, value)
+	if err != nil { 
+		return err
+	}
+	
+	self.GetEvent("onChanged").Emit() //do not return error as setting was already successfull
+	return nil
 }
 
 //internal set: careful, no checks!
@@ -315,6 +327,12 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	if self.entries.HasKey(dbkey) {
 		return nil, fmt.Errorf("Key exists already, cannot create new object")
 	}
+	
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return nil, err
+	}
 
 	//create a new entry (with correct refcount if needed)
 	var result interface{}
@@ -331,7 +349,13 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	}
 
 	//write new entry
-	return result, self.set(key, result)
+	err = self.set(key, result)
+	if err != nil { 
+		return nil, err
+	}
+	
+	self.GetEvent("onChanged").Emit() //do not return error as setting was already successfull
+	return result, nil
 }
 
 //remove a entry from the mapImpl
@@ -344,10 +368,16 @@ func (self *mapImpl) Remove(key interface{}) error {
 		return utils.StackError(err, "Cannot create new map value, key has wrong type")
 	}
 
-	//if we already have it we cannot remove it!
+	//if we don't have it we cannot remove it!
 	dbkey := self.typeToDB(key, kdt)
 	if !self.entries.HasKey(dbkey) {
 		return fmt.Errorf("Key does not exist (%v), cannot be removed", key)
+	}
+	
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return err
 	}
 
 	dt := self.valueDataType()
@@ -359,12 +389,18 @@ func (self *mapImpl) Remove(key interface{}) error {
 		}
 		obj, ok := val.(Object)
 		if ok {
-			self.rntm.removeObject(obj.Id())
+			self.rntm.removeObject(obj)
 		}
 	}
 
-	//and delete the old key
-	return self.entries.Remove(dbkey)
+	//delete the key
+	err = self.entries.Remove(dbkey)
+	if err != nil { 
+		return err
+	}
+	
+	self.GetEvent("onChanged").Emit() //do not return error as setting was already successfull
+	return nil
 }
 
 //*****************************************************************************

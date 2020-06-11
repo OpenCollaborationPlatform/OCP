@@ -32,7 +32,7 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) 
 	length, _ := valueSet.GetOrCreateValue([]byte("__vector_order"))
 
 	//initial values
-	if holds, _ := length.HoldsValue(); !holds {
+	if !length.IsValid() {
 		length.Write(int64(0))
 	}
 
@@ -60,7 +60,6 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) 
 
 	//events of a vector
 	vec.AddEvent("onNewEntry", NewEvent(vec.GetJSObject(), rntm))
-	vec.AddEvent("onChange", NewEvent(vec.GetJSObject(), rntm))
 	vec.AddEvent("onDeleteEntry", NewEvent(vec.GetJSObject(), rntm))
 
 	return vec, nil
@@ -188,11 +187,32 @@ func (self *vector) Set(idx int64, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to set vector entry")
 	}
+	
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return err
+	}
 
 	if dt.IsComplex() {
-		fmt.Errorf("Compley datatypes cannot be set")
+		return fmt.Errorf("Compley datatypes cannot be set")
 
-	} else if dt.IsType() {
+	} 
+	
+	err = self.set(dt, idx, value)
+	if err != nil {
+		return err
+	}
+
+	self.GetEvent("onChanged").Emit()
+	return nil
+}
+
+//internal set, without any type checking
+func (self *vector) set(dt DataType, idx int64, value interface{}) error {
+	
+	var err error
+	if dt.IsType() {
 
 		val, _ := value.(DataType)
 		err = self.entries.Write(idx, val.AsString())
@@ -201,13 +221,8 @@ func (self *vector) Set(idx int64, value interface{}) error {
 		//plain types remain
 		err = self.entries.Write(idx, value)
 	}
-
-	if err != nil {
-		return utils.StackError(err, "Unable to write vector at idx %v", idx)
-	}
-
-	self.GetEvent("onChange").Emit()
-	return nil
+	
+	return err
 }
 
 //creates a new entry with a all new type, returns the index of the new one
@@ -219,6 +234,12 @@ func (self *vector) Append(value interface{}) (int64, error) {
 	if err != nil {
 		return -1, utils.StackError(err, "Unable to append vector entry")
 	}
+	
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return -1, err
+	}
 
 	if dt.IsComplex() {
 		return 0, fmt.Errorf("Complex datatypes cannot be appended, use AppendNew")
@@ -228,14 +249,21 @@ func (self *vector) Append(value interface{}) (int64, error) {
 	newIdx, _ := self.Length()
 	self.length.Write(newIdx + 1)
 	//and set value
-	err = self.Set(newIdx, value)
+	err = self.set(dt, newIdx, value)
 
 	self.GetEvent("onNewEntry").Emit(newIdx)
+	self.GetEvent("onChanged").Emit()
 	return newIdx, err
 }
 
 //creates a new entry with a all new type, returns the index of the new one
 func (self *vector) AppendNew() (interface{}, error) {
+
+	//event handling
+	err := self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return nil, err
+	}
 
 	//create a new entry (with correct refcount if needed)
 	length, _ := self.Length()
@@ -257,6 +285,7 @@ func (self *vector) AppendNew() (interface{}, error) {
 	self.length.Write(length + 1)
 
 	self.GetEvent("onNewEntry").Emit(length)
+	self.GetEvent("onChanged").Emit()
 	return result, nil
 }
 
@@ -267,17 +296,24 @@ func (self *vector) Insert(idx int64, value interface{}) error {
 	if idx >= length || idx < 0 {
 		return fmt.Errorf("Index out of bounds: %v", idx)
 	}
+	
+	//event handling
+	err := self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return err
+	}
 
 	appidx, err := self.Append(value)
 	if err != nil {
 		return utils.StackError(err, "Unable to insert value into vector")
 	}
-	err = self.Move(appidx, idx)
+	err = self.move(appidx, idx)
 	if err != nil {
 		return utils.StackError(err, "Unable to insert value into vector")
 	}
 
 	self.GetEvent("onNewEntry").Emit(idx)
+	self.GetEvent("onChanged").Emit()
 	return nil
 }
 
@@ -289,16 +325,23 @@ func (self *vector) InsertNew(idx int64) (interface{}, error) {
 		return nil, fmt.Errorf("Index out of bounds: %v", idx)
 	}
 
+	//event handling
+	err := self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return nil, err
+	}
+
 	res, err := self.AppendNew()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to insert value into vector")
 	}
-	err = self.Move(length, idx)
+	err = self.move(length, idx)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to insert value into vector")
 	}
 
 	self.GetEvent("onNewEntry").Emit(idx)
+	self.GetEvent("onChanged").Emit()
 	return res, nil
 }
 
@@ -309,22 +352,38 @@ func (self *vector) Remove(idx int64) error {
 	if idx >= length || idx < 0 {
 		return fmt.Errorf("Index out of bounds: %v", idx)
 	}
+	
+	//event handling
+	err := self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return err
+	}
+	
+	//inform that we are going to remove
+	err = self.GetEvent("onDeleteEntry").Emit(idx)
+	if err != nil { 
+		return err
+	}
 
+			
+	//if it was a object it needs to be removed completely
 	dt := self.entryDataType()
 	if dt.IsComplex() {
-		//we have a object stored, hence delete must remove it completely!
 		val, err := self.Get(idx)
 		if err != nil {
 			return utils.StackError(err, "Unable to delete entry")
 		}
 		data, ok := val.(Data)
 		if ok {
-			self.rntm.removeObject(data.Id())
+			err := self.rntm.removeObject(data)
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("Stored object seems invalid")
 		}
 	}
-
-	//inform that we are going to remove
-	self.GetEvent("onDeleteEntry").Emit(idx)
+	
 
 	//deleting means moving each entry after idx one down and shortening the length by 1
 	l, _ := self.Length()
@@ -340,16 +399,41 @@ func (self *vector) Remove(idx int64) error {
 	}
 
 	//now shorten the length
-	err := self.length.Write(l - 1)
+	err = self.length.Write(l - 1)
 	if err != nil {
 		return utils.StackError(err, "Unable to Delete entry: vector cnnot be shortent")
 	}
 
 	//and delete the old key
-	return self.entries.Remove(l - 1)
+	err = self.entries.Remove(l - 1)
+	if err != nil {
+		return err
+	}
+
+	
+	self.GetEvent("onChanged").Emit() 
+	return nil
 }
 
 func (self *vector) Swap(idx1 int64, idx2 int64) error {
+
+	if idx1 == idx2 {
+		return nil
+	}
+	
+	length, err := self.Length()
+	if err != nil { 
+		return err
+	}
+	if idx1 >= length || idx2 >= length {
+		return fmt.Errorf("Both indices need to be within vector range")
+	}
+	
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return err
+	}
 
 	//get the data to move
 	data1, err := self.entries.Read(idx1)
@@ -371,20 +455,45 @@ func (self *vector) Swap(idx1 int64, idx2 int64) error {
 		return utils.StackError(err, "Unable to swap vector entries")
 	}
 
-	self.GetEvent("onChange").Emit()
+	self.GetEvent("onChanged").Emit()
 	return nil
 }
 
 func (self *vector) Move(oldIdx int64, newIdx int64) error {
+	
+	if oldIdx == newIdx {
+		return nil
+	}
+	
+	length, err := self.Length()
+	if err != nil {
+		return err
+	}
+	if oldIdx >= length || newIdx >= length {
+		return fmt.Errorf("Both indices need to be within vector range")
+	}
+	
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return err
+	}
+	
+	err = self.move(oldIdx, newIdx)
+	if err != nil { 
+		return err
+	}
+	
+	self.GetEvent("onChanged").Emit()
+	return nil
+}
+
+func (self *vector) move(oldIdx int64, newIdx int64) error {
 
 	//everything between newIdx and oldIdx must be moved by 1
 	//[0 1 2 3 4 5 6]
 	// e.g. old: 2, new: 5 [0 1 3 4 5 2 6] (3->2, 4->3, 5->4, 2->5)
 	// e.g. old: 5, new: 2 [0 1 5 2 3 4 6] (2->3, 3->4, 4->5, 5->2)
-
-	if oldIdx == newIdx {
-		return nil
-	}
 
 	//get the data to move
 	data, err := self.entries.Read(oldIdx)
@@ -419,11 +528,7 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 	}
 
 	//write the data into the correct location
-	err = self.entries.Write(newIdx, data)
-	if err == nil {
-		self.GetEvent("onChange").Emit()
-	}
-	return err
+	return self.entries.Write(newIdx, data)
 }
 
 //*****************************************************************************

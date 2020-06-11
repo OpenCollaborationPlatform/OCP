@@ -973,7 +973,7 @@ func (self *ValueVersioned) Write(valueVersioned interface{}) error {
 //True if:
 // - setup correctly and writeable/readable
 // - is available in currently load version
-//Note: True does not mean that data was written and reading makes sense
+// - contains a value, hence can be safely read
 func (self *ValueVersioned) IsValid() bool {
 
 	var result bool = true
@@ -1008,29 +1008,82 @@ func (self *ValueVersioned) IsValid() bool {
 	return result
 }
 
-//return true if the value was already written, false otherwise
-func (self *ValueVersioned) HoldsValue() (bool, error) {
+//return true if 
+// - the value was already written in HEAD, or
+// - any versions exist
+func (self *ValueVersioned) WasWrittenOnce() (bool, error) {
 
-	var hasValue bool
-	id := self.CurrentVersion()
+	var result bool = false
 	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
-		data := bucket.Get(itob(uint64(id)))
-		if isInvalid(data) {
-			return fmt.Errorf("ValueVersioned does not exist in currently loaded version")
+		
+		//check if something valid is in HEAD
+		head := bucket.Get(itob(HEAD))
+		if head != nil && !isInvalid(head) { 
+			result = true
+			return nil
 		}
-		hasValue = (data != nil)
+		
+		//head was not written, check if we have any versions
+		bucket.ForEach(func(k, v []byte) error {
+			val := btoi(k)
+			if val != HEAD && val != CURRENT {
+				result = true
+				return nil
+			}
+			return nil
+		})
+		
+		
 		return nil
 	})
 
 	if err != nil {
 		return false, utils.StackError(err, "Cannot check if value holds data or not")
 	}
-	return hasValue, nil
+	return result, nil
+}
+
+//True if:
+// - was setup with GetOrCreate
+// - was not removed, including al its versions
+//
+// Note that it does state nothing about content, could still be invalid or never
+// be written before
+func (self *ValueVersioned) Exists() bool {
+
+	var result bool = true
+	err := self.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.dbkey)
+		if bucket == nil {
+			result = false
+			return nil
+		}
+		for _, bkey := range append(self.setkey, self.key) {
+			bucket = bucket.Bucket(bkey)
+			if bucket == nil {
+				result = false
+				return nil
+			}
+		}
+
+		cur := bucket.Get(itob(CURRENT))
+		if cur == nil {
+			result = false
+			return nil
+		}
+		return nil
+	})
+
+	if err != nil {
+		return false
+	}
+	return result
 }
 
 func (self *ValueVersioned) Read() (interface{}, error) {

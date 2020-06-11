@@ -484,9 +484,10 @@ func TestValueVersioned(t *testing.T) {
 				value.Write("test")
 				So(value.HasUpdates(), ShouldBeTrue)
 
-				holds, err := value.HoldsValue()
+				holds, err := value.WasWrittenOnce()
 				So(err, ShouldBeNil)
 				So(holds, ShouldBeTrue)
+				So(value.IsValid(), ShouldBeTrue)
 				So(value.LatestVersion().IsValid(), ShouldBeFalse)
 
 				has, _ := kvset.HasUpdates()

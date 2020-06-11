@@ -50,11 +50,7 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 func (self *variant) Load() error {
 
 	//if the value was never set we don't need to load anything...
-	has, err := self.value.HoldsValue()
-	if err != nil {
-		return utils.StackError(err, "Unable to access database to load variant value")
-	}
-	if !has {
+	if !self.value.IsValid() {
 		return nil
 	}
 	//we only need to load when we store objects
@@ -88,6 +84,12 @@ func (self *variant) SetValue(value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to set variant data")
 	}
+	
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit()
+	if err != nil { 
+		return err
+	}
 
 	if dt.IsComplex() {
 
@@ -108,6 +110,7 @@ func (self *variant) SetValue(value interface{}) error {
 	}
 
 	self.GetEvent("onValueChanged").Emit()
+	self.GetEvent("onChanged").Emit()
 	return nil
 }
 
@@ -115,8 +118,8 @@ func (self *variant) GetValue() (interface{}, error) {
 
 	dt := self.getDataType()
 
-	//if no value waas set before we just return the default values!
-	if holds, _ := self.value.HoldsValue(); !holds {
+	//if no value was set before we just return the default values!
+	if !self.value.IsValid() {
 		return dt.GetDefaultValue(), nil
 	}
 

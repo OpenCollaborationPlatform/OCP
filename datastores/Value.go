@@ -195,7 +195,7 @@ func (self ValueSet) GetType() StorageType {
 func (self *ValueSet) HasKey(key []byte) bool {
 
 	value := Value{self.db, self.dbkey, self.setkey, key}
-	res, err := value.HoldsValue()
+	res, err := value.Exists()
 	if err != nil {
 		return false
 	}
@@ -321,10 +321,29 @@ func (self *Value) Read() (interface{}, error) {
 
 //returns true if:
 //- setup correctly and able to write
-//- value is not INVALID
-//note that it does not mean that anything was written yet.
+//- value is not INVALID, hence can be read
+//- was not removed yet
 func (self *Value) IsValid() bool {
 
+	//for a normal unversioned Value IsValid == WasWrittenOnce, as we do not use 
+	//INVALID_DATA for anything else except indicating if the value was created
+	//INVALID_DATA is not allowed to be set by the user, hence once any value has been 
+	//set it is always valid.
+	res, err := self.WasWrittenOnce()
+	if err != nil {
+		return false
+	}
+	return res
+}
+
+//return true if
+// - the value was written before
+func (self *Value) WasWrittenOnce() (bool, error) {
+
+	//Note: A value is created By GetOrCreate with INVALID_DATA written. This 
+	//allows to distuinguish if it was already created or not. But INVALID_DATA
+	//does still mean nothing was written
+	
 	valid := true
 	err := self.db.View(func(tx *bolt.Tx) error {
 
@@ -342,36 +361,40 @@ func (self *Value) IsValid() bool {
 		}
 
 		data := bucket.Get(self.key)
-		if isInvalid(data) {
-			valid = false
-		}
+		valid = !((data == nil) || (isInvalid(data)))
 		return nil
 	})
 	if err != nil {
-		return false
+		return false, err
 	}
-	return valid
+	return valid, nil
 }
 
-//return true if the value was already written, false otherwise
-//Note that it also returns true if the value is INVALID
-func (self *Value) HoldsValue() (bool, error) {
+//return true if the value exists:
+//- was created by GetOrCreate
+//- was not removed yet
+func (self *Value) Exists() (bool, error) {
 
-	var hasValue bool
+	//Note: A value is created By GetOrCreate with INVALID_DATA written. This 
+	//allows to distuinguish if it was already created or not. Hence we only need 
+	//to check  if the stored value is nil
+
+	var exists bool
 	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range self.setkey {
 			bucket = bucket.Bucket(bkey)
 		}
-		hasValue = (bucket.Get(self.key) != nil)
+		val := bucket.Get(self.key)
+		exists = (val != nil)
 		return nil
 	})
 
 	if err != nil {
-		return false, utils.StackError(err, "Cannot check if value holds data or not")
+		return false, utils.StackError(err, "Cannot check if value exists")
 	}
-	return hasValue, nil
+	return exists, nil
 }
 
 func (self *Value) remove() error {

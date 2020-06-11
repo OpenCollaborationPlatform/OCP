@@ -122,8 +122,7 @@ func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) err
 			jsArgs[i] = self.jsvm.ToValue(arg)
 		}
 		cb(goja.FunctionCall{This: self.jsparent, Arguments: jsArgs})
-
-		return err
+		return
 	})
 }
 

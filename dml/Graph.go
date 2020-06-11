@@ -279,7 +279,7 @@ func (self *graph) RemoveNode(value interface{}) error {
 	//remove from runtime
 	if dt.IsComplex() {
 		obj := value.(Object)
-		self.rntm.removeObject(obj.Id())
+		self.rntm.removeObject(obj)
 	}
 
 	return nil
@@ -382,7 +382,7 @@ func (self *graph) RemoveEdge(value interface{}) error {
 	err = self.edgeData.Remove(dbentry)
 	if err == nil && dt.IsComplex() {
 		obj := value.(Object)
-		self.rntm.removeObject(obj.Id())
+		self.rntm.removeObject(obj)
 	}
 	return err
 }
@@ -428,7 +428,7 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 					return utils.StackError(err, "Faulty edge stored")
 				}
 				obj := value.(Object)
-				self.rntm.removeObject(obj.Id())
+				self.rntm.removeObject(obj)
 			}
 			return self.edgeData.Remove(key)
 		}

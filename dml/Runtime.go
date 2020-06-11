@@ -161,6 +161,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		return utils.StackError(err, "Unable to parse dml code")
 		//TODO clear the database entries...
 	}
+	obj.(Data).SetupBehaviours(obj.(Data), true)
 	self.mainObj = obj.(Data)
 	self.ready = true
 
@@ -489,22 +490,8 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 
 	if !rollbackOnly {
 
-		//handle all behaviours!
-		for _, obj := range self.objects {
-
-			//handle transactions
-			if obj.HasBehaviour("Transaction") {
-				err := self.transactions.Handle(obj.GetBehaviour("Transaction"))
-				if err != nil {
-					postError = utils.StackError(err, "Adding to Transaction failed: Rollback")
-					rollback = true
-					break
-				}
-			}
-
-			//handle the versioning
-
-		}
+		//handle behaviours... none yet. Transaction is handled in normal 
+		//execution flow
 	}
 
 	//rollback if required (caller requested or behaviours failed)
@@ -582,25 +569,27 @@ func (self *Runtime) importDML(astImp *astImport) error {
 }
 
 //recursive remove object from runtime
-func (self *Runtime) removeObject(id Identifier) error {
+func (self *Runtime) removeObject(obj Object) error {
 
-	obj, ok := self.objects[id]
-	if !ok {
-		return fmt.Errorf("No such obj, cannot remove")
+	if data, ok := obj.(Data); ok {
+		
+		//remove from list and javascript (not for behaviours)
+		delete(self.objects, obj.Id())
+		_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().Encode()))
+		if err != nil {
+			return err
+		}
+		
+		//recursive object handling!
+		for _, sub := range data.GetSubobjects(true) {
+			err := self.removeObject(sub)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
-	//remove from list and javascript
-	delete(self.objects, id)
-	self.jsObjMap.Set(id.Encode(), nil)
-	self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().Encode()))
-
-	//recursive object handling!
-	data, ok := obj.(Data)
-	for _, sub := range data.GetSubobjects(false) {
-		self.removeObject(sub.Id())
-	}
-
-	//TODO: howto handle data store?
+	//TODO: howto handle data store? for Data and Behaviours!
 
 	return nil
 }

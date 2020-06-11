@@ -21,7 +21,7 @@ type Data interface {
 	GetChildren() []Data
 	GetChildByName(name string) (Data, error)
 
-	//Subobject handling is more than only childres
+	//Subobject handling is more than only childrens
 	//Hirarchy + dynamic objects, optional behaviour + object properties
 	GetSubobjects(bhvr bool) []Object
 	GetSubobjectByName(name string, bhvr bool) (Object, error)
@@ -50,7 +50,7 @@ func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) (*DataImp
 		NewBehaviourHandler(),
 		make([]Identifier, 0),
 	}
-
+	
 	return &dat, nil
 }
 

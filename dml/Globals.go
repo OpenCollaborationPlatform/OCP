@@ -52,8 +52,6 @@ func SetupGlobals(rntm *Runtime) {
 }
 
 //Construct a data object from encoded description (as provided by type property)
-//Note that if no name is given a random name is generated to ensure uniqueness. If
-//the object shall be restored instead provide the name to restore
 func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier) (Object, error) {
 
 	if !dt.IsComplex() {
@@ -68,8 +66,9 @@ func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier)
 	//set a uuid to ensure unique identifier
 	uid := uuid.NewV4().String()
 
-	//build the object (without parent, but with uuid)
+	//build the object
 	obj, err := rntm.buildObject(astObj, parent, uid)
+	obj.(Data).SetupBehaviours(obj.(Data), true)
 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
@@ -98,7 +97,9 @@ func LoadObject(rntm *Runtime, dt DataType, id Identifier, parent Identifier) (O
 
 	//build the object (without parent, but with uuid)
 	obj, err := rntm.buildObject(astObj, Identifier{}, id.Uuid)
-
+	//no behaviour setup, LoadObject is only called out of buildObject
+	
+	
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
 	}

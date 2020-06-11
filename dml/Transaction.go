@@ -106,29 +106,28 @@ func (self transaction) SetUser(user User) error {
 	return self.user.Write(user)
 }
 
-func (self transaction) Objects() []Data {
+func (self transaction) Objects() ([]Data, error) {
 
 	entries, err := self.objects.GetEntries()
 	if err != nil {
-		return make([]Data, 0)
+		return make([]Data, 0), err
 	}
-	result := make([]Data, len(entries))
+	result := make([]Data, 0)
 
-	//note: must panic on error as otherwise slice has more nil objects in it
-	for i, entry := range entries {
+	for _, entry := range entries {
 
 		id, err := entry.Read()
 		if err != nil {
-			panic("Cannot read identifier\n")
+			return result, err
 		}
 
 		obj, ok := self.rntm.objects[*(id.(*Identifier))]
 		if !ok {
-			panic("Id not available")
+			return result, fmt.Errorf("Stored object not accessible")
 		}
-		result[i] = obj
+		result = append(result, obj)
 	}
-	return result
+	return result, nil
 }
 
 func (self transaction) HasObject(id Identifier) bool {
@@ -175,8 +174,8 @@ func (self transaction) AddObject(id Identifier) error {
 
 type TransactionManager struct {
 	methodHandler
-
-	rntm *Runtime
+	
+	rntm 	*Runtime
 
 	//we do not need the versioning, but the commit/rollback possibility
 	mapset       *datastore.MapSet
@@ -199,7 +198,9 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 		return &TransactionManager{}, utils.StackError(err, "Cannot access internal transaction list store")
 	}
 
-	mngr := &TransactionManager{NewMethodHandler(), rntm, mapSet, map_, nil}
+	mngr := &TransactionManager{ NewMethodHandler(), 
+								rntm, 
+								mapSet, map_, nil}
 
 	//setup default methods
 	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen, true))
@@ -261,7 +262,10 @@ func (self *TransactionManager) Close() error {
 	}
 
 	//iterate over all objects and call the close event
-	objs := trans.Objects()
+	objs, err := trans.Objects()
+	if err != nil {
+		return err
+	}
 	for _, obj := range objs {
 
 		//the object is not part of a transaction anymode
@@ -315,15 +319,18 @@ func (self *TransactionManager) Add(obj Data) error {
 	if err != nil {
 		err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
 		bhvr.GetEvent("onFailure").Emit(err.Error())
-		return err
+		return utils.StackError(err, "Unable to add Object")
 	}
 
 	//check if object is not already in annother transaction
-	if bhvr.InTransaction() {
-
+	ok, err = bhvr.InTransaction()
+	if err != nil {
+		return utils.StackError(err, "Unable to add Object")
+	}
+	if ok {
 		objTrans, err := bhvr.GetTransaction()
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to add Object")
 		}
 		if !objTrans.Equal(trans) {
 			err = fmt.Errorf("Object already part of different transaction")
@@ -442,42 +449,9 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 		return transaction{}, utils.StackError(err, "Setting user for new transaction failed")
 	}
 
-	return trans, err
+	return trans, nil
 }
 
-func (self *TransactionManager) Handle(bhvr Behaviour) error {
-
-	obj := bhvr.GetParent()
-	if recursiveHasUpdates(obj) {
-		trans, err := self.getTransaction()
-		if err != nil {
-			return err
-		}
-		return trans.AddObject(obj.Id())
-	}
-
-	return nil
-}
-
-func recursiveHasUpdates(obj Object) bool {
-
-	if has, _ := obj.HasUpdates(); has {
-		return true
-	}
-
-	data, isData := obj.(Data)
-	if isData {
-		objs := data.GetSubobjects(true)
-
-		for _, obj := range objs {
-			if recursiveHasUpdates(obj) {
-				return true
-			}
-		}
-	}
-
-	return false
-}
 
 func getTransactionBehaviour(obj Data) *transactionBehaviour {
 	//must have the transaction behaviour
@@ -492,6 +466,8 @@ func getTransactionBehaviour(obj Data) *transactionBehaviour {
 *********************************************************************************/
 type transactionBehaviour struct {
 	*behaviour
+	
+	mngr *TransactionManager
 
 	//transient state (hence db storage)
 	inTransaction datastore.Value
@@ -511,7 +487,7 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	inTrans, _ := vset.GetOrCreateValue([]byte("__inTransaction"))
 	curTrans, _ := vset.GetOrCreateValue([]byte("__currentTransaction"))
 
-	tbhvr := &transactionBehaviour{behaviour, *inTrans, *curTrans}
+	tbhvr := &transactionBehaviour{behaviour, rntm.transactions, *inTrans, *curTrans}
 
 	//add default methods for overriding by the user
 	tbhvr.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable, true))                //return true/false if object can be used in current transaction
@@ -525,33 +501,69 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	tbhvr.AddEvent(`onFailure`, NewEvent(behaviour.GetJSObject(), rntm))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
-	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))
-	tbhvr.AddMethod("InCurrentTransaction", MustNewMethod(tbhvr.InCurrentTransaction, true))
+	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))					//behaviour is in any transaction, also other users?
+	tbhvr.AddMethod("InCurrentTransaction", MustNewMethod(tbhvr.InCurrentTransaction, true))	//behaviour is in currently open transaction for user?
 
 	return tbhvr, nil
 }
 
-func (self *transactionBehaviour) InTransaction() bool {
+func (self *transactionBehaviour)	 Setup() 	error { 
 
-	if holds, _ := self.inTransaction.HoldsValue(); !holds {
-		return false
-	}
-
-	res, _ := self.inTransaction.Read()
-	if res == nil {
-		return false
-	}
-	return res.(bool)
+	//we look for changed events and add to transaction on it. This leads to an error 
+	//if this is not allowed by transaction, and hence the change never happens
+	return self.GetParent().GetEvent("onBeforeChange").RegisterCallback(func(...interface{}) error {
+		
+		//note that this fails when no transacton is open. But this is supposed to happen:
+		//once the user added the Transaction behaviour no changes are possible anymore without transaction
+		return self.mngr.Add(self.GetParent().(Data))
+	})
 }
 
-func (self *transactionBehaviour) InCurrentTransaction() bool {
+func (self *transactionBehaviour) SetupRecursive(obj Data) error { 
 
-	trans, err := self.GetTransaction()
-	if err != nil {
-		return false
+	if !self.GetProperty("recursive").GetValue().(bool) { 
+		return nil
+	}
+	
+	//equal to Setup()
+	return obj.GetEvent("onBeforeChange").RegisterCallback(func(...interface{}) error {
+		return self.mngr.Add(self.GetParent().(Data))
+	})
+}
+
+func (self *transactionBehaviour) InTransaction() (bool, error) {
+
+	if !self.inTransaction.IsValid() {
+		return false, nil
 	}
 
-	return trans.HasObject(self.GetParent().Id())
+	res, err := self.inTransaction.Read()
+	if err != nil {
+		return false, utils.StackError(err, "Cannot check if in transaction")
+	}
+	if res == nil {
+		return false, nil
+	}
+	return res.(bool), nil
+}
+
+func (self *transactionBehaviour) InCurrentTransaction() (bool, error) {
+	
+	if !self.inTransaction.IsValid() {
+		return false, nil 
+	}
+	
+	trans, err := self.GetTransaction()
+	if err != nil {
+		return false, err
+	}
+	
+	current, err := self.mngr.getTransaction()
+	if err != nil {
+		return false, err
+	}
+	
+	return current.Equal(trans), nil
 }
 
 func (self *transactionBehaviour) GetTransaction() (transaction, error) {
@@ -562,11 +574,6 @@ func (self *transactionBehaviour) GetTransaction() (transaction, error) {
 		return transaction{}, err
 	}
 	return trans, nil
-}
-
-func (self *transactionBehaviour) Copy() Behaviour {
-
-	return nil
 }
 
 func (self *transactionBehaviour) defaultAddable() bool {
