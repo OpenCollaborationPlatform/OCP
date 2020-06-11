@@ -32,7 +32,7 @@ func NewVector(id Identifier, parent Identifier, rntm *Runtime) (Object, error) 
 	length, _ := valueSet.GetOrCreateValue([]byte("__vector_order"))
 
 	//initial values
-	if !length.IsValid() {
+	if ok, _ := length.WasWrittenOnce(); !ok {
 		length.Write(int64(0))
 	}
 
