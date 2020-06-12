@@ -325,9 +325,9 @@ func (self *Value) Read() (interface{}, error) {
 //- was not removed yet
 func (self *Value) IsValid() bool {
 
-	//for a normal unversioned Value IsValid == WasWrittenOnce, as we do not use 
+	//for a normal unversioned Value IsValid == WasWrittenOnce, as we do not use
 	//INVALID_DATA for anything else except indicating if the value was created
-	//INVALID_DATA is not allowed to be set by the user, hence once any value has been 
+	//INVALID_DATA is not allowed to be set by the user, hence once any value has been
 	//set it is always valid.
 	res, err := self.WasWrittenOnce()
 	if err != nil {
@@ -340,10 +340,10 @@ func (self *Value) IsValid() bool {
 // - the value was written before
 func (self *Value) WasWrittenOnce() (bool, error) {
 
-	//Note: A value is created By GetOrCreate with INVALID_DATA written. This 
+	//Note: A value is created By GetOrCreate with INVALID_DATA written. This
 	//allows to distuinguish if it was already created or not. But INVALID_DATA
 	//does still mean nothing was written
-	
+
 	valid := true
 	err := self.db.View(func(tx *bolt.Tx) error {
 
@@ -375,8 +375,8 @@ func (self *Value) WasWrittenOnce() (bool, error) {
 //- was not removed yet
 func (self *Value) Exists() (bool, error) {
 
-	//Note: A value is created By GetOrCreate with INVALID_DATA written. This 
-	//allows to distuinguish if it was already created or not. Hence we only need 
+	//Note: A value is created By GetOrCreate with INVALID_DATA written. This
+	//allows to distuinguish if it was already created or not. Hence we only need
 	//to check  if the stored value is nil
 
 	var exists bool

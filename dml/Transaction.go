@@ -174,8 +174,8 @@ func (self transaction) AddObject(id Identifier) error {
 
 type TransactionManager struct {
 	methodHandler
-	
-	rntm 	*Runtime
+
+	rntm *Runtime
 
 	//we do not need the versioning, but the commit/rollback possibility
 	mapset       *datastore.MapSet
@@ -198,9 +198,9 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 		return &TransactionManager{}, utils.StackError(err, "Cannot access internal transaction list store")
 	}
 
-	mngr := &TransactionManager{ NewMethodHandler(), 
-								rntm, 
-								mapSet, map_, nil}
+	mngr := &TransactionManager{NewMethodHandler(),
+		rntm,
+		mapSet, map_, nil}
 
 	//setup default methods
 	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen, true))
@@ -452,7 +452,6 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 	return trans, nil
 }
 
-
 func getTransactionBehaviour(obj Data) *transactionBehaviour {
 	//must have the transaction behaviour
 	if !obj.HasBehaviour("Transaction") {
@@ -466,7 +465,7 @@ func getTransactionBehaviour(obj Data) *transactionBehaviour {
 *********************************************************************************/
 type transactionBehaviour struct {
 	*behaviour
-	
+
 	mngr *TransactionManager
 
 	//transient state (hence db storage)
@@ -501,30 +500,30 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	tbhvr.AddEvent(`onFailure`, NewEvent(behaviour.GetJSObject(), rntm))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
-	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))					//behaviour is in any transaction, also other users?
-	tbhvr.AddMethod("InCurrentTransaction", MustNewMethod(tbhvr.InCurrentTransaction, true))	//behaviour is in currently open transaction for user?
+	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))               //behaviour is in any transaction, also other users?
+	tbhvr.AddMethod("InCurrentTransaction", MustNewMethod(tbhvr.InCurrentTransaction, true)) //behaviour is in currently open transaction for user?
 
 	return tbhvr, nil
 }
 
-func (self *transactionBehaviour)	 Setup() 	error { 
+func (self *transactionBehaviour) Setup() error {
 
-	//we look for changed events and add to transaction on it. This leads to an error 
+	//we look for changed events and add to transaction on it. This leads to an error
 	//if this is not allowed by transaction, and hence the change never happens
 	return self.GetParent().GetEvent("onBeforeChange").RegisterCallback(func(...interface{}) error {
-		
+
 		//note that this fails when no transacton is open. But this is supposed to happen:
 		//once the user added the Transaction behaviour no changes are possible anymore without transaction
 		return self.mngr.Add(self.GetParent().(Data))
 	})
 }
 
-func (self *transactionBehaviour) SetupRecursive(obj Data) error { 
+func (self *transactionBehaviour) SetupRecursive(obj Data) error {
 
-	if !self.GetProperty("recursive").GetValue().(bool) { 
+	if !self.GetProperty("recursive").GetValue().(bool) {
 		return nil
 	}
-	
+
 	//equal to Setup()
 	return obj.GetEvent("onBeforeChange").RegisterCallback(func(...interface{}) error {
 		return self.mngr.Add(self.GetParent().(Data))
@@ -548,21 +547,21 @@ func (self *transactionBehaviour) InTransaction() (bool, error) {
 }
 
 func (self *transactionBehaviour) InCurrentTransaction() (bool, error) {
-	
+
 	if !self.inTransaction.IsValid() {
-		return false, nil 
+		return false, nil
 	}
-	
+
 	trans, err := self.GetTransaction()
 	if err != nil {
 		return false, err
 	}
-	
+
 	current, err := self.mngr.getTransaction()
 	if err != nil {
 		return false, err
 	}
-	
+
 	return current.Equal(trans), nil
 }
 

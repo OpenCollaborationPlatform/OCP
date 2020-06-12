@@ -652,7 +652,7 @@ func (self *MapVersioned) Remove(key interface{}) error {
 	if !self.HasKey(key) {
 		return fmt.Errorf("Key does not exist, cannot remove")
 	}
-	
+
 	k, err := getBytes(key)
 	if err != nil {
 		return utils.StackError(err, "Cannot remove MapVersioned key")

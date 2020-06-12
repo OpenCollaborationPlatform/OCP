@@ -11,11 +11,11 @@ import (
 func TestVersioning(t *testing.T) {
 
 	Convey("Creating a temporary datastore with a set manager,", t, func() {
-	
+
 		//make temporary folder for the data
 		path, _ := ioutil.TempDir("", "dml")
 		defer os.RemoveAll(path)
-	
+
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
@@ -82,12 +82,11 @@ func TestVersioning(t *testing.T) {
 				v, err = mset.GetLatestVersion()
 				So(err, ShouldBeNil)
 				So(uint64(v), ShouldEqual, 1)
-			
 
 				Convey("Old data is accessible", func() {
-	
+
 					So(value.Write(12), ShouldBeNil)
-	
+
 					has, _ := mngr.HasUpdates()
 					So(has, ShouldBeTrue)
 					has, _ = vset.HasUpdates()
@@ -100,7 +99,7 @@ func TestVersioning(t *testing.T) {
 					So(uint64(version), ShouldEqual, 2)
 					has, _ = mngr.HasUpdates()
 					So(has, ShouldBeFalse)
-	
+
 					v, err := vset.GetCurrentVersion()
 					So(err, ShouldBeNil)
 					So(v.IsHead(), ShouldBeTrue)
@@ -113,7 +112,7 @@ func TestVersioning(t *testing.T) {
 					v, err = mset.GetLatestVersion()
 					So(err, ShouldBeNil)
 					So(uint64(v), ShouldEqual, 1)
-	
+
 					So(mngr.LoadVersion(version), ShouldBeNil)
 					v, err = vset.GetCurrentVersion()
 					So(err, ShouldBeNil)
@@ -127,7 +126,7 @@ func TestVersioning(t *testing.T) {
 					v, err = mset.GetLatestVersion()
 					So(err, ShouldBeNil)
 					So(uint64(v), ShouldEqual, 1)
-	
+
 				})
 			})
 		})

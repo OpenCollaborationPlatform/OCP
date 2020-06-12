@@ -17,8 +17,8 @@ import (
 type Behaviour interface {
 	Object
 
-	Setup() 	error					//Called after parent is fully setup
-	SetupRecursive(obj Data)	error 	//Called for each recursive data Object (if recursive is true)
+	Setup() error                  //Called after parent is fully setup
+	SetupRecursive(obj Data) error //Called for each recursive data Object (if recursive is true)
 }
 
 func NewBehaviour(id Identifier, parent Identifier, rntm *Runtime) (*behaviour, error) {
@@ -52,7 +52,7 @@ type BehaviourHandler interface {
 	GetBehaviour(string) Behaviour
 	AddBehaviour(string, Behaviour) error
 	Behaviours() []string
-	
+
 	//Setup all behaviours, possible including all childs
 	//to be called after data hirarchy is setup (parent and children)
 	SetupBehaviours(Data, bool) error
@@ -95,19 +95,19 @@ func (self *behaviourHandler) Behaviours() []string {
 }
 
 func (self *behaviourHandler) SetupBehaviours(obj Data, childs bool) error {
-	
-	//We need to setup all behaviours we have been added, and all recursive 
+
+	//We need to setup all behaviours we have been added, and all recursive
 	//ones in any of our parents
-	
+
 	//own behaviours
 	done := make([]string, 0)
 	for name, bhvr := range self.behaviours {
 		bhvr.Setup()
 		done = append(done, name)
 	}
-	
+
 	//let's start recursive behaviour setup (iterate upwards)
-	if obj.GetParent() != nil { 
+	if obj.GetParent() != nil {
 		parent, ok := obj.GetParent().(Data)
 		if ok {
 			err := self.setupRecursive(parent, obj, done)
@@ -116,34 +116,34 @@ func (self *behaviourHandler) SetupBehaviours(obj Data, childs bool) error {
 			}
 		}
 	}
-	
+
 	//setup the children too if required  (iterate downwards)
 	if childs {
 		for _, child := range obj.GetSubobjects(false) {
 			data, ok := child.(Data)
-			if !ok { 
+			if !ok {
 				continue
 			}
 			data.SetupBehaviours(data, true)
 		}
 	}
-	
+
 	return nil
 }
 
-func (self *behaviourHandler) setupRecursive(setup Data, with Data, done []string)  error { 
+func (self *behaviourHandler) setupRecursive(setup Data, with Data, done []string) error {
 
 	//we check if there are any behaviours available, that we did not yet Setup
 	for _, bhvr := range setup.Behaviours() {
-		
+
 		in := false
-		for _, d := range done { 
+		for _, d := range done {
 			if d == bhvr {
 				in = true
 				break
 			}
 		}
-		
+
 		if !in {
 			done = append(done, bhvr)
 			err := setup.GetBehaviour(bhvr).SetupRecursive(with)
@@ -152,14 +152,14 @@ func (self *behaviourHandler) setupRecursive(setup Data, with Data, done []strin
 			}
 		}
 	}
-	
+
 	//go on check the parent
-	if setup.GetParent() != nil { 
+	if setup.GetParent() != nil {
 		parent, ok := setup.GetParent().(Data)
 		if ok {
 			return self.setupRecursive(parent, with, done)
 		}
 	}
-	
+
 	return nil
 }

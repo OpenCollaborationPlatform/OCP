@@ -52,8 +52,8 @@ func (self *variant) Load() error {
 
 	//we only need to load when we store objects
 	dt := self.getDataType()
-	if dt.IsComplex() {		
-		
+	if dt.IsComplex() {
+
 		//if the value was never set. Hence we need to create the object newly
 		if !self.value.IsValid() {
 			obj, err := ConstructObject(self.rntm, dt, "", self.Id())
@@ -64,7 +64,7 @@ func (self *variant) Load() error {
 			if err != nil {
 				return err
 			}
-		
+
 		} else {
 
 			res, err := self.value.Read()
@@ -78,7 +78,7 @@ func (self *variant) Load() error {
 				if has {
 					return nil
 				}
-				
+
 				//not existing yet, load it!
 				obj, err := LoadObject(self.rntm, dt, id, self.Id())
 				if err != nil {
@@ -101,10 +101,10 @@ func (self *variant) SetValue(value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to set variant data")
 	}
-	
+
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return err
 	}
 
@@ -169,40 +169,40 @@ func (self *variant) GetValue() (interface{}, error) {
 	return result, nil
 }
 func (self *variant) GetSubobjects(bhvr bool) []Object {
-	
+
 	objs := self.DataImpl.GetSubobjects(bhvr)
-	
+
 	dt := self.getDataType()
 	if dt.IsComplex() {
 		obj, err := self.getObject()
-		if err != nil { 
+		if err != nil {
 			return objs
 		}
 		return append(objs, obj)
 	}
-	
+
 	return objs
 }
 
 func (self *variant) GetSubobjectByName(name string, bhvr bool) (Object, error) {
-	
+
 	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr)
-	if obj == nil { 
+	if obj == nil {
 		return obj, err
 	}
-	
+
 	dt := self.getDataType()
 	if dt.IsComplex() {
 		obj, err := self.getObject()
-		if err != nil { 
+		if err != nil {
 			return nil, err
 		}
-		
+
 		if obj.Id().Name == name {
 			return obj, nil
 		}
 	}
-	
+
 	return nil, fmt.Errorf("Unable to find object with given name")
 }
 
@@ -211,7 +211,7 @@ func (self *variant) GetSubobjectByName(name string, bhvr bool) (Object, error) 
 //*****************************************************************************
 
 func (self *variant) getObject() (Object, error) {
-	
+
 	res, err := self.value.Read()
 	if err == nil {
 		id, err := IdentifierFromEncoded(res.(string))
@@ -225,7 +225,7 @@ func (self *variant) getObject() (Object, error) {
 			return res, nil
 		}
 	}
-	
+
 	return nil, utils.StackError(err, "Unable to read object id from deatabase")
 }
 
@@ -234,22 +234,22 @@ func (self *variant) beforeChangeCallback(args ...interface{}) error {
 	//check if we currently hold a object and handle it accordingly
 	dt := self.getDataType()
 	if dt.IsComplex() {
-		
+
 		ndt := args[0].(DataType)
-		if dt.IsEqual(ndt) { 
+		if dt.IsEqual(ndt) {
 			//returning an error here means the value change fails, and onChanged is
 			//never called
 			return fmt.Errorf("Value is equal current value: not changed")
 		}
-		
+
 		obj, err := self.getObject()
 		if err != nil {
 			return utils.StackError(err, "Cannot change object type")
 		}
-		
+
 		//remove object!
 		return self.rntm.removeObject(obj)
-	} 
+	}
 
 	return nil
 }
@@ -276,11 +276,11 @@ func (self *variant) changedCallback(args ...interface{}) error {
 		result := dt.GetDefaultValue()
 		err = self.value.Write(result)
 	}
-	
+
 	if err != nil {
 		return err
 	}
-	
+
 	self.GetEvent("onTypeChanged").Emit()
 	return nil
 }

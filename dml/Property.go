@@ -19,8 +19,8 @@ type Property interface {
 
 	SetValue(value interface{}) error
 	GetValue() interface{}
-	
-	//required for startup, sets the initial value. If the property already 
+
+	//required for startup, sets the initial value. If the property already
 	//has a value set (in database) this call does nothing.
 	SetDefaultValue(value interface{}) error
 }
@@ -43,7 +43,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 			prop = &dataProperty{NewEventHandler(), dtype, *value, nil, rntm}
 			err := prop.SetDefaultValue(default_value)
 			if err != nil {
-				return nil, utils.StackError(err,  "Unable to use provided value as default for property")
+				return nil, utils.StackError(err, "Unable to use provided value as default for property")
 			}
 
 		} else if dtype.IsType() {
@@ -52,7 +52,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 			prop = &typeProperty{NewEventHandler(), *value, DataType{}}
 			err := prop.SetDefaultValue(default_value)
 			if err != nil {
-				return nil, utils.StackError(err,  "Unable to use provided value as default for property")
+				return nil, utils.StackError(err, "Unable to use provided value as default for property")
 			}
 
 		} else {
@@ -60,17 +60,17 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 		}
 	} else {
 		if dtype.IsPOD() {
-			prop = &constProperty{NewEventHandler(), dtype,nil}
+			prop = &constProperty{NewEventHandler(), dtype, nil}
 			err := prop.SetDefaultValue(default_value)
 			if err != nil {
-				return nil, utils.StackError(err,  "Unable to use provided value as default for property")
+				return nil, utils.StackError(err, "Unable to use provided value as default for property")
 			}
 
 		} else if dtype.IsType() {
 			prop = &constTypeProperty{NewEventHandler(), MustNewDataType("int")}
 			err := prop.SetDefaultValue(default_value)
 			if err != nil {
-				return nil, utils.StackError(err,  "Unable to use provided value as default for property")
+				return nil, utils.StackError(err, "Unable to use provided value as default for property")
 			}
 		} else {
 			return nil, fmt.Errorf("Unknown type")
@@ -91,7 +91,7 @@ type dataProperty struct {
 	eventHandler
 	propertyType DataType
 	db           datastore.ValueVersioned
-	default_val	 interface{}
+	default_val  interface{}
 	rntm         *Runtime
 }
 
@@ -117,10 +117,10 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	}
 
 	err = self.GetEvent("onBeforeChange").Emit(val)
-	if err != nil { 
+	if err != nil {
 		return err
 	}
-	
+
 	if obj, isobj := val.(Object); isobj {
 		err = self.db.Write(obj.Id().Encode())
 
@@ -131,18 +131,18 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	if err != nil {
 		return err
 	}
-	
+
 	self.GetEvent("onChanged").Emit(val) //no error handling, as value was already changed successfully
 	return nil
 }
 
 func (self *dataProperty) SetDefaultValue(val interface{}) error {
-	
+
 	err := self.propertyType.MustBeTypeOf(val)
 	if err != nil {
 		return utils.StackError(err, "Unable to set property defult value")
 	}
-	
+
 	self.default_val = val
 	return nil
 }
@@ -164,7 +164,7 @@ func (self *dataProperty) GetValue() interface{} {
 
 type typeProperty struct {
 	eventHandler
-	db datastore.ValueVersioned
+	db          datastore.ValueVersioned
 	default_val DataType
 }
 
@@ -188,13 +188,13 @@ func (self *typeProperty) SetValue(val interface{}) error {
 	err = self.GetEvent("onBeforeChange").Emit(val)
 	if err != nil {
 		return err
-	} 
+	}
 
 	data := val.(DataType)
 	err = self.db.Write(data.AsString())
 	if err != nil {
 		return err
-	} 
+	}
 
 	self.GetEvent("onChanged").Emit(val) //no error handling, as value was already changed successfully
 	return nil
@@ -220,7 +220,7 @@ func (self *typeProperty) GetDataType() DataType {
 	if !self.db.IsValid() {
 		return self.default_val
 	}
-	
+
 	data, err := self.db.Read()
 	if err != nil {
 		log.Printf("Cannot access datastore: %v", err)
@@ -233,7 +233,7 @@ func (self *typeProperty) SetDefaultValue(val interface{}) error {
 	if err != nil {
 		utils.StackError(err, "default value for type property set with wrong type")
 	}
-	
+
 	self.default_val = val.(DataType)
 	return nil
 }
@@ -261,7 +261,7 @@ func (self *constProperty) SetValue(val interface{}) error {
 }
 
 func (self *constProperty) SetDefaultValue(val interface{}) error {
-	
+
 	//check if the type is correct
 	err := self.propertyType.MustBeTypeOf(val)
 	if err != nil {

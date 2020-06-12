@@ -250,11 +250,11 @@ func (self *ValueVersionedSet) Print(params ...int) {
 				subbucket := bucket.Bucket(k)
 				subbucket.ForEach(func(sk []byte, sv []byte) error {
 					var inter string
-					if sv==nil { 
+					if sv == nil {
 						inter = "nil"
 					} else if isInvalid(sv) {
 						inter = "INVALID_DATA"
-					} else { 
+					} else {
 						t, _ := getInterface(sv)
 						inter = fmt.Sprintf("%v", t)
 					}
@@ -911,12 +911,12 @@ func (self *ValueVersionedSet) GetOrCreateValue(key []byte) (*ValueVersioned, er
 			if err != nil {
 				return err
 			}
-			
+
 			//we set HEAD to nil: this means it was created, but is not valid. This is needed
 			//in case someone called remove() on this key. Than HEAD = INVALID_DATA, which leads
 			//to Exists() false
 			bucket.Delete(itob(HEAD))
-			
+
 			return err
 		})
 		if err != nil {
@@ -1030,7 +1030,7 @@ func (self *ValueVersioned) IsValid() bool {
 	return result
 }
 
-//return true if 
+//return true if
 // - the value was already written in HEAD, or
 // - any versions exist with valid data
 func (self *ValueVersioned) WasWrittenOnce() (bool, error) {
@@ -1042,14 +1042,14 @@ func (self *ValueVersioned) WasWrittenOnce() (bool, error) {
 		for _, bkey := range append(self.setkey, self.key) {
 			bucket = bucket.Bucket(bkey)
 		}
-		
+
 		//check if something valid is in HEAD
 		head := bucket.Get(itob(HEAD))
-		if head != nil && !isInvalid(head) { 
+		if head != nil && !isInvalid(head) {
 			result = true
 			return nil
 		}
-		
+
 		//head was not written, check if we have any versions
 		bucket.ForEach(func(k, v []byte) error {
 			key := btoi(k)
@@ -1060,7 +1060,7 @@ func (self *ValueVersioned) WasWrittenOnce() (bool, error) {
 				}
 			}
 			return nil
-		})	
+		})
 		return nil
 	})
 
@@ -1099,13 +1099,13 @@ func (self *ValueVersioned) Exists() (bool, error) {
 			result = false
 			return nil
 		}
-		
+
 		cur = bucket.Get(cur)
 		if cur == nil {
 			result = true
 			return nil
 		}
-		
+
 		if isInvalid(cur) {
 			result = false
 			return nil

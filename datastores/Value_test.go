@@ -84,7 +84,7 @@ func TestValueBasic(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(ok, ShouldBeTrue)
 			So(value.IsValid(), ShouldBeTrue)
-			
+
 			res, err := value.Read()
 			So(err, ShouldBeNil)
 			num, ok := res.(int64)
@@ -157,26 +157,26 @@ func TestValueBasic(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(val2, ShouldResemble, &val)
 		})
-		
+
 		Convey("And data can be removed", func() {
 
 			name := makeSetFromString("test")
 			genset, err := db.GetOrCreateSet(name)
 			So(err, ShouldBeNil)
 			set := genset.(*ValueSet)
-			
+
 			key2 := []byte("key2")
 			value2, err := set.GetOrCreateValue(key2)
-			
+
 			So(value2.IsValid(), ShouldBeTrue)
 			ok, _ := value2.Exists()
-			So(ok,ShouldBeTrue)
-			
+			So(ok, ShouldBeTrue)
+
 			value2.remove()
-			
+
 			So(value2.IsValid(), ShouldBeFalse)
 			ok, _ = value2.Exists()
-			So(ok,ShouldBeFalse)
+			So(ok, ShouldBeFalse)
 			So(set.HasKey(key2), ShouldBeFalse)
 		})
 	})
@@ -251,7 +251,7 @@ func TestValueVersionedBasics(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(ok, ShouldBeTrue)
 			So(pair.IsValid(), ShouldBeTrue)
-			
+
 			res, err := pair.Read()
 			So(err, ShouldBeNil)
 			num, ok := res.(int64)
@@ -302,25 +302,25 @@ func TestValueVersionedBasics(t *testing.T) {
 
 			So(bytes.Equal(result.([]byte), []byte(data)), ShouldBeTrue)
 		})
-		
+
 		Convey("And values can be removed", func() {
 
 			name := makeSetFromString("test")
 			genset, err := db.GetOrCreateSet(name)
 			So(err, ShouldBeNil)
 			set := genset.(*ValueVersionedSet)
-			
+
 			value, _ := set.GetOrCreateValue([]byte("key2"))
 
 			So(value.IsValid(), ShouldBeTrue)
 			ok, _ := value.Exists()
 			So(ok, ShouldBeTrue)
-			
+
 			value.remove()
 
 			So(value.IsValid(), ShouldBeFalse)
 			ok, _ = value.Exists()
-			So(ok, ShouldBeFalse)			
+			So(ok, ShouldBeFalse)
 		})
 	})
 }
@@ -424,7 +424,7 @@ func TestValueVersioned(t *testing.T) {
 			err = set.LoadVersion(VersionID(1))
 			So(err, ShouldBeNil)
 			kvset, _ := set.(*ValueVersionedSet)
-			pair1, err := kvset.GetOrCreateValue([]byte("data1"))		
+			pair1, err := kvset.GetOrCreateValue([]byte("data1"))
 			So(err, ShouldNotBeNil)
 
 			//new data should not be creatable

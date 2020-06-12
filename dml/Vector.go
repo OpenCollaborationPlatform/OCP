@@ -187,18 +187,18 @@ func (self *vector) Set(idx int64, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to set vector entry")
 	}
-	
+
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return err
 	}
 
 	if dt.IsComplex() {
 		return fmt.Errorf("Compley datatypes cannot be set")
 
-	} 
-	
+	}
+
 	err = self.set(dt, idx, value)
 	if err != nil {
 		return err
@@ -210,7 +210,7 @@ func (self *vector) Set(idx int64, value interface{}) error {
 
 //internal set, without any type checking
 func (self *vector) set(dt DataType, idx int64, value interface{}) error {
-	
+
 	var err error
 	if dt.IsType() {
 
@@ -221,7 +221,7 @@ func (self *vector) set(dt DataType, idx int64, value interface{}) error {
 		//plain types remain
 		err = self.entries.Write(idx, value)
 	}
-	
+
 	return err
 }
 
@@ -234,10 +234,10 @@ func (self *vector) Append(value interface{}) (int64, error) {
 	if err != nil {
 		return -1, utils.StackError(err, "Unable to append vector entry")
 	}
-	
+
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return -1, err
 	}
 
@@ -261,7 +261,7 @@ func (self *vector) AppendNew() (interface{}, error) {
 
 	//event handling
 	err := self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return nil, err
 	}
 
@@ -296,10 +296,10 @@ func (self *vector) Insert(idx int64, value interface{}) error {
 	if idx >= length || idx < 0 {
 		return fmt.Errorf("Index out of bounds: %v", idx)
 	}
-	
+
 	//event handling
 	err := self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return err
 	}
 
@@ -327,7 +327,7 @@ func (self *vector) InsertNew(idx int64) (interface{}, error) {
 
 	//event handling
 	err := self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return nil, err
 	}
 
@@ -352,20 +352,19 @@ func (self *vector) Remove(idx int64) error {
 	if idx >= length || idx < 0 {
 		return fmt.Errorf("Index out of bounds: %v", idx)
 	}
-	
+
 	//event handling
 	err := self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
-		return err
-	}
-	
-	//inform that we are going to remove
-	err = self.GetEvent("onDeleteEntry").Emit(idx)
-	if err != nil { 
+	if err != nil {
 		return err
 	}
 
-			
+	//inform that we are going to remove
+	err = self.GetEvent("onDeleteEntry").Emit(idx)
+	if err != nil {
+		return err
+	}
+
 	//if it was a object it needs to be removed completely
 	dt := self.entryDataType()
 	if dt.IsComplex() {
@@ -383,7 +382,6 @@ func (self *vector) Remove(idx int64) error {
 			return fmt.Errorf("Stored object seems invalid")
 		}
 	}
-	
 
 	//deleting means moving each entry after idx one down and shortening the length by 1
 	l, _ := self.Length()
@@ -410,8 +408,7 @@ func (self *vector) Remove(idx int64) error {
 		return err
 	}
 
-	
-	self.GetEvent("onChanged").Emit() 
+	self.GetEvent("onChanged").Emit()
 	return nil
 }
 
@@ -420,18 +417,18 @@ func (self *vector) Swap(idx1 int64, idx2 int64) error {
 	if idx1 == idx2 {
 		return nil
 	}
-	
+
 	length, err := self.Length()
-	if err != nil { 
+	if err != nil {
 		return err
 	}
 	if idx1 >= length || idx2 >= length {
 		return fmt.Errorf("Both indices need to be within vector range")
 	}
-	
+
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return err
 	}
 
@@ -460,11 +457,11 @@ func (self *vector) Swap(idx1 int64, idx2 int64) error {
 }
 
 func (self *vector) Move(oldIdx int64, newIdx int64) error {
-	
+
 	if oldIdx == newIdx {
 		return nil
 	}
-	
+
 	length, err := self.Length()
 	if err != nil {
 		return err
@@ -472,18 +469,18 @@ func (self *vector) Move(oldIdx int64, newIdx int64) error {
 	if oldIdx >= length || newIdx >= length {
 		return fmt.Errorf("Both indices need to be within vector range")
 	}
-	
+
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return err
 	}
-	
+
 	err = self.move(oldIdx, newIdx)
-	if err != nil { 
+	if err != nil {
 		return err
 	}
-	
+
 	self.GetEvent("onChanged").Emit()
 	return nil
 }

@@ -103,18 +103,18 @@ func TestTypeVariant(t *testing.T) {
 		rntm := NewRuntime(store)
 		err = rntm.Parse(strings.NewReader(code))
 		So(err, ShouldBeNil)
-		
+
 		Convey("The default complex type should be created", func() {
-			
+
 			store.Begin()
 			defer store.Rollback()
-			
+
 			vari, err := rntm.getObjectFromPath("toplevel.TypeVariant")
 			So(err, ShouldBeNil)
 			value, err := vari.(*variant).GetValue()
 			So(value, ShouldNotBeNil)
 			So(err, ShouldBeNil)
-			
+
 			So(value.(Object).DataType(), ShouldResemble, vari.GetProperty("type").GetValue())
 		})
 

@@ -146,7 +146,7 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 		return self.GetEvent("onChanged").Emit()
 	})
 
-	//everthing went without error, now we can set this property	
+	//everthing went without error, now we can set this property
 	self.propertyHandler.properties[name] = prop
 
 	return nil

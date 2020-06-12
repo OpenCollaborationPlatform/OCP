@@ -11,10 +11,9 @@ import (
 
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/document"
-	"github.com/ickby/CollaborationNode/user"
 	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/user"
 	"github.com/ickby/CollaborationNode/utils"
-
 )
 
 const (
@@ -23,16 +22,16 @@ const (
 
 type Node struct {
 	//connection
-	quit    chan string        //This is the quit channel: send on it to shutdown
-	Router  *connection.Router //WAMP router for client connections (and gateway)
-	Host    *p2p.Host          //P2P host for direct comunication and data transfer
+	quit   chan string        //This is the quit channel: send on it to shutdown
+	Router *connection.Router //WAMP router for client connections (and gateway)
+	Host   *p2p.Host          //P2P host for direct comunication and data transfer
 
 	//functionality
 	Documents *document.DocumentHandler //the handler for documents
-	Users     *user.UserHandler //handler for users
+	Users     *user.UserHandler         //handler for users
 
 	//misc
-	Version string             //Default setup version string
+	Version string //Default setup version string
 }
 
 func NewNode() *Node {
@@ -58,14 +57,14 @@ func (n *Node) Start() error {
 	}
 
 	//load the document component
-	dh, err := document.NewDocumentHandler(n.Router, n.Host) 
+	dh, err := document.NewDocumentHandler(n.Router, n.Host)
 	if err != nil {
 		return utils.StackError(err, "Unable to load document handler")
 	}
 	n.Documents = dh
 
 	//load the user component
-	uh, err := user.NewUserHandler(n.Router, n.Host) 
+	uh, err := user.NewUserHandler(n.Router, n.Host)
 	if err != nil {
 		return utils.StackError(err, "Unable to load user handler")
 	}
@@ -86,7 +85,7 @@ func (n *Node) Start() error {
 	}
 
 	log.Println("OCP node ready")
-	
+
 	return nil
 }
 

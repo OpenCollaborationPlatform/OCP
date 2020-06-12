@@ -490,7 +490,7 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 
 	if !rollbackOnly {
 
-		//handle behaviours... none yet. Transaction is handled in normal 
+		//handle behaviours... none yet. Transaction is handled in normal
 		//execution flow
 	}
 
@@ -572,14 +572,14 @@ func (self *Runtime) importDML(astImp *astImport) error {
 func (self *Runtime) removeObject(obj Object) error {
 
 	if data, ok := obj.(Data); ok {
-		
+
 		//remove from list and javascript (not for behaviours)
 		delete(self.objects, obj.Id())
 		_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().Encode()))
 		if err != nil {
 			return err
 		}
-		
+
 		//recursive object handling!
 		for _, sub := range data.GetSubobjects(true) {
 			err := self.removeObject(sub)

@@ -263,18 +263,18 @@ func (self *mapImpl) Set(key interface{}, value interface{}) error {
 		return fmt.Errorf("Complex datatypes cannot be set, use New")
 
 	}
-	
+
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return err
 	}
 
 	err = self.set(key, value)
-	if err != nil { 
+	if err != nil {
 		return err
 	}
-	
+
 	self.GetEvent("onChanged").Emit() //do not return error as setting was already successfull
 	return nil
 }
@@ -327,10 +327,10 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	if self.entries.HasKey(dbkey) {
 		return nil, fmt.Errorf("Key exists already, cannot create new object")
 	}
-	
+
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return nil, err
 	}
 
@@ -350,10 +350,10 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 
 	//write new entry
 	err = self.set(key, result)
-	if err != nil { 
+	if err != nil {
 		return nil, err
 	}
-	
+
 	self.GetEvent("onChanged").Emit() //do not return error as setting was already successfull
 	return result, nil
 }
@@ -373,10 +373,10 @@ func (self *mapImpl) Remove(key interface{}) error {
 	if !self.entries.HasKey(dbkey) {
 		return fmt.Errorf("Key does not exist (%v), cannot be removed", key)
 	}
-	
+
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit()
-	if err != nil { 
+	if err != nil {
 		return err
 	}
 
@@ -395,10 +395,10 @@ func (self *mapImpl) Remove(key interface{}) error {
 
 	//delete the key
 	err = self.entries.Remove(dbkey)
-	if err != nil { 
+	if err != nil {
 		return err
 	}
-	
+
 	self.GetEvent("onChanged").Emit() //do not return error as setting was already successfull
 	return nil
 }

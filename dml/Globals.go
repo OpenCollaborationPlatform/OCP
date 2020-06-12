@@ -72,7 +72,7 @@ func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
 	}
-	
+
 	obj.(Data).SetupBehaviours(obj.(Data), true)
 
 	return obj, nil
@@ -100,8 +100,7 @@ func LoadObject(rntm *Runtime, dt DataType, id Identifier, parent Identifier) (O
 	//build the object (without parent, but with uuid)
 	obj, err := rntm.buildObject(astObj, parent, id.Uuid)
 	//no behaviour setup, LoadObject is only called out of buildObject
-	
-	
+
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
 	}

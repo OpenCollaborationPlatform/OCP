@@ -202,7 +202,7 @@ func TestTransactionBehaviour(t *testing.T) {
 			store.Commit()
 
 			Convey("a transaction shall be created", func() {
-				
+
 				store.Begin()
 				defer store.Rollback()
 				trans, err := mngr.getTransaction()
@@ -224,26 +224,26 @@ func TestTransactionBehaviour(t *testing.T) {
 				r2 := regexp.MustCompile("o2")
 				results = index.FindAllIndex(r2, -1)
 				So(len(results), ShouldEqual, 1)
-			})		
+			})
 
 			Convey("Adding the main object to a transaction", func() {
-	
+
 				rntm.currentUser = "User1"
 				store.Begin()
 				err := mngr.Open()
 				So(err, ShouldBeNil)
 				store.Commit()
-	
+
 				_, err = rntm.RunJavaScript("User1", "Document.result.value = ''")
 				So(err, ShouldBeNil)
-	
+
 				store.Begin()
 				err = mngr.Add(rntm.mainObj)
 				So(err, ShouldBeNil)
 				store.Commit()
-				
+
 				Convey("it is listed as part of the transaction ", func() {
-	
+
 					store.Begin()
 					defer store.Rollback()
 					trans, err := mngr.getTransaction()
@@ -251,13 +251,13 @@ func TestTransactionBehaviour(t *testing.T) {
 					objs, err := trans.Objects()
 					So(err, ShouldBeNil)
 					So(len(objs), ShouldEqual, 1)
-					
+
 					obj, _ := rntm.getObjectFromPath("Document")
 					So(trans.HasObject(obj.Id()), ShouldBeTrue)
 				})
-				
+
 				Convey("and knows itself that it belongs to the transaction", func() {
-					
+
 					store.Begin()
 					defer store.Rollback()
 					trns := rntm.mainObj.GetBehaviour("Transaction").(*transactionBehaviour)
@@ -268,42 +268,42 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(ok, ShouldBeTrue)
 				})
-	
+
 				Convey("only its participation event must have been called", func() {
-	
+
 					res, err := rntm.Call("User1", "Document.result.value")
 					So(err, ShouldBeNil)
 					str := res.(string)
 					So(str, ShouldEqual, "p1")
 				})
-	
+
 				Convey("and adding it to annother transaction must fail", func() {
-	
+
 					store.Begin()
 					defer store.Commit()
-	
+
 					rntm.currentUser = "User2"
 					err := mngr.Add(rntm.mainObj)
 					So(err, ShouldNotBeNil)
 					So(mngr.IsOpen(), ShouldBeFalse)
-	
+
 					err = mngr.Open()
 					So(err, ShouldBeNil)
 					err = mngr.Add(rntm.mainObj)
 					So(err, ShouldNotBeNil)
 				})
 			})
-		
+
 			Convey("Changing a object below a recursive transaction", func() {
-				
+
 				_, err := rntm.RunJavaScript("User1", "Document.Child.ChildChild.value = 2")
 				So(err, ShouldBeNil)
-				
+
 				Convey("Adds the behaviour equiped object to the transaction", func() {
-					
+
 					store.Begin()
 					defer store.Rollback()
-					
+
 					obj, _ := rntm.getObjectFromPath("Document.Child")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
@@ -311,39 +311,39 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(has, ShouldBeTrue)
 				})
 			})
-			
+
 			Convey("Creating a new object below a recursive transaction behaviour", func() {
-				
+
 				_, err := rntm.RunJavaScript("User1", "Document.Child.ChildMap.New(\"test\")")
 				So(err, ShouldBeNil)
-				
+
 				Convey("adds the behaviour equiped object to the transaction.", func() {
-					
+
 					store.Begin()
 					defer store.Rollback()
-					
+
 					obj, _ := rntm.getObjectFromPath("Document.Child")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
 					has := trans.HasObject(obj.Id())
 					So(has, ShouldBeTrue)
 				})
-				
+
 				Convey("Creating a new transaction and changing the new subobject value", func() {
-					
-					store.Begin()					
+
+					store.Begin()
 					err = mngr.Open()
 					store.Commit()
 					So(err, ShouldBeNil)
-				
+
 					_, err := rntm.RunJavaScript("User1", "Document.Child.ChildMap.Get(\"test\").value = 5")
 					So(err, ShouldBeNil)
-					
+
 					Convey("adds the behaviour equiped object to the transaction.", func() {
-					
+
 						store.Begin()
 						defer store.Rollback()
-						
+
 						obj, _ := rntm.getObjectFromPath("Document.Child")
 						trans, err := mngr.getTransaction()
 						So(err, ShouldBeNil)
@@ -360,7 +360,7 @@ func TestTransactionAbort(t *testing.T) {
 
 	//create the runtime
 	Convey("Testing transaction abort by loading dml code and opening an transaction", t, func() {
-		
+
 		//make temporary folder for the data
 		path, _ := ioutil.TempDir("", "dml")
 		defer os.RemoveAll(path)

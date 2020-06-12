@@ -50,7 +50,7 @@ func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) (*DataImp
 		NewBehaviourHandler(),
 		make([]Identifier, 0),
 	}
-	
+
 	return &dat, nil
 }
 

@@ -2,12 +2,12 @@
 package utils
 
 import (
-	"strconv"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mitchellh/go-homedir"
@@ -19,20 +19,19 @@ import (
 var (
 	configEntries = map[string]interface{}{
 		"connection": map[string]interface{}{
-			"uri": ConfigEntry{Default: "localhost", Short: "u", Text: "The uri the node is listening on for client connections "},
+			"uri":  ConfigEntry{Default: "localhost", Short: "u", Text: "The uri the node is listening on for client connections "},
 			"port": ConfigEntry{Default: 8000, Short: "p", Text: "The port on which the node listents for client connections"},
 		},
 		"p2p": map[string]interface{}{
-			"port":      ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens on for p2p connections from other nodes"},
-			"uri":       ConfigEntry{Default: "0.0.0.0", Short: "u", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
+			"port": ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens on for p2p connections from other nodes"},
+			"uri":  ConfigEntry{Default: "0.0.0.0", Short: "u", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
 			"bootstrap": map[string]interface{}{
-				"nodes": ConfigEntry{Default: []string{"/ip4/167.99.243.88/tcp/7000/ipfs/QmNPWPAxd4aZga27oKFzB6Cu3Yn1kLrHds65j7tGBSZ6CT"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification, next to the default ones"},
+				"nodes":    ConfigEntry{Default: []string{"/ip4/167.99.243.88/tcp/7000/ipfs/QmNPWPAxd4aZga27oKFzB6Cu3Yn1kLrHds65j7tGBSZ6CT"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification, next to the default ones"},
 				"defaults": ConfigEntry{Default: true, Short: "d", Text: "The node bootstraps the default addresses next to the config ones"},
 			},
 		},
 	}
 )
-
 
 //Default init of config stuff:
 // - There is always a config file, even if node is not initialized
@@ -113,27 +112,27 @@ type ConfigEntry struct {
 }
 
 func (self ConfigEntry) ValueFromString(value string) (interface{}, error) {
-	
+
 	switch self.Default.(type) {
 	case int:
 		i, err := strconv.ParseInt(value, 10, 32)
 		return int(i), err
-		
+
 	case string:
 		return value, nil
-		
+
 	case float64:
 		return strconv.ParseFloat(value, 64)
-		
+
 	case []string:
 		//first and last are [], remove!
-		list := value[1:(len(value)-1)]
+		list := value[1:(len(value) - 1)]
 		return strings.Split(list, ","), nil
-		
+
 	case []int:
 		res := make([]int, 0)
 		//first and last are [], remove!
-		list := value[1:(len(value)-1)]
+		list := value[1:(len(value) - 1)]
 		splits := strings.Split(list, ",")
 		for _, val := range splits {
 			i, err := strconv.ParseInt(val, 10, 32)
@@ -142,7 +141,7 @@ func (self ConfigEntry) ValueFromString(value string) (interface{}, error) {
 			}
 		}
 		return res, nil
-		
+
 	case bool:
 		if strings.ToLower(value) == "true" {
 			return true, nil
@@ -154,17 +153,17 @@ func (self ConfigEntry) ValueFromString(value string) (interface{}, error) {
 	default:
 		return nil, fmt.Errorf("error")
 	}
-	
+
 	return nil, fmt.Errorf("Cannot read, need type %T", self.Default)
 }
 
 func (self ConfigEntry) IsStringSlice() bool {
 
 	switch self.Default.(type) {
-		case []string: 
-			return true
-		default:
-			return false 
+	case []string:
+		return true
+	default:
+		return false
 	}
 	return false
 }
@@ -172,10 +171,10 @@ func (self ConfigEntry) IsStringSlice() bool {
 func (self ConfigEntry) IsIntSlice() bool {
 
 	switch self.Default.(type) {
-		case []int: 
-			return true
-		default:
-			return false 
+	case []int:
+		return true
+	default:
+		return false
 	}
 	return false
 }
@@ -200,12 +199,12 @@ func getConfigEntryByArray(keys []string) (ConfigEntry, error) {
 	//iterate over all nested values
 	tmp := configEntries
 	for i, key := range keys {
-		
+
 		val, ok := tmp[key]
 		if !ok {
 			return ConfigEntry{}, fmt.Errorf("Key %v does not exist in default config", key)
 		}
-		
+
 		if i == (len(keys) - 1) {
 			//maybe its not a entry...
 			if !ok || val == nil {
@@ -229,7 +228,7 @@ func AddConfigFlag(cmd *cobra.Command, accessor string) {
 	if err != nil {
 		return
 	}
-	
+
 	keys := strings.Split(accessor, ".")
 	name := keys[len(keys)-1]
 
@@ -269,7 +268,6 @@ func setupConfigDefaults(configs map[string]interface{}, accessor string) {
 		}
 	}
 }
-
 
 func GetDefaultNodeFolder() string {
 
