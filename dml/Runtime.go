@@ -792,18 +792,19 @@ func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 		return fmt.Errorf("A function cannot be assigned to a property")
 	}
 
+	var err error = nil
 	if asgn.Value.Int != nil {
-		prop.SetValue(*asgn.Value.Int)
+		err = prop.SetDefaultValue(*asgn.Value.Int)
 	} else if asgn.Value.String != nil {
-		prop.SetValue(*asgn.Value.String)
+		err = prop.SetDefaultValue(*asgn.Value.String)
 	} else if asgn.Value.Number != nil {
-		prop.SetValue(*asgn.Value.Number)
+		err = prop.SetDefaultValue(*asgn.Value.Number)
 	} else if asgn.Value.Bool != nil {
-		prop.SetValue(bool(*asgn.Value.Bool))
+		err = prop.SetDefaultValue(bool(*asgn.Value.Bool))
 	} else if asgn.Value.Type != nil {
-		prop.SetValue(MustNewDataType(asgn.Value.Type))
+		err = prop.SetDefaultValue(MustNewDataType(asgn.Value.Type))
 	}
-	return nil
+	return err
 }
 
 func (self *Runtime) assignEvent(asgn *astAssignment, evt Event) error {

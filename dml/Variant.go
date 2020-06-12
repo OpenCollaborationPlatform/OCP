@@ -34,6 +34,7 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 
 	//add properties (with setup callback)
 	vari.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), false)
+	vari.GetProperty("type").GetEvent("onBeforeChange").RegisterCallback(vari.beforeChangeCallback)
 	vari.GetProperty("type").GetEvent("onChanged").RegisterCallback(vari.changedCallback)
 
 	//add methods
@@ -49,28 +50,44 @@ func NewVariant(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
 //implement DynamicData interface
 func (self *variant) Load() error {
 
-	//if the value was never set we don't need to load anything...
-	if !self.value.IsValid() {
-		return nil
-	}
 	//we only need to load when we store objects
 	dt := self.getDataType()
-	if dt.IsComplex() {
-
-		res, err := self.value.Read()
-		if err == nil {
-			id, err := IdentifierFromEncoded(res.(string))
+	if dt.IsComplex() {		
+		
+		//if the value was never set. Hence we need to create the object newly
+		if !self.value.IsValid() {
+			obj, err := ConstructObject(self.rntm, dt, "", self.Id())
 			if err != nil {
-				return utils.StackError(err, "Unable to load variant: Stored identifier is invalid")
+				return utils.StackError(err, "Unable to setup variant object: construction of object failed")
 			}
-			obj, err := LoadObject(self.rntm, dt, id, self.Id())
+			err = self.value.Write(obj.Id().Encode())
 			if err != nil {
-				return utils.StackError(err, "Unable to load object for variant: construction failed")
+				return err
 			}
-			self.rntm.objects[id] = obj.(Data)
-
+		
 		} else {
-			return utils.StackError(err, "Unable to load variant: entry cannot be read")
+
+			res, err := self.value.Read()
+			if err == nil {
+				id, err := IdentifierFromEncoded(res.(string))
+				if err != nil {
+					return utils.StackError(err, "Unable to load variant: Stored identifier is invalid")
+				}
+				//maybe the object exists already (happens on first startup: it is created already)
+				_, has := self.rntm.objects[id]
+				if has {
+					return nil
+				}
+				
+				//not existing yet, load it!
+				obj, err := LoadObject(self.rntm, dt, id, self.Id())
+				if err != nil {
+					return utils.StackError(err, "Unable to load object for variant: construction failed")
+				}
+				self.rntm.objects[id] = obj.(Data)
+			} else {
+				return utils.StackError(err, "Unable to load variant: entry cannot be read")
+			}
 		}
 	}
 	return nil
@@ -126,21 +143,10 @@ func (self *variant) GetValue() (interface{}, error) {
 	var result interface{}
 
 	if dt.IsComplex() {
-		res, err := self.value.Read()
-		if err == nil {
-			id, err := IdentifierFromEncoded(res.(string))
-			if err != nil {
-				return nil, utils.StackError(err, "Unable to parse object id from databaase value")
-			} else {
-				res, ok := self.rntm.objects[id]
-				if !ok {
-					return nil, fmt.Errorf("Variant entry is invalid object")
-				}
-				result = res
-			}
-
-		} else {
-			return nil, utils.StackError(err, "Unable to read object id from deatabase")
+		var err error
+		result, err = self.getObject()
+		if err != nil {
+			return nil, utils.StackError(err, "Invalid object stored in variant")
 		}
 
 	} else if dt.IsType() {
@@ -149,7 +155,7 @@ func (self *variant) GetValue() (interface{}, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to read type from database")
 		}
-		result, err = NewDataType(res.(string))
+		result, _ = NewDataType(res.(string))
 
 	} else {
 		//plain types remain
@@ -162,36 +168,121 @@ func (self *variant) GetValue() (interface{}, error) {
 
 	return result, nil
 }
+func (self *variant) GetSubobjects(bhvr bool) []Object {
+	
+	objs := self.DataImpl.GetSubobjects(bhvr)
+	
+	dt := self.getDataType()
+	if dt.IsComplex() {
+		obj, err := self.getObject()
+		if err != nil { 
+			return objs
+		}
+		return append(objs, obj)
+	}
+	
+	return objs
+}
+
+func (self *variant) GetSubobjectByName(name string, bhvr bool) (Object, error) {
+	
+	obj, err := self.DataImpl.GetSubobjectByName(name, bhvr)
+	if obj == nil { 
+		return obj, err
+	}
+	
+	dt := self.getDataType()
+	if dt.IsComplex() {
+		obj, err := self.getObject()
+		if err != nil { 
+			return nil, err
+		}
+		
+		if obj.Id().Name == name {
+			return obj, nil
+		}
+	}
+	
+	return nil, fmt.Errorf("Unable to find object with given name")
+}
 
 //*****************************************************************************
 //			Internal functions
 //*****************************************************************************
 
-func (self *variant) changedCallback(args ...interface{}) error {
+func (self *variant) getObject() (Object, error) {
+	
+	res, err := self.value.Read()
+	if err == nil {
+		id, err := IdentifierFromEncoded(res.(string))
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to parse object id from databaase value")
+		} else {
+			res, ok := self.rntm.objects[id]
+			if !ok {
+				return nil, fmt.Errorf("Variant entry is non existing object")
+			}
+			return res, nil
+		}
+	}
+	
+	return nil, utils.StackError(err, "Unable to read object id from deatabase")
+}
 
-	self.GetEvent("onTypeChanged").Emit()
+func (self *variant) beforeChangeCallback(args ...interface{}) error {
+
+	//check if we currently hold a object and handle it accordingly
+	dt := self.getDataType()
+	if dt.IsComplex() {
+		
+		ndt := args[0].(DataType)
+		if dt.IsEqual(ndt) { 
+			//returning an error here means the value change fails, and onChanged is
+			//never called
+			return fmt.Errorf("Value is equal current value: not changed")
+		}
+		
+		obj, err := self.getObject()
+		if err != nil {
+			return utils.StackError(err, "Cannot change object type")
+		}
+		
+		//remove object!
+		return self.rntm.removeObject(obj)
+	} 
+
+	return nil
+}
+
+func (self *variant) changedCallback(args ...interface{}) error {
 
 	//build the default values! And set the value. Don't use SetValue as this
 	//assumes old and new value have same datatype
 	dt := self.getDataType()
+	var err error
 	if dt.IsComplex() {
 		obj, err := ConstructObject(self.rntm, dt, "", self.Id())
 		if err != nil {
 			return utils.StackError(err, "Unable to setup variant object: construction failed")
 		}
-		return self.value.Write(obj.Id().Encode())
+		err = self.value.Write(obj.Id().Encode())
 
 	} else if dt.IsType() {
 
 		val, _ := dt.GetDefaultValue().(DataType)
-		return self.value.Write(val.AsString())
+		err = self.value.Write(val.AsString())
 
 	} else {
 		result := dt.GetDefaultValue()
-		return self.value.Write(result)
+		err = self.value.Write(result)
 	}
-
-	return fmt.Errorf("Something went wrong")
+	
+	if err != nil {
+		return err
+	}
+	
+	self.GetEvent("onTypeChanged").Emit()
+	return nil
 }
 
 func (self *variant) getDataType() DataType {

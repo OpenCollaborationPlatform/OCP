@@ -79,7 +79,8 @@ func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier)
 }
 
 //Construct a data object from encoded description (as provided by type property)
-//and a given identifier
+//and a given identifier. Note that it does not setup behaviours, that msut be done by
+//the caller
 func LoadObject(rntm *Runtime, dt DataType, id Identifier, parent Identifier) (Object, error) {
 
 	if !dt.IsComplex() {
@@ -97,7 +98,7 @@ func LoadObject(rntm *Runtime, dt DataType, id Identifier, parent Identifier) (O
 	}
 
 	//build the object (without parent, but with uuid)
-	obj, err := rntm.buildObject(astObj, Identifier{}, id.Uuid)
+	obj, err := rntm.buildObject(astObj, parent, id.Uuid)
 	//no behaviour setup, LoadObject is only called out of buildObject
 	
 	

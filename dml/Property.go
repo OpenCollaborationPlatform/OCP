@@ -19,6 +19,10 @@ type Property interface {
 
 	SetValue(value interface{}) error
 	GetValue() interface{}
+	
+	//required for startup, sets the initial value. If the property already 
+	//has a value set (in database) this call does nothing.
+	SetDefaultValue(value interface{}) error
 }
 
 func NewProperty(name string, dtype DataType, default_value interface{}, set *datastore.ValueVersionedSet, rntm *Runtime, parent *goja.Object, constprop bool) (Property, error) {
@@ -36,39 +40,38 @@ func NewProperty(name string, dtype DataType, default_value interface{}, set *da
 
 			//setup default value if needed
 			value, _ := set.GetOrCreateValue([]byte(name))
-			res, err := value.WasWrittenOnce()
+			prop = &dataProperty{NewEventHandler(), dtype, *value, nil, rntm}
+			err := prop.SetDefaultValue(default_value)
 			if err != nil {
-				return nil, utils.StackError(err, "Cannot create property, datastore not accessible")
+				return nil, utils.StackError(err,  "Unable to use provided value as default for property")
 			}
-			if !res {
-				value.Write(default_value)
-			}
-			prop = &dataProperty{NewEventHandler(), dtype, *value, rntm}
 
 		} else if dtype.IsType() {
 			//setup default value if needed
 			value, _ := set.GetOrCreateValue([]byte(name))
-			res, err := value.WasWrittenOnce()
+			prop = &typeProperty{NewEventHandler(), *value, DataType{}}
+			err := prop.SetDefaultValue(default_value)
 			if err != nil {
-				return nil, utils.StackError(err, "Cannot create property, datastore not accessible")
+				return nil, utils.StackError(err,  "Unable to use provided value as default for property")
 			}
-			if !res {
-				dt := default_value.(DataType)
-				value.Write(dt.AsString())
-			}
-			prop = &typeProperty{NewEventHandler(), *value}
 
 		} else {
 			return nil, fmt.Errorf("Unknown type")
 		}
 	} else {
 		if dtype.IsPOD() {
-			prop = &constProperty{NewEventHandler(), dtype, default_value}
+			prop = &constProperty{NewEventHandler(), dtype,nil}
+			err := prop.SetDefaultValue(default_value)
+			if err != nil {
+				return nil, utils.StackError(err,  "Unable to use provided value as default for property")
+			}
 
 		} else if dtype.IsType() {
 			prop = &constTypeProperty{NewEventHandler(), MustNewDataType("int")}
-			prop.SetValue(default_value)
-
+			err := prop.SetDefaultValue(default_value)
+			if err != nil {
+				return nil, utils.StackError(err,  "Unable to use provided value as default for property")
+			}
 		} else {
 			return nil, fmt.Errorf("Unknown type")
 		}
@@ -88,6 +91,7 @@ type dataProperty struct {
 	eventHandler
 	propertyType DataType
 	db           datastore.ValueVersioned
+	default_val	 interface{}
 	rntm         *Runtime
 }
 
@@ -108,7 +112,7 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	}
 
 	//store it
-	if !self.db.IsValid() {
+	if ok, _ := self.db.Exists(); !ok {
 		return fmt.Errorf("Invalid database entry")
 	}
 
@@ -132,10 +136,21 @@ func (self *dataProperty) SetValue(val interface{}) error {
 	return nil
 }
 
+func (self *dataProperty) SetDefaultValue(val interface{}) error {
+	
+	err := self.propertyType.MustBeTypeOf(val)
+	if err != nil {
+		return utils.StackError(err, "Unable to set property defult value")
+	}
+	
+	self.default_val = val
+	return nil
+}
+
 func (self *dataProperty) GetValue() interface{} {
 
 	if !self.db.IsValid() {
-		return nil
+		return self.default_val
 	}
 
 	val, err := self.db.Read()
@@ -150,6 +165,7 @@ func (self *dataProperty) GetValue() interface{} {
 type typeProperty struct {
 	eventHandler
 	db datastore.ValueVersioned
+	default_val DataType
 }
 
 func (self typeProperty) Type() DataType {
@@ -187,6 +203,10 @@ func (self *typeProperty) SetValue(val interface{}) error {
 //we only return basic information, mailny for JS accessibility
 func (self *typeProperty) GetValue() interface{} {
 
+	if !self.db.IsValid() {
+		return self.default_val
+	}
+
 	data, err := self.db.Read()
 	if err != nil {
 		log.Printf("Error reading value: %s", err)
@@ -197,11 +217,25 @@ func (self *typeProperty) GetValue() interface{} {
 
 func (self *typeProperty) GetDataType() DataType {
 
+	if !self.db.IsValid() {
+		return self.default_val
+	}
+	
 	data, err := self.db.Read()
 	if err != nil {
 		log.Printf("Cannot access datastore: %v", err)
 	}
 	return DataType{data.(string)}
+}
+
+func (self *typeProperty) SetDefaultValue(val interface{}) error {
+	err := MustNewDataType("type").MustBeTypeOf(val)
+	if err != nil {
+		utils.StackError(err, "default value for type property set with wrong type")
+	}
+	
+	self.default_val = val.(DataType)
+	return nil
 }
 
 //Const property
@@ -223,10 +257,15 @@ func (self constProperty) IsConst() bool {
 
 func (self *constProperty) SetValue(val interface{}) error {
 
+	return fmt.Errorf("Const property cannot set value")
+}
+
+func (self *constProperty) SetDefaultValue(val interface{}) error {
+	
 	//check if the type is correct
 	err := self.propertyType.MustBeTypeOf(val)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Const property default value set with wrong type")
 	}
 
 	self.value = val
@@ -251,13 +290,17 @@ func (self constTypeProperty) IsConst() bool {
 	return true
 }
 
-//we store the basic information, plain type string or parser result for object
 func (self *constTypeProperty) SetValue(val interface{}) error {
+	return fmt.Errorf("Const property cannot set value")
+}
+
+//we store the basic information, plain type string or parser result for object
+func (self *constTypeProperty) SetDefaultValue(val interface{}) error {
 
 	//check if the type is correct
 	err := MustNewDataType("type").MustBeTypeOf(val)
 	if err != nil {
-		return utils.StackError(err, "Cannot set type property: invalid argument")
+		return utils.StackError(err, "Cannot set type property default value: invalid argument")
 	}
 
 	self.data = val.(DataType)
