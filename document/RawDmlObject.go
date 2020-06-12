@@ -82,8 +82,8 @@ func (self *Raw) Get() (string, error) {
 //adds the path, either file or directory, to the Raw object
 func (self *Raw) IsSet() (bool, error) {
 
-	if holds, err := self.value.HoldsValue(); !holds || err != nil {
-		return false, err
+	if !self.value.IsValid() {
+		return false, nil
 	}
 
 	//could also be invalid CID after clear!

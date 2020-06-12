@@ -68,11 +68,12 @@ func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier)
 
 	//build the object
 	obj, err := rntm.buildObject(astObj, parent, uid)
-	obj.(Data).SetupBehaviours(obj.(Data), true)
 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
 	}
+	
+	obj.(Data).SetupBehaviours(obj.(Data), true)
 
 	return obj, nil
 }
@@ -105,7 +106,7 @@ func LoadObject(rntm *Runtime, dt DataType, id Identifier, parent Identifier) (O
 	}
 
 	if !obj.Id().Equal(id) {
-		return nil, fmt.Errorf("Loaded object is faulty: Identifiers do not match")
+		return nil, fmt.Errorf("Loaded object is faulty: Identifiers do not match (%v vs %v)", obj.Id(), id)
 	}
 
 	return obj, nil

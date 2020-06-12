@@ -136,14 +136,14 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 		if err != nil {
 			return err
 		}
-		return self.GetEvent("onBeforeChange").Emit(name)
+		return self.GetEvent("onBeforeChange").Emit()
 	})
 	prop.GetEvent("onChanged").RegisterCallback(func(...interface{}) error {
 		err := self.GetEvent("onPropertyChanged").Emit(name)
 		if err != nil {
 			return err
 		}
-		return self.GetEvent("onChanged").Emit(name)
+		return self.GetEvent("onChanged").Emit()
 	})
 
 	//everthing went without error, now we can set this property	

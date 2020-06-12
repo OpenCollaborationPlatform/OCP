@@ -3,7 +3,6 @@ package datastore
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"testing"
@@ -67,10 +66,25 @@ func TestValueBasic(t *testing.T) {
 			So(value, ShouldNotBeNil)
 
 			So(set.HasKey(key1), ShouldBeTrue)
+			ok, err := value.Exists()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeTrue)
+			ok, err = value.WasWrittenOnce()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeFalse)
+			So(value.IsValid(), ShouldBeFalse)
 
 			var data int64 = 1
 			err = value.Write(data)
 			So(err, ShouldBeNil)
+			ok, err = value.Exists()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeTrue)
+			ok, err = value.WasWrittenOnce()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeTrue)
+			So(value.IsValid(), ShouldBeTrue)
+			
 			res, err := value.Read()
 			So(err, ShouldBeNil)
 			num, ok := res.(int64)
@@ -143,6 +157,28 @@ func TestValueBasic(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(val2, ShouldResemble, &val)
 		})
+		
+		Convey("And data can be removed", func() {
+
+			name := makeSetFromString("test")
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set := genset.(*ValueSet)
+			
+			key2 := []byte("key2")
+			value2, err := set.GetOrCreateValue(key2)
+			
+			So(value2.IsValid(), ShouldBeTrue)
+			ok, _ := value2.Exists()
+			So(ok,ShouldBeTrue)
+			
+			value2.remove()
+			
+			So(value2.IsValid(), ShouldBeFalse)
+			ok, _ = value2.Exists()
+			So(ok,ShouldBeFalse)
+			So(set.HasKey(key2), ShouldBeFalse)
+		})
 	})
 }
 
@@ -200,10 +236,22 @@ func TestValueVersionedBasics(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(pair, ShouldNotBeNil)
 			So(set.HasKey(key1), ShouldBeTrue)
+			ok, err := pair.Exists()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeTrue)
+			ok, err = pair.WasWrittenOnce()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeFalse)
+			So(pair.IsValid(), ShouldBeFalse)
 
 			var data int64 = 1
 			err = pair.Write(data)
 			So(err, ShouldBeNil)
+			ok, err = pair.WasWrittenOnce()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeTrue)
+			So(pair.IsValid(), ShouldBeTrue)
+			
 			res, err := pair.Read()
 			So(err, ShouldBeNil)
 			num, ok := res.(int64)
@@ -254,6 +302,26 @@ func TestValueVersionedBasics(t *testing.T) {
 
 			So(bytes.Equal(result.([]byte), []byte(data)), ShouldBeTrue)
 		})
+		
+		Convey("And values can be removed", func() {
+
+			name := makeSetFromString("test")
+			genset, err := db.GetOrCreateSet(name)
+			So(err, ShouldBeNil)
+			set := genset.(*ValueVersionedSet)
+			
+			value, _ := set.GetOrCreateValue([]byte("key2"))
+
+			So(value.IsValid(), ShouldBeTrue)
+			ok, _ := value.Exists()
+			So(ok, ShouldBeTrue)
+			
+			value.remove()
+
+			So(value.IsValid(), ShouldBeFalse)
+			ok, _ = value.Exists()
+			So(ok, ShouldBeFalse)			
+		})
 	})
 }
 
@@ -261,8 +329,7 @@ func TestValueVersioned(t *testing.T) {
 
 	//make temporary folder for the data
 	path, _ := ioutil.TempDir("", "dml")
-	fmt.Println(path)
-	//defer os.RemoveAll(path)
+	defer os.RemoveAll(path)
 
 	Convey("Setting up a ValueVersioned database with a single set,", t, func() {
 
@@ -319,7 +386,7 @@ func TestValueVersioned(t *testing.T) {
 			So(has, ShouldBeTrue)
 			So(err, ShouldBeNil)
 
-			So(pair1.IsValid(), ShouldBeTrue)
+			So(pair1.IsValid(), ShouldBeFalse)
 			So(pair1.CurrentVersion().IsHead(), ShouldBeTrue)
 			So(pair1.LatestVersion().IsValid(), ShouldBeFalse)
 			So(pair1.HasUpdates(), ShouldBeTrue)
@@ -352,13 +419,13 @@ func TestValueVersioned(t *testing.T) {
 			err = set.LoadVersion(VersionID(0))
 			So(err, ShouldNotBeNil)
 
-			//if we load the old version directly, the data pair should be invalid
+			//we cannot load data1, as it does not exist in the checked out version
+			//and hence would be created new, which is forbidden
 			err = set.LoadVersion(VersionID(1))
 			So(err, ShouldBeNil)
 			kvset, _ := set.(*ValueVersionedSet)
-			pair1, err := kvset.GetOrCreateValue([]byte("data1"))
+			pair1, err := kvset.GetOrCreateValue([]byte("data1"))		
 			So(err, ShouldNotBeNil)
-			So(pair1, ShouldBeNil)
 
 			//new data should not be creatable
 			pair2, err := kvset.GetOrCreateValue([]byte("data2"))
@@ -375,6 +442,9 @@ func TestValueVersioned(t *testing.T) {
 			pair1, err = kvset.GetOrCreateValue([]byte("data1"))
 			So(err, ShouldBeNil)
 			So(pair1.IsValid(), ShouldBeTrue)
+			ok, err := pair1.Exists()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeTrue)
 			data, err := pair1.Read()
 			So(err, ShouldBeNil)
 			value, ok := data.(string)
@@ -389,6 +459,9 @@ func TestValueVersioned(t *testing.T) {
 			err = set.LoadVersion(VersionID(HEAD))
 			So(err, ShouldBeNil)
 			So(pair1.IsValid(), ShouldBeTrue)
+			ok, err = pair1.Exists()
+			So(err, ShouldBeNil)
+			So(ok, ShouldBeTrue)
 			data, err = pair1.Read()
 			So(err, ShouldBeNil)
 			value, ok = data.(string)
@@ -426,7 +499,8 @@ func TestValueVersioned(t *testing.T) {
 			So(pair2.IsValid(), ShouldBeTrue)
 			So(pair3.IsValid(), ShouldBeFalse)
 
-			val, _ := pair1.Read()
+			val, err := pair1.Read()
+			So(err, ShouldBeNil)
 			So(val.(string), ShouldEqual, "again")
 			val, _ = pair2.Read()
 			So(val.(int), ShouldEqual, -5)

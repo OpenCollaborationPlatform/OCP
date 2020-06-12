@@ -30,6 +30,12 @@ Definitions:
 - HEAD    	gives the currently worked on valueVersioned. It is set to []byte{} and hence made
 		  	invalid on removal
 - Bucket sequence: Is alwas on the latest version existing in the bucket
+
+Lifecycle in checked out version:
+- CURRENT = INVALID: it was not created yet in current version, exist = false, IsValid = false
+- CURRENT = HEAD, HEAD = nil: it was created, but not written yet: exist = true, IsValid = false
+- CURRENT = VERSION, VERSION = INVALID_DATA: it was removed in this version, exist = false, IsValid = false
+- CURRENT = VERSION, VERSION = data: it exists in this version and is valid, exist = true, IsValid = true
 */
 
 import (
@@ -243,7 +249,16 @@ func (self *ValueVersionedSet) Print(params ...int) {
 				}
 				subbucket := bucket.Bucket(k)
 				subbucket.ForEach(func(sk []byte, sv []byte) error {
-					inter, _ := getInterface(sv)
+					var inter string
+					if sv==nil { 
+						inter = "nil"
+					} else if isInvalid(sv) {
+						inter = "INVALID_DATA"
+					} else { 
+						t, _ := getInterface(sv)
+						inter = fmt.Sprintf("%v", t)
+					}
+
 					key := btoi(sk)
 					if key == HEAD {
 						fmt.Printf("%s\tHEAD: %v\n", indent, inter)
@@ -862,7 +877,8 @@ func (self ValueVersionedSet) GetType() StorageType {
 func (self *ValueVersionedSet) HasKey(key []byte) bool {
 
 	pair := ValueVersioned{self.db, self.dbkey, self.setkey, key}
-	return pair.IsValid()
+	ok, _ := pair.Exists()
+	return ok
 }
 
 func (self *ValueVersionedSet) GetOrCreateValue(key []byte) (*ValueVersioned, error) {
@@ -895,6 +911,12 @@ func (self *ValueVersionedSet) GetOrCreateValue(key []byte) (*ValueVersioned, er
 			if err != nil {
 				return err
 			}
+			
+			//we set HEAD to nil: this means it was created, but is not valid. This is needed
+			//in case someone called remove() on this key. Than HEAD = INVALID_DATA, which leads
+			//to Exists() false
+			bucket.Delete(itob(HEAD))
+			
 			return err
 		})
 		if err != nil {
@@ -998,7 +1020,7 @@ func (self *ValueVersioned) IsValid() bool {
 			return nil
 		}
 		cur = bucket.Get(cur)
-		result = !isInvalid(cur)
+		result = !((cur == nil) || isInvalid(cur))
 		return nil
 	})
 
@@ -1010,7 +1032,7 @@ func (self *ValueVersioned) IsValid() bool {
 
 //return true if 
 // - the value was already written in HEAD, or
-// - any versions exist
+// - any versions exist with valid data
 func (self *ValueVersioned) WasWrittenOnce() (bool, error) {
 
 	var result bool = false
@@ -1030,15 +1052,15 @@ func (self *ValueVersioned) WasWrittenOnce() (bool, error) {
 		
 		//head was not written, check if we have any versions
 		bucket.ForEach(func(k, v []byte) error {
-			val := btoi(k)
-			if val != HEAD && val != CURRENT {
-				result = true
-				return nil
+			key := btoi(k)
+			if key != HEAD && key != CURRENT {
+				if v != nil && !isInvalid(v) {
+					result = true
+					return nil
+				}
 			}
 			return nil
-		})
-		
-		
+		})	
 		return nil
 	})
 
@@ -1050,11 +1072,11 @@ func (self *ValueVersioned) WasWrittenOnce() (bool, error) {
 
 //True if:
 // - was setup with GetOrCreate
-// - was not removed, including al its versions
+// - was not removed
 //
 // Note that it does state nothing about content, could still be invalid or never
 // be written before
-func (self *ValueVersioned) Exists() bool {
+func (self *ValueVersioned) Exists() (bool, error) {
 
 	var result bool = true
 	err := self.db.View(func(tx *bolt.Tx) error {
@@ -1073,17 +1095,29 @@ func (self *ValueVersioned) Exists() bool {
 		}
 
 		cur := bucket.Get(itob(CURRENT))
-		if cur == nil {
+		if cur == nil || btoi(cur) == INVALID {
 			result = false
 			return nil
 		}
+		
+		cur = bucket.Get(cur)
+		if cur == nil {
+			result = true
+			return nil
+		}
+		
+		if isInvalid(cur) {
+			result = false
+			return nil
+		}
+
 		return nil
 	})
 
 	if err != nil {
-		return false
+		return false, err
 	}
-	return result
+	return result, nil
 }
 
 func (self *ValueVersioned) Read() (interface{}, error) {

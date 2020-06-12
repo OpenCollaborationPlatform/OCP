@@ -10,12 +10,12 @@ import (
 
 func TestVersioning(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Creating a temporary datastore with a set manager,", t, func() {
-
+	
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
+	
 		store, err := NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
@@ -37,7 +37,10 @@ func TestVersioning(t *testing.T) {
 			key1 := []byte("key1")
 			value, err := vset.GetOrCreateValue(key1)
 			So(err, ShouldBeNil)
-			So(value.IsValid(), ShouldBeTrue)
+			ok, err = value.Exists()
+			So(ok, ShouldBeTrue)
+			So(err, ShouldBeNil)
+			So(value.IsValid(), ShouldBeFalse)
 
 			//check map type
 			set, err = mngr.GetDatabaseSet(MapType)
@@ -79,54 +82,54 @@ func TestVersioning(t *testing.T) {
 				v, err = mset.GetLatestVersion()
 				So(err, ShouldBeNil)
 				So(uint64(v), ShouldEqual, 1)
-			})
+			
 
-			Convey("Old data is accessible", func() {
-
-				So(value.Write(12), ShouldBeNil)
-
-				has, _ := mngr.HasUpdates()
-				So(has, ShouldBeTrue)
-				has, _ = vset.HasUpdates()
-				So(has, ShouldBeTrue)
-				has, err = mset.HasUpdates()
-				So(err, ShouldBeNil)
-				So(has, ShouldBeFalse)
-				version, err := mngr.FixStateAsVersion()
-				So(err, ShouldBeNil)
-				So(uint64(version), ShouldEqual, 2)
-				has, _ = mngr.HasUpdates()
-				So(has, ShouldBeFalse)
-
-				v, err := vset.GetCurrentVersion()
-				So(err, ShouldBeNil)
-				So(v.IsHead(), ShouldBeTrue)
-				v, err = mset.GetCurrentVersion()
-				So(err, ShouldBeNil)
-				So(v.IsHead(), ShouldBeTrue)
-				v, err = vset.GetLatestVersion()
-				So(err, ShouldBeNil)
-				So(uint64(v), ShouldEqual, 2)
-				v, err = mset.GetLatestVersion()
-				So(err, ShouldBeNil)
-				So(uint64(v), ShouldEqual, 1)
-
-				So(mngr.LoadVersion(version), ShouldBeNil)
-				v, err = vset.GetCurrentVersion()
-				So(err, ShouldBeNil)
-				So(v.IsHead(), ShouldBeFalse)
-				v, err = mset.GetCurrentVersion()
-				So(err, ShouldBeNil)
-				So(v.IsHead(), ShouldBeFalse)
-				v, err = vset.GetLatestVersion()
-				So(err, ShouldBeNil)
-				So(uint64(v), ShouldEqual, 2)
-				v, err = mset.GetLatestVersion()
-				So(err, ShouldBeNil)
-				So(uint64(v), ShouldEqual, 1)
-
+				Convey("Old data is accessible", func() {
+	
+					So(value.Write(12), ShouldBeNil)
+	
+					has, _ := mngr.HasUpdates()
+					So(has, ShouldBeTrue)
+					has, _ = vset.HasUpdates()
+					So(has, ShouldBeTrue)
+					has, err = mset.HasUpdates()
+					So(err, ShouldBeNil)
+					So(has, ShouldBeFalse)
+					version, err := mngr.FixStateAsVersion()
+					So(err, ShouldBeNil)
+					So(uint64(version), ShouldEqual, 2)
+					has, _ = mngr.HasUpdates()
+					So(has, ShouldBeFalse)
+	
+					v, err := vset.GetCurrentVersion()
+					So(err, ShouldBeNil)
+					So(v.IsHead(), ShouldBeTrue)
+					v, err = mset.GetCurrentVersion()
+					So(err, ShouldBeNil)
+					So(v.IsHead(), ShouldBeTrue)
+					v, err = vset.GetLatestVersion()
+					So(err, ShouldBeNil)
+					So(uint64(v), ShouldEqual, 2)
+					v, err = mset.GetLatestVersion()
+					So(err, ShouldBeNil)
+					So(uint64(v), ShouldEqual, 1)
+	
+					So(mngr.LoadVersion(version), ShouldBeNil)
+					v, err = vset.GetCurrentVersion()
+					So(err, ShouldBeNil)
+					So(v.IsHead(), ShouldBeFalse)
+					v, err = mset.GetCurrentVersion()
+					So(err, ShouldBeNil)
+					So(v.IsHead(), ShouldBeFalse)
+					v, err = vset.GetLatestVersion()
+					So(err, ShouldBeNil)
+					So(uint64(v), ShouldEqual, 2)
+					v, err = mset.GetLatestVersion()
+					So(err, ShouldBeNil)
+					So(uint64(v), ShouldEqual, 1)
+	
+				})
 			})
 		})
-
 	})
 }

@@ -632,6 +632,10 @@ func (self *MapVersioned) HasKey(key interface{}) bool {
 
 func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 
+	if !self.HasKey(key) {
+		return nil, fmt.Errorf("Key does not exist, cannot read")
+	}
+
 	k, err := getBytes(key)
 	if err != nil {
 		return nil, err
@@ -645,6 +649,10 @@ func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 
 func (self *MapVersioned) Remove(key interface{}) error {
 
+	if !self.HasKey(key) {
+		return fmt.Errorf("Key does not exist, cannot remove")
+	}
+	
 	k, err := getBytes(key)
 	if err != nil {
 		return utils.StackError(err, "Cannot remove MapVersioned key")
