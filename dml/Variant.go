@@ -101,7 +101,7 @@ func (self *variant) SetValue(value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to set variant data")
 	}
-	
+
 	//make sure to use unified types
 	value = UnifyDataType(value)
 

@@ -248,7 +248,7 @@ func (self *graph) RemoveNode(value interface{}) error {
 	if has, _ := self.HasNode(value); !has {
 		return fmt.Errorf("No such node available, cannot remove")
 	}
-	
+
 	//make sure to use unified types
 	value = UnifyDataType(value)
 
@@ -296,11 +296,11 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Cannot add node, has wrong type")
 	}
-	
+
 	//make sure to use unified types
 	source = UnifyDataType(source)
 	target = UnifyDataType(target)
-	value  = UnifyDataType(value)
+	value = UnifyDataType(value)
 
 	//check if we have the two nodes
 	hassource, err := self.HasNode(source)
@@ -343,7 +343,7 @@ func (self *graph) NewEdge(source, target interface{}) (interface{}, error) {
 	if !hassource || !hastarget {
 		return nil, fmt.Errorf("Source and target nodes must be available, but are not")
 	}
-	
+
 	//make sure to use unified types
 	source = UnifyDataType(source)
 	target = UnifyDataType(target)
@@ -413,7 +413,7 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 	if !hassource || !hastarget {
 		return fmt.Errorf("Source and target nodes must be available, but are not")
 	}
-	
+
 	//make sure to use unified types
 	source = UnifyDataType(source)
 	target = UnifyDataType(target)
@@ -461,7 +461,7 @@ func (self *graph) HasEdge(value interface{}) (bool, error) {
 	if err != nil {
 		return false, utils.StackError(err, "Edge has wrong type")
 	}
-	
+
 	dbkey := self.typeToDB(value, dt)
 	return self.edgeData.HasKey(dbkey), nil
 }
@@ -480,7 +480,7 @@ func (self *graph) HasEdgeBetween(source, target interface{}) (bool, error) {
 	if !hassource || !hastarget {
 		return false, fmt.Errorf("Source and target nodes must be available, but are not")
 	}
-	
+
 	//make sure to use unified types
 	source = UnifyDataType(source)
 	target = UnifyDataType(target)
@@ -522,7 +522,7 @@ func (self *graph) Edge(source, target interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Target node has wrong type")
 	}
-	
+
 	//make sure to use unified types
 	source = UnifyDataType(source)
 	target = UnifyDataType(target)
@@ -567,7 +567,7 @@ func (self *graph) FromNode(node interface{}) ([]interface{}, error) {
 	if !has {
 		return nil, fmt.Errorf("Node does not exist")
 	}
-	
+
 	//make sure to use unified types
 	node = UnifyDataType(node)
 
@@ -600,7 +600,7 @@ func (self *graph) ToNode(node interface{}) ([]interface{}, error) {
 	if !has {
 		return nil, fmt.Errorf("Node does not exist: %v", node)
 	}
-	
+
 	//make sure to use unified types
 	node = UnifyDataType(node)
 
@@ -699,7 +699,7 @@ func (self *graph) ReachableNodes(node interface{}) ([]interface{}, error) {
 	if !has {
 		return nil, fmt.Errorf("Node does not exist")
 	}
-	
+
 	//make sure to use unified types
 	node = UnifyDataType(node)
 

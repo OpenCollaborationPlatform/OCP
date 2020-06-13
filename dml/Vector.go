@@ -187,7 +187,7 @@ func (self *vector) Set(idx int64, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to set vector entry")
 	}
-	
+
 	//make sure to use unified types
 	value = UnifyDataType(value)
 
@@ -237,7 +237,7 @@ func (self *vector) Append(value interface{}) (int64, error) {
 	if err != nil {
 		return -1, utils.StackError(err, "Unable to append vector entry")
 	}
-	
+
 	//make sure to use unified types
 	value = UnifyDataType(value)
 
@@ -302,7 +302,7 @@ func (self *vector) Insert(idx int64, value interface{}) error {
 	if idx >= length || idx < 0 {
 		return fmt.Errorf("Index out of bounds: %v", idx)
 	}
-	
+
 	//make sure to use unified types
 	value = UnifyDataType(value)
 

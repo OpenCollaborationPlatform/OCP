@@ -6,7 +6,6 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 )
 
-
 //changes value to its main type from multiple subtypes, e.g. int64 from int and int16
 //Note: No type checking is done!
 func UnifyDataType(val interface{}) interface{} {
@@ -35,7 +34,7 @@ func UnifyDataType(val interface{}) interface{} {
 	case Boolean:
 		return bool(val.(bool))
 	}
-	
+
 	//everything else is correct
 	return val
 }

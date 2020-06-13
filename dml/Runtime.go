@@ -340,7 +340,7 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		}
 		if fnc.IsConst() {
 			self.datastore.Rollback()
-			if err != nil  {
+			if err != nil {
 				return nil, err
 			}
 			return result, nil

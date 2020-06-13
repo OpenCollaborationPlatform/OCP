@@ -77,7 +77,7 @@ func TestPODGraph(t *testing.T) {
 				val, err = rntm.RunJavaScript("", code)
 				So(err, ShouldBeNil)
 				So(val, ShouldBeTrue)
-				
+
 				Convey("Connections are returned correctly", func() {
 
 					code = `	toplevel.IntGraph.FromNode(1)`
@@ -89,18 +89,18 @@ func TestPODGraph(t *testing.T) {
 					val, err = rntm.RunJavaScript("", code)
 					So(err, ShouldBeNil)
 					So(val, ShouldResemble, []interface{}{int64(4)})
-					
+
 					code = `	toplevel.IntGraph.ToNode(7)`
 					val, err = rntm.RunJavaScript("", code)
 					So(err, ShouldNotBeNil)
 					So(val, ShouldBeNil)
-					
+
 					val, err = rntm.Call("", "toplevel.IntGraph.ToNode", 1)
-					So(err,ShouldBeNil)
+					So(err, ShouldBeNil)
 					So(val, ShouldResemble, []interface{}{int64(4)})
-					
+
 					val, err = rntm.Call("", "toplevel.IntGraph.ToNode", 7)
-					So(err,ShouldNotBeNil)
+					So(err, ShouldNotBeNil)
 					So(val, ShouldBeNil)
 				})
 
