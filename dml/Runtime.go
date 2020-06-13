@@ -575,7 +575,7 @@ func (self *Runtime) removeObject(obj Object) error {
 
 		//remove from list and javascript (not for behaviours)
 		delete(self.objects, obj.Id())
-		_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects.%v", obj.Id().Encode()))
+		_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects[\"%v\"]", obj.Id().Encode()))
 		if err != nil {
 			return err
 		}
