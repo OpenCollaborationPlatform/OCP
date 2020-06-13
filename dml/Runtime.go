@@ -330,7 +330,6 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	if obj.HasMethod(accessor) {
 		fnc := obj.GetMethod(accessor)
 		result = fnc.Call(args...)
-		//fmt.Printf("\nCall method %v result: %v\n", accessor, result)
 		handled = true
 
 		//did somethign go wrong?
@@ -340,8 +339,11 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 
 		}
 		if fnc.IsConst() {
-			err := self.datastore.Rollback()
-			return result, err
+			self.datastore.Rollback()
+			if err != nil  {
+				return nil, err
+			}
+			return result, nil
 		}
 	}
 
@@ -676,7 +678,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 
 		method, err := self.buildMethod(fnc)
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to create method %v in object %v", fnc.Name, objName)
+			return nil, utils.StackError(err, "Unable to create method %v in object %v", *fnc.Name, objName)
 		}
 		obj.AddMethod(*fnc.Name, method)
 	}

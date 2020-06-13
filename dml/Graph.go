@@ -172,7 +172,7 @@ func (self *graph) typeToDB(input interface{}, dt DataType) interface{} {
 	}
 
 	//everything else is simply used as key
-	return input
+	return UnifyDataType(input)
 }
 
 func (self *graph) Nodes() ([]interface{}, error) {
@@ -248,6 +248,9 @@ func (self *graph) RemoveNode(value interface{}) error {
 	if has, _ := self.HasNode(value); !has {
 		return fmt.Errorf("No such node available, cannot remove")
 	}
+	
+	//make sure to use unified types
+	value = UnifyDataType(value)
 
 	dt := self.nodeDataType()
 
@@ -293,6 +296,11 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Cannot add node, has wrong type")
 	}
+	
+	//make sure to use unified types
+	source = UnifyDataType(source)
+	target = UnifyDataType(target)
+	value  = UnifyDataType(value)
 
 	//check if we have the two nodes
 	hassource, err := self.HasNode(source)
@@ -320,7 +328,7 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 	return self.edgeData.Write(dbentry, edge)
 }
 
-//creates a new entry with a all new type, returns the new node
+//creates a new entry with a all new type, returns the new edge
 func (self *graph) NewEdge(source, target interface{}) (interface{}, error) {
 
 	//check if we have the two nodes
@@ -335,6 +343,10 @@ func (self *graph) NewEdge(source, target interface{}) (interface{}, error) {
 	if !hassource || !hastarget {
 		return nil, fmt.Errorf("Source and target nodes must be available, but are not")
 	}
+	
+	//make sure to use unified types
+	source = UnifyDataType(source)
+	target = UnifyDataType(target)
 
 	//check if edge already exists
 	if has, _ := self.HasEdgeBetween(source, target); has {
@@ -401,6 +413,10 @@ func (self *graph) RemoveEdgeBetween(source, target interface{}) error {
 	if !hassource || !hastarget {
 		return fmt.Errorf("Source and target nodes must be available, but are not")
 	}
+	
+	//make sure to use unified types
+	source = UnifyDataType(source)
+	target = UnifyDataType(target)
 
 	//we need to iterate all edges!
 	keys, err := self.edgeData.GetKeys()
@@ -445,7 +461,7 @@ func (self *graph) HasEdge(value interface{}) (bool, error) {
 	if err != nil {
 		return false, utils.StackError(err, "Edge has wrong type")
 	}
-
+	
 	dbkey := self.typeToDB(value, dt)
 	return self.edgeData.HasKey(dbkey), nil
 }
@@ -464,6 +480,10 @@ func (self *graph) HasEdgeBetween(source, target interface{}) (bool, error) {
 	if !hassource || !hastarget {
 		return false, fmt.Errorf("Source and target nodes must be available, but are not")
 	}
+	
+	//make sure to use unified types
+	source = UnifyDataType(source)
+	target = UnifyDataType(target)
 
 	//we need to iterate all edges!
 	keys, err := self.edgeData.GetKeys()
@@ -502,6 +522,10 @@ func (self *graph) Edge(source, target interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Target node has wrong type")
 	}
+	
+	//make sure to use unified types
+	source = UnifyDataType(source)
+	target = UnifyDataType(target)
 
 	//we need to iterate all edges!
 	keys, err := self.edgeData.GetKeys()
@@ -533,7 +557,7 @@ func (self *graph) Edge(source, target interface{}) (interface{}, error) {
 //*****************************************************************************
 
 //return all nodes reachable from the given one
-func (self *graph) FromNode(node interface{}) (interface{}, error) {
+func (self *graph) FromNode(node interface{}) ([]interface{}, error) {
 
 	//check if node exists
 	has, err := self.HasNode(node)
@@ -541,8 +565,11 @@ func (self *graph) FromNode(node interface{}) (interface{}, error) {
 		return nil, err
 	}
 	if !has {
-		return nil, fmt.Errorf("Not does not exist")
+		return nil, fmt.Errorf("Node does not exist")
 	}
+	
+	//make sure to use unified types
+	node = UnifyDataType(node)
 
 	gg, mapper := self.getGonumGraph()
 	res := gg.From(mapper[node].ID())
@@ -557,7 +584,9 @@ func (self *graph) FromNode(node interface{}) (interface{}, error) {
 }
 
 //return all nodes which can reach the given one
-func (self *graph) ToNode(node interface{}) (interface{}, error) {
+func (self *graph) ToNode(node interface{}) ([]interface{}, error) {
+
+	fmt.Printf("\nCall to Node with node %v (Type %T)\n", node, node)
 
 	if !self.isDirected() {
 		return self.FromNode(node)
@@ -569,8 +598,11 @@ func (self *graph) ToNode(node interface{}) (interface{}, error) {
 		return nil, err
 	}
 	if !has {
-		return nil, fmt.Errorf("Not does not exist")
+		return nil, fmt.Errorf("Node does not exist: %v", node)
 	}
+	
+	//make sure to use unified types
+	node = UnifyDataType(node)
 
 	gg, mapper := self.getGonumDirected()
 	res := gg.To(mapper[node].ID())
@@ -667,6 +699,9 @@ func (self *graph) ReachableNodes(node interface{}) ([]interface{}, error) {
 	if !has {
 		return nil, fmt.Errorf("Node does not exist")
 	}
+	
+	//make sure to use unified types
+	node = UnifyDataType(node)
 
 	//get the graph
 	graph, mapper := self.getGonumGraph()

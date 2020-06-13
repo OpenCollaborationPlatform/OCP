@@ -94,30 +94,8 @@ func (self *mapImpl) typeToDB(key interface{}, dt DataType) interface{} {
 		return val.AsString()
 	}
 
-	//numeric types should be unified!
-	switch key.(type) {
-	case int:
-		key = int64(key.(int))
-	case int8:
-		key = int64(key.(int8))
-	case int16:
-		key = int64(key.(int16))
-	case int32:
-		key = int64(key.(int32))
-	case uint:
-		key = uint64(key.(uint))
-	case uint8:
-		key = uint64(key.(uint8))
-	case uint16:
-		key = uint64(key.(uint16))
-	case uint32:
-		key = uint64(key.(uint32))
-	case float32:
-		key = float64(key.(float32))
-	}
-
-	//everything else is simply used as key
-	return key
+	//everything else is simply used as key (but unified)
+	return UnifyDataType(key)
 
 }
 

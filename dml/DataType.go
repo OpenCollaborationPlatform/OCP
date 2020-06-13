@@ -6,6 +6,40 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 )
 
+
+//changes value to its main type from multiple subtypes, e.g. int64 from int and int16
+//Note: No type checking is done!
+func UnifyDataType(val interface{}) interface{} {
+
+	switch val.(type) {
+	case int:
+		return int64(val.(int))
+	case int8:
+		return int64(val.(int8))
+	case int16:
+		return int64(val.(int16))
+	case int32:
+		return int64(val.(int16))
+	case uint:
+		return int64(val.(uint))
+	case uint8:
+		return int64(val.(uint8))
+	case uint16:
+		return int64(val.(uint16))
+	case uint32:
+		return int64(val.(uint32))
+	case uint64:
+		return int64(val.(uint64))
+	case float32:
+		return int64(val.(float32))
+	case Boolean:
+		return bool(val.(bool))
+	}
+	
+	//everything else is correct
+	return val
+}
+
 /*	DataType: a object which holds all available datatypes in DML. Those include:
  *
  *	POD:
@@ -120,12 +154,12 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 	}
 
 	//check if the type is correct
-	switch val.(type) {
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+	switch UnifyDataType(val).(type) {
+	case int64:
 		if !self.IsInt() && !self.IsFloat() {
 			return fmt.Errorf(`wrong type, got 'int' and expected '%s'`, self.AsString())
 		}
-	case float32, float64:
+	case float64:
 		if !self.IsFloat() {
 			return fmt.Errorf(`wrong type, got 'float' and expected '%s'`, self.AsString())
 		}
@@ -133,7 +167,7 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 		if !self.IsString() {
 			return fmt.Errorf(`wrong type, got 'string' and expected '%s'`, self.AsString())
 		}
-	case bool, Boolean:
+	case bool:
 		if !self.IsBool() {
 			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, self.AsString())
 		}
@@ -146,7 +180,6 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 	}
 
 	return nil
-
 }
 
 func (self DataType) complexAsAst() (*astObject, error) {

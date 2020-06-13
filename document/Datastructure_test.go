@@ -37,12 +37,22 @@ const (
 				function TestFncTwoArgs(a, b) {
 					this.testI = a+b
 				}
+				
+				function TestList() {
+					return []	
+				}
 
 				Vector {
 					.name: "Vector"
 					.type: Data {
 								property int testI: 10
 						   }
+				}
+				
+				Graph {
+					.name: "Graph"
+					.node: string
+					.edge: none	
 				}
 				
 				Raw {
@@ -167,6 +177,17 @@ func TestDatastructure(t *testing.T) {
 
 			val, _ = ds.dml.Call(dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 3)
+			
+			val, err = testClient.Call(ctx, "ocp.test.call.Test.TestList", opts, wamp.List{}, wamp.Dict{}, nil)
+			So(err, ShouldBeNil)
+			args := val.(*wamp.Result)
+			So(args.Arguments[0], ShouldResemble, []interface{}{})
+			
+			testClient.Call(ctx, "ocp.test.call.Test.Graph.AddNode", opts, wamp.List{"node"}, wamp.Dict{}, nil)
+			val, err = testClient.Call(ctx, "ocp.test.call.Test.Graph.ToNode", opts, wamp.List{"node"}, wamp.Dict{}, nil)
+			So(err, ShouldBeNil)
+			args = val.(*wamp.Result)
+			So(args.Arguments[0], ShouldResemble, []interface{}{})
 		})
 
 		Convey("javascript code can be excecuted,", func() {
