@@ -165,6 +165,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	self.mainObj = obj.(Data)
 	self.ready = true
 
+
 	//set the JS main entry point
 	self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
 
@@ -174,6 +175,9 @@ func (self *Runtime) Parse(reader io.Reader) error {
 			obj.FixStateAsVersion()
 		}
 	}
+	
+	//call everyones "onCreated"
+	obj.(Data).Created()
 
 	return err
 }
@@ -796,7 +800,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 	} else {
 		jsobj.DefineDataProperty("parent", self.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	}
-
+	
 	return obj, nil
 }
 

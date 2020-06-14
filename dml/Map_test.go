@@ -195,6 +195,11 @@ func TestComplexTypeMap(t *testing.T) {
 						.key: string
 						.value: Data {
 							property int test: 0
+							property string created
+							
+							.onCreated: function() {
+								this.created = this.Identifier()
+							}
 						}
 					}
 
@@ -227,6 +232,26 @@ func TestComplexTypeMap(t *testing.T) {
 			code = `	toplevel.TypeMap.Set("new", toplevel.TypeMap.Get("test"))`
 			_, err = rntm.RunJavaScript("user3", code)
 			So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
+
+			Convey("The created event was called", func() {
+				
+				store.Begin()
+				defer store.Rollback()
+				
+				obj, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
+				So(err, ShouldBeNil)
+				So(obj.GetProperty("created").GetValue(), ShouldEqual, obj.Id().Encode())
+				store.Rollback()
+				
+				code = `
+					obj = toplevel.TypeMap.Get("test")
+					if (obj.Identifier() != obj.created) {
+						throw "identifiers are not equal, but should be"
+					}
+				`
+				_, err = rntm.RunJavaScript("user3", code)
+				So(err, ShouldBeNil)
+			})
 
 			Convey("Setting data to the new type is supported", func() {
 

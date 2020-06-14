@@ -396,13 +396,13 @@ func (self *TransactionManager) Add(obj Data) error {
 	}
 
 	//add the requried additional objects to the transaction
-	list, err := bhvr.GetMethod("DependendObjects").Call()
+	list, err := bhvr.GetMethod("DependentObjects").Call()
 	if err != nil {
-		return utils.StackError(err, "Unable to query behaviour for dependent objects")
+		return utils.StackError(err, "Error in \"DependentObjects\" function:")
 	}
-	objs, ok := list.([]Object)
+	objs, ok := list.([]interface{})
 	if !ok {
-		err = fmt.Errorf("Invalid \"DependendObjects\" function: return value must be list of objects, not %T", list)
+		err = fmt.Errorf("Invalid \"DependentObjects\" function: return value must be list of objects, not %T", list)
 		bhvr.GetEvent("onFailure").Emit(err.Error())
 		return err
 	}
@@ -517,7 +517,7 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	//add default methods for overriding by the user
 	tbhvr.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable, true))                //return true/false if object can be used in current transaction
 	tbhvr.AddMethod("CanBeClosed", MustNewMethod(tbhvr.defaultCloseable, true))             //return true/false if transaction containing the object can be closed
-	tbhvr.AddMethod("DependendObjects", MustNewMethod(tbhvr.defaultDependendObjects, true)) //return array of objects that need also to be added to transaction
+	tbhvr.AddMethod("DependentObjects", MustNewMethod(tbhvr.defaultDependentObjects, true)) //return array of objects that need also to be added to transaction
 
 	//add default events
 	tbhvr.AddEvent(`onOpen`, NewEvent(behaviour.GetJSObject(), rntm))          //called when a new transaction was opened
@@ -629,6 +629,6 @@ func (self *transactionBehaviour) defaultCloseable() bool {
 	return true
 }
 
-func (self *transactionBehaviour) defaultDependendObjects() []Object {
-	return make([]Object, 0)
+func (self *transactionBehaviour) defaultDependentObjects() []interface{} {
+	return make([]interface{}, 0)
 }

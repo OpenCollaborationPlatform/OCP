@@ -289,6 +289,10 @@ func (self *vector) AppendNew() (interface{}, error) {
 	}
 	//and increase length
 	self.length.Write(length + 1)
+	
+	if data, ok := result.(Data); ok {
+		data.Created()
+	}
 
 	self.GetEvent("onNewEntry").Emit(length)
 	self.GetEvent("onChanged").Emit()

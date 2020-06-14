@@ -256,5 +256,12 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(c, ShouldBeFalse)
 		})
+		
+		Convey("and created event was emitted", func() {
+
+			res, err := rntm.Call("", "Document.created")
+			So(err, ShouldBeNil)
+			So(res, ShouldBeTrue)
+		})
 	})
 }

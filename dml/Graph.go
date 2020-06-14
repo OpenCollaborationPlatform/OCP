@@ -238,9 +238,18 @@ func (self *graph) NewNode() (interface{}, error) {
 	} else {
 		result = dt.GetDefaultValue()
 	}
+	
+	err := self.AddNode(result)
+	if err != nil {
+		return nil, err
+	}
+	
+	if dt.IsComplex() {
+		result.(Data).Created()
+	}
 
 	//write new entry
-	return result, self.AddNode(result)
+	return result, nil
 }
 
 func (self *graph) RemoveNode(value interface{}) error {
@@ -377,7 +386,14 @@ func (self *graph) NewEdge(source, target interface{}) (interface{}, error) {
 	dbentry := self.typeToDB(result, dt)
 	edge := graphEdge{source, target}
 
-	return result, self.edgeData.Write(dbentry, edge)
+	err = self.edgeData.Write(dbentry, edge)
+	if err != nil {
+		return nil, err
+	}
+	if dt.IsComplex() {
+		result.(Data).Created()
+	}
+	return result, nil
 }
 
 func (self *graph) RemoveEdge(value interface{}) error {

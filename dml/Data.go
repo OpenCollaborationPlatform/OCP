@@ -25,6 +25,8 @@ type Data interface {
 	//Hirarchy + dynamic objects, optional behaviour + object properties
 	GetSubobjects(bhvr bool) []Object
 	GetSubobjectByName(name string, bhvr bool) (Object, error)
+	
+	Created() //emits onCreated event for this and all subobjects (not behaviours)
 }
 
 type DataImpl struct {
@@ -50,6 +52,8 @@ func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) (*DataImp
 		NewBehaviourHandler(),
 		make([]Identifier, 0),
 	}
+	
+	dat.AddEvent("onCreated", NewEvent(dat.GetJSObject(), rntm))
 
 	return &dat, nil
 }
@@ -119,6 +123,19 @@ func (self *DataImpl) GetSubobjectByName(name string, bhvr bool) (Object, error)
 
 func (self *DataImpl) GetValueByName(name string) interface{} {
 	return nil
+}
+
+func (self *DataImpl) Created() {
+	
+	self.GetEvent("onCreated").Emit()
+	
+	for _, obj := range self.GetSubobjects(false) {
+		
+		data, ok := obj.(Data)
+		if ok {
+			data.Created()
+		}
+	}
 }
 
 /*******************************************************************************/

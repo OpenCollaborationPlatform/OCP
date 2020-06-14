@@ -331,6 +331,10 @@ func (self *mapImpl) New(key interface{}) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	
+	if dt.IsComplex() {
+		result.(Data).Created()
+	}
 
 	self.GetEvent("onChanged").Emit() //do not return error as setting was already successfull
 	return result, nil

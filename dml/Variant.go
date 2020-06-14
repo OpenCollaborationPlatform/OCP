@@ -64,6 +64,7 @@ func (self *variant) Load() error {
 			if err != nil {
 				return err
 			}
+			obj.(Data).Created()
 
 		} else {
 
@@ -269,6 +270,8 @@ func (self *variant) changedCallback(args ...interface{}) error {
 			return utils.StackError(err, "Unable to setup variant object: construction failed")
 		}
 		err = self.value.Write(obj.Id().Encode())
+		
+		obj.(Data).Created()
 
 	} else if dt.IsType() {
 

@@ -172,9 +172,18 @@ func TestTransactionBehaviour(t *testing.T) {
 					Data {
 						.name: "Child3"
 						
+						property bool created: false
+						
+						.onCreated: function() {
+							if (this.Transaction.InTransaction()) {
+								throw "In transaction, but should not"	
+							}
+						}
+						
 						Transaction{
-							.name: "Transaction3"
-						} //test default transaction behaviour
+							.name: "Transaction"
+							.automatic: true
+						} 
 					}
 							
 				}`

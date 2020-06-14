@@ -8,6 +8,7 @@
     property int 	testI: 1
 	property bool 	testB: true
 	property float	testF 
+	property bool  	created: false
 	
 	const   property int testConst:4
 	
@@ -44,6 +45,10 @@
 		
 		Data {
 			.name: "DefaultChild"
+			
+			.onCreated: function() {
+				Document.created = true
+			}
 		}
 	}
 	

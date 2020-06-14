@@ -106,7 +106,7 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) 
 	//goja panics as form of error reporting...
 	defer func() {
 		if e := recover(); e != nil {
-			err = e.(error)
+			err = fmt.Errorf("%v", e)
 			result = nil
 		}
 	}()
