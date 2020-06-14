@@ -8,7 +8,7 @@ import (
 )
 
 type Method interface {
-	Call(args ...interface{}) interface{}
+	Call(args ...interface{}) (interface{}, error)
 	CallBoolReturn(args ...interface{}) (bool, error)
 	IsConst() bool
 }
@@ -41,7 +41,7 @@ type method struct {
 	constant bool
 }
 
-func (self *method) Call(args ...interface{}) interface{} {
+func (self *method) Call(args ...interface{}) (interface{}, error) {
 
 	rfargs := make([]reflect.Value, len(args))
 	for i, arg := range args {
@@ -50,10 +50,14 @@ func (self *method) Call(args ...interface{}) interface{} {
 	res := self.fnc.Call(rfargs)
 
 	if len(res) == 0 {
-		return nil
+		return nil, nil
 
 	} else if len(res) == 1 {
-		return res[0].Interface()
+		err, ok := res[0].Interface().(error)
+		if ok {
+			return nil, err
+		}
+		return res[0].Interface(), nil
 
 	} else if len(res) == 2 {
 
@@ -62,24 +66,25 @@ func (self *method) Call(args ...interface{}) interface{} {
 		if !res[1].IsNil() {
 			err, ok := res[1].Interface().(error)
 			if !ok {
-				return fmt.Errorf("Second return type of function must be error, not %T", res[1].Interface())
+				return nil, fmt.Errorf("Second return type of function must be error, not %T", res[1].Interface())
 			}
-			if err != nil {
-				return err
-			}
+			return nil, err
 		}
-		return res[0].Interface()
+		return res[0].Interface(), nil
 	}
 
-	return fmt.Errorf("Function returns too many results: not supported")
+	return nil, fmt.Errorf("Function returns too many results: not supported")
 }
 
 func (self *method) CallBoolReturn(args ...interface{}) (bool, error) {
 
-	result := self.Call(args...)
+	result, err := self.Call(args...)
+	if err != nil {
+		return false, err
+	}
 	boolean, ok := result.(bool)
 	if !ok {
-		return true, fmt.Errorf("Return value must be bool")
+		return false, fmt.Errorf("Return value must be bool")
 	}
 	return boolean, nil
 }
@@ -96,12 +101,13 @@ type jsMethod struct {
 	constant bool
 }
 
-func (self *jsMethod) Call(args ...interface{}) (result interface{}) {
+func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) {
 
 	//goja panics as form of error reporting...
 	defer func() {
-		if err := recover(); err != nil {
-			result = fmt.Errorf("%v", err)
+		if e := recover(); e != nil {
+			err = e.(error)
+			result = nil
 		}
 	}()
 
@@ -111,15 +117,16 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}) {
 		jsargs[i] = self.rntm.jsvm.ToValue(arg)
 	}
 
+	err = nil
 	res := self.fnc(goja.FunctionCall{Arguments: jsargs, This: self.jsobj})
 
 	//check if it is a dml object and convert to dml object
-	obj, err := objectFromJSValue(res, self.rntm)
+	result, err = objectFromJSValue(res, self.rntm)
 	if err != nil {
-		return err
+		return
 	}
-	if obj != nil {
-		return obj
+	if result != nil {
+		return
 	}
 
 	//no object. Just return the default go representation
@@ -129,10 +136,13 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}) {
 
 func (self *jsMethod) CallBoolReturn(args ...interface{}) (bool, error) {
 
-	result := self.Call(args...)
+	result, err := self.Call(args...)
+	if err != nil {
+		return false, err
+	}
 	boolean, ok := result.(bool)
 	if !ok {
-		return true, fmt.Errorf("Return value must be bool")
+		return false, fmt.Errorf("Return value must be bool")
 	}
 	return boolean, nil
 }
@@ -216,11 +226,10 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				args := extractArgs(jsargs.Arguments, rntm)
 
 				//call the function
-				res := thisMethod.Call(args...)
+				res, err := thisMethod.Call(args...)
 
-				//check if we have a error and if it is not nil to panic for goja
-				err, ok := res.(error)
-				if ok && err != nil {
+				//check if we have a error and if it is not nil we panic for goja
+				if err != nil {
 					panic(rntm.jsvm.ToValue(err.Error()))
 				}
 

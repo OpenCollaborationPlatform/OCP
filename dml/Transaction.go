@@ -396,10 +396,13 @@ func (self *TransactionManager) Add(obj Data) error {
 	}
 
 	//add the requried additional objects to the transaction
-	list := bhvr.GetMethod("DependendObjects").Call()
+	list, err := bhvr.GetMethod("DependendObjects").Call()
+	if err != nil {
+		return utils.StackError(err, "Unable to query behaviour for dependent objects")
+	}
 	objs, ok := list.([]Object)
 	if !ok {
-		err = fmt.Errorf("Invalid \"DependendObjects\" function: return value must be list of objects")
+		err = fmt.Errorf("Invalid \"DependendObjects\" function: return value must be list of objects, not %T", list)
 		bhvr.GetEvent("onFailure").Emit(err.Error())
 		return err
 	}

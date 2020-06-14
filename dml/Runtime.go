@@ -328,14 +328,12 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 			return nil, fmt.Errorf("Manager %v does not have method %v", path[0], accessor)
 		}
 		fnc := mngr.GetMethod(accessor)
-		result := fnc.Call(args...)
+		result, e := fnc.Call(args...)
 
 		//did somethign go wrong?
-		e, ok := result.(error)
-		if ok {
+		if e != nil {
 			self.datastore.Rollback()
 			return nil, e
-
 		}
 		if fnc.IsConst() {
 			self.datastore.Rollback()
@@ -359,15 +357,9 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	//check if it is a method
 	if obj.HasMethod(accessor) {
 		fnc := obj.GetMethod(accessor)
-		result = fnc.Call(args...)
+		result, err = fnc.Call(args...)
 		handled = true
 
-		//did somethign go wrong?
-		e, ok := result.(error)
-		if ok {
-			err = e
-
-		}
 		if fnc.IsConst() {
 			self.datastore.Rollback()
 			if err != nil {

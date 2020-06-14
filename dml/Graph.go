@@ -323,7 +323,6 @@ func (self *graph) AddEdge(source, target, value interface{}) error {
 	//write
 	dbentry := self.typeToDB(value, dt)
 	edge := graphEdge{source, target}
-	fmt.Printf("Add edge %v\n", edge)
 
 	return self.edgeData.Write(dbentry, edge)
 }
@@ -585,8 +584,6 @@ func (self *graph) FromNode(node interface{}) ([]interface{}, error) {
 
 //return all nodes which can reach the given one
 func (self *graph) ToNode(node interface{}) ([]interface{}, error) {
-
-	fmt.Printf("\nCall to Node with node %v (Type %T)\n", node, node)
 
 	if !self.isDirected() {
 		return self.FromNode(node)
