@@ -55,16 +55,16 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 		currentUser:  "none",
 		mainObj:      nil,
 		objects:      make(map[Identifier]Data, 0),
-		transactions: &TransactionManager{},
+		behaviours:   make(map[string]BehaviourManager, 0),
 	}
 
 	//build the managers and expose
 	transMngr, err := NewTransactionManager(rntm)
 	if err != nil {
-		panic(utils.StackError(err, "Unable to initilize transaction manager"))
+		panic("Unable to initilize transaction manager")
 	}
-	rntm.transactions = transMngr
-	rntm.jsvm.Set("Transaction", transMngr.jsobj)
+	rntm.behaviours["Transaction"] = transMngr
+	rntm.jsvm.Set("Transaction", transMngr.GetJSObject())
 
 	//add the datastructures
 	rntm.RegisterObjectCreator("Data", NewData)
@@ -100,7 +100,7 @@ type Runtime struct {
 	mainObj     Data
 
 	//managers
-	transactions *TransactionManager
+	behaviours  map[string]BehaviourManager
 }
 
 // Setup / creation Methods
@@ -272,6 +272,12 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 	idx := strings.LastIndex(string(fullpath), ".")
 	path := fullpath[:idx]
 	accessor := fullpath[(idx + 1):]
+	
+	//check if manager
+	mngr, ok := self.behaviours[path]
+	if ok && mngr.HasMethod(accessor) {
+		return mngr.GetMethod(accessor).IsConst(), nil
+	}
 
 	//the relevant object
 	obj, err := self.getObjectFromPath(path)
@@ -315,7 +321,33 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	path := fullpath[:idx]
 	accessor := fullpath[(idx + 1):]
 
-	//first check if path is correct and object available
+
+	//first check if it is a Manager
+	mngr, ok := self.behaviours[path]
+	if ok {
+		if !mngr.HasMethod(accessor) {
+			return nil, fmt.Errorf("Manager %v does not have method %v", path[0], accessor)
+		}
+		fnc := mngr.GetMethod(accessor)
+		result := fnc.Call(args...)
+
+		//did somethign go wrong?
+		e, ok := result.(error)
+		if ok {
+			self.datastore.Rollback()
+			return nil, e
+
+		}
+		if fnc.IsConst() {
+			self.datastore.Rollback()
+			return result, nil
+		}
+		err = self.postprocess(false)
+		return result, err
+	}
+
+
+	//not a manager: now check if path is correct and object available
 	obj, err := self.getObjectFromPath(path)
 	if err != nil {
 		self.datastore.Rollback()
@@ -438,7 +470,7 @@ func (self *Runtime) getObjectFromPath(path string) (Object, error) {
 
 	names := strings.Split(path, `.`)
 	if len(names) == 0 {
-		return nil, fmt.Errorf("Not a valid path to object: no IDs found")
+		return nil, fmt.Errorf("Not a valid path to object: no names found")
 	}
 
 	var obj Data

@@ -28,7 +28,7 @@ func TestTransactionBasics(t *testing.T) {
 
 		Convey("a transaction manager shall be created", func() {
 
-			mngr := rntm.transactions
+			mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 			So(err, ShouldBeNil)
 
 			Convey("which allows creating transactions", func() {
@@ -183,7 +183,7 @@ func TestTransactionBehaviour(t *testing.T) {
 		rntm.currentUser = "User1"
 		err := rntm.Parse(strings.NewReader(code))
 		So(err, ShouldBeNil)
-		mngr := rntm.transactions
+		mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 
 		Convey("the object structure must be correct", func() {
 
@@ -425,7 +425,7 @@ func TestTransactionAbort(t *testing.T) {
 		err := rntm.Parse(strings.NewReader(code))
 		So(err, ShouldBeNil)
 		store.Begin()
-		So(rntm.transactions.Open(), ShouldBeNil)
+		So(rntm.behaviours["Transaction"].(*TransactionManager).Open(), ShouldBeNil)
 		store.Commit()
 
 		Convey("leads to a single transaction in the manager.", func() {
@@ -433,7 +433,7 @@ func TestTransactionAbort(t *testing.T) {
 			store.Begin()
 			defer store.Rollback()
 
-			mngr := rntm.transactions
+			mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 			keys, err := mngr.transactions.GetKeys()
 
 			So(err, ShouldBeNil)
@@ -445,11 +445,11 @@ func TestTransactionAbort(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			mngr := rntm.transactions
+			mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 			mngr.Close()
 
 			Convey("leads to zero transaction in the manager.", func() {
-				mngr := rntm.transactions
+				mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 				keys, err := mngr.transactions.GetKeys()
 
 				So(err, ShouldBeNil)
@@ -475,7 +475,7 @@ func TestTransactionAbort(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				trans, err := rntm.transactions.getTransaction()
+				trans, err := rntm.behaviours["Transaction"].(*TransactionManager).getTransaction()
 				So(err, ShouldBeNil)
 				user, err := trans.User()
 				So(err, ShouldBeNil)
@@ -492,7 +492,7 @@ func TestTransactionAbort(t *testing.T) {
 			store.Begin()
 			err := rntm.mainObj.GetProperty("abort").SetValue(true)
 			So(err, ShouldBeNil)
-			So(rntm.transactions.Open(), ShouldBeNil)
+			So(rntm.behaviours["Transaction"].(*TransactionManager).Open(), ShouldBeNil)
 			store.Commit()
 
 			Convey("Changing data of non-transaction subobject should work", func() {
@@ -522,7 +522,7 @@ func TestTransactionAbort(t *testing.T) {
 
 				Convey("And transaction should have no object", func() {
 					store.Begin()
-					mngr := rntm.transactions
+					mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 					trans, _ := mngr.getTransaction()
 					obj, err := trans.Objects()
 					So(err, ShouldBeNil)
@@ -535,7 +535,7 @@ func TestTransactionAbort(t *testing.T) {
 
 				//initially 0 objects required
 				store.Begin()
-				mngr := rntm.transactions
+				mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 				trans, _ := mngr.getTransaction()
 				obj, err := trans.Objects()
 				So(err, ShouldBeNil)
@@ -567,7 +567,7 @@ func TestTransactionAbort(t *testing.T) {
 
 			Convey("Opening a transaction directly bevore failing data change", func() {
 				store.Begin()
-				mngr := rntm.transactions
+				mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 
 				mngr.Close()
 

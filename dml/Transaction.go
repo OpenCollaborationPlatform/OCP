@@ -172,6 +172,7 @@ func (self transaction) AddObject(id Identifier) error {
 								Manager
 *********************************************************************************/
 
+//implements BehaviourManager
 type TransactionManager struct {
 	methodHandler
 
@@ -217,6 +218,15 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 
 	return mngr, nil
 }
+
+func (self *TransactionManager) GetJSObject() *goja.Object {
+	return self.jsobj
+}
+
+func (self *TransactionManager) GetJSRuntime() *goja.Runtime {
+	return self.rntm.jsvm
+}
+
 
 //returns if currently a transaction is open
 func (self *TransactionManager) IsOpen() bool {
@@ -317,9 +327,19 @@ func (self *TransactionManager) Add(obj Data) error {
 
 	trans, err := self.getTransaction()
 	if err != nil {
-		err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
-		bhvr.GetEvent("onFailure").Emit(err.Error())
-		return utils.StackError(err, "Unable to add Object")
+		//seems we do not have a transaction open. Let's check if we shall open one
+		if bhvr.GetProperty("automatic").GetValue().(bool) {			
+			err = self.Open() 
+			if err == nil {
+				trans, err = self.getTransaction()
+			}
+		}
+
+		if err != nil  {
+			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
+			bhvr.GetEvent("onFailure").Emit(err.Error())
+			return err
+		}
 	}
 
 	//check if object is not already in annother transaction
@@ -486,7 +506,11 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	inTrans, _ := vset.GetOrCreateValue([]byte("__inTransaction"))
 	curTrans, _ := vset.GetOrCreateValue([]byte("__currentTransaction"))
 
-	tbhvr := &transactionBehaviour{behaviour, rntm.transactions, *inTrans, *curTrans}
+	mngr := rntm.behaviours["Transaction"].(*TransactionManager)
+	tbhvr := &transactionBehaviour{behaviour, mngr, *inTrans, *curTrans}
+	
+	//add default properties
+	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) 	//open transaction automatically on change
 
 	//add default methods for overriding by the user
 	tbhvr.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable, true))                //return true/false if object can be used in current transaction
