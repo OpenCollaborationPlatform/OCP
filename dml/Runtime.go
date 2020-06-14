@@ -46,16 +46,16 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 
 	cr := make(map[string]CreatorFunc, 0)
 	rntm := &Runtime{
-		creators:     cr,
-		jsvm:         js,
-		jsObjMap:     js.NewObject(),
-		datastore:    ds,
-		mutex:        &sync.Mutex{},
-		ready:        false,
-		currentUser:  "none",
-		mainObj:      nil,
-		objects:      make(map[Identifier]Data, 0),
-		behaviours:   make(map[string]BehaviourManager, 0),
+		creators:    cr,
+		jsvm:        js,
+		jsObjMap:    js.NewObject(),
+		datastore:   ds,
+		mutex:       &sync.Mutex{},
+		ready:       false,
+		currentUser: "none",
+		mainObj:     nil,
+		objects:     make(map[Identifier]Data, 0),
+		behaviours:  make(map[string]BehaviourManager, 0),
 	}
 
 	//build the managers and expose
@@ -100,7 +100,7 @@ type Runtime struct {
 	mainObj     Data
 
 	//managers
-	behaviours  map[string]BehaviourManager
+	behaviours map[string]BehaviourManager
 }
 
 // Setup / creation Methods
@@ -272,7 +272,7 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 	idx := strings.LastIndex(string(fullpath), ".")
 	path := fullpath[:idx]
 	accessor := fullpath[(idx + 1):]
-	
+
 	//check if manager
 	mngr, ok := self.behaviours[path]
 	if ok && mngr.HasMethod(accessor) {
@@ -321,7 +321,6 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	path := fullpath[:idx]
 	accessor := fullpath[(idx + 1):]
 
-
 	//first check if it is a Manager
 	mngr, ok := self.behaviours[path]
 	if ok {
@@ -345,7 +344,6 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 		err = self.postprocess(false)
 		return result, err
 	}
-
 
 	//not a manager: now check if path is correct and object available
 	obj, err := self.getObjectFromPath(path)

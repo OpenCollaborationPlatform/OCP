@@ -13,9 +13,9 @@ import (
  *  - Provide properties to access special data decribing the behaviour state
  *  - Provide Events that fire during execution of the behaviour
  *  - Provides Methods to override and hence customice the behaviour
- * 
+ *
  * Behaviour infrastructure consists of:
- * - Behaviours: Objects (not Data) that can be added to Data Objects and describe the 
+ * - Behaviours: Objects (not Data) that can be added to Data Objects and describe the
  * 	 Object for the given behaviour type
  * - Behaviour Handler: Helper interface to manage behaviours within an Object, similar
  *   to MethodHandler or EventHandler
@@ -23,13 +23,11 @@ import (
  *   and accessible as toplevel global object. It exposes global behaviour methods
  */
 
-
 /* The general behaviour manager, exposing Methods */
 type BehaviourManager interface {
 	MethodHandler
 	JSObject
 }
-
 
 /* The behaviour object */
 type Behaviour interface {

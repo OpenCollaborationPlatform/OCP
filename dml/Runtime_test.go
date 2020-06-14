@@ -249,7 +249,7 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(c, ShouldBeFalse)
 		})
-		
+
 		Convey("Behaviour Managers shall be callable", func() {
 
 			c, err := rntm.Call("", "Transaction.IsOpen")

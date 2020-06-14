@@ -227,7 +227,6 @@ func (self *TransactionManager) GetJSRuntime() *goja.Runtime {
 	return self.rntm.jsvm
 }
 
-
 //returns if currently a transaction is open
 func (self *TransactionManager) IsOpen() bool {
 	return self.transactions.HasKey(self.rntm.currentUser)
@@ -328,14 +327,14 @@ func (self *TransactionManager) Add(obj Data) error {
 	trans, err := self.getTransaction()
 	if err != nil {
 		//seems we do not have a transaction open. Let's check if we shall open one
-		if bhvr.GetProperty("automatic").GetValue().(bool) {			
-			err = self.Open() 
+		if bhvr.GetProperty("automatic").GetValue().(bool) {
+			err = self.Open()
 			if err == nil {
 				trans, err = self.getTransaction()
 			}
 		}
 
-		if err != nil  {
+		if err != nil {
 			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
 			bhvr.GetEvent("onFailure").Emit(err.Error())
 			return err
@@ -508,9 +507,9 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 
 	mngr := rntm.behaviours["Transaction"].(*TransactionManager)
 	tbhvr := &transactionBehaviour{behaviour, mngr, *inTrans, *curTrans}
-	
+
 	//add default properties
-	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) 	//open transaction automatically on change
+	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) //open transaction automatically on change
 
 	//add default methods for overriding by the user
 	tbhvr.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable, true))                //return true/false if object can be used in current transaction
@@ -526,7 +525,7 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	//add the user usable methods
 	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))               //behaviour is in any transaction, also other users?
 	tbhvr.AddMethod("InCurrentTransaction", MustNewMethod(tbhvr.InCurrentTransaction, true)) //behaviour is in currently open transaction for user?
-	tbhvr.AddMethod("InOtherTransaction", MustNewMethod(tbhvr.InOtherTransaction, true)) //behaviour is in a transaction differently than the currently open for user?
+	tbhvr.AddMethod("InOtherTransaction", MustNewMethod(tbhvr.InOtherTransaction, true))     //behaviour is in a transaction differently than the currently open for user?
 
 	return tbhvr, nil
 }
@@ -608,7 +607,6 @@ func (self *transactionBehaviour) InOtherTransaction() (bool, error) {
 
 	return !current.Equal(trans), nil
 }
-
 
 func (self *transactionBehaviour) GetTransaction() (transaction, error) {
 
