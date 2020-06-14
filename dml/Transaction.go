@@ -526,6 +526,7 @@ func NewTransactionBehaviour(id Identifier, parent Identifier, rntm *Runtime) (O
 	//add the user usable methods
 	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))               //behaviour is in any transaction, also other users?
 	tbhvr.AddMethod("InCurrentTransaction", MustNewMethod(tbhvr.InCurrentTransaction, true)) //behaviour is in currently open transaction for user?
+	tbhvr.AddMethod("InOtherTransaction", MustNewMethod(tbhvr.InOtherTransaction, true)) //behaviour is in a transaction differently than the currently open for user?
 
 	return tbhvr, nil
 }
@@ -588,6 +589,26 @@ func (self *transactionBehaviour) InCurrentTransaction() (bool, error) {
 
 	return current.Equal(trans), nil
 }
+
+func (self *transactionBehaviour) InOtherTransaction() (bool, error) {
+
+	if !self.inTransaction.IsValid() {
+		return false, nil
+	}
+
+	trans, err := self.GetTransaction()
+	if err != nil {
+		return false, err
+	}
+
+	current, err := self.mngr.getTransaction()
+	if err != nil {
+		return false, err
+	}
+
+	return !current.Equal(trans), nil
+}
+
 
 func (self *transactionBehaviour) GetTransaction() (transaction, error) {
 
