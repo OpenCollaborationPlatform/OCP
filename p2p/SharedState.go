@@ -158,6 +158,7 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 			}
 			return nil, fmt.Errorf("Add command timed out")
 		default:
+			//if we are here the leader could not be called, but context is not expired. let's wait a bit before trying again
 			time.Sleep(100 * time.Millisecond)
 		}
 	}

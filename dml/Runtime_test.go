@@ -149,6 +149,12 @@ func TestDmlFile(t *testing.T) {
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 42)
+			
+			Convey("and print messages are collected", func() {
+				msgs := rntm.GetMessages()
+				So(len(msgs), ShouldEqual, 1)
+				So(msgs[0], ShouldEqual, "test")
+			})
 		})
 
 		Convey("Object hirarchy must be established", func() {

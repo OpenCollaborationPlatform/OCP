@@ -61,3 +61,28 @@ func (self User) Data() []byte {
 func UserFromData(data []byte) (User, error) {
 	return User(data), nil
 }
+
+
+type printManager struct {
+	messages []string
+}
+
+func NewPrintManager() *printManager {
+	
+	mngr := &printManager{
+		messages: make([]string, 0),
+	}
+	return mngr
+}
+
+func (self *printManager) clearMessage() {	
+	self.messages = self.messages[:0]
+}
+
+func (self *printManager) printMessage(msg string) {	
+	self.messages = append(self.messages, msg)
+}
+
+func (self *printManager) GetMessages() []string {
+	return self.messages
+}

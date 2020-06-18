@@ -49,6 +49,23 @@ func SetupGlobals(rntm *Runtime) {
 		return rntm.jsvm.ToValue(dt).(*goja.Object)
 	})
 
+	rntm.jsvm.Set("print", func(call goja.FunctionCall) goja.Value {
+	
+		if len(call.Arguments) != 1 {
+			panic("Print takes only single string argument")
+		}
+	
+		res := call.Arguments[0].Export()
+		str, ok := res.(string) 
+		
+		if !ok {
+			panic("Print takes only single string argument")
+		}
+
+		rntm.printMessage(str)
+		return nil
+	})
+
 }
 
 //Construct a data object from encoded description (as provided by type property)

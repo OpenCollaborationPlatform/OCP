@@ -26,6 +26,7 @@
 	}
 	
 	function testFnc(a) {
+		print("test")
 		this.testI = a
 	}
 	

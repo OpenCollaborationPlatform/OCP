@@ -103,6 +103,13 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	options = wamp.SetOption(options, wamp.OptMatch, wamp.MatchExact)
 	uri = self.prefix + "execute"
 	self.client.Register(uri, self.createWampJSFunction(), options)
+	
+	//register debug print handler
+	uri = self.prefix + "prints"
+	fnc := func(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+		return nxclient.InvokeResult{Args: wamp.List{rntm.GetMessages()}}
+	}
+	self.client.Register(uri, fnc, options)
 }
 
 func (self Datastructure) Close() {

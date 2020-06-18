@@ -176,7 +176,6 @@ func (self *dagHelper) ReadChannel(ctx context.Context, id Cid) (chan []byte, er
 		for {
 			n, err := reader.Read(data)
 			if n > 0 {
-				time.Sleep(500 * time.Millisecond)
 				local := make([]byte, n)
 				copy(local, data[:n])
 				result <- local

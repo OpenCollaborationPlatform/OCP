@@ -46,6 +46,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 
 	cr := make(map[string]CreatorFunc, 0)
 	rntm := &Runtime{
+		printManager: NewPrintManager(),
 		creators:    cr,
 		jsvm:        js,
 		jsObjMap:    js.NewObject(),
@@ -84,6 +85,8 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 //builds a datastructure from a file
 // - existing types must be registered to be recognized during parsing
 type Runtime struct {
+	*printManager
+	
 	creators map[string]CreatorFunc
 
 	//components of the runtime
@@ -237,6 +240,7 @@ func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 //run arbitrary javascript code on the loaded structure
 func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) {
 
+	self.clearMessage()
 	self.datastore.Begin()
 
 	//save the user for processing
@@ -312,6 +316,8 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 
 func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
 
+	self.clearMessage()
+	
 	err := self.datastore.Begin()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access database")
