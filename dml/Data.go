@@ -54,6 +54,7 @@ func NewDataBaseClass(id Identifier, parent Identifier, rntm *Runtime) (*DataImp
 	}
 	
 	dat.AddEvent("onCreated", NewEvent(dat.GetJSObject(), rntm))
+	dat.AddEvent("onRemove", NewEvent(dat.GetJSObject(), rntm))
 
 	return &dat, nil
 }

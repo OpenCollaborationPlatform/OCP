@@ -598,19 +598,23 @@ func (self *Runtime) removeObject(obj Object) error {
 
 	if data, ok := obj.(Data); ok {
 
-		//remove from list and javascript (not for behaviours)
-		delete(self.objects, obj.Id())
-		_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects[\"%v\"]", obj.Id().Encode()))
-		if err != nil {
-			return err
-		}
-
-		//recursive object handling!
+		//recursive object handling. (child first, so that event onRemove always finds 
+		//existing parents)
 		for _, sub := range data.GetSubobjects(true) {
 			err := self.removeObject(sub)
 			if err != nil {
 				return err
 			}
+		}
+		
+		//call event on remove
+		data.GetEvent("onRemove").Emit()
+
+		//remove from list and javascript (not for behaviours)
+		delete(self.objects, obj.Id())
+		_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects[\"%v\"]", obj.Id().Encode()))
+		if err != nil {
+			return err
 		}
 	}
 
