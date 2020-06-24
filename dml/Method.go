@@ -120,17 +120,7 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) 
 	err = nil
 	res := self.fnc(goja.FunctionCall{Arguments: jsargs, This: self.jsobj})
 
-	//check if it is a dml object and convert to dml object
-	result, err = objectFromJSValue(res, self.rntm)
-	if err != nil {
-		return
-	}
-	if result != nil {
-		return
-	}
-
-	//no object. Just return the default go representation
-	result = res.Export()
+	result = extractValue(res, self.rntm)
 	return
 }
 
@@ -223,7 +213,7 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 			wrapped := func(jsargs goja.FunctionCall) goja.Value {
 
 				//js args to go args
-				args := extractArgs(jsargs.Arguments, rntm)
+				args := extractValues(jsargs.Arguments, rntm)
 
 				//call the function
 				res, err := thisMethod.Call(args...)

@@ -190,20 +190,3 @@ func (self *eventHandler) SetupJSEvents(jsobj *goja.Object) error {
 	return nil
 }
 
-//little helper to extract the call arguments
-func extractArgs(values []goja.Value, rntm *Runtime) []interface{} {
-
-	res := make([]interface{}, len(values))
-	for i, val := range values {
-		//check if it is a goja object
-		obj, _ := objectFromJSValue(val, rntm)
-		if obj != nil {
-			res[i] = obj
-			continue
-		}
-
-		//no, normal values!
-		res[i] = val.Export()
-	}
-	return res
-}

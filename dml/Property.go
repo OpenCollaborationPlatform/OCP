@@ -405,7 +405,7 @@ func (self *propertyHandler) SetupJSProperties(rntm *Runtime, obj *goja.Object) 
 			}
 
 			//convert goja args to go ones
-			args := extractArgs(call.Arguments, rntm)
+			args := extractValues(call.Arguments, rntm)
 			err := p.SetValue(args[0])
 			if err != nil {
 				//panic becomes exception in JS

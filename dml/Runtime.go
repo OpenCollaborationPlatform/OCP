@@ -258,17 +258,8 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 		return nil, err
 	}
 
-	//check if it is a dml object and convert to dml object
-	obj, err := objectFromJSValue(val, self)
-	if err != nil {
-		return nil, err
-	}
-	if obj != nil {
-		return obj, err
-	}
-
 	//return default values
-	return val.Export(), err
+	return extractValue(val, self), err
 }
 
 func (self *Runtime) IsConstant(fullpath string) (bool, error) {

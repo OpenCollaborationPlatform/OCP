@@ -3,8 +3,13 @@ package dml
 import (
 	"encoding/gob"
 	"fmt"
+	"reflect"
 	"github.com/dop251/goja"
 	"github.com/ickby/CollaborationNode/utils"
+)
+
+var (
+	reflectTypeArray  = reflect.TypeOf([]interface{}{})
 )
 
 func init() {
@@ -46,10 +51,49 @@ func objectFromJSValue(jsval goja.Value, rntm *Runtime) (Object, error) {
 			return nil, fmt.Errorf("Javascript returned object, but it has errous Identifier method")
 		}
 	}
-
 	return nil, nil
-
 }
+
+//goja value handling
+func extractValue(value goja.Value, rntm *Runtime) interface{}  {
+	
+	//fmt.Printf("Extract arg: %v (%T) %v (%T)\n", value, value, value.ExportType(), value.ExportType())
+
+	switch value.ExportType() {
+		
+		case reflectTypeArray:
+		
+			//List type. as enything can be in the list we simply call extractValue recurisvly
+			obj := value.(*goja.Object)
+			keys := obj.Keys()
+			//fmt.Printf("Keys: %v\n", keys)
+			result := make([]interface{}, len(keys))
+			for i, key := range keys {
+				//fmt.Printf("Add key:  %v\n", i)
+				result[i] = extractValue(obj.Get(key), rntm)
+			}
+			return result
+	}
+
+	//check if it is a goja object
+	obj, _ := objectFromJSValue(value, rntm)
+	if obj != nil {
+		return obj
+	}
+
+	//no, normal values!
+	return value.Export()
+}
+
+func extractValues(values []goja.Value, rntm *Runtime) []interface{} {
+
+	res := make([]interface{}, len(values))
+	for i, val := range values {
+		res[i] = extractValue(val, rntm)
+	}
+	return res
+}
+
 
 //user type to store data about a user
 type User string

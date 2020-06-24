@@ -427,6 +427,31 @@ func TestTransactionAbort(t *testing.T) {
 							return !this.parent.abort
 						}
 					}
+					
+					Data {
+						.name: "DepTest"
+						
+						Data {
+							.name: "Child1"
+							Transaction {
+								.name: "Transaction"	
+							}
+						}
+						
+						Data {
+							.name: "Child2"
+							property int p: 0
+							
+							Transaction {
+								.name: "Transaction"
+								.automatic: true
+								
+								function DependentObjects() {
+									return [Document.DepTest.Child1]
+								}	
+							}
+						}
+					}
 				}`
 
 		rntm := NewRuntime(store)
@@ -604,5 +629,42 @@ func TestTransactionAbort(t *testing.T) {
 			})
 		})
 
+		Convey("Changing a object with automatic transaction enabled", func() { 
+				
+			code = `Transaction.Close(); Document.DepTest.Child2.p = 1`
+			_, err := rntm.RunJavaScript("User1", code)
+			So(err, ShouldBeNil)
+			
+			Convey("should add this object to the transaction", func() { 
+			
+				store.Begin()
+				defer store.Rollback()
+
+				trans, err := rntm.behaviours["Transaction"].(*TransactionManager).getTransaction()
+				So(err, ShouldBeNil)
+				user, err := trans.User()
+				So(err, ShouldBeNil)
+				So(user, ShouldEqual, "User1")
+				objs, err := trans.Objects()
+				So(err, ShouldBeNil)
+				So(objs[0].Id().Name, ShouldEqual, "Child2")
+			})
+			
+			Convey("and also adds the dependent object to the transaction", func() { 
+			
+				store.Begin()
+				defer store.Rollback()
+
+				trans, err := rntm.behaviours["Transaction"].(*TransactionManager).getTransaction()
+				So(err, ShouldBeNil)
+				user, err := trans.User()
+				So(err, ShouldBeNil)
+				So(user, ShouldEqual, "User1")
+				objs, err := trans.Objects()
+				So(err, ShouldBeNil)
+				So(len(objs), ShouldEqual, 2)
+				So(objs[1].Id().Name, ShouldEqual, "Child1")
+			})
+		})
 	})
 }

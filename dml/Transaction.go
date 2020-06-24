@@ -409,11 +409,14 @@ func (self *TransactionManager) Add(obj Data) error {
 	for _, obj := range objs {
 		dat, ok := obj.(Data)
 		if !ok {
-			err = fmt.Errorf("Only objects are allowed to be added to transactions, not %t", obj)
+			err = fmt.Errorf("Only objects are allowed to be added to transactions, not %T", obj)
 			bhvr.GetEvent("onFailure").Emit(err.Error())
 			return err
 		}
-		self.Add(dat)
+		err := self.Add(dat)
+		if err != nil {
+			return utils.StackError(err, "Unable to add dependend object")
+		}
 	}
 
 	return nil
