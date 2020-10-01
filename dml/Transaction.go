@@ -384,16 +384,20 @@ func (self *TransactionManager) Add(obj Data) error {
 	}
 
 	//store in the behaviour
-	bhvr.current.Write(trans.identification)
-	bhvr.inTransaction.Write(true)
-
-	//throw relevant event
-	err = bhvr.GetEvent("onParticipation").Emit()
+	err = bhvr.current.Write(trans.identification)
 	if err != nil {
-		err = utils.StackError(err, "Unable to emit participation event for transaction")
-		bhvr.GetEvent("onFailure").Emit(err.Error())
 		return err
 	}
+	err = bhvr.inTransaction.Write(true)
+	if err != nil {
+		return err
+	}
+	
+	//store state
+	obj.FixStateAsVersion()
+
+	//throw relevant event
+	bhvr.GetEvent("onParticipation").Emit()
 
 	//add the requried additional objects to the transaction
 	list, err := bhvr.GetMethod("DependentObjects").Call()
