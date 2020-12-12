@@ -238,12 +238,12 @@ func (self *graph) NewNode() (interface{}, error) {
 	} else {
 		result = dt.GetDefaultValue()
 	}
-	
+
 	err := self.AddNode(result)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	if dt.IsComplex() {
 		result.(Data).Created()
 	}
