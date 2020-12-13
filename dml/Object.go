@@ -2,7 +2,9 @@ package dml
 
 import (
 	"fmt"
+
 	"github.com/ickby/CollaborationNode/datastores"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/dop251/goja"
 )
@@ -20,12 +22,12 @@ type Object interface {
 	JSObject
 
 	//Object functions
-	Id() Identifier
-	GetParent() Object
+	Parent(Identifier) (Identifier, error)
+	SetParent(Identifier, Identifier) error
 
 	//type handling (full type desciption)
-	DataType() DataType
-	SetDataType(DataType)
+	DataType(Identifier) (DataType, error)
+	SetDataType(Identifier, DataType) error
 
 	//Genertic
 	GetRuntime() *Runtime
@@ -49,16 +51,16 @@ type object struct {
 	jsobj *goja.Object
 }
 
-func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error) {
+func NewObject(rntm *Runtime) (*object, error) {
 
 	jsobj := rntm.jsvm.NewObject()
 
 	//the versionmanager to access the datastores correctly
-	versManager := datastore.NewVersionManager(id.Hash(), rntm.datastore)
+	//versManager := datastore.NewVersionManager(id.Hash(), rntm.datastore)
 
 	//build the object
 	obj := object{
-		versManager,
+		nil, //versManager,
 		NewPropertyHandler(),
 		NewEventHandler(),
 		NewMethodHandler(),
@@ -84,21 +86,76 @@ func NewObject(id Identifier, parent Identifier, rntm *Runtime) (*object, error)
 	return &obj, nil
 }
 
-func (self *object) Id() Identifier {
-	return self.id
+// helper methods for DB access
+func valueFromStore(store datastore.Datastore, id Identifier, key []byte) (*datastore.Value, error) {
+
+	set, err := store.GetOrCreateSet(datastore.ValueType, false, id.Hash())
+	if err != nil {
+		return datastore.Value{}, utils.StackError(err, "Unable to load %s from database", string(key))
+	}
+	vset, err := set.(*datastore.ValueSet)
+	if err != nil {
+		return datastore.Value{}, utils.StackError(err, "Database access failed: wrong set returned")
+	}
+	value, err := vset.GetOrCreateValue(key)
+	if err != nil {
+		return datastore.Value{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return value, nil
 }
 
-func (self *object) GetParent() Object {
+func (self *object) Parent(id Identifier) (Identifier, error) {
 
-	return self.rntm.objects[self.parent]
+	value, err := valueFromStore(self.rntm.datastore, id, []byte("__parent"))
+	if err != nil {
+		return Identifier{}, err
+	}
+	parent, err := value.Read()
+	if err != nil {
+		return Identifier{}, utils.StackError(err, "Unable to decode parent from DB")
+	}
+
+	return parent.(Identifier), nil
 }
 
-func (self *object) DataType() DataType {
-	return self.dataType
+func (self *object) SetParent(id Identifier, parent Identifier) error {
+
+	value, err := valueFromStore(self.rntm.datastore, id, []byte("__parent"))
+	if err != nil {
+		return err
+	}
+	err = value.Write(parent)
+	if err != nil {
+		return utils.StackError(err, "Unable to decode parent into DB")
+	}
+	return nil
 }
 
-func (self *object) SetDataType(t DataType) {
-	self.dataType = t
+func (self *object) DataType(id Identifier) (DataType, error) {
+
+	value, err := valueFromStore(self.rntm.datastore, id, []byte("__datatype"))
+	if err != nil {
+		return DataType{}, err
+	}
+	dt, err := value.Read()
+	if err != nil {
+		return DataType{}, utils.StackError(err, "Unable to decode datatype from DB")
+	}
+
+	return parent.(DataType), nil
+}
+
+func (self *object) SetDataType(id Identifier, dt DataType) error {
+
+	value, err := valueFromStore(self.rntm.datastore, id, []byte("__datatype"))
+	if err != nil {
+		return err
+	}
+	err = value.Write(dt)
+	if err != nil {
+		return utils.StackError(err, "Unable to decode datatype into DB")
+	}
+	return nil
 }
 
 func (self *object) GetJSObject() *goja.Object {

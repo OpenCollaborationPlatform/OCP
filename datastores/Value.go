@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+
 	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
