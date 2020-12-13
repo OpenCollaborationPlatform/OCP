@@ -24,7 +24,7 @@ type Event interface {
 	RegisterJSCallback(func(goja.FunctionCall) goja.Value) error
 }
 
-func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
+func NewEvent(jsParentProto *goja.Object, rntm *Runtime) Event {
 
 	evt := &event{
 		methodHandler: NewMethodHandler(),
@@ -45,7 +45,7 @@ func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
 
 	evt.jsProto = evtObj
 	evt.rntm = rntm
-	evt.jsParentProto = jsparent
+	evt.jsParentProto = jsParentProto
 	evt.SetupJSMethods(rntm, evtObj)
 
 	return evt

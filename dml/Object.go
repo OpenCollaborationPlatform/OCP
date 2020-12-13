@@ -162,25 +162,25 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	}
 
 	//we add properties
-	prop, err := NewProperty(name, dtype, default_val, self.GetRuntime(), self.GetJSObject(), constprop)
+	prop, err := NewProperty(name, dtype, default_val, self.GetRuntime(), self.GetJSPrototype(), constprop)
 	if err != nil {
 		return err
 	}
 
 	//register change events
-	prop.GetEvent("onBeforeChange").RegisterCallback(func(...interface{}) error {
-		err := self.GetEvent("onBeforePropertyChange").Emit(name)
+	prop.GetEvent("onBeforeChange").RegisterCallback(func(id Identifier, args ...interface{}) error {
+		err := self.GetEvent("onBeforePropertyChange").Emit(id, name)
 		if err != nil {
 			return err
 		}
-		return self.GetEvent("onBeforeChange").Emit()
+		return self.GetEvent("onBeforeChange").Emit(id)
 	})
-	prop.GetEvent("onChanged").RegisterCallback(func(...interface{}) error {
-		err := self.GetEvent("onPropertyChanged").Emit(name)
+	prop.GetEvent("onChanged").RegisterCallback(func(id Identifier, args ...interface{}) error {
+		err := self.GetEvent("onPropertyChanged").Emit(id, name)
 		if err != nil {
 			return err
 		}
-		return self.GetEvent("onChanged").Emit()
+		return self.GetEvent("onChanged").Emit(id)
 	})
 
 	//everthing went without error, now we can set this property

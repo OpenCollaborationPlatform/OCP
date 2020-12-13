@@ -25,7 +25,7 @@ type Property interface {
 	SetDefaultValue(value interface{}) error
 }
 
-func NewProperty(name string, dtype DataType, default_value interface{}, rntm *Runtime, parent *goja.Object, constprop bool) (Property, error) {
+func NewProperty(name string, dtype DataType, default_value interface{}, rntm *Runtime, parentProto *goja.Object, constprop bool) (Property, error) {
 
 	err := dtype.MustBeTypeOf(default_value)
 	if err != nil {
@@ -76,8 +76,8 @@ func NewProperty(name string, dtype DataType, default_value interface{}, rntm *R
 	}
 
 	//add all required events
-	prop.AddEvent("onBeforeChange", NewEvent(parent, rntm))
-	prop.AddEvent("onChanged", NewEvent(parent, rntm))
+	prop.AddEvent("onBeforeChange", NewEvent(parentProto, rntm))
+	prop.AddEvent("onChanged", NewEvent(parentProto, rntm))
 
 	return prop, nil
 }
@@ -118,7 +118,7 @@ func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
 		return fmt.Errorf("Invalid database entry")
 	}
 
-	err = self.GetEvent("onBeforeChange").Emit(val)
+	err = self.GetEvent("onBeforeChange").Emit(id, val)
 	if err != nil {
 		return err
 	}
@@ -129,7 +129,7 @@ func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
 		return err
 	}
 
-	self.GetEvent("onChanged").Emit(val) //no error handling, as value was already changed successfully
+	self.GetEvent("onChanged").Emit(id, val) //no error handling, as value was already changed successfully
 	return nil
 }
 
@@ -188,7 +188,7 @@ func (self *typeProperty) SetValue(id Identifier, val interface{}) error {
 		return utils.StackError(err, "Cannot set type property: invalid argument")
 	}
 
-	err = self.GetEvent("onBeforeChange").Emit(val)
+	err = self.GetEvent("onBeforeChange").Emit(id, val)
 	if err != nil {
 		return err
 	}
@@ -204,7 +204,7 @@ func (self *typeProperty) SetValue(id Identifier, val interface{}) error {
 		return err
 	}
 
-	self.GetEvent("onChanged").Emit(val) //no error handling, as value was already changed successfully
+	self.GetEvent("onChanged").Emit(id, val) //no error handling, as value was already changed successfully
 	return nil
 }
 
@@ -228,7 +228,7 @@ func (self *typeProperty) GetValue(id Identifier) interface{} {
 	return DataType{data.(string)}
 }
 
-func (self *typeProperty) GetDataType() DataType {
+func (self *typeProperty) GetDataType(id Identifier) DataType {
 
 	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
