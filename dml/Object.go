@@ -86,24 +86,6 @@ func NewObject(rntm *Runtime) (*object, error) {
 	return &obj, nil
 }
 
-// helper methods for DB access
-func valueFromStore(store datastore.Datastore, id Identifier, key []byte) (*datastore.Value, error) {
-
-	set, err := store.GetOrCreateSet(datastore.ValueType, false, id.Hash())
-	if err != nil {
-		return datastore.Value{}, utils.StackError(err, "Unable to load %s from database", string(key))
-	}
-	vset, err := set.(*datastore.ValueSet)
-	if err != nil {
-		return datastore.Value{}, utils.StackError(err, "Database access failed: wrong set returned")
-	}
-	value, err := vset.GetOrCreateValue(key)
-	if err != nil {
-		return datastore.Value{}, utils.StackError(err, "Unable to read %s from DB", string(key))
-	}
-	return value, nil
-}
-
 func (self *object) Parent(id Identifier) (Identifier, error) {
 
 	value, err := valueFromStore(self.rntm.datastore, id, []byte("__parent"))
