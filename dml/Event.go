@@ -4,20 +4,24 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ickby/CollaborationNode/utils"
+
 	"github.com/dop251/goja"
 )
 
-type EventCallback func(...interface{}) error
+type EventCallback func(Identifier, ...interface{}) error
 
 type Event interface {
 	JSObject
 	MethodHandler
 
-	Emit(args ...interface{}) error
-	RegisterCallback(cb EventCallback) error
-	Enable() error
-	Disable() error
-	RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error
+	Emit(Identifier, ...interface{}) error
+	Enabled(Identifier) (bool, error)
+	Enable(Identifier) error
+	Disable(Identifier) error
+
+	RegisterCallback(EventCallback) error
+	RegisterJSCallback(func(goja.FunctionCall) goja.Value) error
 }
 
 func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
@@ -25,23 +29,23 @@ func NewEvent(jsparent *goja.Object, rntm *Runtime) Event {
 	evt := &event{
 		methodHandler: NewMethodHandler(),
 		callbacks:     make([]EventCallback, 0),
-		enabled:       true}
+	}
 
 	//now the js object
 	evtObj := rntm.jsvm.NewObject()
 
 	emitMethod, _ := NewMethod(evt.Emit, false)
 	evt.AddMethod("Emit", emitMethod)
-	registerMethod, _ := NewMethod(evt.RegisterJSCallback, false)
-	evt.AddMethod("RegisterCallback", registerMethod)
+	enabledMethod, _ := NewMethod(evt.Enabled, true)
+	evt.AddMethod("Enabled", enabledMethod)
 	enableMethod, _ := NewMethod(evt.Enable, false)
 	evt.AddMethod("Enable", enableMethod)
 	disableMethod, _ := NewMethod(evt.Disable, false)
 	evt.AddMethod("Disable", disableMethod)
 
-	evt.jsobj = evtObj
-	evt.jsvm = rntm.jsvm
-	evt.jsparent = jsparent
+	evt.jsProto = evtObj
+	evt.rntm = rntm
+	evt.jsParentProto = jsparent
 	evt.SetupJSMethods(rntm, evtObj)
 
 	return evt
@@ -53,21 +57,25 @@ type event struct {
 	callbacks []EventCallback
 	enabled   bool
 
-	jsvm     *goja.Runtime
-	jsobj    *goja.Object
-	jsparent *goja.Object //needed to be passed as "this" to event functions
+	rntm          *Runtime
+	jsProto       *goja.Object
+	jsParentProto *goja.Object //needs to be passed as "this" to event functions
 }
 
-func (self *event) Emit(args ...interface{}) error {
+func (self *event) Emit(id Identifier, args ...interface{}) error {
 
-	if !self.enabled {
+	enabled, err := self.Enabled(id)
+	if err != nil {
+		return utils.StackError(err, "Unable to emit as status query failed")
+	}
+
+	if !enabled {
 		return nil
 	}
 
 	//call all registered functions
-	var err error
 	for _, fnc := range self.callbacks {
-		err = fnc(args...)
+		err = fnc(id, args...)
 		if err != nil {
 			break
 		}
@@ -82,21 +90,57 @@ func (self *event) RegisterCallback(cb EventCallback) error {
 	return nil
 }
 
-func (self *event) Enable() error {
+func (self *event) Enabled(id Identifier) (bool, error) {
 
-	self.enabled = true
+	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__enabled"))
+	if err != nil {
+		return false, utils.StackError(err, "Unable to access event status from DB")
+	}
+
+	enabled, err := value.Read()
+	if err != nil {
+		return false, utils.StackError(err, "Unable to query event status from DB")
+	}
+
+	result, ok := enabled.(bool)
+	if !ok {
+		return false, fmt.Errorf("Event status wrongly stored in DB")
+	}
+
+	return result, nil
+}
+
+func (self *event) Enable(id Identifier) error {
+
+	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__enabled"))
+	if err != nil {
+		return utils.StackError(err, "Unable to access event status from DB")
+	}
+
+	err = value.Write(true)
+	if err != nil {
+		return utils.StackError(err, "Unable so write event status")
+	}
 	return nil
 }
 
-func (self *event) Disable() error {
+func (self *event) Disable(id Identifier) error {
 
-	self.enabled = false
+	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__enabled"))
+	if err != nil {
+		return utils.StackError(err, "Unable to access event status from DB")
+	}
+
+	err = value.Write(false)
+	if err != nil {
+		return utils.StackError(err, "Unable so write event status")
+	}
 	return nil
 }
 
 func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error {
 
-	return self.RegisterCallback(func(args ...interface{}) (err error) {
+	return self.RegisterCallback(func(id Identifier, args ...interface{}) (err error) {
 
 		defer func() {
 			// recover from panic if one occured. Set err to nil otherwise.
@@ -117,21 +161,33 @@ func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) err
 			}
 		}()
 
+		//the arguments for the function call
 		jsArgs := make([]goja.Value, len(args))
 		for i, arg := range args {
-			jsArgs[i] = self.jsvm.ToValue(arg)
+			jsArgs[i] = self.rntm.jsvm.ToValue(arg)
 		}
-		cb(goja.FunctionCall{This: self.jsparent, Arguments: jsArgs})
+
+		//build the object to call on
+		obj := self.rntm.jsvm.CreateObject(self.jsParentProto)
+		obj.Set("identifier", self.rntm.jsvm.ToValue(id))
+
+		cb(goja.FunctionCall{This: obj, Arguments: jsArgs})
 		return
 	})
 }
 
-func (self *event) GetJSObject() *goja.Object {
-	return self.jsobj
+func (self *event) GetJSObject(id Identifier) *goja.Object {
+	obj := self.rntm.jsvm.CreateObject(self.jsProto)
+	obj.Set("identifier", self.rntm.jsvm.ToValue(id))
+	return obj
+}
+
+func (self *event) GetJSPrototype() *goja.Object {
+	return self.jsProto
 }
 
 func (self *event) GetJSRuntime() *goja.Runtime {
-	return self.jsvm
+	return self.rntm.jsvm
 }
 
 type EventHandler interface {
@@ -183,10 +239,11 @@ func (self *eventHandler) Events() []string {
 }
 
 func (self *eventHandler) SetupJSEvents(jsobj *goja.Object) error {
-
-	for key, evt := range self.events {
-		jsobj.Set(key, evt.GetJSObject())
-	}
+	/*
+		for key, evt := range self.events {
+			jsobj.Set(key, evt.GetJSObject())
+		}*/
+	//TODO: event need to be handled as property with setter/getter to allow
+	//		access to the identifier and to create the correct object than
 	return nil
 }
-
