@@ -23,7 +23,7 @@ func valueFromStore(store datastore.Datastore, id Identifier, key []byte) (*data
 
 	set, err := store.GetOrCreateSet(datastore.ValueType, false, id.Hash())
 	if err != nil {
-		return datastore.Value{}, utils.StackError(err, "Unable to load %s from database", string(key))
+		return datastore.Value{}, utils.StackError(err, "Unable to load %s from database", id)
 	}
 	vset, err := set.(*datastore.ValueSet)
 	if err != nil {
@@ -36,11 +36,11 @@ func valueFromStore(store datastore.Datastore, id Identifier, key []byte) (*data
 	return value, nil
 }
 
-func valueVersionedFromStore(store datastore.Datastore, id Identifier, key []byte) (*datastore.ValueVersioned, error) {
+func valueVersionedFromStore(store *datastore.Datastore, id Identifier, key []byte) (*datastore.ValueVersioned, error) {
 
 	set, err := store.GetOrCreateSet(datastore.ValueType, true, id.Hash())
 	if err != nil {
-		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to load %s from database", string(key))
+		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
 	}
 	vset, err := set.(*datastore.ValueVersionedSet)
 	if err != nil {
@@ -51,6 +51,40 @@ func valueVersionedFromStore(store datastore.Datastore, id Identifier, key []byt
 		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
 	}
 	return value, nil
+}
+
+func listFromStore(store *datastore.Datastore, id Identifier, key []byte) (*datastore.List, error) {
+
+	set, err := store.GetOrCreateSet(datastore.ListType, false, id.Hash())
+	if err != nil {
+		return datastore.List{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	lset, err := set.(*datastore.ListSet)
+	if err != nil {
+		return datastore.List{}, utils.StackError(err, "Database access failed: wrong set returned")
+	}
+	list, err := lset.GetOrCreateList(key)
+	if err != nil {
+		return datastore.List{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return list, nil
+}
+
+func mapFromStore(store *datastore.Datastore, id Identifier, key []byte) (*datastore.Map, error) {
+
+	set, err := store.GetOrCreateSet(datastore.MapType, false, id.Hash())
+	if err != nil {
+		return datastore.Map{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	mset, err := set.(*datastore.MapSet)
+	if err != nil {
+		return datastore.Map{}, utils.StackError(err, "Database access failed: wrong set returned")
+	}
+	map_, err := mset.GetOrCreateMap(key)
+	if err != nil {
+		return datastore.Map{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return map_, nil
 }
 
 //should be implemented by everythign that is exposed to JS

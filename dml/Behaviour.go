@@ -3,6 +3,7 @@ package dml
 
 import (
 	"fmt"
+
 	"github.com/ickby/CollaborationNode/utils"
 )
 
@@ -37,18 +38,18 @@ type Behaviour interface {
 	SetupRecursive(obj Data) error //Called for each recursive data Object (if recursive is true)
 }
 
-func NewBehaviour(id Identifier, parent Identifier, rntm *Runtime) (*behaviour, error) {
+func NewBehaviour(runtime *Runtime) (*behaviour, error) {
 
-	obj, err := NewObject(id, parent, rntm)
+	obj, err := NewObject(runtime)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to create base object for behaviour %s", id.String())
+		return nil, utils.StackError(err, "Unable to create base object for behaviour")
 	}
 	result := behaviour{obj}
 
 	//add default behaviour properties
 	err = result.AddProperty(`recursive`, MustNewDataType("bool"), false, true)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to add object to %s", id.String())
+		return nil, utils.StackError(err, "Unable to recursive property to behaviour")
 	}
 
 	return &result, nil
@@ -64,52 +65,77 @@ type behaviour struct {
 type BehaviourHandler interface {
 
 	//management functions
-	HasBehaviour(string) bool
-	GetBehaviour(string) Behaviour
-	AddBehaviour(string, Behaviour) error
-	Behaviours() []string
+	HasBehaviour(Identifier, string) (bool, error)
+	GetBehaviour(Identifier, string) (Behaviour, error)
+	AddBehaviour(Identifier, string, Behaviour) error
+	Behaviours(Identifier) ([]string, error)
 
 	//Setup all behaviours, possible including all childs
 	//to be called after data hirarchy is setup (parent and children)
-	SetupBehaviours(Data, bool) error
+	//SetupBehaviours(Data, bool) error
 }
 
-func NewBehaviourHandler() behaviourHandler {
-	return behaviourHandler{make(map[string]Behaviour, 0)}
+func NewBehaviourHandler(runtime *Runtime) behaviourHandler {
+	return behaviourHandler{runtime}
 }
 
 type behaviourHandler struct {
-	behaviours map[string]Behaviour
+	runtime *Runtime
 }
 
-func (self *behaviourHandler) HasBehaviour(name string) bool {
-	_, ok := self.behaviours[name]
-	return ok
+func (self *behaviourHandler) HasBehaviour(id Identifier, name string) (bool, error) {
+
+	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
+	if err != nil {
+		return false, err
+	}
+	return map_.HasKey(name), nil
 }
 
-func (self *behaviourHandler) AddBehaviour(name string, behaviour Behaviour) error {
+func (self *behaviourHandler) AddBehaviour(id Identifier, name string, behaviour Identifier) error {
 
-	if self.HasBehaviour(name) {
+	if val, _ := self.HasBehaviour(id, name); val {
 		return fmt.Errorf("Behaviour already set: %v", name)
 	}
-	self.behaviours[name] = behaviour
-	return nil
+
+	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
+	if err != nil {
+		return err
+	}
+	return map_.Write(name, behaviour)
 }
 
-func (self *behaviourHandler) GetBehaviour(name string) Behaviour {
-	return self.behaviours[name]
+func (self *behaviourHandler) GetBehaviour(id Identifier, name string) (Identifier, error) {
+	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
+	if err != nil {
+		return Identifier{}, err
+	}
+	value, err := map_.Read(name)
+	if err != nil {
+		return Identifier{}, err
+	}
+	return value.(Identifier), nil
 }
 
-func (self *behaviourHandler) Behaviours() []string {
+func (self *behaviourHandler) Behaviours(id Identifier) ([]string, error) {
 
-	meths := make([]string, 0)
-	for name, _ := range self.behaviours {
-		meths = append(meths, name)
+	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access behaviours")
 	}
 
-	return meths
+	keys, err := map_.GetKeys()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, len(keys))
+	for i, val := range keys {
+		result[i] = val.(string)
+	}
+	return result, nil
 }
 
+/*
 func (self *behaviourHandler) SetupBehaviours(obj Data, childs bool) error {
 
 	//We need to setup all behaviours we have been added, and all recursive
@@ -123,8 +149,8 @@ func (self *behaviourHandler) SetupBehaviours(obj Data, childs bool) error {
 	}
 
 	//let's start recursive behaviour setup (iterate upwards)
-	if obj.GetParent() != nil {
-		parent, ok := obj.GetParent().(Data)
+	if obj.Parent() != nil {
+		parent, ok := obj.Parent().(Data)
 		if ok {
 			err := self.setupRecursive(parent, obj, done)
 			if err != nil {
@@ -179,3 +205,4 @@ func (self *behaviourHandler) setupRecursive(setup Data, with Data, done []strin
 
 	return nil
 }
+*/
