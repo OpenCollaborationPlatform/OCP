@@ -17,13 +17,14 @@ package dml
 
 import (
 	"fmt"
-	datastore "github.com/ickby/CollaborationNode/datastores"
-	"github.com/ickby/CollaborationNode/utils"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	datastore "github.com/ickby/CollaborationNode/datastores"
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/alecthomas/participle"
 	"github.com/dop251/goja"
@@ -47,33 +48,33 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	cr := make(map[string]CreatorFunc, 0)
 	rntm := &Runtime{
 		printManager: NewPrintManager(),
-		creators:    cr,
-		jsvm:        js,
-		jsObjMap:    js.NewObject(),
-		datastore:   ds,
-		mutex:       &sync.Mutex{},
-		ready:       false,
-		currentUser: "none",
-		mainObj:     nil,
-		objects:     make(map[Identifier]Data, 0),
-		behaviours:  make(map[string]BehaviourManager, 0),
+		creators:     cr,
+		jsvm:         js,
+		jsObjMap:     js.NewObject(),
+		datastore:    ds,
+		mutex:        &sync.Mutex{},
+		ready:        false,
+		currentUser:  "none",
+		mainObj:      nil,
+		objects:      make(map[Identifier]Data, 0),
+		behaviours:   make(map[string]BehaviourManager, 0),
 	}
 
 	//build the managers and expose
-	transMngr, err := NewTransactionManager(rntm)
-	if err != nil {
-		panic("Unable to initilize transaction manager")
-	}
-	rntm.behaviours["Transaction"] = transMngr
-	rntm.jsvm.Set("Transaction", transMngr.GetJSObject())
-
+	/*	transMngr, err := NewTransactionManager(rntm)
+		if err != nil {
+			panic("Unable to initilize transaction manager")
+		}
+		rntm.behaviours["Transaction"] = transMngr
+		rntm.jsvm.Set("Transaction", transMngr.GetJSObject())
+	*/
 	//add the datastructures
 	rntm.RegisterObjectCreator("Data", NewData)
-	rntm.RegisterObjectCreator("Variant", NewVariant)
-	rntm.RegisterObjectCreator("Vector", NewVector)
-	rntm.RegisterObjectCreator("Map", NewMap)
-	rntm.RegisterObjectCreator("Graph", NewGraph)
-	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
+	//	rntm.RegisterObjectCreator("Variant", NewVariant)
+	//	rntm.RegisterObjectCreator("Vector", NewVector)
+	//	rntm.RegisterObjectCreator("Map", NewMap)
+	//	rntm.RegisterObjectCreator("Graph", NewGraph)
+	//	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
 
 	//setup globals
 	rntm.jsvm.Set("Objects", rntm.jsObjMap)
@@ -86,7 +87,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 // - existing types must be registered to be recognized during parsing
 type Runtime struct {
 	*printManager
-	
+
 	creators map[string]CreatorFunc
 
 	//components of the runtime
@@ -168,7 +169,6 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	self.mainObj = obj.(Data)
 	self.ready = true
 
-
 	//set the JS main entry point
 	self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
 
@@ -178,7 +178,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 			obj.FixStateAsVersion()
 		}
 	}
-	
+
 	//call everyones "onCreated"
 	obj.(Data).Created()
 
@@ -308,7 +308,7 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
 
 	self.clearMessage()
-	
+
 	err := self.datastore.Begin()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access database")
@@ -598,7 +598,7 @@ func (self *Runtime) removeObject(obj Object) error {
 
 	if data, ok := obj.(Data); ok {
 
-		//recursive object handling. (child first, so that event onRemove always finds 
+		//recursive object handling. (child first, so that event onRemove always finds
 		//existing parents)
 		for _, sub := range data.GetSubobjects(true) {
 			err := self.removeObject(sub)
@@ -606,7 +606,7 @@ func (self *Runtime) removeObject(obj Object) error {
 				return err
 			}
 		}
-		
+
 		//call event on remove
 		data.GetEvent("onRemove").Emit()
 
@@ -801,7 +801,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 	} else {
 		jsobj.DefineDataProperty("parent", self.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	}
-	
+
 	return obj, nil
 }
 

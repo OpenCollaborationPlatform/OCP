@@ -13,9 +13,9 @@ import (
 //  - Properties
 //  - Events
 //  - Methods
-//Furthermore must both be available in JS, Global by id an in the child hirarchy
+//Furthermore must both be available in JS, Global by id an in the child hirarchy.
+//It also implements the VersionedData interface, but on identifier basis
 type Object interface {
-	datastore.VersionManager
 	PropertyHandler
 	EventHandler
 	MethodHandler
@@ -31,6 +31,17 @@ type Object interface {
 
 	//Genertic
 	GetRuntime() *Runtime
+
+	//VersionedData interface based on Identifiers
+	HasUpdates(Identifier) (bool, error)
+	HasVersions(Identifier) (bool, error)
+	ResetHead(Identifier) error
+	FixStateAsVersion(Identifier) (datastore.VersionID, error)
+	LoadVersion(Identifier, datastore.VersionID) error
+	GetLatestVersion(Identifier) (datastore.VersionID, error)
+	GetCurrentVersion(Identifier) (datastore.VersionID, error)
+	RemoveVersionsUpTo(Identifier, datastore.VersionID) error
+	RemoveVersionsUpFrom(Identifier, datastore.VersionID) error
 }
 
 //the most basic implementation of an dml Object. It is intended as dml grouping
@@ -179,4 +190,50 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 
 func (self *object) GetRuntime() *Runtime {
 	return self.rntm
+}
+
+//Versioned Data Interface
+func (self *object) HasUpdates(id Identifier) (bool, error) {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.HasUpdates()
+}
+
+func (self *object) HasVersions(id Identifier) (bool, error) {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.HasVersions()
+}
+
+func (self *object) ResetHead(id Identifier) error {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.ResetHead()
+}
+
+func (self *object) FixStateAsVersion(id Identifier) (datastore.VersionID, error) {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.FixStateAsVersion()
+}
+
+func (self *object) LoadVersion(id Identifier, vId datastore.VersionID) error {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.LoadVersion(vId)
+}
+
+func (self *object) GetLatestVersion(id Identifier) (datastore.VersionID, error) {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.GetLatestVersion()
+}
+
+func (self *object) GetCurrentVersion(id Identifier) (datastore.VersionID, error) {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.GetCurrentVersion()
+}
+
+func (self *object) RemoveVersionsUpTo(id Identifier, vId datastore.VersionID) error {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.RemoveVersionsUpTo(vId)
+}
+
+func (self *object) RemoveVersionsUpFrom(id Identifier, vId datastore.VersionID) error {
+	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	return mngr.RemoveVersionsUpFrom(vId)
 }
