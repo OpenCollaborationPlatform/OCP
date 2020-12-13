@@ -89,7 +89,8 @@ func mapFromStore(store *datastore.Datastore, id Identifier, key []byte) (datast
 
 //should be implemented by everythign that is exposed to JS
 type JSObject interface {
-	GetJSObject() *goja.Object
+	GetJSObject(Identifier) *goja.Object
+	GetJSPrototype() *goja.Object
 	GetJSRuntime() *goja.Runtime
 }
 

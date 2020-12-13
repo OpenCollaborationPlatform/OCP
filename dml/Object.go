@@ -55,16 +55,14 @@ type object struct {
 	rntm     *Runtime
 	dataType DataType
 
-	//javascript
-	jsobj *goja.Object
+	//javascript prototype for this object
+	jsProto *goja.Object
 }
 
 func NewObject(rntm *Runtime) (*object, error) {
 
-	jsobj := rntm.jsvm.NewObject()
-
-	//the versionmanager to access the datastores correctly
-	//versManager := datastore.NewVersionManager(id.Hash(), rntm.datastore)
+	jsProto := rntm.jsvm.NewObject()
+	jsProto.DefineDataProperty("identifier", rntm.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
 	//build the object
 	obj := object{
@@ -73,20 +71,17 @@ func NewObject(rntm *Runtime) (*object, error) {
 		NewMethodHandler(),
 		rntm,
 		DataType{},
-		jsobj,
+		jsProto,
 	}
 
 	//default properties
 	obj.AddProperty("name", MustNewDataType("string"), "", true)
 
-	//add default methods
-	obj.AddMethod("Identifier", MustNewMethod(obj.Id().Encode, true))
-
 	//add default events
-	obj.AddEvent("onBeforePropertyChange", NewEvent(obj.GetJSObject(), rntm))
-	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSObject(), rntm))
-	obj.AddEvent("onBeforeChange", NewEvent(obj.GetJSObject(), rntm))
-	obj.AddEvent("onChanged", NewEvent(obj.GetJSObject(), rntm))
+	obj.AddEvent("onBeforePropertyChange", NewEvent(obj.GetJSPrototype(), rntm))
+	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSPrototype(), rntm))
+	obj.AddEvent("onBeforeChange", NewEvent(obj.GetJSPrototype(), rntm))
+	obj.AddEvent("onChanged", NewEvent(obj.GetJSPrototype(), rntm))
 
 	return &obj, nil
 }
@@ -145,8 +140,14 @@ func (self *object) SetDataType(id Identifier, dt DataType) error {
 	return nil
 }
 
-func (self *object) GetJSObject() *goja.Object {
-	return self.jsobj
+func (self *object) GetJSObject(id Identifier) *goja.Object {
+	obj := self.rntm.jsvm.CreateObject(self.jsProto)
+	obj.Set("identifier", self.rntm.jsvm.ToValue(id))
+	return obj
+}
+
+func (self *object) GetJSPrototype() *goja.Object {
+	return self.jsProto
 }
 
 func (self *object) GetJSRuntime() *goja.Runtime {

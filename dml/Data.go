@@ -55,8 +55,8 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 		NewBehaviourHandler(rntm),
 	}
 
-	dat.AddEvent("onCreated", NewEvent(dat.GetJSObject(), rntm))
-	dat.AddEvent("onRemove", NewEvent(dat.GetJSObject(), rntm))
+	dat.AddEvent("onCreated", NewEvent(dat.GetJSPrototype(), rntm))
+	dat.AddEvent("onRemove", NewEvent(dat.GetJSPrototype(), rntm))
 
 	return &dat, nil
 }

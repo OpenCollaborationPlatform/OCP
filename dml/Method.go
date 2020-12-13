@@ -110,7 +110,7 @@ func (self *method) IsConst() bool {
 type jsMethod struct {
 	fnc      func(goja.FunctionCall) goja.Value
 	rntm     *Runtime
-	jsobj    *goja.Object
+	jsProto  *goja.Object
 	constant bool
 }
 
@@ -124,15 +124,27 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) 
 		}
 	}()
 
+	//first arg must be Identifier
+	if len(args) == 0 {
+		return nil, fmt.Errorf("Identifier needs to be provided for function call")
+	}
+	if _, ok := args[0].(Identifier); !ok {
+		return nil, fmt.Errorf("First argument needs to be identifier")
+	}
+
 	//build the function call argument
-	jsargs := make([]goja.Value, len(args))
-	for i, arg := range args {
+	jsargs := make([]goja.Value, len(args)-1)
+	for i, arg := range args[1:] {
 		jsargs[i] = self.rntm.jsvm.ToValue(arg)
 	}
 
-	err = nil
-	res := self.fnc(goja.FunctionCall{Arguments: jsargs, This: self.jsobj})
+	//build the object to call on
+	obj := self.rntm.jsvm.CreateObject(self.jsProto)
+	obj.Set("identifier", self.rntm.jsvm.ToValue(args[0]))
 
+	//call and return
+	err = nil
+	res := self.fnc(goja.FunctionCall{Arguments: jsargs, This: obj})
 	result = extractValue(res, self.rntm)
 	return
 }
@@ -217,7 +229,7 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 		jsmethod, isJS := thisMethod.(*jsMethod)
 		if isJS {
 			//we only need to setup the runtime and object
-			jsmethod.jsobj = obj
+			jsmethod.jsProto = obj
 			jsmethod.rntm = rntm
 			obj.Set(name, jsmethod.fnc)
 
@@ -228,18 +240,28 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				//js args to go args
 				args := extractValues(jsargs.Arguments, rntm)
 
+				//get the identifier from whom we are called
+				id := jsargs.This.ToObject(rntm.jsvm).Get("identifier").Export()
+				if _, ok := id.(Identifier); !ok {
+					panic("Called object does not have identifier setup correctly")
+				}
+
 				//call the function
-				res, err := thisMethod.Call(args...)
+				arguments := []interface{}{id}
+				arguments = append(arguments, args...)
+				res, err := thisMethod.Call(arguments...)
 
 				//check if we have a error and if it is not nil we panic for goja
 				if err != nil {
 					panic(rntm.jsvm.ToValue(err.Error()))
 				}
 
-				//object has special return value
-				retobj, ok := res.(Object)
+				//Identifier has special return value (need to build the correct js obj)
+				_, ok := res.(Identifier)
 				if ok {
-					return retobj.GetJSObject()
+					//todo
+					//return retobj.GetJSObject()
+					return rntm.jsvm.ToValue("object return values not implemented")
 				}
 
 				//go return values to js return values
