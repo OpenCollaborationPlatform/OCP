@@ -25,6 +25,11 @@ func NewMethod(fnc interface{}, constant bool) (Method, error) {
 		return nil, fmt.Errorf("Expected function, not %s", value.Type().String())
 	}
 
+	first := value.Type().In(0)
+	if first != reflect.TypeOf(Identifier{}) {
+		return nil, fmt.Errorf("First Argument of method needs to be Identifier, not %s", first.String())
+	}
+
 	return &method{value, constant}, nil
 }
 
@@ -42,6 +47,14 @@ type method struct {
 }
 
 func (self *method) Call(args ...interface{}) (interface{}, error) {
+
+	if len(args) == 0 {
+		return nil, fmt.Errorf("Identifier needs to be provided for function call")
+	}
+
+	if _, ok := args[0].(Identifier); !ok {
+		return nil, fmt.Errorf("First argument needs to be identifier")
+	}
 
 	rfargs := make([]reflect.Value, len(args))
 	for i, arg := range args {
