@@ -378,64 +378,73 @@ func (self *propertyHandler) GetProperties() []string {
 	return result
 }
 
-func (self *propertyHandler) SetupJSProperties(rntm *Runtime, obj *goja.Object) error {
-	/*
-		keys := obj.Keys()
+func (self *propertyHandler) SetupJSProperties(rntm *Runtime, proto *goja.Object) error {
 
-		for name, _ := range self.properties {
+	keys := proto.Keys()
 
-			//check if proeprty is already set up
-			cont := false
-			for _, key := range keys {
-				if key == name {
-					cont = true
-					break
-				}
+	for name, _ := range self.properties {
+
+		//check if proeprty is already set up
+		cont := false
+		for _, key := range keys {
+			if key == name {
+				cont = true
+				break
 			}
-			if cont {
-				continue
+		}
+		if cont {
+			continue
+		}
+
+		var propname string = name
+		getter := rntm.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+
+			//get the identifier of the object that accesses the property
+			id := call.This.ToObject(rntm.jsvm).Get("identifier").Export()
+			identifier, ok := id.(Identifier)
+			if !ok {
+				panic("Called object does not have identifier setup correctly")
 			}
 
-			var propname string = name
-			getter := rntm.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+			//return ob object is different than POD
+			val := self.GetProperty(propname).GetValue(identifier)
+			return rntm.jsvm.ToValue(val)
+		})
 
-				//return ob object is different than POD
-				val := self.GetProperty(propname).GetValue()
-				obj, ok := val.(Object)
-				if ok {
-					return obj.GetJSObject()
-				}
+		setter := rntm.jsvm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
 
-				return rntm.jsvm.ToValue(val)
-			})
+			if len(call.Arguments) != 1 {
+				//panic becomes exception in JS
+				panic(rntm.jsvm.ToValue(fmt.Sprintf("Property setting requires exactly one argument")))
+			}
 
-			setter := rntm.jsvm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
+			//get the identifier of the object that accesses the property
+			id := call.This.ToObject(rntm.jsvm).Get("identifier").Export()
+			identifier, ok := id.(Identifier)
+			if !ok {
+				panic("Called object does not have identifier setup correctly")
+			}
 
-				if len(call.Arguments) != 1 {
-					//panic becomes exception in JS
-					panic(rntm.jsvm.ToValue(fmt.Sprintf("Property setting requires exactly one argument")))
-				}
+			p := self.GetProperty(propname)
+			if p.IsConst() {
+				//panic becomes exception in JS
+				panic(rntm.jsvm.ToValue(fmt.Sprintf("Property %s is constant", propname)))
+			}
 
-				p := self.GetProperty(propname)
-				if p.IsConst() {
-					//panic becomes exception in JS
-					panic(rntm.jsvm.ToValue(fmt.Sprintf("Property %s is constant", propname)))
-				}
-
-				//convert goja args to go ones
-				args := extractValues(call.Arguments, rntm)
-				err := p.SetValue(args[0])
-				if err != nil {
-					//panic becomes exception in JS
-					panic(rntm.jsvm.ToValue(err.Error()))
-				}
-				return
-			})
-			err := obj.DefineAccessorProperty(name, getter, setter, goja.FLAG_FALSE, goja.FLAG_TRUE)
-
+			//convert goja args to go ones
+			args := extractValues(call.Arguments, rntm)
+			err := p.SetValue(identifier, args[0])
 			if err != nil {
-				return err
+				//panic becomes exception in JS
+				panic(rntm.jsvm.ToValue(err.Error()))
 			}
-		}*/
+			return
+		})
+		err := proto.DefineAccessorProperty(name, getter, setter, goja.FLAG_FALSE, goja.FLAG_TRUE)
+
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
