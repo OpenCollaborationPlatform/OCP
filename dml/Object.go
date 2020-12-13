@@ -36,15 +36,12 @@ type Object interface {
 //the most basic implementation of an dml Object. It is intended as dml grouping
 //object as well as base object for other types
 type object struct {
-	datastore.VersionManagerImp
 	propertyHandler
 	eventHandler
 	methodHandler
 
 	//object static state
 	rntm     *Runtime
-	parent   Identifier
-	id       Identifier
 	dataType DataType
 
 	//javascript
@@ -60,13 +57,10 @@ func NewObject(rntm *Runtime) (*object, error) {
 
 	//build the object
 	obj := object{
-		nil, //versManager,
 		NewPropertyHandler(),
 		NewEventHandler(),
 		NewMethodHandler(),
 		rntm,
-		parent,
-		id,
 		DataType{},
 		jsobj,
 	}
@@ -124,7 +118,7 @@ func (self *object) DataType(id Identifier) (DataType, error) {
 		return DataType{}, utils.StackError(err, "Unable to decode datatype from DB")
 	}
 
-	return parent.(DataType), nil
+	return dt.(DataType), nil
 }
 
 func (self *object) SetDataType(id Identifier, dt DataType) error {
@@ -156,15 +150,7 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	}
 
 	//we add properties
-	set, err := self.GetDatabaseSet(datastore.ValueType)
-	if err != nil {
-		return err
-	}
-	vSet, ok := set.(*datastore.ValueVersionedSet)
-	if !ok {
-		return fmt.Errorf("Unable to create database set")
-	}
-	prop, err := NewProperty(name, dtype, default_val, vSet, self.GetRuntime(), self.GetJSObject(), constprop)
+	prop, err := NewProperty(name, dtype, default_val, self.GetRuntime(), self.GetJSObject(), constprop)
 	if err != nil {
 		return err
 	}

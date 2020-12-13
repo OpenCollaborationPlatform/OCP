@@ -27,7 +27,7 @@ type Data interface {
 	GetChildByName(id Identifier, name string) (Identifier, error)
 
 	//Subobject handling is more than only childrens
-	//Hirarchy + dynamic objects, optional behaviour
+	//Hirarchy + dynamic objects, optional behaviours
 	GetSubobjects(id Identifier, bhvr bool) ([]Identifier, error)
 	GetSubobjectByName(id Identifier, name string, bhvr bool) (Identifier, error)
 

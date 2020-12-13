@@ -19,72 +19,72 @@ func init() {
 }
 
 // helper methods for DB access
-func valueFromStore(store datastore.Datastore, id Identifier, key []byte) (*datastore.Value, error) {
+func valueFromStore(store *datastore.Datastore, id Identifier, key []byte) (datastore.Value, error) {
 
 	set, err := store.GetOrCreateSet(datastore.ValueType, false, id.Hash())
 	if err != nil {
 		return datastore.Value{}, utils.StackError(err, "Unable to load %s from database", id)
 	}
-	vset, err := set.(*datastore.ValueSet)
-	if err != nil {
-		return datastore.Value{}, utils.StackError(err, "Database access failed: wrong set returned")
+	vset, done := set.(*datastore.ValueSet)
+	if !done {
+		return datastore.Value{}, fmt.Errorf("Database access failed: wrong set returned")
 	}
 	value, err := vset.GetOrCreateValue(key)
 	if err != nil {
 		return datastore.Value{}, utils.StackError(err, "Unable to read %s from DB", string(key))
 	}
-	return value, nil
+	return *value, nil
 }
 
-func valueVersionedFromStore(store *datastore.Datastore, id Identifier, key []byte) (*datastore.ValueVersioned, error) {
+func valueVersionedFromStore(store *datastore.Datastore, id Identifier, key []byte) (datastore.ValueVersioned, error) {
 
 	set, err := store.GetOrCreateSet(datastore.ValueType, true, id.Hash())
 	if err != nil {
 		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
 	}
-	vset, err := set.(*datastore.ValueVersionedSet)
-	if err != nil {
-		return datastore.ValueVersioned{}, utils.StackError(err, "Database access failed: wrong set returned")
+	vset, done := set.(*datastore.ValueVersionedSet)
+	if !done {
+		return datastore.ValueVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
 	}
 	value, err := vset.GetOrCreateValue(key)
 	if err != nil {
 		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
 	}
-	return value, nil
+	return *value, nil
 }
 
-func listFromStore(store *datastore.Datastore, id Identifier, key []byte) (*datastore.List, error) {
+func listFromStore(store *datastore.Datastore, id Identifier, key []byte) (datastore.List, error) {
 
 	set, err := store.GetOrCreateSet(datastore.ListType, false, id.Hash())
 	if err != nil {
 		return datastore.List{}, utils.StackError(err, "Unable to load %s from database", id)
 	}
-	lset, err := set.(*datastore.ListSet)
-	if err != nil {
-		return datastore.List{}, utils.StackError(err, "Database access failed: wrong set returned")
+	lset, done := set.(*datastore.ListSet)
+	if !done {
+		return datastore.List{}, fmt.Errorf("Database access failed: wrong set returned")
 	}
 	list, err := lset.GetOrCreateList(key)
 	if err != nil {
 		return datastore.List{}, utils.StackError(err, "Unable to read %s from DB", string(key))
 	}
-	return list, nil
+	return *list, nil
 }
 
-func mapFromStore(store *datastore.Datastore, id Identifier, key []byte) (*datastore.Map, error) {
+func mapFromStore(store *datastore.Datastore, id Identifier, key []byte) (datastore.Map, error) {
 
 	set, err := store.GetOrCreateSet(datastore.MapType, false, id.Hash())
 	if err != nil {
 		return datastore.Map{}, utils.StackError(err, "Unable to load %s from database", id)
 	}
-	mset, err := set.(*datastore.MapSet)
-	if err != nil {
-		return datastore.Map{}, utils.StackError(err, "Database access failed: wrong set returned")
+	mset, done := set.(*datastore.MapSet)
+	if !done {
+		return datastore.Map{}, fmt.Errorf("Database access failed: wrong set returned")
 	}
 	map_, err := mset.GetOrCreateMap(key)
 	if err != nil {
 		return datastore.Map{}, utils.StackError(err, "Unable to read %s from DB", string(key))
 	}
-	return map_, nil
+	return *map_, nil
 }
 
 //should be implemented by everythign that is exposed to JS

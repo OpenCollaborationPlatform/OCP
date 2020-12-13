@@ -47,7 +47,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, rntm *R
 
 		} else if dtype.IsType() {
 			//setup default value if needed
-			prop = &typeProperty{NewEventHandler(), name, DataType{}}
+			prop = &typeProperty{NewEventHandler(), name, DataType{}, rntm}
 			err := prop.SetDefaultValue(default_value)
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to use provided value as default for property")
@@ -123,12 +123,7 @@ func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
 		return err
 	}
 
-	if obj, isobj := val.(Object); isobj {
-		err = dbValue.Write(obj.Id().Encode())
-
-	} else {
-		err = dbValue.Write(val)
-	}
+	err = dbValue.Write(val)
 
 	if err != nil {
 		return err
@@ -173,6 +168,7 @@ type typeProperty struct {
 	eventHandler
 	name        string
 	default_val DataType
+	rntm        *Runtime
 }
 
 func (self typeProperty) Type() DataType {
@@ -236,7 +232,7 @@ func (self *typeProperty) GetDataType() DataType {
 
 	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
-		return err
+		return self.default_val
 	}
 
 	if !dbValue.IsValid() {
@@ -277,7 +273,7 @@ func (self constProperty) IsConst() bool {
 	return true
 }
 
-func (self *constProperty) SetValue(val interface{}) error {
+func (self *constProperty) SetValue(id Identifier, val interface{}) error {
 
 	return fmt.Errorf("Const property cannot set value")
 }
@@ -294,7 +290,7 @@ func (self *constProperty) SetDefaultValue(val interface{}) error {
 	return nil
 }
 
-func (self *constProperty) GetValue() interface{} {
+func (self *constProperty) GetValue(id Identifier) interface{} {
 
 	return self.value
 }
@@ -312,7 +308,7 @@ func (self constTypeProperty) IsConst() bool {
 	return true
 }
 
-func (self *constTypeProperty) SetValue(val interface{}) error {
+func (self *constTypeProperty) SetValue(id Identifier, val interface{}) error {
 	return fmt.Errorf("Const property cannot set value")
 }
 
@@ -331,7 +327,7 @@ func (self *constTypeProperty) SetDefaultValue(val interface{}) error {
 }
 
 //we only return basic information, mailny for JS accessibility
-func (self *constTypeProperty) GetValue() interface{} {
+func (self *constTypeProperty) GetValue(id Identifier) interface{} {
 	return self.data
 }
 
@@ -383,63 +379,63 @@ func (self *propertyHandler) GetProperties() []string {
 }
 
 func (self *propertyHandler) SetupJSProperties(rntm *Runtime, obj *goja.Object) error {
+	/*
+		keys := obj.Keys()
 
-	keys := obj.Keys()
+		for name, _ := range self.properties {
 
-	for name, _ := range self.properties {
-
-		//check if proeprty is already set up
-		cont := false
-		for _, key := range keys {
-			if key == name {
-				cont = true
-				break
+			//check if proeprty is already set up
+			cont := false
+			for _, key := range keys {
+				if key == name {
+					cont = true
+					break
+				}
 			}
-		}
-		if cont {
-			continue
-		}
-
-		var propname string = name
-		getter := rntm.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
-
-			//return ob object is different than POD
-			val := self.GetProperty(propname).GetValue()
-			obj, ok := val.(Object)
-			if ok {
-				return obj.GetJSObject()
+			if cont {
+				continue
 			}
 
-			return rntm.jsvm.ToValue(val)
-		})
+			var propname string = name
+			getter := rntm.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
 
-		setter := rntm.jsvm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
+				//return ob object is different than POD
+				val := self.GetProperty(propname).GetValue()
+				obj, ok := val.(Object)
+				if ok {
+					return obj.GetJSObject()
+				}
 
-			if len(call.Arguments) != 1 {
-				//panic becomes exception in JS
-				panic(rntm.jsvm.ToValue(fmt.Sprintf("Property setting requires exactly one argument")))
-			}
+				return rntm.jsvm.ToValue(val)
+			})
 
-			p := self.GetProperty(propname)
-			if p.IsConst() {
-				//panic becomes exception in JS
-				panic(rntm.jsvm.ToValue(fmt.Sprintf("Property %s is constant", propname)))
-			}
+			setter := rntm.jsvm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {
 
-			//convert goja args to go ones
-			args := extractValues(call.Arguments, rntm)
-			err := p.SetValue(args[0])
+				if len(call.Arguments) != 1 {
+					//panic becomes exception in JS
+					panic(rntm.jsvm.ToValue(fmt.Sprintf("Property setting requires exactly one argument")))
+				}
+
+				p := self.GetProperty(propname)
+				if p.IsConst() {
+					//panic becomes exception in JS
+					panic(rntm.jsvm.ToValue(fmt.Sprintf("Property %s is constant", propname)))
+				}
+
+				//convert goja args to go ones
+				args := extractValues(call.Arguments, rntm)
+				err := p.SetValue(args[0])
+				if err != nil {
+					//panic becomes exception in JS
+					panic(rntm.jsvm.ToValue(err.Error()))
+				}
+				return
+			})
+			err := obj.DefineAccessorProperty(name, getter, setter, goja.FLAG_FALSE, goja.FLAG_TRUE)
+
 			if err != nil {
-				//panic becomes exception in JS
-				panic(rntm.jsvm.ToValue(err.Error()))
+				return err
 			}
-			return
-		})
-		err := obj.DefineAccessorProperty(name, getter, setter, goja.FLAG_FALSE, goja.FLAG_TRUE)
-
-		if err != nil {
-			return err
-		}
-	}
+		}*/
 	return nil
 }
