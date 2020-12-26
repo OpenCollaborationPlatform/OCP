@@ -1,13 +1,14 @@
 package dml
 
 import (
-	"bytes"
-	"fmt"
+	//	"bytes"
+	//	"fmt"
+
 	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/alecthomas/participle"
 	"github.com/dop251/goja"
-	uuid "github.com/satori/go.uuid"
+	//	uuid "github.com/satori/go.uuid"
 )
 
 func SetupGlobals(rntm *Runtime) {
@@ -50,14 +51,14 @@ func SetupGlobals(rntm *Runtime) {
 	})
 
 	rntm.jsvm.Set("print", func(call goja.FunctionCall) goja.Value {
-	
+
 		if len(call.Arguments) != 1 {
 			panic("Print takes only single string argument")
 		}
-	
+
 		res := call.Arguments[0].Export()
-		str, ok := res.(string) 
-		
+		str, ok := res.(string)
+
 		if !ok {
 			panic("Print takes only single string argument")
 		}
@@ -68,9 +69,11 @@ func SetupGlobals(rntm *Runtime) {
 
 }
 
+/*
 //Construct a data object from encoded description (as provided by type property)
 // - does setup behaviours
 // - does not call Constructed() for events. Should be done by caller after full setup handling
+// - does not setup
 func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier) (Object, error) {
 
 	if !dt.IsComplex() {
@@ -86,17 +89,17 @@ func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier)
 	uid := uuid.NewV4().String()
 
 	//build the object
-	obj, err := rntm.buildObject(astObj, parent, uid)
+	obj, err := rntm.buildObject(astObj, parent, uid, false)
 
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create subobject")
 	}
 
 	data, ok := obj.(Data)
-	
+
 	if ok {
 		data.SetupBehaviours(obj.(Data), true)
-	
+
 	} else {
 		return nil, fmt.Errorf("Behaviours are not valid Data objects")
 	}
@@ -138,3 +141,4 @@ func LoadObject(rntm *Runtime, dt DataType, id Identifier, parent Identifier) (O
 
 	return obj, nil
 }
+*/

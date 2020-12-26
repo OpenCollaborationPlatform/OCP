@@ -96,34 +96,23 @@ type JSObject interface {
 
 //returns the DML object if it is one. obj is nil if not. Error is only set if it is a
 //dml object but proplems occured extracting it
-func objectFromJSValue(jsval goja.Value, rntm *Runtime) (Object, error) {
+func objectFromJSValue(jsval goja.Value, rntm *Runtime) (Identifier, error) {
 
 	jsobj, ok := jsval.(*goja.Object)
 	if !ok {
-		return nil, nil
+		return Identifier{}, nil
 	}
 
-	fncobj := jsobj.Get("Identifier")
-	if fncobj != nil {
-		fnc := fncobj.Export()
-		wrapper, ok := fnc.(func(goja.FunctionCall) goja.Value)
-		if ok {
-			encoded := wrapper(goja.FunctionCall{})
-			id, err := IdentifierFromEncoded(encoded.Export().(string))
-			if err != nil {
-				return nil, utils.StackError(err, "Unable to convert returned object from javascript")
-			}
-			obj, ok := rntm.objects[id]
-			if !ok {
-				return nil, utils.StackError(err, "Cannot find object returned from javascript")
-			}
-			return obj, nil
-
-		} else {
-			return nil, fmt.Errorf("Javascript returned object, but it has errous Identifier method")
+	idProp := jsobj.Get("identifier")
+	if idProp != nil {
+		id := idProp.Export()
+		identifier, ok := id.(Identifier)
+		if !ok {
+			return Identifier{}, fmt.Errorf("Javascript returned object, but it has errous Identifier method")
 		}
+		return identifier, nil
 	}
-	return nil, nil
+	return Identifier{}, nil
 }
 
 //goja value handling
@@ -148,9 +137,9 @@ func extractValue(value goja.Value, rntm *Runtime) interface{} {
 	}
 
 	//check if it is a goja object
-	obj, _ := objectFromJSValue(value, rntm)
-	if obj != nil {
-		return obj
+	id, _ := objectFromJSValue(value, rntm)
+	if id.Valid() {
+		return id
 	}
 
 	//no, normal values!

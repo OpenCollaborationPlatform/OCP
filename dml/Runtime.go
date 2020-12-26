@@ -33,7 +33,7 @@ import (
 )
 
 //Function prototype that can create new object types in DML
-type CreatorFunc func(id Identifier, parent Identifier, rntm *Runtime) (Object, error)
+type CreatorFunc func(rntm *Runtime) (Object, error)
 
 func NewRuntime(ds *datastore.Datastore) *Runtime {
 
@@ -50,13 +50,12 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 		printManager: NewPrintManager(),
 		creators:     cr,
 		jsvm:         js,
-		jsObjMap:     js.NewObject(),
 		datastore:    ds,
 		mutex:        &sync.Mutex{},
 		ready:        false,
 		currentUser:  "none",
 		mainObj:      nil,
-		objects:      make(map[Identifier]Data, 0),
+		objects:      make(map[DataType]Object, 0),
 		behaviours:   make(map[string]BehaviourManager, 0),
 	}
 
@@ -77,7 +76,6 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	//	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
 
 	//setup globals
-	rntm.jsvm.Set("Objects", rntm.jsObjMap)
 	SetupGlobals(rntm)
 
 	return rntm
@@ -92,7 +90,6 @@ type Runtime struct {
 
 	//components of the runtime
 	jsvm      *goja.Runtime
-	jsObjMap  *goja.Object
 	datastore *datastore.Datastore
 	mutex     *sync.Mutex
 
@@ -100,8 +97,8 @@ type Runtime struct {
 	importPath  string
 	ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
 	currentUser User    //user that currently access the runtime
-	objects     map[Identifier]Data
 	mainObj     Data
+	objects     map[DataType]Object
 
 	//managers
 	behaviours map[string]BehaviourManager
@@ -151,7 +148,6 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 
 	//first import everything needed
-
 	for _, imp := range ast.Imports {
 		err := self.importDML(imp)
 		if err != nil {
@@ -159,28 +155,36 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		}
 	}
 
+	//check if the data structure is setup, or if we need to do this
+	var setKey [32]byte
+	copy(setKey[:], []byte("__internal"))
+	set, err := self.datastore.GetOrCreateSet(datastore.ValueType, false, setKey)
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB")
+	}
+	vSet, _ := set.(*datastore.ValueSet)
+	//setup := !vSet.HasKey([]byte("MainIdentifier"))
+
 	//process the AST into usable objects
-	obj, err := self.buildObject(ast.Object, Identifier{}, "")
+	obj, err := self.buildObject(ast.Object)
 	if err != nil {
 		return utils.StackError(err, "Unable to parse dml code")
 		//TODO clear the database entries...
 	}
-	obj.(Data).SetupBehaviours(obj.(Data), true)
+	//obj.(Data).SetupBehaviours(obj.(Data), true)
 	self.mainObj = obj.(Data)
 	self.ready = true
 
-	//set the JS main entry point
-	self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
-
-	//commit objects which are totally new (so they have no updates initially)
-	for _, obj := range self.objects {
-		if has, _ := obj.HasUpdates(); has {
-			obj.FixStateAsVersion()
-		}
-	}
+	//self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
 
 	//call everyones "onCreated"
-	obj.(Data).Created()
+	val, _ := vSet.GetOrCreateValue([]byte("MainIdentifier"))
+	id, err := val.Read()
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB")
+	}
+	mainId := id.(Identifier)
+	obj.(Data).Created(mainId)
 
 	return err
 }
@@ -189,36 +193,36 @@ func (self *Runtime) Parse(reader io.Reader) error {
 //e.g. for object Toplevel.Sublevel.MyObject path ist Toplevel.Sublevel
 //th epath is empty for the main object as well as all dynamic data, e.g. vector entries
 func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
-
-	//check if setup is possible
-	if !self.ready {
-		return fmt.Errorf("Unable to setup objects: Runtime not initialized")
-	}
-
-	//iterate all data object in the hirarchy
-	has := make(map[Identifier]struct{}, 0)
-	err := setupDataChildren("", self.mainObj, has, setup)
-	if err != nil {
-		return utils.StackError(err, "Unable to setup all objects")
-	}
-
-	//call setup for all dynamic objects (objects in the global list but not yet
-	//reached via the hirarchy)
-	for _, obj := range self.objects {
-		_, ok := has[obj.Id()]
-		if ok {
-			continue
+	/*
+		//check if setup is possible
+		if !self.ready {
+			return fmt.Errorf("Unable to setup objects: Runtime not initialized")
 		}
-		dataobj, ok := obj.(Data)
-		if !ok {
-			continue
-		}
-		err := setup("", dataobj)
+
+		//iterate all data object in the hirarchy
+		has := make(map[Identifier]struct{}, 0)
+		err := setupDataChildren("", self.mainObj, has, setup)
 		if err != nil {
-			return utils.StackError(err, "Unable to setup all dynamic objects")
+			return utils.StackError(err, "Unable to setup all objects")
 		}
-	}
 
+		//call setup for all dynamic objects (objects in the global list but not yet
+		//reached via the hirarchy)
+		for _, obj := range self.objects {
+			_, ok := has[obj.Id()]
+			if ok {
+				continue
+			}
+			dataobj, ok := obj.(Data)
+			if !ok {
+				continue
+			}
+			err := setup("", dataobj)
+			if err != nil {
+				return utils.StackError(err, "Unable to setup all dynamic objects")
+			}
+		}
+	*/
 	return nil
 }
 
@@ -306,198 +310,201 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 }
 
 func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
+	/*
+		self.clearMessage()
 
-	self.clearMessage()
-
-	err := self.datastore.Begin()
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to access database")
-	}
-
-	//save the user for processing
-	self.currentUser = user
-
-	//get path and accessor
-	idx := strings.LastIndex(string(fullpath), ".")
-	path := fullpath[:idx]
-	accessor := fullpath[(idx + 1):]
-
-	//first check if it is a Manager
-	mngr, ok := self.behaviours[path]
-	if ok {
-		if !mngr.HasMethod(accessor) {
-			return nil, fmt.Errorf("Manager %v does not have method %v", path[0], accessor)
+		err := self.datastore.Begin()
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to access database")
 		}
-		fnc := mngr.GetMethod(accessor)
-		result, e := fnc.Call(args...)
 
-		//did somethign go wrong?
-		if e != nil {
-			self.datastore.Rollback()
-			return nil, e
-		}
-		if fnc.IsConst() {
-			self.datastore.Rollback()
-			return result, nil
-		}
-		err = self.postprocess(false)
-		return result, err
-	}
+		//save the user for processing
+		self.currentUser = user
 
-	//not a manager: now check if path is correct and object available
-	obj, err := self.getObjectFromPath(path)
-	if err != nil {
-		self.datastore.Rollback()
-		return nil, err
-	}
+		//get path and accessor
+		idx := strings.LastIndex(string(fullpath), ".")
+		path := fullpath[:idx]
+		accessor := fullpath[(idx + 1):]
 
-	handled := false
-	var result interface{} = nil
-	err = nil
-
-	//check if it is a method
-	if obj.HasMethod(accessor) {
-		fnc := obj.GetMethod(accessor)
-		result, err = fnc.Call(args...)
-		handled = true
-
-		if fnc.IsConst() {
-			self.datastore.Rollback()
-			if err != nil {
-				return nil, err
-			}
-			return result, nil
-		}
-	}
-
-	//a property maybe?
-	if !handled && obj.HasProperty(accessor) {
-		prop := obj.GetProperty(accessor)
-
-		if len(args) == 0 {
-			//read only
-			result = prop.GetValue()
-			self.datastore.Rollback()
-			return result, nil
-
-		} else {
-			err = prop.SetValue(args[0])
-			result = args[0]
-		}
-		handled = true
-	}
-
-	//an event?
-	if !handled && obj.HasEvent(accessor) {
-		err = obj.GetEvent(accessor).Emit(args...)
-		handled = true
-	}
-
-	//or a simple value?
-	if !handled {
-		dat, ok := obj.(Data)
+		//first check if it is a Manager
+		mngr, ok := self.behaviours[path]
 		if ok {
-			result = dat.GetValueByName(accessor)
-			if result != nil {
-				//read only
-				err := self.datastore.Rollback()
-				return result, err
+			if !mngr.HasMethod(accessor) {
+				return nil, fmt.Errorf("Manager %v does not have method %v", path[0], accessor)
+			}
+			fnc := mngr.GetMethod(accessor)
+			result, e := fnc.Call(args...)
+
+			//did somethign go wrong?
+			if e != nil {
+				self.datastore.Rollback()
+				return nil, e
+			}
+			if fnc.IsConst() {
+				self.datastore.Rollback()
+				return result, nil
+			}
+			err = self.postprocess(false)
+			return result, err
+		}
+
+		//not a manager: now check if path is correct and object available
+		obj, err := self.getObjectFromPath(path)
+		if err != nil {
+			self.datastore.Rollback()
+			return nil, err
+		}
+
+		handled := false
+		var result interface{} = nil
+		err = nil
+
+		//check if it is a method
+		if obj.HasMethod(accessor) {
+			fnc := obj.GetMethod(accessor)
+			result, err = fnc.Call(args...)
+			handled = true
+
+			if fnc.IsConst() {
+				self.datastore.Rollback()
+				if err != nil {
+					return nil, err
+				}
+				return result, nil
 			}
 		}
-	}
 
-	//was it handled? If not no change to db was done
-	if !handled {
-		self.datastore.Rollback()
-		return nil, fmt.Errorf("No accessor %v known in object %v", accessor, path)
-	}
+		//a property maybe?
+		if !handled && obj.HasProperty(accessor) {
+			prop := obj.GetProperty(accessor)
 
-	//did an error occure?
-	if err != nil {
-		self.postprocess(true)
-		return nil, err
-	}
+			if len(args) == 0 {
+				//read only
+				result = prop.GetValue()
+				self.datastore.Rollback()
+				return result, nil
 
-	//postprocess correctly
-	err = self.postprocess(false)
+			} else {
+				err = prop.SetValue(args[0])
+				result = args[0]
+			}
+			handled = true
+		}
 
-	return result, err
+		//an event?
+		if !handled && obj.HasEvent(accessor) {
+			err = obj.GetEvent(accessor).Emit(args...)
+			handled = true
+		}
+
+		//or a simple value?
+		if !handled {
+			dat, ok := obj.(Data)
+			if ok {
+				result = dat.GetValueByName(accessor)
+				if result != nil {
+					//read only
+					err := self.datastore.Rollback()
+					return result, err
+				}
+			}
+		}
+
+		//was it handled? If not no change to db was done
+		if !handled {
+			self.datastore.Rollback()
+			return nil, fmt.Errorf("No accessor %v known in object %v", accessor, path)
+		}
+
+		//did an error occure?
+		if err != nil {
+			self.postprocess(true)
+			return nil, err
+		}
+
+		//postprocess correctly
+		err = self.postprocess(false)
+
+		return result, err*/
+	return nil, nil
 }
 
 // 							Internal Functions
 //*********************************************************************************
 
 func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup func(string, Data) error) error {
+	/*
+		//execute on the object itself!
+		err := setup(path, obj)
+		if err != nil {
+			return err
+		}
+		has[obj.Id()] = struct{}{}
 
-	//execute on the object itself!
-	err := setup(path, obj)
-	if err != nil {
-		return err
-	}
-	has[obj.Id()] = struct{}{}
+		//advance path and execute all children
+		if path != "" {
+			path += "."
+		}
+		path += obj.Id().Name
+		for _, child := range obj.GetChildren() {
 
-	//advance path and execute all children
-	if path != "" {
-		path += "."
-	}
-	path += obj.Id().Name
-	for _, child := range obj.GetChildren() {
-
-		datachild, ok := child.(Data)
-		if ok {
-			err := setupDataChildren(path, datachild, has, setup)
-			if err != nil {
-				return err
+			datachild, ok := child.(Data)
+			if ok {
+				err := setupDataChildren(path, datachild, has, setup)
+				if err != nil {
+					return err
+				}
 			}
 		}
-	}
-
+	*/
 	return nil
 }
 
 //get the object from the identifier path list (e.g. myobj.childname.yourobject)
 //alternatively to names it can include identifiers (e.g. from Object.Identifier())
 func (self *Runtime) getObjectFromPath(path string) (Object, error) {
-
-	names := strings.Split(path, `.`)
-	if len(names) == 0 {
-		return nil, fmt.Errorf("Not a valid path to object: no names found")
-	}
-
-	var obj Data
-	if names[0] != self.mainObj.Id().Name {
-		id, err := IdentifierFromEncoded(names[0])
-		if err != nil {
-			return nil, fmt.Errorf("First identifier in %v cannot be found", path)
-		}
-		listobj, ok := self.objects[id]
-		if !ok {
-			return nil, fmt.Errorf("First identifier in %v cannot be found", path)
-		}
-		obj = listobj
-
-	} else {
-		obj = self.mainObj
-	}
-
-	for _, name := range names[1:] {
-
-		//check all childs to find the one with given name
-		child, err := obj.GetSubobjectByName(name, true)
-		if err != nil {
-			return nil, utils.StackError(err, "Identifier %v is not available in object %v", name, obj.Id().Name)
+	/*
+		names := strings.Split(path, `.`)
+		if len(names) == 0 {
+			return nil, fmt.Errorf("Not a valid path to object: no names found")
 		}
 
-		//check if it is a behaviour, and if so end here
-		_, isBehaviour := child.(Behaviour)
-		if isBehaviour {
-			return child, nil
+		var obj Data
+		if names[0] != self.mainObj.Id().Name {
+			id, err := IdentifierFromEncoded(names[0])
+			if err != nil {
+				return nil, fmt.Errorf("First identifier in %v cannot be found", path)
+			}
+			listobj, ok := self.objects[id]
+			if !ok {
+				return nil, fmt.Errorf("First identifier in %v cannot be found", path)
+			}
+			obj = listobj
+
+		} else {
+			obj = self.mainObj
 		}
 
-		obj = child.(Data)
+		for _, name := range names[1:] {
 
-	}
-	return obj, nil
+			//check all childs to find the one with given name
+			child, err := obj.GetSubobjectByName(name, true)
+			if err != nil {
+				return nil, utils.StackError(err, "Identifier %v is not available in object %v", name, obj.Id().Name)
+			}
+
+			//check if it is a behaviour, and if so end here
+			_, isBehaviour := child.(Behaviour)
+			if isBehaviour {
+				return child, nil
+			}
+
+			obj = child.(Data)
+
+		}
+		return obj, nil
+	*/
+	return nil, nil
 }
 
 //postprocess for all done operations. Entry point for behaviours
@@ -558,25 +565,8 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	}
 
 	//we now register the imported ast as a creator
-	creator := func(id Identifier, parent Identifier, rntm *Runtime) (Object, error) {
-
-		//to assgn the correct object name we need to override the name asignment. This must be available
-		//on object build time as the identifier is created with it
-		idSet := false
-		for _, astAssign := range ast.Object.Assignments {
-			if astAssign.Key[0] == "name" {
-				*astAssign.Value.String = id.Name
-				idSet = true
-				break
-			}
-		}
-		if !idSet {
-			val := &astValue{String: &id.Name}
-			asgn := &astAssignment{Key: []string{"name"}, Value: val}
-			ast.Object.Assignments = append(ast.Object.Assignments, asgn)
-		}
-
-		return rntm.buildObject(ast.Object, parent, id.Uuid)
+	creator := func(rntm *Runtime) (Object, error) {
+		return rntm.buildObject(ast.Object)
 	}
 
 	//build the name, file or alias
@@ -595,41 +585,47 @@ func (self *Runtime) importDML(astImp *astImport) error {
 
 //recursive remove object from runtime
 func (self *Runtime) removeObject(obj Object) error {
+	/*
+		if data, ok := obj.(Data); ok {
 
-	if data, ok := obj.(Data); ok {
+			//recursive object handling. (child first, so that event onRemove always finds
+			//existing parents)
+			for _, sub := range data.GetSubobjects(true) {
+				err := self.removeObject(sub)
+				if err != nil {
+					return err
+				}
+			}
 
-		//recursive object handling. (child first, so that event onRemove always finds
-		//existing parents)
-		for _, sub := range data.GetSubobjects(true) {
-			err := self.removeObject(sub)
+			//call event on remove
+			data.GetEvent("onRemove").Emit()
+
+			//remove from list and javascript (not for behaviours)
+			delete(self.objects, obj.Id())
+			_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects[\"%v\"]", obj.Id().Encode()))
 			if err != nil {
 				return err
 			}
 		}
 
-		//call event on remove
-		data.GetEvent("onRemove").Emit()
-
-		//remove from list and javascript (not for behaviours)
-		delete(self.objects, obj.Id())
-		_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects[\"%v\"]", obj.Id().Encode()))
-		if err != nil {
-			return err
-		}
-	}
-
-	//TODO: howto handle data store? for Data and Behaviours!
-
+		//TODO: howto handle data store? for Data and Behaviours!
+	*/
 	return nil
 }
 
 //due to recursive nature of objects we need an extra function
-func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid string) (Object, error) {
+func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 
-	//see if we can build it, and do so if possible
-	creator, ok := self.creators[astObj.Identifier]
-	if !ok {
-		return nil, fmt.Errorf("No object type \"%s\" exists", astObj.Identifier)
+	//get the datatype, and check if we have that type already
+	dt := MustNewDataType(astObj)
+	if obj, has := self.objects[dt]; has {
+		return obj, nil
+	}
+
+	//check if we build this already
+	obj, exist := self.objects[dt]
+	if exist {
+		return obj, nil
 	}
 
 	//we need the objects name first. Search for the id property assignment
@@ -640,38 +636,19 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 		}
 	}
 
-	//create the object ID and check for uniqueness
-	var phash [32]byte
-	if parent.Valid() {
-		phash = parent.Hash()
-	}
-	id := Identifier{Parent: phash, Name: objName, Type: astObj.Identifier, Uuid: uuid}
-	_, has := self.objects[id]
-	if has {
-		return nil, fmt.Errorf("Object with same type (%s) and ID (%s) already exists", id.Type, id.Name)
+	//build the object!
+	creator, ok := self.creators[astObj.Identifier]
+	if !ok {
+		return nil, fmt.Errorf("No object type \"%s\" exists", astObj.Identifier)
 	}
 
-	//setup the object including datastore
-	obj, err := creator(id, parent, self)
+	var err error
+	obj, err = creator(self)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to create object %v (%v)", id.Name, id.Type)
+		return nil, utils.StackError(err, "Unable to create object %v (%v)", objName, astObj.Identifier)
 	}
-	obj.SetDataType(MustNewDataType(astObj))
-
-	//check if data or behaviour
-	_, isBehaviour := obj.(Behaviour)
-
-	if !isBehaviour {
-		//add to rntm
-		self.objects[obj.Id()] = obj.(Data)
-		self.jsObjMap.Set(obj.Id().Encode(), obj.GetJSObject())
-	}
-
-	//expose to javascript
-	jsobj := obj.GetJSObject()
-	if parent.Valid() && id.Name != "" {
-		parentObj := self.objects[parent]
-		parentObj.GetJSObject().Set(objName, jsobj)
+	if err != nil {
+		return nil, err
 	}
 
 	//Now we create all additional properties and set them up in js
@@ -681,7 +658,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 			return nil, utils.StackError(err, "Unable to create property %v in object %v", astProp.Key, objName)
 		}
 	}
-	err = obj.SetupJSProperties(self, jsobj)
+	err = obj.SetupJSProperties(self, obj.GetJSPrototype())
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create javascript property interface for %v", objName)
 	}
@@ -698,7 +675,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 			return nil, utils.StackError(err, "Unable to add event %v to object %v", astEvent.Key, objName)
 		}
 	}
-	obj.SetupJSEvents(jsobj)
+	obj.SetupJSEvents(obj.GetJSPrototype())
 
 	//than all methods (including defaults if required)
 	for _, fnc := range astObj.Functions {
@@ -709,17 +686,16 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 		}
 		obj.AddMethod(*fnc.Name, method)
 	}
-	obj.SetupJSMethods(self, jsobj)
+	obj.SetupJSMethods(self, obj.GetJSPrototype())
 
 	//go on with all subobjects (if not behaviour)
+	_, isBehaviour := obj.(Behaviour)
 	if !isBehaviour {
-
-		jsChildren := make([]goja.Value, 0)
 
 		for _, astChild := range astObj.Objects {
 
 			//build the child
-			child, err := self.buildObject(astChild, obj.Id(), "")
+			child, err := self.buildObject(astChild)
 			if err != nil {
 				return nil, err
 			}
@@ -727,22 +703,16 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 			//check if this child is a behaviour, and handle accordingly
 			behaviour, isBehaviour := child.(Behaviour)
 			if isBehaviour {
-				obj.(Data).AddBehaviour(behaviour.Id().Type, behaviour)
+				obj.(Data).AddBehaviour(astChild.Identifier, behaviour)
 			} else {
 				obj.(Data).AddChild(child.(Data))
-
 			}
-			jsChildren = append(jsChildren, child.GetJSObject())
 		}
-
-		jsobj.DefineDataProperty("children", self.jsvm.ToValue(jsChildren), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
-
 	} else if len(astObj.Objects) > 0 {
 		return nil, fmt.Errorf("Behaviours cannot have child objects")
 	}
 
 	//with everything in place we are able to process the assignments
-	//needs to be here
 	for _, assign := range astObj.Assignments {
 
 		//get the object we need to assign to
@@ -753,7 +723,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 			if assignObj.HasProperty(subkey) || assignObj.HasEvent(subkey) {
 				break
 			}
-			if assignObj.GetParent().Id().Name == subkey {
+			/*if assignObj.GetParent().Id().Name == subkey {
 				assignObj = assignObj.GetParent()
 				continue
 			}
@@ -766,7 +736,7 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 				assignObj = child
 			} else {
 				return nil, fmt.Errorf("Unable to assign to %v: unknown identifier", assign.Key)
-			}
+			}*/
 		}
 
 		parts := assign.Key[assignIdx:]
@@ -784,22 +754,6 @@ func (self *Runtime) buildObject(astObj *astObject, parent Identifier, uuid stri
 		} else {
 			return nil, fmt.Errorf("Key of assignment is not a property or event")
 		}
-	}
-
-	//load the dynamic objects
-	dynamic, ok := obj.(DynamicData)
-	if ok {
-		err := dynamic.Load()
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to create object, dynamic data cannot be loaded")
-		}
-	}
-
-	//ant last we add the general object properties: parent etc...
-	if parent.Valid() {
-		jsobj.DefineDataProperty("parent", self.objects[parent].GetJSObject(), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
-	} else {
-		jsobj.DefineDataProperty("parent", self.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_TRUE)
 	}
 
 	return obj, nil
@@ -896,7 +850,7 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) {
 
 	//build the event
-	evt := NewEvent(parent.GetJSObject(), self)
+	evt := NewEvent(parent.GetJSPrototype(), self)
 
 	//and see if we should add a default callback
 	if astEvt.Default != nil {

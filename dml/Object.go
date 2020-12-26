@@ -27,7 +27,6 @@ type Object interface {
 
 	//type handling (full type desciption)
 	DataType(Identifier) (DataType, error)
-	SetDataType(Identifier, DataType) error
 
 	//Genertic
 	GetRuntime() *Runtime
@@ -115,7 +114,7 @@ func (self *object) SetParent(id Identifier, parent Identifier) error {
 
 func (self *object) DataType(id Identifier) (DataType, error) {
 
-	value, err := valueFromStore(self.rntm.datastore, id, []byte("__datatype"))
+	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__objects"))
 	if err != nil {
 		return DataType{}, err
 	}
@@ -125,19 +124,6 @@ func (self *object) DataType(id Identifier) (DataType, error) {
 	}
 
 	return dt.(DataType), nil
-}
-
-func (self *object) SetDataType(id Identifier, dt DataType) error {
-
-	value, err := valueFromStore(self.rntm.datastore, id, []byte("__datatype"))
-	if err != nil {
-		return err
-	}
-	err = value.Write(dt)
-	if err != nil {
-		return utils.StackError(err, "Unable to decode datatype into DB")
-	}
-	return nil
 }
 
 func (self *object) GetJSObject(id Identifier) *goja.Object {

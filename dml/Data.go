@@ -21,15 +21,20 @@ type Data interface {
 	//Access a value by name. Could be overriden by some objects, e.g. maps and vectors
 	GetValueByName(id Identifier, name string) interface{}
 
+	//Data hirarchy allows childs. Here we add the structure and logic by
+	//adding static objects. Database access by identifiers is handled seperatly
+	AddChild(Data)
+	GetChilds() []Data
+
 	//Data hirarchy allows childs
-	AddChild(id Identifier, child Identifier) error
-	GetChildren(id Identifier) ([]Identifier, error)
-	GetChildByName(id Identifier, name string) (Identifier, error)
+	AddChildIdentifier(Identifier, Identifier) error
+	GetChildIdentifiers(Identifier) ([]Identifier, error)
+	GetChildIdentifierByName(Identifier, string) (Identifier, error)
 
 	//Subobject handling is more than only childrens
 	//Hirarchy + dynamic objects, optional behaviours
-	GetSubobjects(id Identifier, bhvr bool) ([]Identifier, error)
-	GetSubobjectByName(id Identifier, name string, bhvr bool) (Identifier, error)
+	GetSubobjectIdentifiers(id Identifier, bhvr bool) ([]Identifier, error)
+	GetSubobjectIdentifierByName(id Identifier, name string, bhvr bool) (Identifier, error)
 
 	Created(id Identifier) //emits onCreated event for this and all subobjects (not behaviours)
 }
@@ -37,6 +42,8 @@ type Data interface {
 type DataImpl struct {
 	*object
 	behaviourHandler
+
+	children []Data
 }
 
 func NewData(rntm *Runtime) (Object, error) {
@@ -53,6 +60,7 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 	dat := DataImpl{
 		obj,
 		NewBehaviourHandler(rntm),
+		make([]Data, 0),
 	}
 
 	dat.AddEvent("onCreated", NewEvent(dat.GetJSPrototype(), rntm))
@@ -61,7 +69,15 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 	return &dat, nil
 }
 
-func (self *DataImpl) AddChild(id Identifier, child Identifier) error {
+func (self *DataImpl) AddChild(child Data) {
+	self.children = append(self.children, child)
+}
+
+func (self *DataImpl) GetChildren() []Data {
+	return self.children
+}
+
+func (self *DataImpl) AddChildIdentifier(id Identifier, child Identifier) error {
 
 	list, err := listFromStore(self.rntm.datastore, id, []byte("__children"))
 	if err != nil {
@@ -74,7 +90,7 @@ func (self *DataImpl) AddChild(id Identifier, child Identifier) error {
 	return nil
 }
 
-func (self *DataImpl) GetChildren(id Identifier) ([]Identifier, error) {
+func (self *DataImpl) GetChildIdentifiers(id Identifier) ([]Identifier, error) {
 
 	list, err := listFromStore(self.rntm.datastore, id, []byte("__children"))
 	if err != nil {
@@ -96,9 +112,9 @@ func (self *DataImpl) GetChildren(id Identifier) ([]Identifier, error) {
 	return result, nil
 }
 
-func (self *DataImpl) GetChildByName(id Identifier, name string) (Identifier, error) {
+func (self *DataImpl) GetChildIdentifierByName(id Identifier, name string) (Identifier, error) {
 
-	childs, err := self.GetChildren(id)
+	childs, err := self.GetChildIdentifiers(id)
 	if err != nil {
 		return Identifier{}, err
 	}
@@ -114,12 +130,12 @@ func (self *DataImpl) GetChildByName(id Identifier, name string) (Identifier, er
 	return Identifier{}, fmt.Errorf("No such object available")
 }
 
-func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]Identifier, error) {
+func (self *DataImpl) GetSubobjectIdentifiers(id Identifier, bhvr bool) ([]Identifier, error) {
 
 	result := make([]Identifier, 0)
 
 	//add hirarchy
-	children, err := self.GetChildren(id)
+	children, err := self.GetChildIdentifiers(id)
 	if err != nil {
 		return nil, err
 	}
@@ -127,12 +143,9 @@ func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]Identifier, err
 
 	//add behaviour
 	if bhvr {
-		bhvrs, err := self.Behaviours(id)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to query behaviour manager")
-		}
+		bhvrs := self.Behaviours()
 		for _, name := range bhvrs {
-			bhvr, err := self.GetBehaviour(id, name)
+			bhvr, err := self.GetBehaviourIdentifier(id, name)
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to query behaviour manager")
 			}
@@ -143,18 +156,18 @@ func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]Identifier, err
 	return result, nil
 }
 
-func (self *DataImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) (Identifier, error) {
+func (self *DataImpl) GetSubobjectIdentifierByName(id Identifier, name string, bhvr bool) (Identifier, error) {
 
 	//search hirarchy
-	child, err := self.GetChildByName(id, name)
+	child, err := self.GetChildIdentifierByName(id, name)
 	if err == nil {
 		return child, nil
 	}
 
 	//search behaviour
 	if bhvr {
-		if val, _ := self.HasBehaviour(id, name); val {
-			return self.GetBehaviour(id, name)
+		if self.HasBehaviour(name) {
+			return self.GetBehaviourIdentifier(id, name)
 		}
 	}
 

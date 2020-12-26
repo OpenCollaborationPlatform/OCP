@@ -64,11 +64,18 @@ type behaviour struct {
  */
 type BehaviourHandler interface {
 
-	//management functions
-	HasBehaviour(Identifier, string) (bool, error)
-	GetBehaviour(Identifier, string) (Behaviour, error)
-	AddBehaviour(Identifier, string, Behaviour) error
-	Behaviours(Identifier) ([]string, error)
+	//management functions for behaviours:
+	//here general behaviour objects are handled, as a object has a defined set of behaviours.
+	//This does not provide any database access, only logic
+	HasBehaviour(string) bool
+	GetBehaviour(string) Behaviour
+	AddBehaviour(string, Behaviour) error
+	Behaviours() []string
+
+	//This function is used to retrieve a behaviour database access Identifier
+	GetBehaviourIdentifier(Identifier, string) (Identifier, error)
+	SetBehaviourIdentifier(Identifier, string, Identifier) error
+	HasBehaviourIdentifier(Identifier, string) (bool, error)
 
 	//Setup all behaviours, possible including all childs
 	//to be called after data hirarchy is setup (parent and children)
@@ -76,25 +83,65 @@ type BehaviourHandler interface {
 }
 
 func NewBehaviourHandler(runtime *Runtime) behaviourHandler {
-	return behaviourHandler{runtime}
+	return behaviourHandler{make(map[string]Behaviour, 0), runtime}
 }
 
 type behaviourHandler struct {
+	behvrs  map[string]Behaviour
 	runtime *Runtime
 }
 
-func (self *behaviourHandler) HasBehaviour(id Identifier, name string) (bool, error) {
+func (self *behaviourHandler) HasBehaviour(name string) bool {
+
+	_, has := self.behvrs[name]
+	return has
+}
+
+func (self *behaviourHandler) AddBehaviour(name string, behaviour Behaviour) error {
+
+	if self.HasBehaviour(name) {
+		return fmt.Errorf("Behaviour already set, cannot override")
+	}
+	self.behvrs[name] = behaviour
+	return nil
+}
+
+func (self *behaviourHandler) GetBehaviour(name string) Behaviour {
+
+	val, has := self.behvrs[name]
+	if !has {
+		return nil
+	}
+
+	return val
+}
+
+func (self *behaviourHandler) Behaviours() []string {
+
+	result := make([]string, 0)
+	for key, _ := range self.behvrs {
+		result = append(result, key)
+	}
+
+	return result
+}
+
+func (self *behaviourHandler) GetBehaviourIdentifier(id Identifier, name string) (Identifier, error) {
 
 	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
 	if err != nil {
-		return false, err
+		return Identifier{}, utils.StackError(err, "Unable to access behaviours in database for %s", id)
 	}
-	return map_.HasKey(name), nil
+	value, err := map_.Read(name)
+	if err != nil {
+		return Identifier{}, err
+	}
+	return value.(Identifier), nil
 }
 
-func (self *behaviourHandler) AddBehaviour(id Identifier, name string, behaviour Identifier) error {
+func (self *behaviourHandler) SetBehaviourIdentifier(id Identifier, name string, behaviour Identifier) error {
 
-	if val, _ := self.HasBehaviour(id, name); val {
+	if val, _ := self.HasBehaviourIdentifier(id, name); val {
 		return fmt.Errorf("Behaviour already set: %v", name)
 	}
 
@@ -105,34 +152,13 @@ func (self *behaviourHandler) AddBehaviour(id Identifier, name string, behaviour
 	return map_.Write(name, behaviour)
 }
 
-func (self *behaviourHandler) GetBehaviour(id Identifier, name string) (Identifier, error) {
-	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
-	if err != nil {
-		return Identifier{}, err
-	}
-	value, err := map_.Read(name)
-	if err != nil {
-		return Identifier{}, err
-	}
-	return value.(Identifier), nil
-}
-
-func (self *behaviourHandler) Behaviours(id Identifier) ([]string, error) {
+func (self *behaviourHandler) HasBehaviourIdentifier(id Identifier, name string) (bool, error) {
 
 	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to access behaviours")
+		return false, err
 	}
-
-	keys, err := map_.GetKeys()
-	if err != nil {
-		return nil, err
-	}
-	result := make([]string, len(keys))
-	for i, val := range keys {
-		result[i] = val.(string)
-	}
-	return result, nil
+	return map_.HasKey(name), nil
 }
 
 /*
