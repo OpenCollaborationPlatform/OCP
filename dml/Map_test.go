@@ -1,5 +1,6 @@
 package dml
 
+/*
 import (
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
@@ -24,24 +25,24 @@ func TestPODMap(t *testing.T) {
 
 		dmlcode := `Data {
 					.name:"toplevel"
-					
+
 					Map {
 						.name: "IntIntMap"
 						.key: int
 						.value: int
 					}
-									
+
 					Map {
 						.name: "StringBoolMap"
 						.key: string
 						.value: bool
 					}
-									
+
 					Map {
 						.name: "IntFloatMap"
 						.key: int
 						.value: float
-					}					
+					}
 				}`
 
 		rntm := NewRuntime(store)
@@ -196,7 +197,7 @@ func TestComplexTypeMap(t *testing.T) {
 						.value: Data {
 							property int test: 0
 							property string created
-							
+
 							.onCreated: function() {
 								this.created = this.Identifier()
 							}
@@ -234,15 +235,15 @@ func TestComplexTypeMap(t *testing.T) {
 			So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
 
 			Convey("The created event was called", func() {
-				
+
 				store.Begin()
 				defer store.Rollback()
-				
+
 				obj, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
 				So(err, ShouldBeNil)
 				So(obj.GetProperty("created").GetValue(), ShouldEqual, obj.Id().Encode())
 				store.Rollback()
-				
+
 				code = `
 					obj = toplevel.TypeMap.Get("test")
 					if (obj.Identifier() != obj.created) {
@@ -295,7 +296,7 @@ func TestComplexTypeMap(t *testing.T) {
 				code = `
 					obj = toplevel.TypeMap.Get("test")
 					if (obj.parent != toplevel.TypeMap) {
-						throw "parent not set correctly"	
+						throw "parent not set correctly"
 					}
 				`
 				_, err := rntm.RunJavaScript("user3", code)
@@ -318,3 +319,4 @@ func TestComplexTypeMap(t *testing.T) {
 		})
 	})
 }
+*/

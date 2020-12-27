@@ -25,8 +25,14 @@ type Object interface {
 	Parent(Identifier) (Identifier, error)
 	SetParent(Identifier, Identifier) error
 
-	//type handling (full type desciption)
+	//Object type handling (full type desciption of this object)
+	ObjectDataType() DataType
+	SetObjectDataType(DataType)
+
+	//Identifier type handling. It could be, that a certain object is used to access
+	//the database for a object of different DataType
 	DataType(Identifier) (DataType, error)
+	SetDataType(Identifier, DataType) error
 
 	//Genertic
 	GetRuntime() *Runtime
@@ -61,7 +67,7 @@ type object struct {
 func NewObject(rntm *Runtime) (*object, error) {
 
 	jsProto := rntm.jsvm.NewObject()
-	jsProto.DefineDataProperty("identifier", rntm.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_FALSE)
+	//jsProto.DefineDataProperty("identifier", rntm.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
 	//build the object
 	obj := object{
@@ -126,7 +132,30 @@ func (self *object) DataType(id Identifier) (DataType, error) {
 	return dt.(DataType), nil
 }
 
+func (self *object) SetDataType(id Identifier, dt DataType) error {
+
+	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__objects"))
+	if err != nil {
+		return err
+	}
+	err = value.Write(dt)
+	if err != nil {
+		return utils.StackError(err, "Unable to decode datatype from DB")
+	}
+
+	return nil
+}
+
+func (self *object) ObjectDataType() DataType {
+	return self.dataType
+}
+
+func (self *object) SetObjectDataType(dt DataType) {
+	self.dataType = dt
+}
+
 func (self *object) GetJSObject(id Identifier) *goja.Object {
+
 	obj := self.rntm.jsvm.CreateObject(self.jsProto)
 	obj.Set("identifier", self.rntm.jsvm.ToValue(id))
 	return obj

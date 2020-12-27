@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+
 	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/mr-tron/base58/base58"
@@ -47,6 +48,9 @@ func (self Identifier) Data() []byte {
 }
 
 func (self Identifier) Hash() [32]byte {
+	if !self.Valid() {
+		return [32]byte{}
+	}
 	return sha256.Sum256(self.Data())
 }
 

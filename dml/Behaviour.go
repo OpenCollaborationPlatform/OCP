@@ -68,14 +68,17 @@ type BehaviourHandler interface {
 	//here general behaviour objects are handled, as a object has a defined set of behaviours.
 	//This does not provide any database access, only logic
 	HasBehaviour(string) bool
-	GetBehaviour(string) Behaviour
-	AddBehaviour(string, Behaviour) error
+	GetBehaviourObject(string) Behaviour
+	AddBehaviourObject(string, Behaviour) error
 	Behaviours() []string
 
 	//This function is used to retrieve a behaviour database access Identifier
 	GetBehaviourIdentifier(Identifier, string) (Identifier, error)
 	SetBehaviourIdentifier(Identifier, string, Identifier) error
 	HasBehaviourIdentifier(Identifier, string) (bool, error)
+
+	//convinience function for combined logic and db access
+	GetBehaviour(Identifier, string) (dmlSet, error)
 
 	//Setup all behaviours, possible including all childs
 	//to be called after data hirarchy is setup (parent and children)
@@ -97,7 +100,7 @@ func (self *behaviourHandler) HasBehaviour(name string) bool {
 	return has
 }
 
-func (self *behaviourHandler) AddBehaviour(name string, behaviour Behaviour) error {
+func (self *behaviourHandler) AddBehaviourObject(name string, behaviour Behaviour) error {
 
 	if self.HasBehaviour(name) {
 		return fmt.Errorf("Behaviour already set, cannot override")
@@ -106,7 +109,7 @@ func (self *behaviourHandler) AddBehaviour(name string, behaviour Behaviour) err
 	return nil
 }
 
-func (self *behaviourHandler) GetBehaviour(name string) Behaviour {
+func (self *behaviourHandler) GetBehaviourObject(name string) Behaviour {
 
 	val, has := self.behvrs[name]
 	if !has {
@@ -159,6 +162,16 @@ func (self *behaviourHandler) HasBehaviourIdentifier(id Identifier, name string)
 		return false, err
 	}
 	return map_.HasKey(name), nil
+}
+
+func (self *behaviourHandler) GetBehaviour(id Identifier, name string) (dmlSet, error) {
+
+	bhvrID, err := self.GetBehaviourIdentifier(id, name)
+	if err != nil {
+		return dmlSet{}, err
+	}
+
+	return dmlSet{obj: self.GetBehaviourObject(name), id: bhvrID}, nil
 }
 
 /*

@@ -403,7 +403,7 @@ func (self *propertyHandler) SetupJSProperties(rntm *Runtime, proto *goja.Object
 			id := call.This.ToObject(rntm.jsvm).Get("identifier").Export()
 			identifier, ok := id.(Identifier)
 			if !ok {
-				panic("Called object does not have identifier setup correctly")
+				panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
 			}
 
 			//return ob object is different than POD

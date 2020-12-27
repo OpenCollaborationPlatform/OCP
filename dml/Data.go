@@ -19,22 +19,26 @@ type Data interface {
 	BehaviourHandler
 
 	//Access a value by name. Could be overriden by some objects, e.g. maps and vectors
-	GetValueByName(id Identifier, name string) interface{}
+	GetValueByName(id Identifier, name string) (interface{}, error)
 
 	//Data hirarchy allows childs. Here we add the structure and logic by
 	//adding static objects. Database access by identifiers is handled seperatly
-	AddChild(Data)
-	GetChilds() []Data
+	AddChildObject(Data)
+	GetChildObjects() []Data
 
 	//Data hirarchy allows childs
 	AddChildIdentifier(Identifier, Identifier) error
 	GetChildIdentifiers(Identifier) ([]Identifier, error)
 	GetChildIdentifierByName(Identifier, string) (Identifier, error)
 
+	//little convinience function for children hirarchy combining objects and IDs
+	GetChildren(Identifier) ([]dmlSet, error)
+	GetChildByName(Identifier, string) (dmlSet, error)
+
 	//Subobject handling is more than only childrens
 	//Hirarchy + dynamic objects, optional behaviours
-	GetSubobjectIdentifiers(id Identifier, bhvr bool) ([]Identifier, error)
-	GetSubobjectIdentifierByName(id Identifier, name string, bhvr bool) (Identifier, error)
+	GetSubobject(id Identifier, bhvr bool) ([]dmlSet, error)
+	GetSubobjectByName(id Identifier, name string, bhvr bool) (dmlSet, error)
 
 	Created(id Identifier) //emits onCreated event for this and all subobjects (not behaviours)
 }
@@ -69,11 +73,11 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 	return &dat, nil
 }
 
-func (self *DataImpl) AddChild(child Data) {
+func (self *DataImpl) AddChildObject(child Data) {
 	self.children = append(self.children, child)
 }
 
-func (self *DataImpl) GetChildren() []Data {
+func (self *DataImpl) GetChildObjects() []Data {
 	return self.children
 }
 
@@ -130,12 +134,45 @@ func (self *DataImpl) GetChildIdentifierByName(id Identifier, name string) (Iden
 	return Identifier{}, fmt.Errorf("No such object available")
 }
 
-func (self *DataImpl) GetSubobjectIdentifiers(id Identifier, bhvr bool) ([]Identifier, error) {
+func (self *DataImpl) GetChildren(id Identifier) ([]dmlSet, error) {
 
-	result := make([]Identifier, 0)
+	childIDs, err := self.GetChildIdentifiers(id)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dmlSet, len(childIDs))
+	for i, childID := range childIDs {
+		childDT, err := self.DataType(childID)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = dmlSet{obj: self.rntm.objects[childDT].(Data), id: childID}
+	}
+	return result, nil
+}
+
+func (self *DataImpl) GetChildByName(id Identifier, name string) (dmlSet, error) {
+
+	childID, err := self.GetChildIdentifierByName(id, name)
+	if err != nil {
+		return dmlSet{}, err
+	}
+
+	childDT, err := self.DataType(childID)
+	if err != nil {
+		return dmlSet{}, err
+	}
+
+	return dmlSet{obj: self.rntm.objects[childDT].(Data), id: childID}, nil
+}
+
+func (self *DataImpl) GetSubobject(id Identifier, bhvr bool) ([]dmlSet, error) {
+
+	result := make([]dmlSet, 0)
 
 	//add hirarchy
-	children, err := self.GetChildIdentifiers(id)
+	children, err := self.GetChildren(id)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +182,7 @@ func (self *DataImpl) GetSubobjectIdentifiers(id Identifier, bhvr bool) ([]Ident
 	if bhvr {
 		bhvrs := self.Behaviours()
 		for _, name := range bhvrs {
-			bhvr, err := self.GetBehaviourIdentifier(id, name)
+			bhvr, err := self.GetBehaviour(id, name)
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to query behaviour manager")
 			}
@@ -156,10 +193,10 @@ func (self *DataImpl) GetSubobjectIdentifiers(id Identifier, bhvr bool) ([]Ident
 	return result, nil
 }
 
-func (self *DataImpl) GetSubobjectIdentifierByName(id Identifier, name string, bhvr bool) (Identifier, error) {
+func (self *DataImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) (dmlSet, error) {
 
 	//search hirarchy
-	child, err := self.GetChildIdentifierByName(id, name)
+	child, err := self.GetChildByName(id, name)
 	if err == nil {
 		return child, nil
 	}
@@ -167,11 +204,11 @@ func (self *DataImpl) GetSubobjectIdentifierByName(id Identifier, name string, b
 	//search behaviour
 	if bhvr {
 		if self.HasBehaviour(name) {
-			return self.GetBehaviourIdentifier(id, name)
+			return self.GetBehaviour(id, name)
 		}
 	}
 
-	return Identifier{}, fmt.Errorf("No such name known")
+	return dmlSet{}, fmt.Errorf("No such name known")
 }
 
 func (self *DataImpl) GetValueByName(id Identifier, name string) (interface{}, error) {

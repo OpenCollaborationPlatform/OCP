@@ -196,6 +196,7 @@ type EventHandler interface {
 	GetEvent(name string) Event
 	Events() []string
 	SetupJSEvents(*goja.Object) error
+	InitializeEventDB(Identifier) error
 }
 
 func NewEventHandler() eventHandler {
@@ -245,5 +246,18 @@ func (self *eventHandler) SetupJSEvents(jsobj *goja.Object) error {
 		}*/
 	//TODO: event need to be handled as property with setter/getter to allow
 	//		access to the identifier and to create the correct object than
+	return nil
+}
+
+func (self *eventHandler) InitializeEventDB(id Identifier) error {
+
+	//the only data in the DB is the enabled flag of the events. Write it to default
+	//enabled
+	for _, event := range self.events {
+		err := event.Enable(id)
+		if err != nil {
+			return utils.StackError(err, "Unable to initialize event DB")
+		}
+	}
 	return nil
 }

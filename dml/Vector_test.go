@@ -1,5 +1,6 @@
 package dml
 
+/*
 import (
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
@@ -24,26 +25,26 @@ func TestPODVector(t *testing.T) {
 
 		code := `Data {
 					.name:"toplevel"
-					
+
 					Vector {
 						.name: "IntVec"
 						.type: int
 					}
-					
+
 					Vector {
 						.name: "BoolVec"
 						.type: bool
 					}
-					
+
 					Vector {
 						.name: "StringVec"
 						.type: string
 					}
-					
+
 					Vector {
 						.name: "FloatVec"
 						.type: float
-					}					
+					}
 				}`
 
 		rntm := NewRuntime(store)
@@ -337,7 +338,7 @@ func TestTypeVector(t *testing.T) {
 				code = `
 						obj = toplevel.TypeVec.Get(0)
 						if (obj.parent != toplevel.TypeVec) {
-							throw "parent not set correctly"	
+							throw "parent not set correctly"
 						}
 					`
 				_, err := rntm.RunJavaScript("user3", code)
@@ -360,3 +361,4 @@ func TestTypeVector(t *testing.T) {
 		})
 	})
 }
+*/

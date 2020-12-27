@@ -1,6 +1,7 @@
 //parser for the datastructure markup language
 package dml
 
+/*
 import (
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"index/suffixarray"
@@ -118,16 +119,16 @@ func TestTransactionBehaviour(t *testing.T) {
 		var code = `
 				Data {
 					.name: "Document"
-					
+
 					Data {
 						.name: "result"
 						property string value: ""
 					}
-					
+
 					Transaction {
-						
+
 						.name: "trans"
-						
+
 						.onOpen: function() {
 							this.parent.result.value += "o1"
 						}
@@ -135,57 +136,57 @@ func TestTransactionBehaviour(t *testing.T) {
 						.onClosing: function() {this.parent.result.value += "c1"}
 						.onFailure: function() {this.parent.result.value += "f1"}
 					}
-					
+
 					Data {
 						.name: "Child"
-						
+
 						Data {
 							.name: "ChildChild"
-							
+
 							property int value: 0
 						}
-						
+
 						Map {
 							.name: "ChildMap"
 							.key: string
 							.value: Data {
 								.name: "sub"
 								property int value: 0
-							}	
+							}
 						}
-						
+
 						Transaction {
 							.name: "ChildTransaction"
 							.recursive: true
-						
+
 							.onOpen: function() {Document.result.value += "o2"}
 							.onParticipation: function() {Document.result.value += "p2"}
 							.onClosing: function() {Document.result.value += "c2"}
 							.onFailure: function() {Document.result.value += "f2"}
 						}
 					}
-					
+
 					Data {
 						.name: "Child2"
 					} // test object without transaction behaviour
-					
+
 					Data {
 						.name: "Child3"
-						
+
 						property bool created: false
-						
+
 						.onCreated: function() {
 							if (this.Transaction.InTransaction()) {
-								throw "In transaction, but should not"	
+								throw "In transaction, but should not"
 							}
 						}
-						
+
 						Transaction{
 							.name: "Transaction"
 							.automatic: true
-						} 
+						}
 					}
-							
+
 				}`
 
 		rntm := NewRuntime(store)
@@ -380,75 +381,75 @@ func TestTransactionAbort(t *testing.T) {
 		var code = `
 				Data {
 					.name: "Document"
-					
+
 					property  int p: 1
 					property bool abort: false
-					
+
 					Data {
 						.name: "DocumentObject"
-							
+
 						property int p: 1
-						
+
 						function test() {
 							this.p = 10
-							this.parent.p = 10	
+							this.parent.p = 10
 						}
 					}
-					
+
 					Data {
 						.name: "TransDocumentObject"
-							
+
 						property int p: 1
-						
+
 						Transaction{
 							.name: "trans"
 						}
 					}
-					
+
 					Data {
 						.name: "FailTransDocumentObject"
-							
+
 						property int p: 1
-						
+
 						Transaction{
 							.name: "trans"
-							
-							.onParticipation: function() {	
+
+							.onParticipation: function() {
 								throw("Unable to take part in transaction")
 							}
 						}
 					}
-					
+
 					Transaction {
-						
+
 						.name: "trans"
-						
+
 						function CanBeAdded() {
 							return !this.parent.abort
 						}
 					}
-					
+
 					Data {
 						.name: "DepTest"
-						
+
 						Data {
 							.name: "Child1"
 							Transaction {
-								.name: "Transaction"	
+								.name: "Transaction"
 							}
 						}
-						
+
 						Data {
 							.name: "Child2"
 							property int p: 0
-							
+
 							Transaction {
 								.name: "Transaction"
 								.automatic: true
-								
+
 								function DependentObjects() {
 									return [Document.DepTest.Child1]
-								}	
+								}
 							}
 						}
 					}
@@ -629,14 +630,14 @@ func TestTransactionAbort(t *testing.T) {
 			})
 		})
 
-		Convey("Changing a object with automatic transaction enabled", func() { 
-				
+		Convey("Changing a object with automatic transaction enabled", func() {
+
 			code = `Transaction.Close(); Document.DepTest.Child2.p = 1`
 			_, err := rntm.RunJavaScript("User1", code)
 			So(err, ShouldBeNil)
-			
-			Convey("should add this object to the transaction", func() { 
-			
+
+			Convey("should add this object to the transaction", func() {
+
 				store.Begin()
 				defer store.Rollback()
 
@@ -649,9 +650,9 @@ func TestTransactionAbort(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(objs[0].Id().Name, ShouldEqual, "Child2")
 			})
-			
-			Convey("and also adds the dependent object to the transaction", func() { 
-			
+
+			Convey("and also adds the dependent object to the transaction", func() {
+
 				store.Begin()
 				defer store.Rollback()
 
@@ -668,3 +669,4 @@ func TestTransactionAbort(t *testing.T) {
 		})
 	})
 }
+*/

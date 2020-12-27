@@ -1,5 +1,6 @@
 package dml
 
+/*
 import (
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
@@ -25,11 +26,11 @@ func TestPODVariant(t *testing.T) {
 		code := `Data {
 					.name:"toplevel"
 					const property type other: bool
-					
+
 					Variant {
 						.name: "Variant"
 						.type: int
-					}				
+					}
 				}`
 
 		rntm := NewRuntime(store)
@@ -91,12 +92,12 @@ func TestTypeVariant(t *testing.T) {
 						.name: "Variant"
 						.type: int
 					}
-					
+
 					Variant {
 						.name: "TypeVariant"
 						.type: Data {
 							.name: "TestData"
-						}	
+						}
 					}
 				}`
 
@@ -147,3 +148,4 @@ func TestTypeVariant(t *testing.T) {
 		})
 	})
 }
+*/

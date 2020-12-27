@@ -1,5 +1,6 @@
 package dml
 
+/*
 import (
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
@@ -24,17 +25,17 @@ func TestTypeProperty(t *testing.T) {
 
 		code := `Data {
 				.name:"toplevel"
-				
+
 				const property type test: Data {
 					property int test: 10
 				}
-				
+
 				property type test2: string
-				
+
 				function dtAsInt() {
 					return new DataType("int")
 				}
-				
+
 				function dtAsComplex() {
 					var code = "Data{ property string test }"
 					return new DataType(code)
@@ -102,3 +103,4 @@ func TestTypeProperty(t *testing.T) {
 
 	})
 }
+*/

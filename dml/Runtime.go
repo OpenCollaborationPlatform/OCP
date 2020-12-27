@@ -54,7 +54,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 		mutex:        &sync.Mutex{},
 		ready:        false,
 		currentUser:  "none",
-		mainObj:      nil,
+		mainObj:      dmlSet{},
 		objects:      make(map[DataType]Object, 0),
 		behaviours:   make(map[string]BehaviourManager, 0),
 	}
@@ -97,7 +97,7 @@ type Runtime struct {
 	importPath  string
 	ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
 	currentUser User    //user that currently access the runtime
-	mainObj     Data
+	mainObj     dmlSet
 	objects     map[DataType]Object
 
 	//managers
@@ -155,6 +155,13 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		}
 	}
 
+	//process the AST into usable objects
+	mainObj, err := self.buildObject(ast.Object)
+	if err != nil {
+		return utils.StackError(err, "Unable to parse dml code")
+		//TODO clear the database entries...
+	}
+
 	//check if the data structure is setup, or if we need to do this
 	var setKey [32]byte
 	copy(setKey[:], []byte("__internal"))
@@ -163,29 +170,48 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		return utils.StackError(err, "Unable to access DB")
 	}
 	vSet, _ := set.(*datastore.ValueSet)
-	//setup := !vSet.HasKey([]byte("MainIdentifier"))
+	isSetup := vSet.HasKey([]byte("MainIdentifier"))
 
-	//process the AST into usable objects
-	obj, err := self.buildObject(ast.Object)
-	if err != nil {
-		return utils.StackError(err, "Unable to parse dml code")
-		//TODO clear the database entries...
+	var mainID Identifier
+	if isSetup {
+		//no setup required, get the mainID
+		val, err := vSet.GetOrCreateValue([]byte("MainIdentifier"))
+		if err != nil {
+			return utils.StackError(err, "Unable to parse dml code due to database access error")
+		}
+		idVal, err := val.Read()
+		if err != nil {
+			return utils.StackError(err, "Unable to parse dml code due to database access error")
+		}
+		mainID = idVal.(Identifier)
+
+	} else {
+		//nothing setup yet, lets do it
+		mainID, err = self.setupObject(mainObj, Identifier{})
+		if err != nil {
+			return utils.StackError(err, "Unable to parse dml code due to database access error while setup")
+		}
 	}
+
 	//obj.(Data).SetupBehaviours(obj.(Data), true)
-	self.mainObj = obj.(Data)
+	self.mainObj = dmlSet{mainObj.(Data), mainID}
 	self.ready = true
 
-	//self.jsvm.Set(self.mainObj.Id().Name, self.mainObj.GetJSObject())
+	//expose main object to js
+	getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+		return self.mainObj.obj.GetJSObject(self.mainObj.id)
+	})
+	self.jsvm.GlobalObject().DefineAccessorProperty(self.mainObj.id.Name, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 	//call everyones "onCreated"
-	val, _ := vSet.GetOrCreateValue([]byte("MainIdentifier"))
+	/*val, _ := vSet.GetOrCreateValue([]byte("MainIdentifier"))
 	id, err := val.Read()
 	if err != nil {
 		return utils.StackError(err, "Unable to access DB")
 	}
 	mainId := id.(Identifier)
 	obj.(Data).Created(mainId)
-
+	*/
 	return err
 }
 
@@ -647,9 +673,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create object %v (%v)", objName, astObj.Identifier)
 	}
-	if err != nil {
-		return nil, err
-	}
+	obj.SetObjectDataType(dt)
 
 	//Now we create all additional properties and set them up in js
 	for _, astProp := range astObj.Properties {
@@ -703,11 +727,31 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 			//check if this child is a behaviour, and handle accordingly
 			behaviour, isBehaviour := child.(Behaviour)
 			if isBehaviour {
-				obj.(Data).AddBehaviour(astChild.Identifier, behaviour)
+				obj.(Data).AddBehaviourObject(astChild.Identifier, behaviour)
 			} else {
-				obj.(Data).AddChild(child.(Data))
+				obj.(Data).AddChildObject(child.(Data))
 			}
 		}
+
+		//expose children list to javascript
+		getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+			id := call.This.ToObject(self.jsvm).Get("identifier").Export()
+			identifier, ok := id.(Identifier)
+			if !ok {
+				panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
+			}
+			children, err := obj.(Data).GetChildren(identifier)
+			if err != nil {
+				panic(err.Error())
+			}
+			result := make([]*goja.Object, len(children))
+			for i, child := range children {
+				result[i] = child.obj.GetJSObject(child.id)
+			}
+			return self.jsvm.ToValue(result)
+		})
+		obj.GetJSPrototype().DefineAccessorProperty("children", getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
+
 	} else if len(astObj.Objects) > 0 {
 		return nil, fmt.Errorf("Behaviours cannot have child objects")
 	}
@@ -723,20 +767,6 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 			if assignObj.HasProperty(subkey) || assignObj.HasEvent(subkey) {
 				break
 			}
-			/*if assignObj.GetParent().Id().Name == subkey {
-				assignObj = assignObj.GetParent()
-				continue
-			}
-			data, ok := assignObj.(Data)
-			if ok {
-				child, err := data.GetChildByName(subkey)
-				if err != nil {
-					return nil, fmt.Errorf("Unable to assign to %v: unknown identifier", assign.Key)
-				}
-				assignObj = child
-			} else {
-				return nil, fmt.Errorf("Unable to assign to %v: unknown identifier", assign.Key)
-			}*/
 		}
 
 		parts := assign.Key[assignIdx:]
@@ -757,6 +787,62 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	}
 
 	return obj, nil
+}
+
+func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, error) {
+
+	//get the infos we need for the ID
+	astObj, err := obj.ObjectDataType().complexAsAst()
+	if err != nil {
+		return Identifier{}, utils.StackError(err, "Unable to setup object")
+	}
+	objType := astObj.Identifier
+	var objName string
+	for _, astAssign := range astObj.Assignments {
+		if astAssign.Key[0] == "name" {
+			objName = *astAssign.Value.String
+		}
+	}
+
+	//build the ID and store the object and it's datatype
+	id := Identifier{parent.Hash(), objType, objName, ""}
+	obj.SetDataType(id, obj.ObjectDataType())
+
+	//initalize the DB
+	err = obj.InitializeEventDB(id)
+	if err != nil {
+		return Identifier{}, err
+	}
+
+	//setup all children and behaviours
+	data, isData := obj.(Data)
+	if isData {
+		children := data.GetChildObjects()
+		for _, child := range children {
+			childID, err := self.setupObject(child, id)
+			if err != nil {
+				return Identifier{}, err
+			}
+			err = data.AddChildIdentifier(id, childID)
+			if err != nil {
+				return Identifier{}, err
+			}
+		}
+
+		behaviours := data.Behaviours()
+		for _, behaviour := range behaviours {
+			bhvrID, err := self.setupObject(data.GetBehaviourObject(behaviour), id)
+			if err != nil {
+				return Identifier{}, err
+			}
+			err = data.SetBehaviourIdentifier(id, bhvrID.Type, bhvrID)
+			if err != nil {
+				return Identifier{}, err
+			}
+		}
+	}
+
+	return id, nil
 }
 
 func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {

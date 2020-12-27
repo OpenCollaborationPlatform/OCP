@@ -1,5 +1,6 @@
 package dml
 
+/*
 import (
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
@@ -25,12 +26,12 @@ func TestPODGraph(t *testing.T) {
 
 		code := `Data {
 					.name:"toplevel"
-					
+
 					Graph {
 						.name: "IntGraph"
 						.node: int
 						.directed: true
-					}			
+					}
 				}`
 
 		rntm := NewRuntime(store)
@@ -145,7 +146,7 @@ func TestPODGraph(t *testing.T) {
 					toplevel.IntGraph.AddNode(3)
 					toplevel.IntGraph.AddNode(4)
 					toplevel.IntGraph.AddNode(5)
-					
+
 					toplevel.IntGraph.NewEdge(2,1)
 					toplevel.IntGraph.NewEdge(3,1)
 					toplevel.IntGraph.NewEdge(4,2)
@@ -183,3 +184,4 @@ func TestPODGraph(t *testing.T) {
 		})
 	})
 }
+*/
