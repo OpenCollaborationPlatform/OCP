@@ -9,6 +9,9 @@ import (
 	"github.com/dop251/goja"
 )
 
+var parentKey []byte = []byte("__parent")
+var dtKey []byte = []byte("__datatype")
+
 //Interface of an object: All objects, data and behaviour, must be able to handle
 //  - Properties
 //  - Events
@@ -22,16 +25,17 @@ type Object interface {
 	JSObject
 
 	//Object functions
-	Parent(Identifier) (Identifier, error)
-	SetParent(Identifier, Identifier) error
+	GetParentIdentifier(Identifier) (Identifier, error)
+	SetParentIdentifier(Identifier, Identifier) error
+	GetParent(Identifier) (dmlSet, error)
 
 	//Object type handling (full type desciption of this object)
-	ObjectDataType() DataType
+	GetObjectDataType() DataType
 	SetObjectDataType(DataType)
 
 	//Identifier type handling. It could be, that a certain object is used to access
 	//the database for a object of different DataType
-	DataType(Identifier) (DataType, error)
+	GetDataType(Identifier) (DataType, error)
 	SetDataType(Identifier, DataType) error
 
 	//Genertic
@@ -47,6 +51,9 @@ type Object interface {
 	GetCurrentVersion(Identifier) (datastore.VersionID, error)
 	RemoveVersionsUpTo(Identifier, datastore.VersionID) error
 	RemoveVersionsUpFrom(Identifier, datastore.VersionID) error
+
+	//initialization function
+	InitializeDB(Identifier) error
 }
 
 //the most basic implementation of an dml Object. It is intended as dml grouping
@@ -91,9 +98,9 @@ func NewObject(rntm *Runtime) (*object, error) {
 	return &obj, nil
 }
 
-func (self *object) Parent(id Identifier) (Identifier, error) {
+func (self *object) GetParentIdentifier(id Identifier) (Identifier, error) {
 
-	value, err := valueFromStore(self.rntm.datastore, id, []byte("__parent"))
+	value, err := valueFromStore(self.rntm.datastore, id, parentKey)
 	if err != nil {
 		return Identifier{}, err
 	}
@@ -102,12 +109,12 @@ func (self *object) Parent(id Identifier) (Identifier, error) {
 		return Identifier{}, utils.StackError(err, "Unable to decode parent from DB")
 	}
 
-	return parent.(Identifier), nil
+	return *parent.(*Identifier), nil
 }
 
-func (self *object) SetParent(id Identifier, parent Identifier) error {
+func (self *object) SetParentIdentifier(id Identifier, parent Identifier) error {
 
-	value, err := valueFromStore(self.rntm.datastore, id, []byte("__parent"))
+	value, err := valueFromStore(self.rntm.datastore, id, parentKey)
 	if err != nil {
 		return err
 	}
@@ -118,9 +125,29 @@ func (self *object) SetParent(id Identifier, parent Identifier) error {
 	return nil
 }
 
-func (self *object) DataType(id Identifier) (DataType, error) {
+func (self *object) GetParent(id Identifier) (dmlSet, error) {
 
-	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__objects"))
+	parent, err := self.GetParentIdentifier(id)
+	if err != nil {
+		return dmlSet{}, err
+	}
+
+	dt, err := self.GetDataType(parent)
+	if err != nil {
+		return dmlSet{}, utils.StackError(err, "Unable to access parent datatype")
+	}
+
+	obj, ok := self.rntm.objects[dt]
+	if !ok {
+		return dmlSet{}, fmt.Errorf("Parent is not setup correctly: no logic object available")
+	}
+
+	return dmlSet{obj: obj, id: parent}, nil
+}
+
+func (self *object) GetDataType(id Identifier) (DataType, error) {
+
+	value, err := valueFromStore(self.rntm.datastore, id, dtKey)
 	if err != nil {
 		return DataType{}, err
 	}
@@ -129,24 +156,24 @@ func (self *object) DataType(id Identifier) (DataType, error) {
 		return DataType{}, utils.StackError(err, "Unable to decode datatype from DB")
 	}
 
-	return dt.(DataType), nil
+	return *dt.(*DataType), nil
 }
 
 func (self *object) SetDataType(id Identifier, dt DataType) error {
 
-	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__objects"))
+	value, err := valueFromStore(self.rntm.datastore, id, dtKey)
 	if err != nil {
 		return err
 	}
 	err = value.Write(dt)
 	if err != nil {
-		return utils.StackError(err, "Unable to decode datatype from DB")
+		return utils.StackError(err, "Unable to encode datatype into DB")
 	}
 
 	return nil
 }
 
-func (self *object) ObjectDataType() DataType {
+func (self *object) GetObjectDataType() DataType {
 	return self.dataType
 }
 
@@ -252,4 +279,16 @@ func (self *object) RemoveVersionsUpTo(id Identifier, vId datastore.VersionID) e
 func (self *object) RemoveVersionsUpFrom(id Identifier, vId datastore.VersionID) error {
 	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
 	return mngr.RemoveVersionsUpFrom(vId)
+}
+
+func (self *object) InitializeDB(id Identifier) error {
+
+	//first all handlers
+	self.InitializeEventDB(id)
+
+	//now our own DB entries
+	self.SetParentIdentifier(id, Identifier{})
+	self.SetDataType(id, DataType{})
+
+	return nil
 }

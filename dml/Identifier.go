@@ -58,8 +58,8 @@ func (self Identifier) Encode() string {
 	return base58.Encode(self.Data())
 }
 
-func (self Identifier) Equal(id Identifier) bool {
-	return bytes.Equal(self.Parent[:], id.Parent[:]) && self.Type == id.Type && self.Name == id.Name
+func (self Identifier) Equals(id Identifier) bool {
+	return bytes.Equal(self.Parent[:], id.Parent[:]) && self.Type == id.Type && self.Name == id.Name && self.Uuid == id.Uuid
 }
 
 func (self Identifier) Valid() bool {

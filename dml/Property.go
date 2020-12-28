@@ -23,6 +23,7 @@ type Property interface {
 	//required for startup, sets the initial value. If the property already
 	//has a value set (in database) this call does nothing.
 	SetDefaultValue(value interface{}) error
+	GetDefaultValue() interface{}
 }
 
 func NewProperty(name string, dtype DataType, default_value interface{}, rntm *Runtime, parentProto *goja.Object, constprop bool) (Property, error) {
@@ -144,11 +145,15 @@ func (self *dataProperty) SetDefaultValue(val interface{}) error {
 	return nil
 }
 
+func (self *dataProperty) GetDefaultValue() interface{} {
+	return self.default_val
+}
+
 func (self *dataProperty) GetValue(id Identifier) interface{} {
 
 	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to access DB for property value")
 	}
 
 	if !dbValue.IsValid() {
@@ -157,8 +162,7 @@ func (self *dataProperty) GetValue(id Identifier) interface{} {
 
 	val, err := dbValue.Read()
 	if err != nil {
-		log.Printf("Error reading value: %s", err)
-		return nil
+		return utils.StackError(err, "Error reading database vaue for property access")
 	}
 
 	return val
@@ -256,6 +260,10 @@ func (self *typeProperty) SetDefaultValue(val interface{}) error {
 	return nil
 }
 
+func (self *typeProperty) GetDefaultValue() interface{} {
+	return self.default_val
+}
+
 //Const property
 //**************
 
@@ -278,6 +286,11 @@ func (self *constProperty) SetValue(id Identifier, val interface{}) error {
 	return fmt.Errorf("Const property cannot set value")
 }
 
+func (self *constProperty) GetValue(id Identifier) interface{} {
+
+	return self.value
+}
+
 func (self *constProperty) SetDefaultValue(val interface{}) error {
 
 	//check if the type is correct
@@ -290,8 +303,7 @@ func (self *constProperty) SetDefaultValue(val interface{}) error {
 	return nil
 }
 
-func (self *constProperty) GetValue(id Identifier) interface{} {
-
+func (self *constProperty) GetDefaultValue() interface{} {
 	return self.value
 }
 
@@ -312,6 +324,11 @@ func (self *constTypeProperty) SetValue(id Identifier, val interface{}) error {
 	return fmt.Errorf("Const property cannot set value")
 }
 
+//we only return basic information, mailny for JS accessibility
+func (self *constTypeProperty) GetValue(id Identifier) interface{} {
+	return self.data
+}
+
 //we store the basic information, plain type string or parser result for object
 func (self *constTypeProperty) SetDefaultValue(val interface{}) error {
 
@@ -326,8 +343,7 @@ func (self *constTypeProperty) SetDefaultValue(val interface{}) error {
 	return nil
 }
 
-//we only return basic information, mailny for JS accessibility
-func (self *constTypeProperty) GetValue(id Identifier) interface{} {
+func (self *constTypeProperty) GetDefaultValue() interface{} {
 	return self.data
 }
 

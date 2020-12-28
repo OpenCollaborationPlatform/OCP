@@ -183,13 +183,21 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		if err != nil {
 			return utils.StackError(err, "Unable to parse dml code due to database access error")
 		}
-		mainID = idVal.(Identifier)
+		mainID = *idVal.(*Identifier)
 
 	} else {
 		//nothing setup yet, lets do it
 		mainID, err = self.setupObject(mainObj, Identifier{})
 		if err != nil {
 			return utils.StackError(err, "Unable to parse dml code due to database access error while setup")
+		}
+		value, err := vSet.GetOrCreateValue([]byte("MainIdentifier"))
+		if err != nil {
+			return utils.StackError(err, "Unable to access  database while setup")
+		}
+		err = value.Write(mainID)
+		if err != nil {
+			return utils.StackError(err, "Unable to access  database while setup")
 		}
 	}
 
@@ -644,9 +652,6 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 
 	//get the datatype, and check if we have that type already
 	dt := MustNewDataType(astObj)
-	if obj, has := self.objects[dt]; has {
-		return obj, nil
-	}
 
 	//check if we build this already
 	obj, exist := self.objects[dt]
@@ -674,6 +679,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		return nil, utils.StackError(err, "Unable to create object %v (%v)", objName, astObj.Identifier)
 	}
 	obj.SetObjectDataType(dt)
+	self.objects[dt] = obj
 
 	//Now we create all additional properties and set them up in js
 	for _, astProp := range astObj.Properties {
@@ -731,6 +737,44 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 			} else {
 				obj.(Data).AddChildObject(child.(Data))
 			}
+
+			//expose parent to js
+			getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+				id := call.This.ToObject(self.jsvm).Get("identifier").Export()
+				identifier, ok := id.(Identifier)
+				if !ok {
+					panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
+				}
+				parent, err := obj.GetParent(identifier)
+				if err != nil {
+					panic(utils.StackError(err, "Unable to access parent").Error())
+				}
+				if !parent.valid() {
+					return self.jsvm.ToValue(nil)
+				}
+				return parent.obj.GetJSObject(parent.id)
+			})
+			child.GetJSPrototype().DefineAccessorProperty("parent", getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
+
+			//expose child as parent property (do this here as now name is easily accessbile
+			childName := child.GetProperty("name").GetDefaultValue().(string)
+			getter = self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+				id := call.This.ToObject(self.jsvm).Get("identifier").Export()
+				identifier, ok := id.(Identifier)
+				if !ok {
+					panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
+				}
+
+				var name = childName
+				child, err := obj.(Data).GetChildByName(identifier, name)
+				if err != nil {
+					panic(utils.StackError(err, "Unable to access child").Error())
+				}
+
+				return child.obj.GetJSObject(child.id)
+			})
+			obj.GetJSPrototype().DefineAccessorProperty(childName, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
+
 		}
 
 		//expose children list to javascript
@@ -742,7 +786,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 			}
 			children, err := obj.(Data).GetChildren(identifier)
 			if err != nil {
-				panic(err.Error())
+				panic(utils.StackError(err, "Unable to collect children").Error())
 			}
 			result := make([]*goja.Object, len(children))
 			for i, child := range children {
@@ -792,7 +836,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, error) {
 
 	//get the infos we need for the ID
-	astObj, err := obj.ObjectDataType().complexAsAst()
+	astObj, err := obj.GetObjectDataType().complexAsAst()
 	if err != nil {
 		return Identifier{}, utils.StackError(err, "Unable to setup object")
 	}
@@ -804,12 +848,17 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 		}
 	}
 
-	//build the ID and store the object and it's datatype
+	//build the ID
 	id := Identifier{parent.Hash(), objType, objName, ""}
-	obj.SetDataType(id, obj.ObjectDataType())
 
 	//initalize the DB
-	err = obj.InitializeEventDB(id)
+	err = obj.InitializeDB(id)
+	if err != nil {
+		return Identifier{}, err
+	}
+
+	//write the requiered values
+	err = obj.SetDataType(id, obj.GetObjectDataType())
 	if err != nil {
 		return Identifier{}, err
 	}
@@ -827,6 +876,8 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 			if err != nil {
 				return Identifier{}, err
 			}
+
+			child.SetParentIdentifier(childID, id)
 		}
 
 		behaviours := data.Behaviours()
@@ -839,6 +890,8 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 			if err != nil {
 				return Identifier{}, err
 			}
+
+			data.GetBehaviourObject(behaviour).SetParentIdentifier(bhvrID, id)
 		}
 	}
 

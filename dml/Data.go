@@ -111,7 +111,7 @@ func (self *DataImpl) GetChildIdentifiers(id Identifier) ([]Identifier, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to read child entry")
 		}
-		result[i] = id.(Identifier)
+		result[i] = *id.(*Identifier)
 	}
 	return result, nil
 }
@@ -124,10 +124,7 @@ func (self *DataImpl) GetChildIdentifierByName(id Identifier, name string) (Iden
 	}
 	for _, child := range childs {
 
-		//all children are objects, hence we can use our own Name property to
-		//access them, and get the correct name by the child ID
-		childname := self.GetProperty("name").GetValue(child)
-		if childname == name {
+		if child.Name == name {
 			return child, nil
 		}
 	}
@@ -143,9 +140,9 @@ func (self *DataImpl) GetChildren(id Identifier) ([]dmlSet, error) {
 
 	result := make([]dmlSet, len(childIDs))
 	for i, childID := range childIDs {
-		childDT, err := self.DataType(childID)
+		childDT, err := self.GetDataType(childID)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to query child datatype")
 		}
 		result[i] = dmlSet{obj: self.rntm.objects[childDT].(Data), id: childID}
 	}
@@ -159,9 +156,9 @@ func (self *DataImpl) GetChildByName(id Identifier, name string) (dmlSet, error)
 		return dmlSet{}, err
 	}
 
-	childDT, err := self.DataType(childID)
+	childDT, err := self.GetDataType(childID)
 	if err != nil {
-		return dmlSet{}, err
+		return dmlSet{}, utils.StackError(err, "Unable to query child datatype")
 	}
 
 	return dmlSet{obj: self.rntm.objects[childDT].(Data), id: childID}, nil

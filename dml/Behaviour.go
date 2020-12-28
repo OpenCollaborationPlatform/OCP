@@ -139,7 +139,7 @@ func (self *behaviourHandler) GetBehaviourIdentifier(id Identifier, name string)
 	if err != nil {
 		return Identifier{}, err
 	}
-	return value.(Identifier), nil
+	return *value.(*Identifier), nil
 }
 
 func (self *behaviourHandler) SetBehaviourIdentifier(id Identifier, name string, behaviour Identifier) error {

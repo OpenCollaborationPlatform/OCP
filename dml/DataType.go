@@ -1,13 +1,18 @@
 package dml
 
 import (
+	"encoding/gob"
 	"encoding/json"
 	"fmt"
 
 	"github.com/ickby/CollaborationNode/utils"
 )
 
-//changes value to its main type from multiple subtypes, e.g. int64 from int and int16
+func init() {
+	gob.Register(new(DataType))
+}
+
+//changes Value to its main type from multiple subtypes, e.g. int64 from int and int16
 //Note: No type checking is done!
 func UnifyDataType(val interface{}) interface{} {
 
@@ -65,7 +70,7 @@ func UnifyDataType(val interface{}) interface{} {
 
 //a datatype can be either a pod type or any complex dml object
 type DataType struct {
-	value string
+	Value string
 }
 
 func NewDataType(val interface{}) (DataType, error) {
@@ -121,22 +126,22 @@ func (self DataType) IsValid() bool {
 
 	//as every else strange string is interpretet as complex datatype and we cannot
 	//easily check it is a valid complex, hence we only check if string is empty
-	return self.value != ""
+	return self.Value != ""
 
 }
 
 func (self DataType) IsEqual(dt DataType) bool {
-	return self.value == dt.value
+	return self.Value == dt.Value
 }
 
 func (self DataType) AsString() string {
-	return self.value
+	return self.Value
 }
 
 func (self DataType) IsPOD() bool {
 
 	//check if the type is correct
-	switch self.value {
+	switch self.Value {
 	case "string", "float", "int", "bool":
 		return true
 	}
@@ -189,19 +194,19 @@ func (self DataType) complexAsAst() (*astObject, error) {
 	}
 
 	var astObj *astObject
-	err := json.Unmarshal([]byte(self.value), &astObj)
+	err := json.Unmarshal([]byte(self.Value), &astObj)
 	if err != nil {
 		return nil, utils.StackError(err, "Passed string is not a valid type desciption: unable to unmarshal")
 	}
 	return astObj, nil
 }
 
-func (self DataType) IsNone() bool   { return self.value == "none" }
-func (self DataType) IsString() bool { return self.value == "string" }
-func (self DataType) IsInt() bool    { return self.value == "int" }
-func (self DataType) IsFloat() bool  { return self.value == "float" }
-func (self DataType) IsBool() bool   { return self.value == "bool" }
-func (self DataType) IsType() bool   { return self.value == "type" }
+func (self DataType) IsNone() bool   { return self.Value == "none" }
+func (self DataType) IsString() bool { return self.Value == "string" }
+func (self DataType) IsInt() bool    { return self.Value == "int" }
+func (self DataType) IsFloat() bool  { return self.Value == "float" }
+func (self DataType) IsBool() bool   { return self.Value == "bool" }
+func (self DataType) IsType() bool   { return self.Value == "type" }
 func (self DataType) IsComplex() bool {
 	return !self.IsPOD() &&
 		!self.IsNone() &&
@@ -210,7 +215,7 @@ func (self DataType) IsComplex() bool {
 
 func (self DataType) GetDefaultValue() interface{} {
 
-	switch self.value {
+	switch self.Value {
 	case "string":
 		return string("")
 	case "int":

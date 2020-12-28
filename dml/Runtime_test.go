@@ -162,7 +162,7 @@ func TestDmlFile(t *testing.T) {
 
 			code := `
 				if (Document.children.length != 3) {
-					throw "It must have exactly 3 child"
+					throw "It must have exactly 3 child, not " + Document.children.length
 				}
 				if (Document.children[0].name != "DocumentObject") {
 					throw "child access seems not to work"
@@ -174,7 +174,7 @@ func TestDmlFile(t *testing.T) {
 				if (Document.parent != null) {
 					throw "parent is not null, but should be"
 				}
-				if (Document.children[0].parent != Document) {
+				if (!Document.children[0].parent.identifier.Equals(Document.identifier)) {
 					throw "parent is not set correctly"
 				}
 				if (Document.DocumentObject.name != "DocumentObject") {

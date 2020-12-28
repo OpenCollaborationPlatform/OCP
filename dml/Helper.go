@@ -35,12 +35,12 @@ func (self dmlSet) valid() bool {
 		return false
 	}
 
-	idDt, err := self.obj.DataType(self.id)
+	idDt, err := self.obj.GetDataType(self.id)
 	if err != nil {
 		return false
 	}
 
-	if !idDt.IsEqual(self.obj.ObjectDataType()) {
+	if !idDt.IsEqual(self.obj.GetObjectDataType()) {
 		return false
 	}
 
