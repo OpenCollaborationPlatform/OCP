@@ -317,25 +317,25 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 	}
 
 	//the relevant object
-	obj, err := self.getObjectFromPath(path)
+	dbSet, err := self.getObjectFromPath(path)
 	if err != nil {
 		return false, err
 	}
 
 	//check if it is a method that could be const
-	if obj.HasMethod(accessor) {
-		fnc := obj.GetMethod(accessor)
+	if dbSet.obj.HasMethod(accessor) {
+		fnc := dbSet.obj.GetMethod(accessor)
 		return fnc.IsConst(), nil
 	}
 
-	//check if it is a proprty that could be const
-	if obj.HasProperty(accessor) {
-		prop := obj.GetProperty(accessor)
+	//check if it is a property that could be const
+	if dbSet.obj.HasProperty(accessor) {
+		prop := dbSet.obj.GetProperty(accessor)
 		return prop.IsConst(), nil
 	}
 
 	//events are always non-const
-	if obj.HasEvent(accessor) {
+	if dbSet.obj.HasEvent(accessor) {
 		return false, nil
 	}
 
@@ -496,49 +496,49 @@ func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup
 
 //get the object from the identifier path list (e.g. myobj.childname.yourobject)
 //alternatively to names it can include identifiers (e.g. from Object.Identifier())
-func (self *Runtime) getObjectFromPath(path string) (Object, error) {
-	/*
-		names := strings.Split(path, `.`)
-		if len(names) == 0 {
-			return nil, fmt.Errorf("Not a valid path to object: no names found")
+func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
+
+	names := strings.Split(path, `.`)
+	if len(names) == 0 {
+		return dmlSet{}, fmt.Errorf("Not a valid path to object: no names found")
+	}
+
+	var dbSet dmlSet
+	if names[0] != self.mainObj.id.Name {
+		id, err := IdentifierFromEncoded(names[0])
+		if err != nil {
+			return dmlSet{}, fmt.Errorf("First identifier in %v cannot be found", path)
+		}
+		dt, err := self.mainObj.obj.GetDataType(id)
+		if err != nil {
+			return dmlSet{}, fmt.Errorf("First identifier in %v cannot be found", path)
+		}
+		dtObj, ok := self.objects[dt]
+		if !ok {
+			return dmlSet{}, fmt.Errorf("First identifier in %v cannot be found", path)
+		}
+		dbSet = dmlSet{id: id, obj: dtObj}
+
+	} else {
+		dbSet = self.mainObj
+	}
+
+	for _, name := range names[1:] {
+
+		//check all childs to find the one with given name
+		child, err := dbSet.obj.(Data).GetSubobjectByName(dbSet.id, name, true)
+		if err != nil {
+			return dmlSet{}, utils.StackError(err, "Name %v is not available in object %v", name, dbSet.id.Name)
 		}
 
-		var obj Data
-		if names[0] != self.mainObj.Id().Name {
-			id, err := IdentifierFromEncoded(names[0])
-			if err != nil {
-				return nil, fmt.Errorf("First identifier in %v cannot be found", path)
-			}
-			listobj, ok := self.objects[id]
-			if !ok {
-				return nil, fmt.Errorf("First identifier in %v cannot be found", path)
-			}
-			obj = listobj
-
-		} else {
-			obj = self.mainObj
+		//check if it is a behaviour, and if so end here
+		_, isBehaviour := child.obj.(Behaviour)
+		if isBehaviour {
+			return child, nil
 		}
-
-		for _, name := range names[1:] {
-
-			//check all childs to find the one with given name
-			child, err := obj.GetSubobjectByName(name, true)
-			if err != nil {
-				return nil, utils.StackError(err, "Identifier %v is not available in object %v", name, obj.Id().Name)
-			}
-
-			//check if it is a behaviour, and if so end here
-			_, isBehaviour := child.(Behaviour)
-			if isBehaviour {
-				return child, nil
-			}
-
-			obj = child.(Data)
-
-		}
-		return obj, nil
-	*/
-	return nil, nil
+		dbSet = child
+	}
+	return dbSet, nil
 }
 
 //postprocess for all done operations. Entry point for behaviours

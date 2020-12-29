@@ -69,15 +69,13 @@
 		}
 		
 		function assign() {
-			obj = this
-			this.Sub.test.RegisterCallback(function() {
-				if (this.name != "Sub") {
-					throw "This is " + this.name + " instead of Sub"
-				}
-				if (obj.name != "ThisTest") {
-					throw "This is " + this.name + " instead of ThisTest"
-				}
-			})
+			this.Sub.test.RegisterCallback(this, "callback")
+		}
+		
+		function callback() {
+			if (this.name != "ThisTest") {
+				throw "This is " + this.name + " instead of ThisTest"
+			}
 		}
 	}
 }

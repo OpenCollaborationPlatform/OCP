@@ -120,7 +120,7 @@ func (self *DataImpl) GetChildIdentifierByName(id Identifier, name string) (Iden
 
 	childs, err := self.GetChildIdentifiers(id)
 	if err != nil {
-		return Identifier{}, err
+		return Identifier{}, utils.StackError(err, "Unable to access child identifiers in DB")
 	}
 	for _, child := range childs {
 
@@ -153,7 +153,7 @@ func (self *DataImpl) GetChildByName(id Identifier, name string) (dmlSet, error)
 
 	childID, err := self.GetChildIdentifierByName(id, name)
 	if err != nil {
-		return dmlSet{}, err
+		return dmlSet{}, utils.StackError(err, "Unable to find child in object")
 	}
 
 	childDT, err := self.GetDataType(childID)

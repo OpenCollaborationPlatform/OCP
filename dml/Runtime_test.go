@@ -179,90 +179,69 @@ func TestDmlFile(t *testing.T) {
 			_, err := rntm.RunJavaScript("", code)
 			So(err, ShouldBeNil)
 		})
-		/*
-			Convey("And objects mus be accessbile by id", func() {
 
-				code := `
-					id = Document.DocumentObject.Identifier()
+		Convey("Imported object must be loaded", func() {
 
-					if (!(id in Objects)) {
-						throw "object is not know, but should be"
-					}
+			store.Begin()
+			defer store.Rollback()
+			imp, err := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "ImportTest")
+			So(err, ShouldBeNil)
+			So(imp, ShouldNotBeNil)
 
-					obj = Objects[id]
-
-					if (obj.test != 10) {
-						throw "unable to get correct object from identifier"
-					}
-				`
-				_, err := rntm.RunJavaScript("", code)
+			Convey("and has its own childs correctly setup", func() {
+				impchild, err := imp.obj.(Data).GetChildByName(imp.id, "ImportedChild")
 				So(err, ShouldBeNil)
+				So(impchild, ShouldNotBeNil)
+
+				prop := impchild.obj.GetProperty("test")
+				So(prop, ShouldNotBeNil)
+				So(prop.GetValue(imp.id), ShouldEqual, 10)
 			})
 
-			Convey("Imported object must be loaded", func() {
+			Convey("and is extended wiith custom property and child", func() {
 
-				imp, err := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "ImportTest")
+				prop := imp.obj.GetProperty("annothertest")
+				So(prop, ShouldNotBeNil)
+				So(prop.GetValue(imp.id), ShouldEqual, 4)
+
+				newchild, err := imp.obj.(Data).GetChildByName(imp.id, "DefaultChild")
 				So(err, ShouldBeNil)
-				So(imp, ShouldNotBeNil)
-
-				Convey("and has its own childs correctly setup", func() {
-					impchild, err := imp.obj.(Data).GetChildByName(imp.id, "ImportedChild")
-					So(err, ShouldBeNil)
-					So(impchild, ShouldNotBeNil)
-
-					prop := impchild.obj.GetProperty("test")
-					So(prop, ShouldNotBeNil)
-					store.Begin()
-					defer store.Rollback()
-					So(prop.GetValue(imp.id), ShouldEqual, 10)
-				})
-
-				Convey("and is extended wiith custom property and child", func() {
-
-					prop := imp.obj.GetProperty("annothertest")
-					So(prop, ShouldNotBeNil)
-					store.Begin()
-					defer store.Rollback()
-					So(prop.GetValue(imp.id), ShouldEqual, 4)
-
-					newchild, err := imp.obj.(Data).GetChildByName(imp.id, "DefaultChild")
-					So(err, ShouldBeNil)
-					So(newchild, ShouldNotBeNil)
-				})
+				So(newchild, ShouldNotBeNil)
 			})
+		})
 
-			Convey("This assignment in functions works as expected", func() {
+		Convey("This assignment in functions works as expected", func() {
 
-				thiscode := `Document.ThisTest.assign()
-							Document.ThisTest.Sub.test.Emit()`
+			thiscode := `	Document.ThisTest.assign()
+						 	Document.ThisTest.Sub.test.Emit()`
 
-				_, err := rntm.RunJavaScript("", thiscode)
-				So(err, ShouldBeNil)
-			})
+			_, err := rntm.RunJavaScript("", thiscode)
+			So(err, ShouldBeNil)
+		})
 
-			Convey("and const functions are recognized", func() {
+		Convey("and const functions are recognized", func() {
 
-				c, err := rntm.IsConstant("Document.readString")
-				So(err, ShouldBeNil)
-				So(c, ShouldBeTrue)
+			c, err := rntm.IsConstant("Document.readString")
+			So(err, ShouldBeNil)
+			So(c, ShouldBeTrue)
 
-				c, err = rntm.IsConstant("Document.testFnc")
-				So(err, ShouldBeNil)
-				So(c, ShouldBeFalse)
-			})
+			c, err = rntm.IsConstant("Document.testFnc")
+			So(err, ShouldBeNil)
+			So(c, ShouldBeFalse)
+		})
 
-			Convey("Behaviour Managers shall be callable", func() {
+		Convey("Behaviour Managers shall be callable", func() {
 
-				c, err := rntm.Call("", "Transaction.IsOpen")
-				So(err, ShouldBeNil)
-				So(c, ShouldBeFalse)
-			})
+			c, err := rntm.Call("", "Transaction.IsOpen")
+			So(err, ShouldBeNil)
+			So(c, ShouldBeFalse)
+		})
 
-			Convey("and created event was emitted", func() {
+		Convey("and created event was emitted", func() {
 
-				res, err := rntm.Call("", "Document.created")
-				So(err, ShouldBeNil)
-				So(res, ShouldBeTrue)
-			})*/
+			res, err := rntm.Call("", "Document.created")
+			So(err, ShouldBeNil)
+			So(res, ShouldBeTrue)
+		})
 	})
 }
