@@ -202,6 +202,23 @@ func listFromStore(store *datastore.Datastore, id Identifier, key []byte) (datas
 	return *list, nil
 }
 
+func listVersionedFromStore(store *datastore.Datastore, id Identifier, key []byte) (datastore.ListVersioned, error) {
+
+	set, err := store.GetOrCreateSet(datastore.ListType, true, id.Hash())
+	if err != nil {
+		return datastore.ListVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	lset, done := set.(*datastore.ListVersionedSet)
+	if !done {
+		return datastore.ListVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
+	}
+	list, err := lset.GetOrCreateList(key)
+	if err != nil {
+		return datastore.ListVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return *list, nil
+}
+
 func mapFromStore(store *datastore.Datastore, id Identifier, key []byte) (datastore.Map, error) {
 
 	set, err := store.GetOrCreateSet(datastore.MapType, false, id.Hash())

@@ -700,7 +700,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to create event %v in object %v", astEvent.Key, objName)
 		}
-		err = obj.AddEvent(astEvent.Key, event)
+		err = obj.AddEvent(event)
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to add event %v to object %v", astEvent.Key, objName)
 		}
@@ -989,7 +989,7 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) {
 
 	//build the event
-	evt := NewEvent(parent.GetJSPrototype(), self)
+	evt := NewEvent(astEvt.Key, parent.GetJSPrototype(), self)
 
 	//and see if we should add a default callback
 	if astEvt.Default != nil {

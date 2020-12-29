@@ -34,6 +34,13 @@
 		return this.testS
 	}
 	
+	function testEventCallback(a, b) {
+		if (a != 2 || b != "hello") {
+			throw "wrong arguments: " + a + " " + b
+		}
+		Document.testI = 0
+	}
+	
 	Data {
 		.name: "DocumentObject"
 		property int test: 10

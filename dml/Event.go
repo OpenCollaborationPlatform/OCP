@@ -1,34 +1,49 @@
 package dml
 
 import (
+	"encoding/gob"
 	"errors"
 	"fmt"
 
+	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/dop251/goja"
 )
 
+func init() {
+	gob.Register(new(EventObjectCallback))
+}
+
 type EventCallback func(Identifier, ...interface{}) error
+
+type EventObjectCallback struct {
+	Id       Identifier
+	Function string
+}
 
 type Event interface {
 	JSObject
 	MethodHandler
+
+	GetName() string
 
 	Emit(Identifier, ...interface{}) error
 	Enabled(Identifier) (bool, error)
 	Enable(Identifier) error
 	Disable(Identifier) error
 
-	RegisterCallback(EventCallback) error
+	RegisterCallback(Identifier, Identifier, string) error
 	RegisterJSCallback(func(goja.FunctionCall) goja.Value) error
 }
 
-func NewEvent(jsParentProto *goja.Object, rntm *Runtime) Event {
+func NewEvent(name string, jsParentProto *goja.Object, rntm *Runtime) Event {
 
 	evt := &event{
 		methodHandler: NewMethodHandler(),
 		callbacks:     make([]EventCallback, 0),
+		enabled:       true,
+		name:          name,
 	}
 
 	//now the js object
@@ -42,6 +57,8 @@ func NewEvent(jsParentProto *goja.Object, rntm *Runtime) Event {
 	evt.AddMethod("Enable", enableMethod)
 	disableMethod, _ := NewMethod(evt.Disable, false)
 	evt.AddMethod("Disable", disableMethod)
+	registerMethod, _ := NewMethod(evt.RegisterCallback, false)
+	evt.AddMethod("RegisterCallback", registerMethod)
 
 	evt.jsProto = evtObj
 	evt.rntm = rntm
@@ -56,10 +73,15 @@ type event struct {
 
 	callbacks []EventCallback
 	enabled   bool
+	name      string
 
 	rntm          *Runtime
 	jsProto       *goja.Object
 	jsParentProto *goja.Object //needs to be passed as "this" to event functions
+}
+
+func (self *event) GetName() string {
+	return self.name
 }
 
 func (self *event) Emit(id Identifier, args ...interface{}) error {
@@ -73,21 +95,51 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 		return nil
 	}
 
-	//call all registered functions
-	for _, fnc := range self.callbacks {
-		err = fnc(id, args...)
-		if err != nil {
-			break
+	//all default event callbacks
+	for _, cb := range self.callbacks {
+		cb(id, args...)
+	}
+
+	//call all runtime created callbacks
+	var cbs datastore.ListVersioned
+	cbs, err = listVersionedFromStore(self.rntm.datastore, id, []byte("__event_"+self.name))
+	entries, err := cbs.GetEntries()
+	if err == nil && len(entries) > 0 {
+
+		for _, entry := range entries {
+			var val interface{}
+			val, err = entry.Read()
+			if err != nil {
+				break
+			}
+			cb, ok := val.(*EventObjectCallback)
+			if !ok {
+				break
+			}
+
+			//get the object to call
+			var dt DataType
+			dt, err = self.rntm.mainObj.obj.GetDataType(cb.Id)
+			if err != nil {
+				break
+			}
+
+			obj, ok := self.rntm.objects[dt]
+			if !ok {
+				err = fmt.Errorf("Object to callback not setup correctly")
+				break
+			}
+
+			if !obj.HasMethod(cb.Function) {
+				err = fmt.Errorf("Registerd callback %v not available in object %v", cb.Function, cb.Id.Name)
+				break
+			}
+			idArgs := append([]interface{}{cb.Id}, args...)
+			_, err = obj.GetMethod(cb.Function).Call(idArgs...)
 		}
 	}
 
 	return err
-}
-
-func (self *event) RegisterCallback(cb EventCallback) error {
-
-	self.callbacks = append(self.callbacks, cb)
-	return nil
 }
 
 func (self *event) Enabled(id Identifier) (bool, error) {
@@ -138,9 +190,29 @@ func (self *event) Disable(id Identifier) error {
 	return nil
 }
 
+//This function allows to register object functions as event callbacks
+//note that this registers a callback to a special object, not all objects of the
+//type
+func (self *event) RegisterCallback(id Identifier, cbID Identifier, function string) error {
+
+	cbs, err := listVersionedFromStore(self.rntm.datastore, id, []byte("__event_"+self.name))
+	if err != nil {
+		return utils.StackError(err, "Unable to register callback")
+	}
+	_, err = cbs.Add(EventObjectCallback{cbID, function})
+	if err != nil {
+		return utils.StackError(err, "Unable to register callback")
+	}
+
+	return nil
+}
+
+//this is to be used for anonymous callbacks. Note that this is only allowed for "static"
+//callbacks, not runtime deoendend ones. Hence  use this only for dml event assignents
+//note that it registers a callback for all objects of the type,
 func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error {
 
-	return self.RegisterCallback(func(id Identifier, args ...interface{}) (err error) {
+	callback := func(id Identifier, args ...interface{}) (err error) {
 
 		defer func() {
 			// recover from panic if one occured. Set err to nil otherwise.
@@ -161,24 +233,24 @@ func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) err
 			}
 		}()
 
-		//the arguments for the function call
 		jsArgs := make([]goja.Value, len(args))
 		for i, arg := range args {
 			jsArgs[i] = self.rntm.jsvm.ToValue(arg)
 		}
+		jsObj := self.rntm.jsvm.CreateObject(self.jsParentProto)
+		jsObj.Set("identifier", id)
+		cb(goja.FunctionCall{This: jsObj, Arguments: jsArgs})
 
-		//build the object to call on
-		obj := self.rntm.jsvm.CreateObject(self.jsParentProto)
-		obj.Set("identifier", self.rntm.jsvm.ToValue(id))
+		return err
+	}
 
-		cb(goja.FunctionCall{This: obj, Arguments: jsArgs})
-		return
-	})
+	self.callbacks = append(self.callbacks, callback)
+	return nil
 }
 
 func (self *event) GetJSObject(id Identifier) *goja.Object {
-	obj := self.rntm.jsvm.CreateObject(self.jsProto)
-	obj.Set("identifier", self.rntm.jsvm.ToValue(id))
+	obj := self.GetJSRuntime().CreateObject(self.jsProto)
+	obj.Set("identifier", self.GetJSRuntime().ToValue(id))
 	return obj
 }
 
@@ -192,7 +264,7 @@ func (self *event) GetJSRuntime() *goja.Runtime {
 
 type EventHandler interface {
 	HasEvent(name string) bool
-	AddEvent(name string, evt Event) error
+	AddEvent(evt Event) error
 	GetEvent(name string) Event
 	Events() []string
 	SetupJSEvents(*goja.Object) error
@@ -214,12 +286,13 @@ func (self *eventHandler) HasEvent(name string) bool {
 	return ok
 }
 
-func (self *eventHandler) AddEvent(name string, evt Event) error {
+func (self *eventHandler) AddEvent(evt Event) error {
 
-	if self.HasEvent(name) {
+	if self.HasEvent(evt.GetName()) {
 		return fmt.Errorf("Event already exists")
 	}
-	self.events[name] = evt
+
+	self.events[evt.GetName()] = evt
 	return nil
 }
 
@@ -240,12 +313,22 @@ func (self *eventHandler) Events() []string {
 }
 
 func (self *eventHandler) SetupJSEvents(jsobj *goja.Object) error {
-	/*
-		for key, evt := range self.events {
-			jsobj.Set(key, evt.GetJSObject())
-		}*/
-	//TODO: event need to be handled as property with setter/getter to allow
-	//		access to the identifier and to create the correct object than
+
+	for _, evt := range self.events {
+
+		evt := evt
+		getter := evt.GetJSRuntime().ToValue(func(call goja.FunctionCall) goja.Value {
+
+			id := call.This.ToObject(evt.GetJSRuntime()).Get("identifier").Export()
+			identifier, ok := id.(Identifier)
+			if !ok {
+				panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
+			}
+			return self.GetEvent(evt.GetName()).GetJSObject(identifier)
+		})
+		jsobj.DefineAccessorProperty(evt.GetName(), getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
+	}
+
 	return nil
 }
 

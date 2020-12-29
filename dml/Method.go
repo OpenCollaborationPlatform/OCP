@@ -53,7 +53,7 @@ func (self *method) Call(args ...interface{}) (interface{}, error) {
 	}
 
 	if _, ok := args[0].(Identifier); !ok {
-		return nil, fmt.Errorf("First argument needs to be identifier")
+		return nil, fmt.Errorf("First argument needs to be identifier, not %T", args[0])
 	}
 
 	rfargs := make([]reflect.Value, len(args))
@@ -129,7 +129,7 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) 
 		return nil, fmt.Errorf("Identifier needs to be provided for function call")
 	}
 	if _, ok := args[0].(Identifier); !ok {
-		return nil, fmt.Errorf("First argument needs to be identifier")
+		return nil, fmt.Errorf("First argument needs to be identifier, not %T", args[0])
 	}
 
 	//build the function call argument

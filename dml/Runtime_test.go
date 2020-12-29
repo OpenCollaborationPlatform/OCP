@@ -71,13 +71,7 @@ func TestDmlFile(t *testing.T) {
 		Convey("and event handling should work.", func() {
 
 			code := `
-					fnc = function(a, b) {
-						if (a != 2 || b != "hello") {
-							throw "wrong arguments"
-						}
-						Document.testI = 0
-					}
-					Document.testE.RegisterCallback(fnc)
+					Document.testE.RegisterCallback(Document, "testEventCallback")
 					Document.testE.Emit(2, "hello")
 				`
 			_, err := rntm.RunJavaScript("", code)

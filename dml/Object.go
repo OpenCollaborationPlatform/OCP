@@ -90,10 +90,10 @@ func NewObject(rntm *Runtime) (*object, error) {
 	obj.AddProperty("name", MustNewDataType("string"), "", true)
 
 	//add default events
-	obj.AddEvent("onBeforePropertyChange", NewEvent(obj.GetJSPrototype(), rntm))
-	obj.AddEvent("onPropertyChanged", NewEvent(obj.GetJSPrototype(), rntm))
-	obj.AddEvent("onBeforeChange", NewEvent(obj.GetJSPrototype(), rntm))
-	obj.AddEvent("onChanged", NewEvent(obj.GetJSPrototype(), rntm))
+	obj.AddEvent(NewEvent("onBeforePropertyChange", obj.GetJSPrototype(), rntm))
+	obj.AddEvent(NewEvent("onPropertyChanged", obj.GetJSPrototype(), rntm))
+	obj.AddEvent(NewEvent("onBeforeChange", obj.GetJSPrototype(), rntm))
+	obj.AddEvent(NewEvent("onChanged", obj.GetJSPrototype(), rntm))
 
 	return &obj, nil
 }
@@ -208,22 +208,22 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	if err != nil {
 		return err
 	}
-
-	//register change events
-	prop.GetEvent("onBeforeChange").RegisterCallback(func(id Identifier, args ...interface{}) error {
-		err := self.GetEvent("onBeforePropertyChange").Emit(id, name)
-		if err != nil {
-			return err
-		}
-		return self.GetEvent("onBeforeChange").Emit(id)
-	})
-	prop.GetEvent("onChanged").RegisterCallback(func(id Identifier, args ...interface{}) error {
-		err := self.GetEvent("onPropertyChanged").Emit(id, name)
-		if err != nil {
-			return err
-		}
-		return self.GetEvent("onChanged").Emit(id)
-	})
+	/*
+		//register change events
+		prop.GetEvent("onBeforeChange").RegisterCallback(func(id Identifier, args ...interface{}) error {
+			err := self.GetEvent("onBeforePropertyChange").Emit(id, name)
+			if err != nil {
+				return err
+			}
+			return self.GetEvent("onBeforeChange").Emit(id)
+		})
+		prop.GetEvent("onChanged").RegisterCallback(func(id Identifier, args ...interface{}) error {
+			err := self.GetEvent("onPropertyChanged").Emit(id, name)
+			if err != nil {
+				return err
+			}
+			return self.GetEvent("onChanged").Emit(id)
+		})*/
 
 	//everthing went without error, now we can set this property
 	self.propertyHandler.properties[name] = prop
