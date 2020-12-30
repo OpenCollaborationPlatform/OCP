@@ -33,8 +33,16 @@ type Event interface {
 	Enable(Identifier) error
 	Disable(Identifier) error
 
+	//DB individual, add to a certain Identifier a callback as function to call from annother identifier
 	RegisterCallback(Identifier, Identifier, string) error
-	RegisterJSCallback(func(goja.FunctionCall) goja.Value) error
+
+	//Object based, add callback functions to all identifiers of the object
+	//note: only allowed for callbacks in the same object the event lives in. The reason is the
+	//passed identifier: it is always the event parent object that emits the event. Hence if a function
+	//to annother object is passed the identifier may have different type than the object called
+	//Therefore any JS function registered is handled as it would be a object function.
+	RegisterObjectJSCallback(func(goja.FunctionCall) goja.Value) error
+	RegisterObjectGoCallback(EventCallback) error
 }
 
 func NewEvent(name string, jsParentProto *goja.Object, rntm *Runtime) Event {
@@ -118,24 +126,18 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 			}
 
 			//get the object to call
-			var dt DataType
-			dt, err = self.rntm.mainObj.obj.GetDataType(cb.Id)
+			var set dmlSet
+			set, err = self.rntm.getObjectSet(cb.Id)
 			if err != nil {
 				break
 			}
 
-			obj, ok := self.rntm.objects[dt]
-			if !ok {
-				err = fmt.Errorf("Object to callback not setup correctly")
-				break
-			}
-
-			if !obj.HasMethod(cb.Function) {
+			if !set.obj.HasMethod(cb.Function) {
 				err = fmt.Errorf("Registerd callback %v not available in object %v", cb.Function, cb.Id.Name)
 				break
 			}
-			idArgs := append([]interface{}{cb.Id}, args...)
-			_, err = obj.GetMethod(cb.Function).Call(idArgs...)
+			idArgs := append([]interface{}{set.id}, args...)
+			_, err = set.obj.GetMethod(cb.Function).Call(idArgs...)
 		}
 	}
 
@@ -210,7 +212,7 @@ func (self *event) RegisterCallback(id Identifier, cbID Identifier, function str
 //this is to be used for anonymous callbacks. Note that this is only allowed for "static"
 //callbacks, not runtime deoendend ones. Hence  use this only for dml event assignents
 //note that it registers a callback for all objects of the type,
-func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) error {
+func (self *event) RegisterObjectJSCallback(cb func(goja.FunctionCall) goja.Value) error {
 
 	callback := func(id Identifier, args ...interface{}) (err error) {
 
@@ -245,6 +247,12 @@ func (self *event) RegisterJSCallback(cb func(goja.FunctionCall) goja.Value) err
 	}
 
 	self.callbacks = append(self.callbacks, callback)
+	return nil
+}
+
+func (self *event) RegisterObjectGoCallback(cb EventCallback) error {
+
+	self.callbacks = append(self.callbacks, cb)
 	return nil
 }
 

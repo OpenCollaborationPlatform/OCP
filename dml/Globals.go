@@ -71,44 +71,6 @@ func SetupGlobals(rntm *Runtime) {
 
 /*
 //Construct a data object from encoded description (as provided by type property)
-// - does setup behaviours
-// - does not call Constructed() for events. Should be done by caller after full setup handling
-// - does not setup
-func ConstructObject(rntm *Runtime, dt DataType, name string, parent Identifier) (Object, error) {
-
-	if !dt.IsComplex() {
-		return nil, fmt.Errorf("Not a complex datatype which can be build into Object")
-	}
-
-	astObj, err := dt.complexAsAst()
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to build object from type description")
-	}
-
-	//set a uuid to ensure unique identifier
-	uid := uuid.NewV4().String()
-
-	//build the object
-	obj, err := rntm.buildObject(astObj, parent, uid, false)
-
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to create subobject")
-	}
-
-	data, ok := obj.(Data)
-
-	if ok {
-		data.SetupBehaviours(obj.(Data), true)
-
-	} else {
-		return nil, fmt.Errorf("Behaviours are not valid Data objects")
-	}
-
-	return obj, nil
-}
-
-
-//Construct a data object from encoded description (as provided by type property)
 //and a given identifier. Note that it does not setup behaviours, that must be done by
 //the caller. Same as Constructed()
 func LoadObject(rntm *Runtime, dt DataType, id Identifier, parent Identifier) (Object, error) {

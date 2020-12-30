@@ -1,12 +1,12 @@
 package dml
 
-/*
 import (
-	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+
+	datastore "github.com/ickby/CollaborationNode/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -112,11 +112,13 @@ func TestTypeVariant(t *testing.T) {
 
 			vari, err := rntm.getObjectFromPath("toplevel.TypeVariant")
 			So(err, ShouldBeNil)
-			value, err := vari.(*variant).GetValue()
-			So(value, ShouldNotBeNil)
+			value, err := vari.obj.(*variant).GetValue(vari.id)
 			So(err, ShouldBeNil)
+			So(value, ShouldNotBeNil)
 
-			So(value.(Object).DataType(), ShouldResemble, vari.GetProperty("type").GetValue())
+			dt, err := value.(dmlSet).obj.GetDataType(value.(dmlSet).id)
+			So(err, ShouldBeNil)
+			So(dt, ShouldResemble, vari.obj.GetProperty("type").GetValue(vari.id))
 		})
 
 		Convey("Changing the datatype to a complex one should work", func() {
@@ -137,10 +139,6 @@ func TestTypeVariant(t *testing.T) {
 					if (obj.test != 10) {
 						throw "initialisation failed: value should be 10"
 					}
-					id = obj.Identifier()
-					if (!(id in Objects)) {
-						throw "object is not accessible, but should be"
-					}
 				`
 				_, err := rntm.RunJavaScript("user3", code)
 				So(err, ShouldBeNil)
@@ -148,4 +146,3 @@ func TestTypeVariant(t *testing.T) {
 		})
 	})
 }
-*/

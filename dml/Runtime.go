@@ -23,6 +23,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/satori/go.uuid"
+
 	datastore "github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -69,7 +71,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	*/
 	//add the datastructures
 	rntm.RegisterObjectCreator("Data", NewData)
-	//	rntm.RegisterObjectCreator("Variant", NewVariant)
+	rntm.RegisterObjectCreator("Variant", NewVariant)
 	//	rntm.RegisterObjectCreator("Vector", NewVector)
 	//	rntm.RegisterObjectCreator("Map", NewMap)
 	//	rntm.RegisterObjectCreator("Graph", NewGraph)
@@ -617,34 +619,59 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	return self.RegisterObjectCreator(name, creator)
 }
 
-//recursive remove object from runtime
-func (self *Runtime) removeObject(obj Object) error {
-	/*
-		if data, ok := obj.(Data); ok {
+//get the logic object for the datatype if it is complex
+func (self *Runtime) getOrCreateObject(dt DataType) (Object, error) {
 
-			//recursive object handling. (child first, so that event onRemove always finds
-			//existing parents)
-			for _, sub := range data.GetSubobjects(true) {
-				err := self.removeObject(sub)
-				if err != nil {
-					return err
-				}
-			}
+	if !dt.IsComplex() {
+		return nil, fmt.Errorf("DataType is not complex")
+	}
 
-			//call event on remove
-			data.GetEvent("onRemove").Emit()
-
-			//remove from list and javascript (not for behaviours)
-			delete(self.objects, obj.Id())
-			_, err := self.jsvm.RunString(fmt.Sprintf("delete Objects[\"%v\"]", obj.Id().Encode()))
-			if err != nil {
-				return err
-			}
+	obj, ok := self.objects[dt]
+	if !ok {
+		//object not yet setup. lets build it!
+		ast, err := dt.complexAsAst()
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to parse DataType for object creation")
 		}
+		obj, err = self.buildObject(ast)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to build object from DataType")
+		}
+		self.objects[dt] = obj
+	}
 
-		//TODO: howto handle data store? for Data and Behaviours!
-	*/
-	return nil
+	return obj, nil
+}
+
+//return the full dmlSet for the identifier, including the logic object
+func (self *Runtime) getObjectSet(id Identifier) (dmlSet, error) {
+
+	dt, err := self.mainObj.obj.GetDataType(id)
+	if err != nil {
+		return dmlSet{}, utils.StackError(err, "Unable to access DB for identifier")
+	}
+	obj, err := self.getOrCreateObject(dt)
+	if err != nil {
+		return dmlSet{}, utils.StackError(err, "Unable to create or access object for identifier")
+	}
+	return dmlSet{id: id, obj: obj}, nil
+}
+
+//Construct a data object from encoded description (as provided by type property)
+//it does not call "Created()" for event emission
+func (self *Runtime) constructObjectSet(dt DataType, parent Identifier) (dmlSet, error) {
+
+	obj, err := self.getOrCreateObject(dt)
+	if err != nil {
+		return dmlSet{}, utils.StackError(err, "Unable to access or create object for datatype")
+	}
+
+	id, err := self.setupObject(obj, parent)
+	if err != nil {
+		return dmlSet{}, utils.StackError(err, "Unable to setup database for object")
+	}
+
+	return dmlSet{id: id, obj: obj}, nil
 }
 
 //due to recursive nature of objects we need an extra function
@@ -849,7 +876,8 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 	}
 
 	//build the ID
-	id := Identifier{parent.Hash(), objType, objName, ""}
+	uid := uuid.NewV4().String()
+	id := Identifier{parent.Hash(), objType, objName, uid}
 
 	//initalize the DB
 	err = obj.InitializeDB(id)
@@ -948,7 +976,7 @@ func (self *Runtime) assignEvent(asgn *astAssignment, evt Event) error {
 	if !ok {
 		return fmt.Errorf("Must be function")
 	}
-	evt.RegisterJSCallback(fnc)
+	evt.RegisterObjectJSCallback(fnc)
 
 	//cleanup the global var we needed
 	_, err = self.jsvm.RunString("delete fnc")
@@ -1006,7 +1034,7 @@ func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) 
 		if !ok {
 			return nil, fmt.Errorf("Must be function")
 		}
-		evt.RegisterJSCallback(fnc)
+		evt.RegisterObjectJSCallback(fnc)
 
 		//cleanup the global var we needed
 		_, err = self.jsvm.RunString("delete fnc")

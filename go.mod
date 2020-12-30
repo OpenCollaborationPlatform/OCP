@@ -14,6 +14,7 @@ require (
 	github.com/gammazero/nexus/v3 v3.0.0
 	github.com/go-sourcemap/sourcemap v2.1.2+incompatible // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
+	github.com/google/uuid v1.1.1
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
 	github.com/hashicorp/go-hclog v0.9.2 // indirect
 	github.com/hashicorp/go-immutable-radix v1.1.0 // indirect

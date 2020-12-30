@@ -2,11 +2,12 @@ package dml
 
 /*
 import (
-	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+
+	datastore "github.com/ickby/CollaborationNode/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
