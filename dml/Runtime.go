@@ -212,14 +212,8 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	self.jsvm.GlobalObject().DefineAccessorProperty(self.mainObj.id.Name, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 	//call everyones "onCreated"
-	/*val, _ := vSet.GetOrCreateValue([]byte("MainIdentifier"))
-	id, err := val.Read()
-	if err != nil {
-		return utils.StackError(err, "Unable to access DB")
-	}
-	mainId := id.(Identifier)
-	obj.(Data).Created(mainId)
-	*/
+	self.mainObj.obj.(Data).Created(self.mainObj.id)
+
 	return err
 }
 
@@ -344,122 +338,128 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 }
 
 func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
-	/*
-		self.clearMessage()
 
-		err := self.datastore.Begin()
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to access database")
+	self.clearMessage()
+
+	err := self.datastore.Begin()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access database")
+	}
+
+	//save the user for processing
+	self.currentUser = user
+
+	//get path and accessor
+	idx := strings.LastIndex(string(fullpath), ".")
+	path := fullpath[:idx]
+	accessor := fullpath[(idx + 1):]
+
+	//first check if it is a Manager
+	mngr, ok := self.behaviours[path]
+	if ok {
+		if !mngr.HasMethod(accessor) {
+			return nil, fmt.Errorf("Manager %v does not have method %v", path[0], accessor)
 		}
+		fnc := mngr.GetMethod(accessor)
+		result, e := fnc.Call(args...)
 
-		//save the user for processing
-		self.currentUser = user
-
-		//get path and accessor
-		idx := strings.LastIndex(string(fullpath), ".")
-		path := fullpath[:idx]
-		accessor := fullpath[(idx + 1):]
-
-		//first check if it is a Manager
-		mngr, ok := self.behaviours[path]
-		if ok {
-			if !mngr.HasMethod(accessor) {
-				return nil, fmt.Errorf("Manager %v does not have method %v", path[0], accessor)
-			}
-			fnc := mngr.GetMethod(accessor)
-			result, e := fnc.Call(args...)
-
-			//did somethign go wrong?
-			if e != nil {
-				self.datastore.Rollback()
-				return nil, e
-			}
-			if fnc.IsConst() {
-				self.datastore.Rollback()
-				return result, nil
-			}
-			err = self.postprocess(false)
-			return result, err
-		}
-
-		//not a manager: now check if path is correct and object available
-		obj, err := self.getObjectFromPath(path)
-		if err != nil {
+		//did somethign go wrong?
+		if e != nil {
 			self.datastore.Rollback()
-			return nil, err
+			return nil, e
 		}
-
-		handled := false
-		var result interface{} = nil
-		err = nil
-
-		//check if it is a method
-		if obj.HasMethod(accessor) {
-			fnc := obj.GetMethod(accessor)
-			result, err = fnc.Call(args...)
-			handled = true
-
-			if fnc.IsConst() {
-				self.datastore.Rollback()
-				if err != nil {
-					return nil, err
-				}
-				return result, nil
-			}
-		}
-
-		//a property maybe?
-		if !handled && obj.HasProperty(accessor) {
-			prop := obj.GetProperty(accessor)
-
-			if len(args) == 0 {
-				//read only
-				result = prop.GetValue()
-				self.datastore.Rollback()
-				return result, nil
-
-			} else {
-				err = prop.SetValue(args[0])
-				result = args[0]
-			}
-			handled = true
-		}
-
-		//an event?
-		if !handled && obj.HasEvent(accessor) {
-			err = obj.GetEvent(accessor).Emit(args...)
-			handled = true
-		}
-
-		//or a simple value?
-		if !handled {
-			dat, ok := obj.(Data)
-			if ok {
-				result = dat.GetValueByName(accessor)
-				if result != nil {
-					//read only
-					err := self.datastore.Rollback()
-					return result, err
-				}
-			}
-		}
-
-		//was it handled? If not no change to db was done
-		if !handled {
+		if fnc.IsConst() {
 			self.datastore.Rollback()
-			return nil, fmt.Errorf("No accessor %v known in object %v", accessor, path)
+			return result, nil
 		}
-
-		//did an error occure?
-		if err != nil {
-			self.postprocess(true)
-			return nil, err
-		}
-
-		//postprocess correctly
 		err = self.postprocess(false)
+		return result, err
+	}
 
-		return result, err*/
+	//not a manager: now check if path is correct and object available
+	dbSet, err := self.getObjectFromPath(path)
+	if err != nil {
+		self.datastore.Rollback()
+		return nil, err
+	}
+
+	handled := false
+	var result interface{} = nil
+	err = nil
+
+	//check if it is a method
+	if dbSet.obj.HasMethod(accessor) {
+		fnc := dbSet.obj.GetMethod(accessor)
+
+		args = append([]interface{}{dbSet.id}, args...)
+		result, err = fnc.Call(args...)
+		handled = true
+
+		if fnc.IsConst() {
+			self.datastore.Rollback()
+			if err != nil {
+				return nil, err
+			}
+			return result, nil
+		}
+	}
+
+	//a property maybe?
+	if !handled && dbSet.obj.HasProperty(accessor) {
+		prop := dbSet.obj.GetProperty(accessor)
+
+		if len(args) == 0 {
+			//read only
+			result = prop.GetValue(dbSet.id)
+			self.datastore.Rollback()
+			return result, nil
+
+		} else {
+			err = prop.SetValue(dbSet.id, args[0])
+			result = args[0]
+		}
+		handled = true
+	}
+
+	//an event?
+	if !handled && dbSet.obj.HasEvent(accessor) {
+		err = dbSet.obj.GetEvent(accessor).Emit(dbSet.id, args...)
+		handled = true
+	}
+
+	//or a simple value?
+	if !handled {
+		dat, ok := dbSet.obj.(Data)
+		if ok {
+			result, err = dat.GetValueByName(dbSet.id, accessor)
+			if err != nil {
+				err := self.datastore.Rollback()
+				return result, err
+			}
+			if result != nil {
+				//read only
+				err := self.datastore.Rollback()
+				return result, err
+			}
+		}
+	}
+
+	//was it handled? If not no change to db was done
+	if !handled {
+		self.datastore.Rollback()
+		return nil, fmt.Errorf("No accessor %v known in object %v", accessor, path)
+	}
+
+	//did an error occure?
+	if err != nil {
+		self.postprocess(true)
+		return nil, err
+	}
+
+	//postprocess correctly
+	err = self.postprocess(false)
+
+	return result, err
 	return nil, nil
 }
 

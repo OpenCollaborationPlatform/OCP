@@ -37,10 +37,10 @@ type Data interface {
 
 	//Subobject handling is more than only childrens
 	//Hirarchy + dynamic objects, optional behaviours
-	GetSubobject(id Identifier, bhvr bool) ([]dmlSet, error)
+	GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error)
 	GetSubobjectByName(id Identifier, name string, bhvr bool) (dmlSet, error)
 
-	Created(id Identifier) //emits onCreated event for this and all subobjects (not behaviours)
+	Created(id Identifier) error //emits onCreated event for this and all subobjects (not behaviours)
 }
 
 type DataImpl struct {
@@ -164,7 +164,7 @@ func (self *DataImpl) GetChildByName(id Identifier, name string) (dmlSet, error)
 	return dmlSet{obj: self.rntm.objects[childDT].(Data), id: childID}, nil
 }
 
-func (self *DataImpl) GetSubobject(id Identifier, bhvr bool) ([]dmlSet, error) {
+func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 
 	result := make([]dmlSet, 0)
 
@@ -212,15 +212,23 @@ func (self *DataImpl) GetValueByName(id Identifier, name string) (interface{}, e
 	return nil, fmt.Errorf("No value with name %s available", name)
 }
 
-func (self *DataImpl) Created(id Identifier) {
-	/*
-		self.GetEvent("onCreated").Emit()
+func (self *DataImpl) Created(id Identifier) error {
 
-		for _, obj := range self.GetSubobjects(id, false) {
+	self.GetEvent("onCreated").Emit(id)
 
-			data, ok := obj.(Data)
-			if ok {
-				data.Created()
-			}
-		}*/
+	subs, err := self.GetSubobjects(id, false)
+	if err != nil {
+		return err
+	}
+	for _, dbSet := range subs {
+
+		data, ok := dbSet.obj.(Data)
+		if ok {
+			data.Created(dbSet.id)
+
+		} else {
+			return fmt.Errorf("Data subobject not accessed correctly")
+		}
+	}
+	return nil
 }
