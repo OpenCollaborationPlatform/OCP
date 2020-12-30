@@ -1,12 +1,12 @@
 package dml
 
-/*
 import (
-	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+
+	datastore "github.com/ickby/CollaborationNode/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -47,8 +47,8 @@ func TestTypeProperty(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		Convey("The property must be accessbile", func() {
-			So(rntm.mainObj.HasProperty("test"), ShouldBeTrue)
-			val := rntm.mainObj.GetProperty("test").GetValue()
+			So(rntm.mainObj.obj.HasProperty("test"), ShouldBeTrue)
+			val := rntm.mainObj.obj.GetProperty("test").GetValue(rntm.mainObj.id)
 			dt, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
 
@@ -103,4 +103,3 @@ func TestTypeProperty(t *testing.T) {
 
 	})
 }
-*/
