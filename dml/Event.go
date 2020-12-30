@@ -136,8 +136,7 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 				err = fmt.Errorf("Registerd callback %v not available in object %v", cb.Function, cb.Id.Name)
 				break
 			}
-			idArgs := append([]interface{}{set.id}, args...)
-			_, err = set.obj.GetMethod(cb.Function).Call(idArgs...)
+			_, err = set.obj.GetMethod(cb.Function).Call(set.id, args...)
 		}
 	}
 

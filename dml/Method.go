@@ -8,8 +8,8 @@ import (
 )
 
 type Method interface {
-	Call(args ...interface{}) (interface{}, error)
-	CallBoolReturn(args ...interface{}) (bool, error)
+	Call(id Identifier, args ...interface{}) (interface{}, error)
+	CallBoolReturn(id Identifier, args ...interface{}) (bool, error)
 	IsConst() bool
 }
 
@@ -46,20 +46,13 @@ type method struct {
 	constant bool
 }
 
-func (self *method) Call(args ...interface{}) (interface{}, error) {
+func (self *method) Call(id Identifier, args ...interface{}) (interface{}, error) {
 
-	if len(args) == 0 {
-		return nil, fmt.Errorf("Identifier needs to be provided for function call")
-	}
-
-	if _, ok := args[0].(Identifier); !ok {
-		return nil, fmt.Errorf("First argument needs to be identifier, not %T", args[0])
-	}
-
-	rfargs := make([]reflect.Value, len(args))
+	rfargs := make([]reflect.Value, len(args)+1)
 	for i, arg := range args {
-		rfargs[i] = reflect.ValueOf(arg)
+		rfargs[i+1] = reflect.ValueOf(arg)
 	}
+	rfargs[0] = reflect.ValueOf(id)
 	res := self.fnc.Call(rfargs)
 
 	if len(res) == 0 {
@@ -89,9 +82,9 @@ func (self *method) Call(args ...interface{}) (interface{}, error) {
 	return nil, fmt.Errorf("Function returns too many results: not supported")
 }
 
-func (self *method) CallBoolReturn(args ...interface{}) (bool, error) {
+func (self *method) CallBoolReturn(id Identifier, args ...interface{}) (bool, error) {
 
-	result, err := self.Call(args...)
+	result, err := self.Call(id, args...)
 	if err != nil {
 		return false, err
 	}
@@ -114,7 +107,7 @@ type jsMethod struct {
 	constant bool
 }
 
-func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) {
+func (self *jsMethod) Call(id Identifier, args ...interface{}) (result interface{}, err error) {
 
 	//goja panics as form of error reporting...
 	defer func() {
@@ -124,23 +117,15 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) 
 		}
 	}()
 
-	//first arg must be Identifier
-	if len(args) == 0 {
-		return nil, fmt.Errorf("Identifier needs to be provided for function call")
-	}
-	if _, ok := args[0].(Identifier); !ok {
-		return nil, fmt.Errorf("First argument needs to be identifier, not %T", args[0])
-	}
-
 	//build the function call argument
-	jsargs := make([]goja.Value, len(args)-1)
-	for i, arg := range args[1:] {
+	jsargs := make([]goja.Value, len(args))
+	for i, arg := range args {
 		jsargs[i] = self.rntm.jsvm.ToValue(arg)
 	}
 
 	//build the object to call on
 	obj := self.rntm.jsvm.CreateObject(self.jsProto)
-	obj.Set("identifier", self.rntm.jsvm.ToValue(args[0]))
+	obj.Set("identifier", self.rntm.jsvm.ToValue(id))
 
 	//call and return
 	err = nil
@@ -149,9 +134,9 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) 
 	return
 }
 
-func (self *jsMethod) CallBoolReturn(args ...interface{}) (bool, error) {
+func (self *jsMethod) CallBoolReturn(id Identifier, args ...interface{}) (bool, error) {
 
-	result, err := self.Call(args...)
+	result, err := self.Call(id, args...)
 	if err != nil {
 		return false, err
 	}
@@ -242,14 +227,13 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 
 				//get the identifier from whom we are called
 				id := jsargs.This.ToObject(rntm.jsvm).Get("identifier").Export()
-				if _, ok := id.(Identifier); !ok {
+				ident, ok := id.(Identifier)
+				if !ok {
 					panic("Called object does not have identifier setup correctly")
 				}
 
 				//call the function
-				arguments := []interface{}{id}
-				arguments = append(arguments, args...)
-				res, err := thisMethod.Call(arguments...)
+				res, err := thisMethod.Call(ident, args...)
 
 				//check if we have a error and if it is not nil we panic for goja
 				if err != nil {
@@ -257,7 +241,7 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				}
 
 				//Identifier has special return value (need to build the correct js obj)
-				ident, ok := res.(Identifier)
+				ident, ok = res.(Identifier)
 				if ok {
 					set, err := rntm.getObjectSet(ident)
 					if err != nil {

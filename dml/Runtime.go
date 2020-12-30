@@ -363,7 +363,7 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 			return nil, fmt.Errorf("Manager %v does not have method %v", path[0], accessor)
 		}
 		fnc := mngr.GetMethod(accessor)
-		result, e := fnc.Call(args...)
+		result, e := fnc.Call(Identifier{}, args...)
 
 		//did somethign go wrong?
 		if e != nil {
@@ -393,8 +393,7 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 	if dbSet.obj.HasMethod(accessor) {
 		fnc := dbSet.obj.GetMethod(accessor)
 
-		args = append([]interface{}{dbSet.id}, args...)
-		result, err = fnc.Call(args...)
+		result, err = fnc.Call(dbSet.id, args...)
 		handled = true
 
 		if fnc.IsConst() {
