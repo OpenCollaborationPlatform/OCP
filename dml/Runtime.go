@@ -72,7 +72,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	//add the datastructures
 	rntm.RegisterObjectCreator("Data", NewData)
 	rntm.RegisterObjectCreator("Variant", NewVariant)
-	//	rntm.RegisterObjectCreator("Vector", NewVector)
+	rntm.RegisterObjectCreator("Vector", NewVector)
 	//	rntm.RegisterObjectCreator("Map", NewMap)
 	//	rntm.RegisterObjectCreator("Graph", NewGraph)
 	//	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
@@ -744,6 +744,25 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	}
 	obj.SetupJSMethods(self, obj.GetJSPrototype())
 
+	//expose parent to js
+	getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+		id := call.This.ToObject(self.jsvm).Get("identifier").Export()
+		identifier, ok := id.(Identifier)
+		if !ok {
+			panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
+		}
+		parent, err := obj.GetParent(identifier)
+		if err != nil {
+			//return nil, as no parent is also returned as error
+			return self.jsvm.ToValue(nil)
+		}
+		if !parent.valid() {
+			return self.jsvm.ToValue(nil)
+		}
+		return parent.obj.GetJSObject(parent.id)
+	})
+	obj.GetJSPrototype().DefineAccessorProperty("parent", getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
+
 	//go on with all subobjects (if not behaviour)
 	_, isBehaviour := obj.(Behaviour)
 	if !isBehaviour {
@@ -763,24 +782,6 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 			} else {
 				obj.(Data).AddChildObject(child.(Data))
 			}
-
-			//expose parent to js
-			getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
-				id := call.This.ToObject(self.jsvm).Get("identifier").Export()
-				identifier, ok := id.(Identifier)
-				if !ok {
-					panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
-				}
-				parent, err := obj.GetParent(identifier)
-				if err != nil {
-					panic(utils.StackError(err, "Unable to access parent").Error())
-				}
-				if !parent.valid() {
-					return self.jsvm.ToValue(nil)
-				}
-				return parent.obj.GetJSObject(parent.id)
-			})
-			child.GetJSPrototype().DefineAccessorProperty("parent", getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 			//expose child as parent property (do this here as now name is easily accessbile
 			childName := child.GetProperty("name").GetDefaultValue().(string)
@@ -889,6 +890,10 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 	if err != nil {
 		return Identifier{}, err
 	}
+	err = obj.SetParentIdentifier(id, parent)
+	if err != nil {
+		return Identifier{}, err
+	}
 
 	//setup all children and behaviours
 	data, isData := obj.(Data)
@@ -903,8 +908,6 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 			if err != nil {
 				return Identifier{}, err
 			}
-
-			child.SetParentIdentifier(childID, id)
 		}
 
 		behaviours := data.Behaviours()

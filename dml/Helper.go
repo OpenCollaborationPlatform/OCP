@@ -235,3 +235,20 @@ func mapFromStore(store *datastore.Datastore, id Identifier, key []byte) (datast
 	}
 	return *map_, nil
 }
+
+func mapVersionedFromStore(store *datastore.Datastore, id Identifier, key []byte) (datastore.MapVersioned, error) {
+
+	set, err := store.GetOrCreateSet(datastore.MapType, true, id.Hash())
+	if err != nil {
+		return datastore.MapVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	mset, done := set.(*datastore.MapVersionedSet)
+	if !done {
+		return datastore.MapVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
+	}
+	map_, err := mset.GetOrCreateMap(key)
+	if err != nil {
+		return datastore.MapVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return *map_, nil
+}

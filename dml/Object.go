@@ -132,6 +132,10 @@ func (self *object) GetParent(id Identifier) (dmlSet, error) {
 		return dmlSet{}, err
 	}
 
+	if !parent.Valid() {
+		return dmlSet{}, fmt.Errorf("Object has no parent")
+	}
+
 	dt, err := self.GetDataType(parent)
 	if err != nil {
 		return dmlSet{}, utils.StackError(err, "Unable to access parent datatype")
