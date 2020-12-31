@@ -1,12 +1,12 @@
 package dml
 
-/*
 import (
-	datastore "github.com/ickby/CollaborationNode/datastores"
 	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
+
+	datastore "github.com/ickby/CollaborationNode/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -51,12 +51,12 @@ func TestPODMap(t *testing.T) {
 
 		Convey("Adding to IntInt map should work", func() {
 			store.Begin()
-			child, _ := rntm.mainObj.GetChildByName("IntIntMap")
-			intmap := child.(*mapImpl)
-			length, err := intmap.Length()
+			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "IntIntMap")
+			intmap := child.obj.(*mapImpl)
+			length, err := intmap.Length(child.id)
 			So(err, ShouldBeNil)
 			So(length, ShouldEqual, 0)
-			has, err := intmap.Has(10)
+			has, err := intmap.Has(child.id, 10)
 			So(err, ShouldBeNil)
 			So(has, ShouldBeFalse)
 			store.Rollback()
@@ -66,9 +66,9 @@ func TestPODMap(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			store.Begin()
-			length, err = intmap.Length()
+			length, err = intmap.Length(child.id)
 			So(err, ShouldBeNil)
-			has, err = intmap.Has(10)
+			has, err = intmap.Has(child.id, 10)
 			So(err, ShouldBeNil)
 			store.Rollback()
 			So(length, ShouldEqual, 1)
@@ -131,16 +131,16 @@ func TestPODMap(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			child, _ := rntm.mainObj.GetChildByName("IntIntMap")
-			m := child.(*mapImpl)
-			So(m.Remove(11), ShouldNotBeNil)
-			length, _ := m.Length()
+			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "IntIntMap")
+			m := child.obj.(*mapImpl)
+			So(m.Remove(child.id, 11), ShouldNotBeNil)
+			length, _ := m.Length(child.id)
 			So(length, ShouldEqual, 2)
-			So(m.Remove(10), ShouldBeNil)
-			length, _ = m.Length()
+			So(m.Remove(child.id, 10), ShouldBeNil)
+			length, _ = m.Length(child.id)
 			So(length, ShouldEqual, 1)
-			So(m.Remove(9), ShouldBeNil)
-			length, _ = m.Length()
+			So(m.Remove(child.id, 9), ShouldBeNil)
+			length, _ = m.Length(child.id)
 			So(length, ShouldEqual, 0)
 		})
 
@@ -161,14 +161,14 @@ func TestPODMap(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				child, _ := rntm2.mainObj.GetChildByName("IntFloatMap")
-				m := child.(*mapImpl)
+				child, _ := rntm2.mainObj.obj.(Data).GetChildByName(rntm2.mainObj.id, "IntFloatMap")
+				m := child.obj.(*mapImpl)
 
-				length, _ := m.Length()
+				length, _ := m.Length(child.id)
 				So(length, ShouldEqual, 2)
-				val, _ := m.Get(10)
+				val, _ := m.Get(child.id, 10)
 				So(val, ShouldAlmostEqual, 5.5)
-				val, _ = m.Get(9)
+				val, _ = m.Get(child.id, 9)
 				So(val, ShouldAlmostEqual, 4.4)
 			})
 		})
@@ -216,9 +216,9 @@ func TestComplexTypeMap(t *testing.T) {
 		Convey("Adding to type map should work", func() {
 
 			store.Begin()
-			child, _ := rntm.mainObj.GetChildByName("TypeMap")
-			vec := child.(*mapImpl)
-			length, _ := vec.Length()
+			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "TypeMap")
+			vec := child.obj.(*mapImpl)
+			length, _ := vec.Length(child.id)
 			So(length, ShouldEqual, 0)
 			store.Commit()
 
@@ -241,7 +241,7 @@ func TestComplexTypeMap(t *testing.T) {
 
 				obj, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
 				So(err, ShouldBeNil)
-				So(obj.GetProperty("created").GetValue(), ShouldEqual, obj.Id().Encode())
+				So(obj.obj.GetProperty("created").GetValue(obj.id), ShouldEqual, obj.id.Encode())
 				store.Rollback()
 
 				code = `
@@ -267,18 +267,18 @@ func TestComplexTypeMap(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				child, _ := rntm.mainObj.GetChildByName("TypeMap")
-				vec := child.(*mapImpl)
+				child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "TypeMap")
+				vec := child.obj.(*mapImpl)
 
-				entry, err := vec.Get("test")
+				entry, err := vec.Get(child.id, "test")
 				So(err, ShouldBeNil)
-				obj := entry.(Object)
-				So(obj.GetProperty("test").GetValue(), ShouldEqual, 1)
+				set := entry.(dmlSet)
+				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 1)
 
-				entry, err = vec.Get("test2")
+				entry, err = vec.Get(child.id, "test2")
 				So(err, ShouldBeNil)
-				obj = entry.(Object)
-				So(obj.GetProperty("test").GetValue(), ShouldEqual, 2)
+				set = entry.(dmlSet)
+				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 2)
 			})
 
 			Convey("And accessing the object via path is possible", func() {
@@ -286,9 +286,9 @@ func TestComplexTypeMap(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				obj, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
+				set, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
 				So(err, ShouldBeNil)
-				So(obj.GetProperty("test").GetValue(), ShouldEqual, 0)
+				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 0)
 			})
 
 			Convey("The hirarchy is set correctl", func() {
@@ -319,4 +319,3 @@ func TestComplexTypeMap(t *testing.T) {
 		})
 	})
 }
-*/
