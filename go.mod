@@ -6,13 +6,13 @@ require (
 	github.com/alecthomas/participle v0.3.0
 	github.com/boltdb/bolt v1.3.1
 	github.com/davidlazar/go-crypto v0.0.0-20190912175916-7055855a373f // indirect
-	github.com/dlclark/regexp2 v1.2.0 // indirect
-	github.com/dop251/goja v0.0.0-20190912223329-aa89e6a4c733
+	github.com/dlclark/regexp2 v1.4.0 // indirect
+	github.com/dop251/goja v0.0.0-20201221183957-6b6d5e2b5d80
 	github.com/dop251/goja_nodejs v0.0.0-20171011081505-adff31b136e6
 	github.com/facebookgo/atomicfile v0.0.0-20151019160806-2de1f203e7d5
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
 	github.com/gammazero/nexus/v3 v3.0.0
-	github.com/go-sourcemap/sourcemap v2.1.2+incompatible // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/google/go-cmp v0.3.1 // indirect
 	github.com/google/uuid v1.1.1
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
@@ -79,6 +79,7 @@ require (
 	golang.org/x/exp v0.0.0-20190919035709-81c71964d733 // indirect
 	golang.org/x/net v0.0.0-20200506145744-7e3656a0809f // indirect
 	golang.org/x/sys v0.0.0-20200501145240-bc7a7d42d5c3 // indirect
+	golang.org/x/text v0.3.4 // indirect
 	golang.org/x/tools v0.0.0-20200507175145-08cbf656cea5 // indirect
 	gonum.org/v1/gonum v0.0.0-20191012094511-9fd3ad46a789
 	gopkg.in/ini.v1 v1.55.0 // indirect
