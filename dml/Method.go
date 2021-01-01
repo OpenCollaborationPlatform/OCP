@@ -241,8 +241,7 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				}
 
 				//Identifier has special return value (need to build the correct js obj)
-				ident, ok = res.(Identifier)
-				if ok {
+				if ident, ok = res.(Identifier); ok {
 					set, err := rntm.getObjectSet(ident)
 					if err != nil {
 						panic("Object is returned, but unable to build JS representation")
@@ -251,8 +250,7 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				}
 
 				//dmlSet has special return value
-				set, ok := res.(dmlSet)
-				if ok {
+				if set, ok := res.(dmlSet); ok {
 					return set.obj.GetJSObject(set.id)
 				}
 

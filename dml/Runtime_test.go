@@ -86,7 +86,8 @@ func TestDmlFile(t *testing.T) {
 
 			//check direct go access
 			store.Begin()
-			set := rntm.mainObj
+			set, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
 			value, ok = set.obj.GetProperty(`testI`).GetValue(set.id).(int64)
 			store.Rollback()
 			So(ok, ShouldBeTrue)
@@ -126,7 +127,8 @@ func TestDmlFile(t *testing.T) {
 
 			//testI must be one if the function was called correctly
 			store.Begin()
-			set = rntm.mainObj
+			set, err = rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
 			value, ok = set.obj.GetProperty(`testI`).GetValue(set.id).(int64)
 			store.Rollback()
 			So(ok, ShouldBeTrue)
@@ -184,7 +186,9 @@ func TestDmlFile(t *testing.T) {
 
 			store.Begin()
 			defer store.Rollback()
-			imp, err := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "ImportTest")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			imp, err := main.obj.(Data).GetChildByName(main.id, "ImportTest")
 			So(err, ShouldBeNil)
 			So(imp, ShouldNotBeNil)
 

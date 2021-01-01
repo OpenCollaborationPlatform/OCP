@@ -34,6 +34,13 @@ import (
 	"github.com/dop251/goja_nodejs/require"
 )
 
+var mainKey = []byte("MainIdentifier")
+var internalKey [32]byte
+
+func init() {
+	copy(internalKey[:], []byte("__internal"))
+}
+
 //Function prototype that can create new object types in DML
 type CreatorFunc func(rntm *Runtime) (Object, error)
 
@@ -56,7 +63,6 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 		mutex:        &sync.Mutex{},
 		ready:        false,
 		currentUser:  "none",
-		mainObj:      dmlSet{},
 		objects:      make(map[DataType]Object, 0),
 		behaviours:   make(map[string]BehaviourManager, 0),
 	}
@@ -99,7 +105,6 @@ type Runtime struct {
 	importPath  string
 	ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
 	currentUser User    //user that currently access the runtime
-	mainObj     dmlSet
 	objects     map[DataType]Object
 
 	//managers
@@ -165,19 +170,17 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 
 	//check if the data structure is setup, or if we need to do this
-	var setKey [32]byte
-	copy(setKey[:], []byte("__internal"))
-	set, err := self.datastore.GetOrCreateSet(datastore.ValueType, false, setKey)
+	set, err := self.datastore.GetOrCreateSet(datastore.ValueType, false, internalKey)
 	if err != nil {
 		return utils.StackError(err, "Unable to access DB")
 	}
 	vSet, _ := set.(*datastore.ValueSet)
-	isSetup := vSet.HasKey([]byte("MainIdentifier"))
+	isSetup := vSet.HasKey(mainKey)
 
 	var mainID Identifier
 	if isSetup {
 		//no setup required, get the mainID
-		val, err := vSet.GetOrCreateValue([]byte("MainIdentifier"))
+		val, err := vSet.GetOrCreateValue(mainKey)
 		if err != nil {
 			return utils.StackError(err, "Unable to parse dml code due to database access error")
 		}
@@ -193,7 +196,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		if err != nil {
 			return utils.StackError(err, "Unable to parse dml code due to database access error while setup")
 		}
-		value, err := vSet.GetOrCreateValue([]byte("MainIdentifier"))
+		value, err := vSet.GetOrCreateValue(mainKey)
 		if err != nil {
 			return utils.StackError(err, "Unable to access  database while setup")
 		}
@@ -204,17 +207,20 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 
 	//obj.(Data).SetupBehaviours(obj.(Data), true)
-	self.mainObj = dmlSet{mainObj.(Data), mainID}
 	self.ready = true
 
 	//expose main object to js
 	getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
-		return self.mainObj.obj.GetJSObject(self.mainObj.id)
+		main, err := self.getMainObjectSet()
+		if err != nil {
+			panic(err.Error())
+		}
+		return main.obj.GetJSObject(main.id)
 	})
-	self.jsvm.GlobalObject().DefineAccessorProperty(self.mainObj.id.Name, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
+	self.jsvm.GlobalObject().DefineAccessorProperty(mainID.Name, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 	//call everyones "onCreated"
-	self.mainObj.obj.(Data).Created(self.mainObj.id)
+	mainObj.(Data).Created(mainID)
 
 	return err
 }
@@ -466,7 +472,6 @@ func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (inte
 
 // 							Internal Functions
 //*********************************************************************************
-
 func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup func(string, Data) error) error {
 	/*
 		//execute on the object itself!
@@ -495,6 +500,36 @@ func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup
 	return nil
 }
 
+func (self *Runtime) getMainObjectSet() (dmlSet, error) {
+
+	if !self.ready {
+		return dmlSet{}, fmt.Errorf("Runtime not setup correctly")
+	}
+
+	//check if the data structure is setup, or if we need to do this
+	set, err := self.datastore.GetOrCreateSet(datastore.ValueType, false, internalKey)
+	if err != nil {
+		return dmlSet{}, err
+	}
+	vSet, _ := set.(*datastore.ValueSet)
+	value, err := vSet.GetOrCreateValue(mainKey)
+	if err != nil {
+		return dmlSet{}, err
+	}
+
+	id, err := value.Read()
+	if err != nil {
+		return dmlSet{}, err
+	}
+
+	ident, ok := id.(*Identifier)
+	if !ok {
+		return dmlSet{}, fmt.Errorf("Stored data is not identifier, cannot access main objects")
+	}
+
+	return self.getObjectSet(*ident)
+}
+
 //get the object from the identifier path list (e.g. myobj.childname.yourobject)
 //alternatively to names it can include identifiers (e.g. from Object.Identifier())
 func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
@@ -504,13 +539,18 @@ func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
 		return dmlSet{}, fmt.Errorf("Not a valid path to object: no names found")
 	}
 
+	main, err := self.getMainObjectSet()
+	if err != nil {
+		return dmlSet{}, err
+	}
+
 	var dbSet dmlSet
-	if names[0] != self.mainObj.id.Name {
+	if names[0] != main.id.Name {
 		id, err := IdentifierFromEncoded(names[0])
 		if err != nil {
 			return dmlSet{}, fmt.Errorf("First identifier in %v cannot be found", path)
 		}
-		dt, err := self.mainObj.obj.GetDataType(id)
+		dt, err := main.obj.GetDataType(id)
 		if err != nil {
 			return dmlSet{}, fmt.Errorf("First identifier in %v cannot be found", path)
 		}
@@ -521,7 +561,7 @@ func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
 		dbSet = dmlSet{id: id, obj: dtObj}
 
 	} else {
-		dbSet = self.mainObj
+		dbSet = main
 	}
 
 	for _, name := range names[1:] {
@@ -645,11 +685,18 @@ func (self *Runtime) getOrCreateObject(dt DataType) (Object, error) {
 //return the full dmlSet for the identifier, including the logic object
 func (self *Runtime) getObjectSet(id Identifier) (dmlSet, error) {
 
-	dt, err := self.mainObj.obj.GetDataType(id)
+	//get any object from the map
+	var obj Object
+	for _, val := range self.objects {
+		obj = val
+		break
+	}
+
+	dt, err := obj.GetDataType(id)
 	if err != nil {
 		return dmlSet{}, utils.StackError(err, "Unable to access DB for identifier")
 	}
-	obj, err := self.getOrCreateObject(dt)
+	obj, err = self.getOrCreateObject(dt)
 	if err != nil {
 		return dmlSet{}, utils.StackError(err, "Unable to create or access object for identifier")
 	}

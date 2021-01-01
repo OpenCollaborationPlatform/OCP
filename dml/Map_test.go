@@ -51,7 +51,9 @@ func TestPODMap(t *testing.T) {
 
 		Convey("Adding to IntInt map should work", func() {
 			store.Begin()
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "IntIntMap")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "IntIntMap")
 			intmap := child.obj.(*mapImpl)
 			length, err := intmap.Length(child.id)
 			So(err, ShouldBeNil)
@@ -131,7 +133,9 @@ func TestPODMap(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "IntIntMap")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "IntIntMap")
 			m := child.obj.(*mapImpl)
 			So(m.Remove(child.id, 11), ShouldNotBeNil)
 			length, _ := m.Length(child.id)
@@ -161,7 +165,9 @@ func TestPODMap(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				child, _ := rntm2.mainObj.obj.(Data).GetChildByName(rntm2.mainObj.id, "IntFloatMap")
+				main, err := rntm2.getMainObjectSet()
+				So(err, ShouldBeNil)
+				child, _ := main.obj.(Data).GetChildByName(main.id, "IntFloatMap")
 				m := child.obj.(*mapImpl)
 
 				length, _ := m.Length(child.id)
@@ -216,14 +222,16 @@ func TestComplexTypeMap(t *testing.T) {
 		Convey("Adding to type map should work", func() {
 
 			store.Begin()
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "TypeMap")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "TypeMap")
 			vec := child.obj.(*mapImpl)
 			length, _ := vec.Length(child.id)
 			So(length, ShouldEqual, 0)
 			store.Commit()
 
 			code = `toplevel.TypeMap.New("test")`
-			_, err := rntm.RunJavaScript("user3", code)
+			_, err = rntm.RunJavaScript("user3", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.test("test2")`
@@ -267,7 +275,9 @@ func TestComplexTypeMap(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "TypeMap")
+				main, err := rntm.getMainObjectSet()
+				So(err, ShouldBeNil)
+				child, _ := main.obj.(Data).GetChildByName(main.id, "TypeMap")
 				vec := child.obj.(*mapImpl)
 
 				entry, err := vec.Get(child.id, "test")

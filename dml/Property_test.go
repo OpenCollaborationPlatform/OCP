@@ -47,12 +47,14 @@ func TestTypeProperty(t *testing.T) {
 		So(err, ShouldBeNil)
 
 		Convey("The property must be accessbile", func() {
-			So(rntm.mainObj.obj.HasProperty("test"), ShouldBeTrue)
-			val := rntm.mainObj.obj.GetProperty("test").GetValue(rntm.mainObj.id)
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			So(main.obj.HasProperty("test"), ShouldBeTrue)
+			val := main.obj.GetProperty("test").GetValue(main.id)
 			dt, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
 
-			val, err := rntm.RunJavaScript("", "toplevel.test")
+			val, err = rntm.RunJavaScript("", "toplevel.test")
 			So(err, ShouldBeNil)
 			dtJs, ok := val.(DataType)
 			So(ok, ShouldBeTrue)

@@ -53,7 +53,9 @@ func TestPODVector(t *testing.T) {
 
 		Convey("Adding to int vector should work", func() {
 			store.Begin()
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "IntVec")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "IntVec")
 			intvec := child.obj.(*vector)
 			length, err := intvec.Length(child.id)
 			So(err, ShouldBeNil)
@@ -74,7 +76,9 @@ func TestPODVector(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "StringVec")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "StringVec")
 			strvec := child.obj.(*vector)
 			val, err := strvec.AppendNew(child.id)
 			So(err, ShouldBeNil)
@@ -103,7 +107,9 @@ func TestPODVector(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "IntVec")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "IntVec")
 			vec := child.obj.(*vector)
 			vec.Set(child.id, 0, 0)
 			vec.Append(child.id, 1)
@@ -140,7 +146,9 @@ func TestPODVector(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "IntVec")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "IntVec")
 			vec := child.obj.(*vector)
 			So(vec.Remove(child.id, 1), ShouldBeNil)
 
@@ -170,7 +178,9 @@ func TestPODVector(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "FloatVec")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
 			vec := child.obj.(*vector)
 
 			//insert should work only at existing indices
@@ -200,7 +210,9 @@ func TestPODVector(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "FloatVec")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
 			vec := child.obj.(*vector)
 			vec.Swap(child.id, 0, 2)
 
@@ -227,7 +239,9 @@ func TestPODVector(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				child, _ := rntm2.mainObj.obj.(Data).GetChildByName(rntm2.mainObj.id, "FloatVec")
+				main, err := rntm2.getMainObjectSet()
+				So(err, ShouldBeNil)
+				child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
 				vec := child.obj.(*vector)
 
 				length, _ := vec.Length(child.id)
@@ -276,7 +290,9 @@ func TestTypeVector(t *testing.T) {
 		Convey("Adding to type vector should work", func() {
 
 			store.Begin()
-			child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "TypeVec")
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "TypeVec")
 			vec := child.obj.(*vector)
 			length, _ := vec.Length(child.id)
 			So(length, ShouldEqual, 0)
@@ -285,11 +301,13 @@ func TestTypeVector(t *testing.T) {
 			code = `toplevel.TypeVec.AppendNew()
 					toplevel.TypeVec.AppendNew()
 			`
-			_, err := rntm.RunJavaScript("user3", code)
+			_, err = rntm.RunJavaScript("user3", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
-			child, _ = rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "TypeVec")
+			main, err = rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ = main.obj.(Data).GetChildByName(main.id, "TypeVec")
 			vec = child.obj.(*vector)
 			length, _ = vec.Length(child.id)
 			So(length, ShouldEqual, 2)
@@ -307,7 +325,9 @@ func TestTypeVector(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				child, _ := rntm.mainObj.obj.(Data).GetChildByName(rntm.mainObj.id, "TypeVec")
+				main, err := rntm.getMainObjectSet()
+				So(err, ShouldBeNil)
+				child, _ := main.obj.(Data).GetChildByName(main.id, "TypeVec")
 				vec := child.obj.(*vector)
 
 				entry, err := vec.Get(child.id, 0)
