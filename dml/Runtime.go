@@ -80,7 +80,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 	rntm.RegisterObjectCreator("Variant", NewVariant)
 	rntm.RegisterObjectCreator("Vector", NewVector)
 	rntm.RegisterObjectCreator("Map", NewMap)
-	//	rntm.RegisterObjectCreator("Graph", NewGraph)
+	rntm.RegisterObjectCreator("Graph", NewGraph)
 	//	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
 
 	//setup globals

@@ -232,13 +232,21 @@ func (self *mapImpl) set(id Identifier, key interface{}, value interface{}) erro
 
 	if dt.IsComplex() {
 
-		ident, ok := value.(Identifier)
-		if !ok {
-			return fmt.Errorf("Complex types need a identifier for set function")
-		}
-		err := dbEntries.Write(dbkey, ident)
-		if err != nil {
-			return utils.StackError(err, "Cannot set map entry")
+		if set, ok := value.(dmlSet); ok {
+
+			err := dbEntries.Write(dbkey, set.id)
+			if err != nil {
+				return utils.StackError(err, "Cannot set map entry")
+			}
+
+		} else if ident, ok := value.(Identifier); ok {
+			err := dbEntries.Write(dbkey, ident)
+			if err != nil {
+				return utils.StackError(err, "Cannot set map entry")
+			}
+
+		} else {
+			return fmt.Errorf("Complex types need a identifier or dmlSet for set function")
 		}
 
 	} else if dt.IsType() {
@@ -289,10 +297,7 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to append new object to mapImpl: construction failed")
 		}
-		if data, ok := set.obj.(Data); ok {
-			data.Created(set.id)
-		}
-		result = set.id
+		result = set
 
 	} else {
 		result = dt.GetDefaultValue()
@@ -302,6 +307,13 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 	err = self.set(id, key, result)
 	if err != nil {
 		return nil, err
+	}
+
+	if dt.IsComplex() {
+		set := result.(dmlSet)
+		if data, ok := set.obj.(Data); ok {
+			data.Created(result.(dmlSet).id)
+		}
 	}
 
 	self.GetEvent("onChanged").Emit(id) //do not return error as setting was already successfull
