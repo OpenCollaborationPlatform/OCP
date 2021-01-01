@@ -133,6 +133,13 @@ func TestDmlFile(t *testing.T) {
 			store.Rollback()
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)
+
+			Convey("with correct error capturing", func() {
+
+				code = `Document.testErrorE.Emit()`
+				_, err = rntm.RunJavaScript("", code)
+				So(err, ShouldNotBeNil)
+			})
 		})
 
 		Convey("Also functions should be callable", func() {
@@ -151,6 +158,12 @@ func TestDmlFile(t *testing.T) {
 				msgs := rntm.GetMessages()
 				So(len(msgs), ShouldEqual, 1)
 				So(msgs[0], ShouldEqual, "test")
+			})
+
+			Convey("But errors are captured", func() {
+				code := `Document.errorTestFnc()`
+				_, err := rntm.RunJavaScript("", code)
+				So(err, ShouldNotBeNil)
 			})
 		})
 

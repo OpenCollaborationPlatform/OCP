@@ -2,7 +2,6 @@ package dml
 
 import (
 	"encoding/gob"
-	"errors"
 	"fmt"
 
 	"github.com/ickby/CollaborationNode/datastores"
@@ -105,7 +104,10 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 
 	//all default event callbacks
 	for _, cb := range self.callbacks {
-		cb(id, args...)
+		err := cb(id, args...)
+		if err != nil {
+			return err
+		}
 	}
 
 	//call all runtime created callbacks
@@ -215,22 +217,10 @@ func (self *event) RegisterObjectJSCallback(cb func(goja.FunctionCall) goja.Valu
 
 	callback := func(id Identifier, args ...interface{}) (err error) {
 
+		//goja panics as form of error reporting...
 		defer func() {
-			// recover from panic if one occured. Set err to nil otherwise.
-			errval := recover()
-			if errval != nil {
-				str := "Error during event processing"
-				if jserr, ok := errval.(*goja.Exception); ok {
-					str = jserr.Value().Export().(string)
-
-				} else if jsval, ok := errval.(goja.Value); ok {
-					str = jsval.ToString().String()
-
-				} else if strval, ok := errval.(string); ok {
-					str = strval
-				}
-
-				err = errors.New(str)
+			if e := recover(); e != nil {
+				err = fmt.Errorf("%v", e)
 			}
 		}()
 

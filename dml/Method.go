@@ -228,8 +228,8 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				//get the identifier from whom we are called
 				id := jsargs.This.ToObject(rntm.jsvm).Get("identifier").Export()
 				ident, ok := id.(Identifier)
-				if !ok {
-					panic("Called object does not have identifier setup correctly")
+				if !ok || !ident.Valid() {
+					panic(rntm.jsvm.ToValue("Called object does not have identifier setup correctly"))
 				}
 
 				//call the function
@@ -244,14 +244,14 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				if ident, ok = res.(Identifier); ok {
 					set, err := rntm.getObjectSet(ident)
 					if err != nil {
-						panic("Object is returned, but unable to build JS representation")
+						panic(rntm.jsvm.ToValue("Object is returned, but unable to build JS representation"))
 					}
-					return set.obj.GetJSObject(set.id)
+					return rntm.jsvm.ToValue(set.obj.GetJSObject(set.id))
 				}
 
 				//dmlSet has special return value
 				if set, ok := res.(dmlSet); ok {
-					return set.obj.GetJSObject(set.id)
+					return rntm.jsvm.ToValue(set.obj.GetJSObject(set.id))
 				}
 
 				//go return values to js return values

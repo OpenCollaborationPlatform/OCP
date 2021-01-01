@@ -214,7 +214,10 @@ func (self *DataImpl) GetValueByName(id Identifier, name string) (interface{}, e
 
 func (self *DataImpl) Created(id Identifier) error {
 
-	self.GetEvent("onCreated").Emit(id)
+	err := self.GetEvent("onCreated").Emit(id)
+	if err != nil {
+		return err
+	}
 
 	subs, err := self.GetSubobjects(id, false)
 	if err != nil {
@@ -224,7 +227,10 @@ func (self *DataImpl) Created(id Identifier) error {
 
 		data, ok := dbSet.obj.(Data)
 		if ok {
-			data.Created(dbSet.id)
+			err := data.Created(dbSet.id)
+			if err != nil {
+				return err
+			}
 
 		} else {
 			return fmt.Errorf("Data subobject not accessed correctly")

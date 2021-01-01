@@ -20,6 +20,10 @@
 		Document.testB = false
 	}
 	
+	event testErrorE: function() {
+		Document.nonExistent()
+	}
+	
 	//event which uses this which should be supported (this means the parent object)
 	event testE2: function() {
 		this.testB = true
@@ -28,6 +32,11 @@
 	function testFnc(a) {
 		print("test")
 		this.testI = a
+	}
+	
+	function errorTestFnc() {
+		//let's see if it fails correctly
+		this.nonExistent()
 	}
 	
 	const function readString() {

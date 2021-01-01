@@ -205,7 +205,7 @@ func TestComplexTypeMap(t *testing.T) {
 							property string created
 
 							.onCreated: function() {
-								this.created = this.Identifier()
+								this.created = this.identifier.Encode()
 							}
 						}
 					}
@@ -254,7 +254,7 @@ func TestComplexTypeMap(t *testing.T) {
 
 				code = `
 					obj = toplevel.TypeMap.Get("test")
-					if (obj.Identifier() != obj.created) {
+					if (obj.identifier.Encode() != obj.created) {
 						throw "identifiers are not equal, but should be"
 					}
 				`
@@ -305,7 +305,7 @@ func TestComplexTypeMap(t *testing.T) {
 
 				code = `
 					obj = toplevel.TypeMap.Get("test")
-					if (obj.parent != toplevel.TypeMap) {
+					if (!obj.parent.identifier.Equals(toplevel.TypeMap.identifier)) {
 						throw "parent not set correctly"
 					}
 				`
@@ -316,10 +316,10 @@ func TestComplexTypeMap(t *testing.T) {
 			Convey("Removing the object works", func() {
 
 				code = `
-					id = toplevel.TypeMap.Get("test").Identifier()
+					l = toplevel.TypeMap.Length()
 					toplevel.TypeMap.Remove("test")
-					if (Objects.hasOwnProperty(id)) {
-						throw "Object list still has type map object, but should not: " + id
+					if (l != toplevel.TypeMap.Length() + 1) {
+						throw "Object removal did not shorten the map"
 					}
 				`
 				_, err := rntm.RunJavaScript("user3", code)
