@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
+	"strings"
+
 	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
 	cid "github.com/ipfs/go-cid"
-	"strings"
 )
 
 func init() {
@@ -29,7 +30,6 @@ type Datastructure struct {
 	prefix string
 
 	//dml state handling
-	dml      *dml.Runtime
 	dmlState dmlState
 
 	//connectvity: p2p and client
@@ -60,7 +60,6 @@ func NewDatastructure(path string, prefix string, client *nxclient.Client) (Data
 	return Datastructure{
 		path:     path,
 		prefix:   prefix,
-		dml:      state.dml,
 		dmlState: state,
 		swarm:    nil,
 		client:   client,
@@ -73,17 +72,17 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	self.swarm = s
 
 	//initiate the client connections for events
-	rntm := self.dml
+	rntm := self.dmlState.dml
 	rntm.SetupAllObjects(func(objpath string, obj dml.Data) error {
+		/*
+			//build the full path
+			if objpath != "" {
+				objpath += "."
+			}
+			objpath += obj.Id().Name
 
-		//build the full path
-		if objpath != "" {
-			objpath += "."
-		}
-		objpath += obj.Id().Name
-
-		//go over all events and set them up
-		self.setupDmlEvents(obj, objpath)
+			//go over all events and set them up
+			self.setupDmlEvents(obj, objpath)*/
 		return nil
 	})
 
@@ -103,7 +102,7 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	options = wamp.SetOption(options, wamp.OptMatch, wamp.MatchExact)
 	uri = self.prefix + "execute"
 	self.client.Register(uri, self.createWampJSFunction(), options)
-	
+
 	//register debug print handler
 	uri = self.prefix + "prints"
 	fnc := func(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
@@ -127,15 +126,16 @@ func (self Datastructure) GetState() p2p.State {
 
 //setup events so that they publish in the wamp client!
 func (self Datastructure) setupDmlEvents(obj dml.EventHandler, path string) {
+	/*
+		//go over all events and set them up
+		for _, evtName := range obj.Events() {
 
-	//go over all events and set them up
-	for _, evtName := range obj.Events() {
-
-		evt := obj.GetEvent(evtName)
-		evt.RegisterCallback(self.createWampPublishFunction(path, evtName))
-	}
+			evt := obj.GetEvent(evtName)
+			evt.RegisterCallback(self.createWampPublishFunction(path, evtName))
+		}*/
 }
 
+/*
 func (self Datastructure) createWampPublishFunction(path string, event string) dml.EventCallback {
 
 	return func(vals ...interface{}) error {
@@ -164,7 +164,7 @@ func (self Datastructure) createWampPublishFunction(path string, event string) d
 		return self.client.Publish(uri, opts, args, kwargs)
 	}
 }
-
+*/
 func (self Datastructure) executeOperation(ctx context.Context, op Operation) nxclient.InvokeResult {
 
 	//execute the operation!
@@ -417,7 +417,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				}
 
 				//get the cid from the data object!
-				val, err := self.dml.Call(dml.User(auth), string(path)+".Get")
+				val, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path)+".Get")
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
@@ -454,7 +454,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			case "ReadBinary":
 
 				//get the cid from the data object!
-				val, err := self.dml.Call(dml.User(auth), string(path)+".Get")
+				val, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path)+".Get")
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}

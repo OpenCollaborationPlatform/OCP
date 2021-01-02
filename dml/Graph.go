@@ -91,11 +91,11 @@ func (self *graph) getGonumDirected(id Identifier) (gonum.Directed, map[interfac
 	directed := simple.NewDirectedGraph()
 	mapper := make(map[interface{}]gonum.Node, 0)
 
-	dbNodes, err := mapVersionedFromStore(self.rntm.datastore, id, nodeKey)
+	dbNodes, err := self.GetDBMapVersioned(id, nodeKey)
 	if err != nil {
 		return directed, mapper
 	}
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return directed, mapper
 	}
@@ -183,7 +183,7 @@ func (self *graph) typeToDB(input interface{}, dt DataType) interface{} {
 
 func (self *graph) Nodes(id Identifier) ([]interface{}, error) {
 
-	dbNodes, err := mapVersionedFromStore(self.rntm.datastore, id, nodeKey)
+	dbNodes, err := self.GetDBMapVersioned(id, nodeKey)
 	if err != nil {
 		return nil, err
 	}
@@ -214,7 +214,7 @@ func (self *graph) HasNode(id Identifier, node interface{}) (bool, error) {
 		return false, utils.StackError(err, "Wrong type for node")
 	}
 
-	dbNodes, err := mapVersionedFromStore(self.rntm.datastore, id, nodeKey)
+	dbNodes, err := self.GetDBMapVersioned(id, nodeKey)
 	if err != nil {
 		return false, err
 	}
@@ -234,7 +234,7 @@ func (self *graph) AddNode(id Identifier, value interface{}) error {
 
 	dbentry := self.typeToDB(value, dt)
 
-	dbNodes, err := mapVersionedFromStore(self.rntm.datastore, id, nodeKey)
+	dbNodes, err := self.GetDBMapVersioned(id, nodeKey)
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func (self *graph) RemoveNode(id Identifier, value interface{}) error {
 
 	dt := self.nodeDataType()
 
-	dbNodes, err := mapVersionedFromStore(self.rntm.datastore, id, nodeKey)
+	dbNodes, err := self.GetDBMapVersioned(id, nodeKey)
 	if err != nil {
 		return err
 	}
@@ -299,7 +299,7 @@ func (self *graph) RemoveNode(id Identifier, value interface{}) error {
 	}
 
 	//remove all edges that connect to this node
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,7 @@ func (self *graph) AddEdge(id Identifier, source, target, value interface{}) err
 	}
 
 	//write
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return err
 	}
@@ -413,7 +413,7 @@ func (self *graph) NewEdge(id Identifier, source, target interface{}) (interface
 	}
 
 	//write
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +442,7 @@ func (self *graph) RemoveEdge(id Identifier, value interface{}) error {
 		return utils.StackError(err, "Cannot remove edge, has wrong type")
 	}
 
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return err
 	}
@@ -471,7 +471,7 @@ func (self *graph) RemoveEdgeBetween(id Identifier, source, target interface{}) 
 	target = UnifyDataType(target)
 
 	//we need to iterate all edges!
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return err
 	}
@@ -511,7 +511,7 @@ func (self *graph) HasEdge(id Identifier, value interface{}) (bool, error) {
 
 	dbkey := self.typeToDB(value, dt)
 
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return false, err
 	}
@@ -538,7 +538,7 @@ func (self *graph) HasEdgeBetween(id Identifier, source, target interface{}) (bo
 	target = UnifyDataType(target)
 
 	//we need to iterate all edges!
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return false, err
 	}
@@ -584,7 +584,7 @@ func (self *graph) Edge(id Identifier, source, target interface{}) (interface{},
 	target = UnifyDataType(target)
 
 	//we need to iterate all edges!
-	dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+	dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 	if err != nil {
 		return nil, err
 	}
@@ -798,7 +798,7 @@ func (self *graph) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 	//handle nodes
 	dt := self.nodeDataType()
 	if dt.IsComplex() {
-		dbNodes, err := mapVersionedFromStore(self.rntm.datastore, id, nodeKey)
+		dbNodes, err := self.GetDBMapVersioned(id, nodeKey)
 		if err != nil {
 			return nil, err
 		}
@@ -822,7 +822,7 @@ func (self *graph) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 	dt = self.edgeDataType()
 	if dt.IsComplex() {
 
-		dbEdges, err := mapVersionedFromStore(self.rntm.datastore, id, edgeKey)
+		dbEdges, err := self.GetDBMapVersioned(id, edgeKey)
 		if err != nil {
 			return nil, err
 		}

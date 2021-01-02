@@ -99,7 +99,7 @@ func (self *mapImpl) typeToDB(key interface{}, dt DataType) interface{} {
 
 func (self *mapImpl) Length(id Identifier) (int64, error) {
 
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return -1, err
 	}
@@ -113,7 +113,7 @@ func (self *mapImpl) Length(id Identifier) (int64, error) {
 
 func (self *mapImpl) Keys(id Identifier) ([]interface{}, error) {
 
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (self *mapImpl) Keys(id Identifier) ([]interface{}, error) {
 
 func (self *mapImpl) Has(id Identifier, key interface{}) (bool, error) {
 
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return false, err
 	}
@@ -161,7 +161,7 @@ func (self *mapImpl) Get(id Identifier, key interface{}) (interface{}, error) {
 		return nil, utils.StackError(err, "Key has wrong type")
 	}
 
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return -1, err
 	}
@@ -225,7 +225,7 @@ func (self *mapImpl) set(id Identifier, key interface{}, value interface{}) erro
 	dt := self.valueDataType(id)
 	dbkey := self.typeToDB(key, self.keyDataType(id))
 
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return err
 	}
@@ -330,7 +330,7 @@ func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 		return utils.StackError(err, "Cannot create new map value, key has wrong type")
 	}
 
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return err
 	}
@@ -369,7 +369,7 @@ func (self *mapImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 		return nil, err
 	}
 
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return nil, err
 	}
@@ -445,7 +445,7 @@ func (self *mapImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) (
 		return dmlSet{}, fmt.Errorf("Map key type %v does no allow access with %v", dt.AsString(), name)
 	}
 
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return dmlSet{}, err
 	}

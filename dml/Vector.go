@@ -58,7 +58,7 @@ func (self *vector) InitializeDB(id Identifier) error {
 	}
 
 	//initial values
-	dbLength, err := valueVersionedFromStore(self.rntm.datastore, id, lengthKey)
+	dbLength, err := self.GetDBValueVersioned(id, lengthKey)
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func (self *vector) InitializeDB(id Identifier) error {
 
 func (self *vector) Length(id Identifier) (int64, error) {
 
-	dbLength, err := valueVersionedFromStore(self.rntm.datastore, id, lengthKey)
+	dbLength, err := self.GetDBValueVersioned(id, lengthKey)
 	if err != nil {
 		return -1, err
 	}
@@ -94,7 +94,7 @@ func (self *vector) Get(id Identifier, idx int64) (interface{}, error) {
 	}
 
 	//db access for entries
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +194,7 @@ func (self *vector) Set(id Identifier, idx int64, value interface{}) error {
 func (self *vector) set(id Identifier, dt DataType, idx int64, value interface{}) error {
 
 	//db access for entries
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return err
 	}
@@ -266,7 +266,7 @@ func (self *vector) AppendNew(id Identifier) (interface{}, error) {
 	}
 
 	//write new entry
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +375,7 @@ func (self *vector) Remove(id Identifier, idx int64) error {
 	}
 
 	//deleting means moving each entry after idx one down and shortening the length by 1
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return err
 	}
@@ -428,7 +428,7 @@ func (self *vector) Swap(id Identifier, idx1 int64, idx2 int64) error {
 	}
 
 	//get the data to move
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return err
 	}
@@ -492,7 +492,7 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 	// e.g. old: 5, new: 2 [0 1 5 2 3 4 6] (2->3, 3->4, 4->5, 5->2)
 
 	//get the data to move
-	dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 	if err != nil {
 		return err
 	}
@@ -537,7 +537,7 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 
 func (self *vector) changeLength(id Identifier, amount int64) (int64, error) {
 
-	dbLength, err := valueVersionedFromStore(self.rntm.datastore, id, lengthKey)
+	dbLength, err := self.GetDBValueVersioned(id, lengthKey)
 	if err != nil {
 		return -1, err
 	}
@@ -604,7 +604,7 @@ func (self *vector) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 	dt := self.entryDataType(id)
 	if dt.IsComplex() {
 
-		dbEntries, err := mapVersionedFromStore(self.rntm.datastore, id, entryKey)
+		dbEntries, err := self.GetDBMapVersioned(id, entryKey)
 		if err != nil {
 			return nil, err
 		}

@@ -83,7 +83,7 @@ func (self *DataImpl) GetChildObjects() []Data {
 
 func (self *DataImpl) AddChildIdentifier(id Identifier, child Identifier) error {
 
-	list, err := listFromStore(self.rntm.datastore, id, []byte("__children"))
+	list, err := self.GetDBList(id, []byte("__children"))
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (self *DataImpl) AddChildIdentifier(id Identifier, child Identifier) error 
 
 func (self *DataImpl) GetChildIdentifiers(id Identifier) ([]Identifier, error) {
 
-	list, err := listFromStore(self.rntm.datastore, id, []byte("__children"))
+	list, err := self.GetDBList(id, []byte("__children"))
 	if err != nil {
 		return nil, err
 	}

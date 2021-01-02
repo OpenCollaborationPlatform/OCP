@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 
 	"github.com/gammazero/nexus/v3/wamp"
+	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 )
@@ -15,7 +16,7 @@ func init() {
 }
 
 type Operation interface {
-	ApplyTo(*dml.Runtime) interface{}
+	ApplyTo(*dml.Runtime, *datastore.Datastore) interface{}
 	ToData() ([]byte, error)
 	GetSession() (p2p.PeerID, wamp.ID)
 }
@@ -55,17 +56,17 @@ func (self callOperation) ToData() ([]byte, error) {
 	return b.Bytes(), err
 }
 
-func (self callOperation) ApplyTo(rntm *dml.Runtime) interface{} {
+func (self callOperation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interface{} {
 
-	val, err := rntm.Call(self.User, self.Path, self.Arguments...)
+	val, err := rntm.Call(ds, self.User, self.Path, self.Arguments...)
 	if err != nil {
 		return err
 	}
 
 	//check if it is a Object, if so we only return the encoded identifier!
-	obj, ok := val.(dml.Object)
+	id, ok := val.(dml.Identifier)
 	if ok {
-		return obj.Id().Encode()
+		return id.Encode()
 	}
 
 	return val
@@ -97,17 +98,17 @@ func (self jsOperation) ToData() ([]byte, error) {
 	return b.Bytes(), err
 }
 
-func (self jsOperation) ApplyTo(rntm *dml.Runtime) interface{} {
+func (self jsOperation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interface{} {
 
-	val, err := rntm.RunJavaScript(self.User, self.Code)
+	val, err := rntm.RunJavaScript(ds, self.User, self.Code)
 	if err != nil {
 		return err
 	}
 
 	//check if it is a Object, if so we only return the encoded identifier!
-	obj, ok := val.(dml.Object)
+	id, ok := val.(dml.Identifier)
 	if ok {
-		return obj.Id().Encode()
+		return id.Encode()
 	}
 
 	return val

@@ -60,7 +60,7 @@ func (self *variant) SetValue(id Identifier, value interface{}) error {
 	}
 
 	var dbValue datastore.ValueVersioned
-	dbValue, err = valueVersionedFromStore(self.rntm.datastore, id, variantKey)
+	dbValue, err = self.GetDBValueVersioned(id, variantKey)
 
 	if err == nil {
 		if dt.IsComplex() {
@@ -90,7 +90,7 @@ func (self *variant) GetValue(id Identifier) (interface{}, error) {
 
 	dt := self.getDataType(id)
 
-	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, variantKey)
+	dbValue, err := self.GetDBValueVersioned(id, variantKey)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access DB for reading variant")
 	}
@@ -187,7 +187,7 @@ func (self *variant) InitializeDB(id Identifier) error {
 
 func (self *variant) getStoredObject(id Identifier) (dmlSet, error) {
 
-	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, variantKey)
+	dbValue, err := self.GetDBValueVersioned(id, variantKey)
 	if err != nil {
 		return dmlSet{}, utils.StackError(err, "Unable to access DB for reading variant")
 	}
@@ -215,7 +215,7 @@ func (self *variant) changedCallback(id Identifier, args ...interface{}) error {
 	//build the default values! And set the value. Don't use SetValue as this
 	//assumes old and new value have same datatype
 
-	dbValue, e := valueVersionedFromStore(self.rntm.datastore, id, variantKey)
+	dbValue, e := self.GetDBValueVersioned(id, variantKey)
 	if e != nil {
 		return utils.StackError(e, "Unable to access DB for reading variant")
 	}

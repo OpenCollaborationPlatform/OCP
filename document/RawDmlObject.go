@@ -3,12 +3,13 @@ package document
 import (
 	"encoding/gob"
 
-	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 
 	cid "github.com/ipfs/go-cid"
 )
+
+var cidKey = []byte("__raw_cid")
 
 func init() {
 	gob.Register(new(p2p.Cid))
@@ -17,27 +18,18 @@ func init() {
 //Raw dml type: stores data identifiers and allows some information gathering
 type Raw struct {
 	*dml.DataImpl
-
-	//data storage
-	value *datastore.ValueVersioned
 }
 
-func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) (dml.Object, error) {
+func NewRawDmlObject(rntm *dml.Runtime) (dml.Object, error) {
 
-	base, err := dml.NewDataBaseClass(id, parent, rntm)
+	base, err := dml.NewDataBaseClass(rntm)
 	if err != nil {
 		return nil, err
 	}
 
-	//get the db entry
-	set, _ := base.GetDatabaseSet(datastore.ValueType)
-	valueSet := set.(*datastore.ValueVersionedSet)
-	value, _ := valueSet.GetOrCreateValue([]byte("__raw_cid"))
-
 	//build the raw object
 	raw := &Raw{
 		base,
-		value,
 	}
 
 	//add methods
@@ -47,16 +39,16 @@ func NewRawDmlObject(id, parent dml.Identifier, rntm *dml.Runtime) (dml.Object, 
 	raw.AddMethod("Clear", dml.MustNewMethod(raw.Clear, false))
 
 	//add events
-	err = raw.AddEvent("onDataChanged", dml.NewEvent(raw.GetJSObject(), rntm))
+	err = raw.AddEvent(dml.NewEvent("onDataChanged", raw.GetJSPrototype(), rntm))
 
 	return raw, err
 }
 
 //adds the path, either file or directory, to the Raw object
-func (self *Raw) Set(cidstr string) error {
+func (self *Raw) Set(id dml.Identifier, cidstr string) error {
 
 	//check if it is a valid cid
-	id, err := cid.Decode(cidstr)
+	cId, err := cid.Decode(cidstr)
 	if err != nil {
 		return err
 	}
@@ -65,41 +57,57 @@ func (self *Raw) Set(cidstr string) error {
 	//as the dml operation can be finished before we received the block!
 
 	//store the cid!
-	err = self.value.Write(id)
+	value, err := self.GetDBValueVersioned(id, cidKey)
 	if err != nil {
 		return err
 	}
-	return self.GetEvent("onDataChanged").Emit(cidstr)
+	err = value.Write(cId)
+	if err != nil {
+		return err
+	}
+	return self.GetEvent("onDataChanged").Emit(id, cidstr)
 }
 
 //adds the path, either file or directory, to the Raw object
-func (self *Raw) Get() (string, error) {
+func (self *Raw) Get(id dml.Identifier) (string, error) {
 
-	id, err := self.value.Read()
-	return id.(*p2p.Cid).String(), err
+	value, err := self.GetDBValueVersioned(id, cidKey)
+	if err != nil {
+		return "", err
+	}
+	cId, err := value.Read()
+	return cId.(*p2p.Cid).String(), err
 }
 
 //adds the path, either file or directory, to the Raw object
-func (self *Raw) IsSet() (bool, error) {
+func (self *Raw) IsSet(id dml.Identifier) (bool, error) {
 
-	if !self.value.IsValid() {
+	value, err := self.GetDBValueVersioned(id, cidKey)
+	if err != nil {
+		return false, err
+	}
+	if !value.IsValid() {
 		return false, nil
 	}
 
 	//could also be invalid CID after clear!
-	id, err := self.value.Read()
+	cId, err := value.Read()
 	if err != nil {
 		return false, err
 	}
-	return id.(*p2p.Cid).Defined(), nil
+	return cId.(*p2p.Cid).Defined(), nil
 }
 
 //adds the path, either file or directory, to the Raw object
-func (self *Raw) Clear() error {
+func (self *Raw) Clear(id dml.Identifier) error {
 
-	err := self.value.Write(p2p.Cid{})
+	value, err := self.GetDBValueVersioned(id, cidKey)
 	if err != nil {
 		return err
 	}
-	return self.GetEvent("onDataChanged").Emit(p2p.Cid{}.String())
+	err = value.Write(p2p.Cid{})
+	if err != nil {
+		return err
+	}
+	return self.GetEvent("onDataChanged").Emit(id, p2p.Cid{}.String())
 }

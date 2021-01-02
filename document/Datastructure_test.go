@@ -124,7 +124,7 @@ func TestDatastructure(t *testing.T) {
 			}
 
 			testClient.Subscribe("ocp.test.events.Test.TestEventZeroArgs", handlerZeroArgs, make(wamp.Dict, 0))
-			_, err = ds.dml.RunJavaScript("TestUser", "Test.TestEventZeroArgs.Emit()")
+			_, err = ds.dmlState.dml.RunJavaScript(ds.dmlState.store, "TestUser", "Test.TestEventZeroArgs.Emit()")
 			So(err, ShouldBeNil)
 			//wait a bit to be sure it reached us
 			time.Sleep(100 * time.Millisecond)
@@ -147,7 +147,7 @@ func TestDatastructure(t *testing.T) {
 				args[1] = evt.Arguments[1]
 			}
 			testClient.Subscribe("ocp.test.events.Test.TestEventTwoArgs", handlerTwoArgs, make(wamp.Dict, 0))
-			_, err = ds.dml.RunJavaScript("TestUser", "Test.TestEventTwoArgs.Emit(\"Hello\", 42)")
+			_, err = ds.dmlState.dml.RunJavaScript(ds.dmlState.store, "TestUser", "Test.TestEventTwoArgs.Emit(\"Hello\", 42)")
 			So(err, ShouldBeNil)
 			//wait a bit to be sure it reached us
 			time.Sleep(50 * time.Millisecond)
@@ -168,21 +168,21 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ := ds.dml.Call(dml.User("test"), "Test.testI")
+			val, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 0)
 
 			_, err = testClient.Call(ctx, "ocp.test.call.Test.TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ = ds.dml.Call(dml.User("test"), "Test.testI")
+			val, _ = ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 3)
-			
+
 			val, err = testClient.Call(ctx, "ocp.test.call.Test.TestList", opts, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			args := val.(*wamp.Result)
 			So(args.Arguments[0], ShouldResemble, []interface{}{})
-			
+
 			testClient.Call(ctx, "ocp.test.call.Test.Graph.AddNode", opts, wamp.List{"node"}, wamp.Dict{}, nil)
 			val, err = testClient.Call(ctx, "ocp.test.call.Test.Graph.ToNode", opts, wamp.List{"node"}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
@@ -203,7 +203,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ := ds.dml.Call(dml.User("test"), "Test.testI")
+			val, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 120)
 		})
 
@@ -251,7 +251,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 20)
 
-			val, _ := ds.dml.Call(dml.User("test"), id+".testI")
+			val, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), id+".testI")
 			So(val, ShouldEqual, 20)
 		})
 	})

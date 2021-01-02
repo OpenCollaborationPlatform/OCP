@@ -434,6 +434,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	}
 
 	handled := false
+	constant := false
 	var result interface{} = nil
 	err = nil
 
@@ -445,29 +446,24 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 		handled = true
 
 		if fnc.IsConst() {
-			self.datastore.Rollback()
-			if err != nil {
-				return nil, err
-			}
-			return result, nil
+			constant = true
 		}
 	}
 
 	//a property maybe?
 	if !handled && dbSet.obj.HasProperty(accessor) {
 		prop := dbSet.obj.GetProperty(accessor)
+		handled = true
 
 		if len(args) == 0 {
 			//read only
 			result = prop.GetValue(dbSet.id)
-			self.datastore.Rollback()
-			return result, nil
+			constant = true
 
 		} else {
 			err = prop.SetValue(dbSet.id, args[0])
 			result = args[0]
 		}
-		handled = true
 	}
 
 	//an event?
@@ -481,15 +477,8 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 		dat, ok := dbSet.obj.(Data)
 		if ok {
 			result, err = dat.GetValueByName(dbSet.id, accessor)
-			if err != nil {
-				err := self.datastore.Rollback()
-				return result, err
-			}
-			if result != nil {
-				//read only
-				err := self.datastore.Rollback()
-				return result, err
-			}
+			constant = true
+			handled = true
 		}
 	}
 
@@ -506,10 +495,14 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	}
 
 	//postprocess correctly
-	err = self.postprocess(false)
+	err = self.postprocess(constant)
+
+	//we do not return dmlSets
+	if set, ok := result.(dmlSet); ok {
+		result = set.id
+	}
 
 	return result, err
-	return nil, nil
 }
 
 // 							Internal Functions

@@ -52,6 +52,14 @@ type Object interface {
 	RemoveVersionsUpTo(Identifier, datastore.VersionID) error
 	RemoveVersionsUpFrom(Identifier, datastore.VersionID) error
 
+	//helpers method for getting database access
+	GetDBValue(Identifier, []byte) (datastore.Value, error)
+	GetDBValueVersioned(Identifier, []byte) (datastore.ValueVersioned, error)
+	GetDBMap(Identifier, []byte) (datastore.Map, error)
+	GetDBMapVersioned(Identifier, []byte) (datastore.MapVersioned, error)
+	GetDBList(Identifier, []byte) (datastore.List, error)
+	GetDBListVersioned(Identifier, []byte) (datastore.ListVersioned, error)
+
 	//initialization function
 	InitializeDB(Identifier) error
 }
@@ -100,7 +108,7 @@ func NewObject(rntm *Runtime) (*object, error) {
 
 func (self *object) GetParentIdentifier(id Identifier) (Identifier, error) {
 
-	value, err := valueFromStore(self.rntm.datastore, id, parentKey)
+	value, err := self.GetDBValue(id, parentKey)
 	if err != nil {
 		return Identifier{}, err
 	}
@@ -114,7 +122,7 @@ func (self *object) GetParentIdentifier(id Identifier) (Identifier, error) {
 
 func (self *object) SetParentIdentifier(id Identifier, parent Identifier) error {
 
-	value, err := valueFromStore(self.rntm.datastore, id, parentKey)
+	value, err := self.GetDBValue(id, parentKey)
 	if err != nil {
 		return err
 	}
@@ -151,7 +159,7 @@ func (self *object) GetParent(id Identifier) (dmlSet, error) {
 
 func (self *object) GetDataType(id Identifier) (DataType, error) {
 
-	value, err := valueFromStore(self.rntm.datastore, id, dtKey)
+	value, err := self.GetDBValue(id, dtKey)
 	if err != nil {
 		return DataType{}, err
 	}
@@ -165,7 +173,7 @@ func (self *object) GetDataType(id Identifier) (DataType, error) {
 
 func (self *object) SetDataType(id Identifier, dt DataType) error {
 
-	value, err := valueFromStore(self.rntm.datastore, id, dtKey)
+	value, err := self.GetDBValue(id, dtKey)
 	if err != nil {
 		return err
 	}
@@ -295,4 +303,106 @@ func (self *object) InitializeDB(id Identifier) error {
 	self.SetDataType(id, DataType{})
 
 	return nil
+}
+
+func (self *object) GetDBValue(id Identifier, key []byte) (datastore.Value, error) {
+
+	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ValueType, false, id.Hash())
+	if err != nil {
+		return datastore.Value{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	vset, done := set.(*datastore.ValueSet)
+	if !done {
+		return datastore.Value{}, fmt.Errorf("Database access failed: wrong set returned")
+	}
+	value, err := vset.GetOrCreateValue(key)
+	if err != nil {
+		return datastore.Value{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return *value, nil
+}
+
+func (self *object) GetDBValueVersioned(id Identifier, key []byte) (datastore.ValueVersioned, error) {
+
+	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ValueType, true, id.Hash())
+	if err != nil {
+		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	vset, done := set.(*datastore.ValueVersionedSet)
+	if !done {
+		return datastore.ValueVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
+	}
+	value, err := vset.GetOrCreateValue(key)
+	if err != nil {
+		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return *value, nil
+}
+
+func (self *object) GetDBMap(id Identifier, key []byte) (datastore.Map, error) {
+
+	set, err := self.rntm.datastore.GetOrCreateSet(datastore.MapType, false, id.Hash())
+	if err != nil {
+		return datastore.Map{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	mset, done := set.(*datastore.MapSet)
+	if !done {
+		return datastore.Map{}, fmt.Errorf("Database access failed: wrong set returned")
+	}
+	map_, err := mset.GetOrCreateMap(key)
+	if err != nil {
+		return datastore.Map{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return *map_, nil
+}
+
+func (self *object) GetDBMapVersioned(id Identifier, key []byte) (datastore.MapVersioned, error) {
+
+	set, err := self.rntm.datastore.GetOrCreateSet(datastore.MapType, true, id.Hash())
+	if err != nil {
+		return datastore.MapVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	mset, done := set.(*datastore.MapVersionedSet)
+	if !done {
+		return datastore.MapVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
+	}
+	map_, err := mset.GetOrCreateMap(key)
+	if err != nil {
+		return datastore.MapVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return *map_, nil
+}
+
+func (self *object) GetDBList(id Identifier, key []byte) (datastore.List, error) {
+
+	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, false, id.Hash())
+	if err != nil {
+		return datastore.List{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	lset, done := set.(*datastore.ListSet)
+	if !done {
+		return datastore.List{}, fmt.Errorf("Database access failed: wrong set returned")
+	}
+	list, err := lset.GetOrCreateList(key)
+	if err != nil {
+		return datastore.List{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return *list, nil
+}
+
+func (self *object) GetDBListVersioned(id Identifier, key []byte) (datastore.ListVersioned, error) {
+
+	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, true, id.Hash())
+	if err != nil {
+		return datastore.ListVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
+	}
+	lset, done := set.(*datastore.ListVersionedSet)
+	if !done {
+		return datastore.ListVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
+	}
+	list, err := lset.GetOrCreateList(key)
+	if err != nil {
+		return datastore.ListVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+	}
+	return *list, nil
 }

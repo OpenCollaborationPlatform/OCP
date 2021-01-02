@@ -3,15 +3,16 @@ package document
 import (
 	"archive/zip"
 	"bytes"
+	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+
 	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
-	"io"
-	"io/ioutil"
-	"os"
-	"path/filepath"
 )
 
 //sharing information about the session, that is currently manipulating the state
@@ -55,7 +56,7 @@ func newState(path string) (dmlState, error) {
 	}
 
 	//create the runtime
-	rntm := dml.NewRuntime(store)
+	rntm := dml.NewRuntime()
 	rntm.RegisterObjectCreator("Raw", NewRawDmlObject)
 
 	//parse the dm file in path/Dml/main.dml
@@ -64,6 +65,8 @@ func newState(path string) (dmlState, error) {
 	if err != nil {
 		return dmlState{}, utils.StackError(err, "Unable to parse dml file")
 	}
+	//init DB
+	rntm.InitializeDatastore(store)
 
 	return dmlState{path, rntm, store, &sessionInfo{}}, nil
 }
@@ -81,7 +84,7 @@ func (self dmlState) Apply(data []byte) interface{} {
 	defer self.operationSession.Unset()
 
 	//apply to runtime
-	return op.ApplyTo(self.dml)
+	return op.ApplyTo(self.dml, self.store)
 }
 
 func (self dmlState) Snapshot() ([]byte, error) {
@@ -187,19 +190,19 @@ func (self dmlState) GetOperationSession() *sessionInfo {
 }
 
 func (self dmlState) CanCallLocal(path string) (bool, error) {
-	return self.dml.IsConstant(path)
+	return self.dml.IsConstant(self.store, path)
 }
 
 func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) (interface{}, error) {
-	val, err := self.dml.Call(user, path, args...)
+	val, err := self.dml.Call(self.store, user, path, args...)
 	if err != nil {
 		return nil, err
 	}
 
 	//check if it is a Object, if so we only return the encoded identifier!
-	obj, ok := val.(dml.Object)
+	id, ok := val.(dml.Identifier)
 	if ok {
-		return obj.Id().Encode(), nil
+		return id.Encode(), nil
 	}
 	return val, nil
 }
