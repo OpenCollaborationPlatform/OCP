@@ -34,7 +34,8 @@ import (
 	"github.com/dop251/goja_nodejs/require"
 )
 
-var mainKey = []byte("MainIdentifier")
+var mainIdKey = []byte("MainIdentifier")
+var mainDtKey = []byte("MainDatatype")
 var internalKey [32]byte
 
 func init() {
@@ -44,10 +45,7 @@ func init() {
 //Function prototype that can create new object types in DML
 type CreatorFunc func(rntm *Runtime) (Object, error)
 
-func NewRuntime(ds *datastore.Datastore) *Runtime {
-
-	ds.Begin()
-	defer ds.Commit()
+func NewRuntime() *Runtime {
 
 	//js runtime with console support
 	js := goja.New()
@@ -59,7 +57,7 @@ func NewRuntime(ds *datastore.Datastore) *Runtime {
 		printManager: NewPrintManager(),
 		creators:     cr,
 		jsvm:         js,
-		datastore:    ds,
+		datastore:    nil,
 		mutex:        &sync.Mutex{},
 		ready:        false,
 		currentUser:  "none",
@@ -106,6 +104,7 @@ type Runtime struct {
 	ready       Boolean //True if a datastructure was read and setup, false if no dml file was parsed
 	currentUser User    //user that currently access the runtime
 	objects     map[DataType]Object
+	main        DataType
 
 	//managers
 	behaviours map[string]BehaviourManager
@@ -133,9 +132,6 @@ func (self *Runtime) ParseFolder(path string) error {
 //Parses the dml code and setups the full structure. Note: Cannot handle local
 //imports
 func (self *Runtime) Parse(reader io.Reader) error {
-
-	self.datastore.Begin()
-	defer self.datastore.Commit()
 
 	//no double loading
 	if self.ready == true {
@@ -169,47 +165,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		//TODO clear the database entries...
 	}
 
-	//check if the data structure is setup, or if we need to do this
-	set, err := self.datastore.GetOrCreateSet(datastore.ValueType, false, internalKey)
-	if err != nil {
-		return utils.StackError(err, "Unable to access DB")
-	}
-	vSet, _ := set.(*datastore.ValueSet)
-	isSetup := vSet.HasKey(mainKey)
-
-	var mainID Identifier
-	if isSetup {
-		//no setup required, get the mainID
-		val, err := vSet.GetOrCreateValue(mainKey)
-		if err != nil {
-			return utils.StackError(err, "Unable to parse dml code due to database access error")
-		}
-		idVal, err := val.Read()
-		if err != nil {
-			return utils.StackError(err, "Unable to parse dml code due to database access error")
-		}
-		mainID = *idVal.(*Identifier)
-
-	} else {
-		//nothing setup yet, lets do it
-		mainID, err = self.setupObject(mainObj, Identifier{})
-		if err != nil {
-			return utils.StackError(err, "Unable to parse dml code due to database access error while setup")
-		}
-		value, err := vSet.GetOrCreateValue(mainKey)
-		if err != nil {
-			return utils.StackError(err, "Unable to access  database while setup")
-		}
-		err = value.Write(mainID)
-		if err != nil {
-			return utils.StackError(err, "Unable to access  database while setup")
-		}
-	}
-
-	//obj.(Data).SetupBehaviours(obj.(Data), true)
-	self.ready = true
-
-	//expose main object to js
+	//expose main object to JS
 	getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
 		main, err := self.getMainObjectSet()
 		if err != nil {
@@ -217,12 +173,79 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		}
 		return main.obj.GetJSObject(main.id)
 	})
-	self.jsvm.GlobalObject().DefineAccessorProperty(mainID.Name, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
+	name := mainObj.GetProperty("name").GetValue(Identifier{}).(string) //name is a const property, hence we can access it with any identifier, even invalid ones
+	self.jsvm.GlobalObject().DefineAccessorProperty(name, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
-	//call everyones "onCreated"
-	mainObj.(Data).Created(mainID)
+	//store the state of the parsing
+	self.main = mainObj.GetObjectDataType()
+	self.ready = true
 
 	return err
+}
+
+//Setups the database according to the parsed DML file
+func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
+
+	ds.Begin()
+	defer ds.Rollback() //rollback on error, otherwise we commit before
+
+	if !self.ready {
+		return fmt.Errorf("Runtime not setup")
+	}
+
+	//all upcoming operations use this datastore
+	self.datastore = ds
+
+	//check if the data structure is setup, or if we need to do this
+	set, err := self.datastore.GetOrCreateSet(datastore.ValueType, false, internalKey)
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB")
+	}
+	vSet, _ := set.(*datastore.ValueSet)
+	isSetup := vSet.HasKey(mainIdKey)
+
+	if isSetup {
+		return fmt.Errorf("Datastore is already setup")
+
+	}
+
+	//nothing setup yet, lets do it
+	mainObj, ok := self.objects[self.main]
+	if !ok {
+		return fmt.Errorf("The runtime is not setup correctly")
+	}
+	mainID, err := self.setupObject(mainObj, Identifier{})
+	if err != nil {
+		return utils.StackError(err, "Unable to setup database")
+	}
+	value, err := vSet.GetOrCreateValue(mainIdKey)
+	if err != nil {
+		return utils.StackError(err, "Unable to access  database while setup")
+	}
+	err = value.Write(mainID)
+	if err != nil {
+		return utils.StackError(err, "Unable to access  database while setup")
+	}
+
+	//call the created events
+	if data, ok := mainObj.(Data); ok {
+		data.Created(mainID)
+
+	} else {
+		return fmt.Errorf("Main object is Behaviour, not Data")
+	}
+
+	//store the DB type
+	dbDt, err := vSet.GetOrCreateValue(mainDtKey)
+	if err != nil {
+		return utils.StackError(err, "Unable to store runtime datatype")
+	}
+	err = dbDt.Write(mainObj.GetObjectDataType())
+	if err != nil {
+		return utils.StackError(err, "Unable to store runtime datatype")
+	}
+
+	return ds.Commit()
 }
 
 //calls setup on all Data Objects. The string is the path up to the object,
@@ -278,10 +301,17 @@ func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 //*********************************************************************************
 
 //run arbitrary javascript code on the loaded structure
-func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) {
+func (self *Runtime) RunJavaScript(ds *datastore.Datastore, user User, code string) (interface{}, error) {
 
 	self.clearMessage()
+	self.datastore = ds
 	self.datastore.Begin()
+
+	//all upcoming operations use this datastore
+	if err := self.checkDatastore(ds); err != nil {
+		self.datastore.Rollback()
+		return nil, err
+	}
 
 	//save the user for processing
 	self.currentUser = user
@@ -302,10 +332,16 @@ func (self *Runtime) RunJavaScript(user User, code string) (interface{}, error) 
 	return extractValue(val, self), err
 }
 
-func (self *Runtime) IsConstant(fullpath string) (bool, error) {
+func (self *Runtime) IsConstant(ds *datastore.Datastore, fullpath string) (bool, error) {
 
 	self.datastore.Begin()
 	defer self.datastore.Rollback()
+
+	//all upcoming operations use this datastore
+	if err := self.checkDatastore(ds); err != nil {
+		return false, err
+	}
+	self.datastore = ds
 
 	//get path and accessor
 	idx := strings.LastIndex(string(fullpath), ".")
@@ -345,13 +381,19 @@ func (self *Runtime) IsConstant(fullpath string) (bool, error) {
 	return true, nil
 }
 
-func (self *Runtime) Call(user User, fullpath string, args ...interface{}) (interface{}, error) {
+func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, args ...interface{}) (interface{}, error) {
 
 	self.clearMessage()
 
+	self.datastore = ds
 	err := self.datastore.Begin()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access database")
+	}
+
+	if err := self.checkDatastore(ds); err != nil {
+		self.datastore.Rollback()
+		return nil, err
 	}
 
 	//save the user for processing
@@ -500,6 +542,40 @@ func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup
 	return nil
 }
 
+func (self *Runtime) checkDatastore(ds *datastore.Datastore) error {
+
+	set, err := ds.GetOrCreateSet(datastore.ValueType, false, internalKey)
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB")
+	}
+	vSet, _ := set.(*datastore.ValueSet)
+	dbDt, err := vSet.GetOrCreateValue(mainDtKey)
+	if err != nil {
+		return utils.StackError(err, "Datastore invalid")
+	}
+
+	if ok, err := dbDt.WasWrittenOnce(); !ok || err != nil {
+		return fmt.Errorf("Datastore is not initialized by runtime")
+	}
+
+	result, err := dbDt.Read()
+	if err != nil {
+		return utils.StackError(err, "Datastore invalid")
+	}
+
+	dt, ok := result.(*DataType)
+	if !ok {
+		fmt.Errorf("Datastore invalid")
+	}
+
+	if !dt.IsEqual(self.main) {
+		return fmt.Errorf("Datastore is initialized for different runtime")
+	}
+
+	//everything ok!
+	return nil
+}
+
 func (self *Runtime) getMainObjectSet() (dmlSet, error) {
 
 	if !self.ready {
@@ -512,7 +588,7 @@ func (self *Runtime) getMainObjectSet() (dmlSet, error) {
 		return dmlSet{}, err
 	}
 	vSet, _ := set.(*datastore.ValueSet)
-	value, err := vSet.GetOrCreateValue(mainKey)
+	value, err := vSet.GetOrCreateValue(mainIdKey)
 	if err != nil {
 		return dmlSet{}, err
 	}
@@ -686,10 +762,9 @@ func (self *Runtime) getOrCreateObject(dt DataType) (Object, error) {
 func (self *Runtime) getObjectSet(id Identifier) (dmlSet, error) {
 
 	//get any object from the map
-	var obj Object
-	for _, val := range self.objects {
-		obj = val
-		break
+	obj, ok := self.objects[self.main]
+	if !ok {
+		return dmlSet{}, fmt.Errorf("Runtime seems bot to be setup correctly")
 	}
 
 	dt, err := obj.GetDataType(id)
@@ -967,8 +1042,6 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 			if err != nil {
 				return Identifier{}, err
 			}
-
-			data.GetBehaviourObject(behaviour).SetParentIdentifier(bhvrID, id)
 		}
 	}
 

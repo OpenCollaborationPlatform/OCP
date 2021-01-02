@@ -13,12 +13,11 @@ import (
 
 func TestPODMap(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Loading dml code into runtime including pod map types,", t, func() {
 
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
@@ -45,12 +44,15 @@ func TestPODMap(t *testing.T) {
 					}
 				}`
 
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
 		err = rntm.Parse(strings.NewReader(dmlcode))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
 		So(err, ShouldBeNil)
 
 		Convey("Adding to IntInt map should work", func() {
 			store.Begin()
+			rntm.datastore = store //set interal datastore as we do not use Runtime API
 			main, err := rntm.getMainObjectSet()
 			So(err, ShouldBeNil)
 			child, _ := main.obj.(Data).GetChildByName(main.id, "IntIntMap")
@@ -64,7 +66,7 @@ func TestPODMap(t *testing.T) {
 			store.Rollback()
 
 			code := `toplevel.IntIntMap.Set(10, 10)`
-			_, err = rntm.RunJavaScript("", code)
+			_, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -77,7 +79,7 @@ func TestPODMap(t *testing.T) {
 			So(has, ShouldBeTrue)
 
 			code = `toplevel.IntIntMap.Get(10)`
-			res, err := rntm.RunJavaScript("", code)
+			res, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
 		})
@@ -85,39 +87,39 @@ func TestPODMap(t *testing.T) {
 		Convey("Adding new values should work", func() {
 
 			code := `toplevel.StringBoolMap.New("hey")`
-			_, err = rntm.RunJavaScript("", code)
+			_, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.StringBoolMap.New("hey")`
-			_, err = rntm.RunJavaScript("", code)
+			_, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldNotBeNil)
 
 			code = `toplevel.StringBoolMap.Get("hey")`
-			res, err := rntm.RunJavaScript("", code)
+			res, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeFalse)
 
 			code = `toplevel.StringBoolMap.Set("ho", true)`
-			_, err = rntm.RunJavaScript("", code)
+			_, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.StringBoolMap.Get("ho")`
-			res, err = rntm.RunJavaScript("", code)
+			res, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeTrue)
 
 			code = `toplevel.StringBoolMap.Length()`
-			res, err = rntm.RunJavaScript("", code)
+			res, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 2)
 
 			code = `toplevel.StringBoolMap.Has("ho")`
-			res, err = rntm.RunJavaScript("", code)
+			res, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeTrue)
 
 			code = `toplevel.StringBoolMap.Has("klö")`
-			res, err = rntm.RunJavaScript("", code)
+			res, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeFalse)
 		})
@@ -127,7 +129,7 @@ func TestPODMap(t *testing.T) {
 			code := `toplevel.IntIntMap.Set(10, 10)
 					toplevel.IntIntMap.Set(9, 9)
 					`
-			_, err = rntm.RunJavaScript("", code)
+			_, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -153,12 +155,14 @@ func TestPODMap(t *testing.T) {
 			code := `toplevel.IntFloatMap.Set(10, 5.5);
 				    toplevel.IntFloatMap.Set(9, 4.4);
 					`
-			_, err = rntm.RunJavaScript("", code)
+			_, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
-			rntm2 := NewRuntime(store)
+			rntm2 := NewRuntime()
 			err = rntm2.Parse(strings.NewReader(dmlcode))
 			So(err, ShouldBeNil)
+
+			rntm2.datastore = store //set interal datastore as we do not use Runtime API
 
 			Convey("The vector should be setup correctly", func() {
 
@@ -215,8 +219,10 @@ func TestComplexTypeMap(t *testing.T) {
 					}
 				}`
 
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
 		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
 		So(err, ShouldBeNil)
 
 		Convey("Adding to type map should work", func() {
@@ -231,15 +237,15 @@ func TestComplexTypeMap(t *testing.T) {
 			store.Commit()
 
 			code = `toplevel.TypeMap.New("test")`
-			_, err = rntm.RunJavaScript("user3", code)
+			_, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.test("test2")`
-			_, err = rntm.RunJavaScript("user3", code)
+			_, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldBeNil)
 
 			code = `	toplevel.TypeMap.Set("new", toplevel.TypeMap.Get("test"))`
-			_, err = rntm.RunJavaScript("user3", code)
+			_, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
 
 			Convey("The created event was called", func() {
@@ -258,7 +264,7 @@ func TestComplexTypeMap(t *testing.T) {
 						throw "identifiers are not equal, but should be"
 					}
 				`
-				_, err = rntm.RunJavaScript("user3", code)
+				_, err = rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 			})
 
@@ -269,7 +275,7 @@ func TestComplexTypeMap(t *testing.T) {
 					obj.test = 1
 					toplevel.TypeMap.Get("test2").test = 2
 				`
-				_, err := rntm.RunJavaScript("user3", code)
+				_, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -309,7 +315,7 @@ func TestComplexTypeMap(t *testing.T) {
 						throw "parent not set correctly"
 					}
 				`
-				_, err := rntm.RunJavaScript("user3", code)
+				_, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 			})
 
@@ -322,7 +328,7 @@ func TestComplexTypeMap(t *testing.T) {
 						throw "Object removal did not shorten the map"
 					}
 				`
-				_, err := rntm.RunJavaScript("user3", code)
+				_, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
 			})

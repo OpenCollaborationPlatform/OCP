@@ -13,12 +13,11 @@ import (
 
 func TestTypeProperty(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Loading dml code into runtime including a type property,", t, func() {
 
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
@@ -42,8 +41,10 @@ func TestTypeProperty(t *testing.T) {
 				}
 			}`
 
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
 		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
 		So(err, ShouldBeNil)
 
 		Convey("The property must be accessbile", func() {
@@ -57,7 +58,7 @@ func TestTypeProperty(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			store.Rollback()
 
-			val, err = rntm.RunJavaScript("", "toplevel.test")
+			val, err = rntm.RunJavaScript(store, "", "toplevel.test")
 			So(err, ShouldBeNil)
 			dtJs, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
@@ -73,7 +74,7 @@ func TestTypeProperty(t *testing.T) {
 						throw "Should be POD, but is not"
 					}
 					`
-				_, err := rntm.RunJavaScript("", "toplevel.test")
+				_, err := rntm.RunJavaScript(store, "", "toplevel.test")
 				So(err, ShouldBeNil)
 			})
 		})
@@ -88,7 +89,7 @@ func TestTypeProperty(t *testing.T) {
 					throw "Should be POD, but is not"
 				}
 			`
-			_, err := rntm.RunJavaScript("", code)
+			_, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 		})
 
@@ -102,7 +103,7 @@ func TestTypeProperty(t *testing.T) {
 					throw "Should not be POD, but is"
 				}
 			`
-			_, err := rntm.RunJavaScript("", code)
+			_, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 		})
 

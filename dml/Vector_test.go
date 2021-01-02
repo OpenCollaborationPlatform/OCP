@@ -13,12 +13,11 @@ import (
 
 func TestPODVector(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Loading dml code into runtime including pod vector types,", t, func() {
 
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
@@ -47,8 +46,10 @@ func TestPODVector(t *testing.T) {
 					}
 				}`
 
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
 		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
 		So(err, ShouldBeNil)
 
 		Convey("Adding to int vector should work", func() {
@@ -62,7 +63,7 @@ func TestPODVector(t *testing.T) {
 			So(length, ShouldEqual, 0)
 			store.Rollback()
 			code = `toplevel.IntVec.Append(0)`
-			val, err := rntm.RunJavaScript("", code)
+			val, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			idx := val.(int64)
 			So(idx, ShouldEqual, 0)
@@ -102,7 +103,7 @@ func TestPODVector(t *testing.T) {
 			So(strvec.Set(child.id, 2, "test"), ShouldNotBeNil)
 		})
 
-		Convey("Moving Values within the vector shall work", func() {
+		Convey("Creating a int vector", func() {
 
 			store.Begin()
 			defer store.Commit()
@@ -111,7 +112,7 @@ func TestPODVector(t *testing.T) {
 			So(err, ShouldBeNil)
 			child, _ := main.obj.(Data).GetChildByName(main.id, "IntVec")
 			vec := child.obj.(*vector)
-			vec.Set(child.id, 0, 0)
+			vec.Append(child.id, 0)
 			vec.Append(child.id, 1)
 			vec.Append(child.id, 2)
 			vec.Append(child.id, 3)
@@ -121,142 +122,141 @@ func TestPODVector(t *testing.T) {
 			length, _ := vec.Length(child.id)
 			So(length, ShouldEqual, 7)
 
-			//[0 1 2 3 4 5 6]
-			// e.g. old: 2, new: 5 [0 1 3 4 5 2 6] (3->2, 4->3, 5->4, 2->5)
-			// e.g. old: 5, new: 2 [0 1 5 2 3 4 6] (2->3, 3->4, 4->5, 5->2)
-			So(vec.Move(child.id, 2, 5), ShouldBeNil)
-			val, _ := vec.Get(child.id, 0)
-			So(val, ShouldEqual, 0)
-			val, _ = vec.Get(child.id, 1)
-			So(val, ShouldEqual, 1)
-			val, _ = vec.Get(child.id, 2)
-			So(val, ShouldEqual, 3)
-			val, _ = vec.Get(child.id, 3)
-			So(val, ShouldEqual, 4)
-			val, _ = vec.Get(child.id, 4)
-			So(val, ShouldEqual, 5)
-			val, _ = vec.Get(child.id, 5)
-			So(val, ShouldEqual, 2)
-			val, _ = vec.Get(child.id, 6)
-			So(val, ShouldEqual, 6)
-		})
+			Convey("moving Values within the vector shall work", func() {
 
-		Convey("Deleting values must be supported", func() {
+				//[0 1 2 3 4 5 6]
+				// e.g. old: 2, new: 5 [0 1 3 4 5 2 6] (3->2, 4->3, 5->4, 2->5)
+				So(vec.Move(child.id, 2, 5), ShouldBeNil)
+				val, _ := vec.Get(child.id, 0)
+				So(val, ShouldEqual, 0)
+				val, _ = vec.Get(child.id, 1)
+				So(val, ShouldEqual, 1)
+				val, _ = vec.Get(child.id, 2)
+				So(val, ShouldEqual, 3)
+				val, _ = vec.Get(child.id, 3)
+				So(val, ShouldEqual, 4)
+				val, _ = vec.Get(child.id, 4)
+				So(val, ShouldEqual, 5)
+				val, _ = vec.Get(child.id, 5)
+				So(val, ShouldEqual, 2)
+				val, _ = vec.Get(child.id, 6)
+				So(val, ShouldEqual, 6)
+			})
 
-			store.Begin()
-			defer store.Commit()
+			Convey("and deleting values from the vector must be supported", func() {
 
-			main, err := rntm.getMainObjectSet()
-			So(err, ShouldBeNil)
-			child, _ := main.obj.(Data).GetChildByName(main.id, "IntVec")
-			vec := child.obj.(*vector)
-			So(vec.Remove(child.id, 1), ShouldBeNil)
+				main, err := rntm.getMainObjectSet()
+				So(err, ShouldBeNil)
+				child, _ := main.obj.(Data).GetChildByName(main.id, "IntVec")
+				vec := child.obj.(*vector)
+				So(vec.Remove(child.id, 1), ShouldBeNil)
 
-			length, _ := vec.Length(child.id)
-			So(length, ShouldEqual, 6)
-			val, _ := vec.Get(child.id, 0)
-			So(val, ShouldEqual, 0)
-			val, _ = vec.Get(child.id, 1)
-			So(val, ShouldEqual, 3)
-			val, _ = vec.Get(child.id, 5)
-			So(val, ShouldEqual, 6)
+				//[0 1 2 3 4 5 6] --> [0 2 3 4 5 6]
+				length, _ := vec.Length(child.id)
+				So(length, ShouldEqual, 6)
+				val, _ := vec.Get(child.id, 0)
+				So(val, ShouldEqual, 0)
+				val, _ = vec.Get(child.id, 1)
+				So(val, ShouldEqual, 2)
+				val, _ = vec.Get(child.id, 5)
+				So(val, ShouldEqual, 6)
 
-			So(vec.Remove(child.id, 6), ShouldNotBeNil)
-			So(vec.Remove(child.id, 5), ShouldBeNil)
-			So(vec.Remove(child.id, 0), ShouldBeNil)
-			So(vec.Remove(child.id, 0), ShouldBeNil)
-			So(vec.Remove(child.id, 0), ShouldBeNil)
-			So(vec.Remove(child.id, 0), ShouldBeNil)
-			So(vec.Remove(child.id, 0), ShouldBeNil)
+				So(vec.Remove(child.id, 6), ShouldNotBeNil)
+				So(vec.Remove(child.id, 5), ShouldBeNil)
+				So(vec.Remove(child.id, 0), ShouldBeNil)
+				So(vec.Remove(child.id, 0), ShouldBeNil)
+				So(vec.Remove(child.id, 0), ShouldBeNil)
+				So(vec.Remove(child.id, 0), ShouldBeNil)
+				So(vec.Remove(child.id, 0), ShouldBeNil)
 
-			length, _ = vec.Length(child.id)
-			So(length, ShouldEqual, 0)
-		})
+				length, _ = vec.Length(child.id)
+				So(length, ShouldEqual, 0)
+			})
 
-		Convey("Inserting works on each position (start, end , inbetween)", func() {
+			Convey("inserting works on each position (start, end , inbetween)", func() {
 
-			store.Begin()
-			defer store.Commit()
-
-			main, err := rntm.getMainObjectSet()
-			So(err, ShouldBeNil)
-			child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
-			vec := child.obj.(*vector)
-
-			//insert should work only at existing indices
-			So(vec.Insert(child.id, 0, 9.5), ShouldNotBeNil)
-			vec.AppendNew(child.id)                       //[0]
-			So(vec.Insert(child.id, 0, 0.5), ShouldBeNil) //[0.5 0]
-			val, err := vec.InsertNew(child.id, 0)        //[0 0.5 0]
-			So(err, ShouldBeNil)
-			So(val, ShouldAlmostEqual, 0.0)
-
-			So(vec.Insert(child.id, 1, 7.1), ShouldBeNil) //[0 7.1 0.5 0]
-
-			length, _ := vec.Length(child.id)
-			So(length, ShouldEqual, 4)
-			val, _ = vec.Get(child.id, 0)
-			So(val, ShouldEqual, 0)
-			val, _ = vec.Get(child.id, 1)
-			So(val, ShouldAlmostEqual, 7.1)
-			val, _ = vec.Get(child.id, 2)
-			So(val, ShouldAlmostEqual, 0.5)
-			val, _ = vec.Get(child.id, 3)
-			So(val, ShouldAlmostEqual, 0.0)
-		})
-
-		Convey("And swapping entries is a thing", func() {
-
-			store.Begin()
-			defer store.Commit()
-
-			main, err := rntm.getMainObjectSet()
-			So(err, ShouldBeNil)
-			child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
-			vec := child.obj.(*vector)
-			vec.Swap(child.id, 0, 2)
-
-			length, _ := vec.Length(child.id)
-			So(length, ShouldEqual, 4)
-			val, _ := vec.Get(child.id, 0)
-			So(val, ShouldAlmostEqual, 0.5)
-			val, _ = vec.Get(child.id, 1)
-			So(val, ShouldAlmostEqual, 7.1)
-			val, _ = vec.Get(child.id, 2)
-			So(val, ShouldAlmostEqual, 0)
-			val, _ = vec.Get(child.id, 3)
-			So(val, ShouldAlmostEqual, 0.0)
-		})
-
-		Convey("Creating a new Runtime with the existing datastore", func() {
-
-			rntm2 := NewRuntime(store)
-			err = rntm2.Parse(strings.NewReader(code))
-			So(err, ShouldBeNil)
-
-			Convey("The vector should be setup correctly", func() {
-
-				store.Begin()
-				defer store.Rollback()
-
-				main, err := rntm2.getMainObjectSet()
+				main, err := rntm.getMainObjectSet()
 				So(err, ShouldBeNil)
 				child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
 				vec := child.obj.(*vector)
 
+				//insert should work only at existing indices
+				So(vec.Insert(child.id, 0, 9.5), ShouldNotBeNil)
+				vec.AppendNew(child.id)                       //[0]
+				So(vec.Insert(child.id, 0, 0.5), ShouldBeNil) //[0.5 0]
+				val, err := vec.InsertNew(child.id, 0)        //[0 0.5 0]
+				So(err, ShouldBeNil)
+				So(val, ShouldAlmostEqual, 0.0)
+
+				So(vec.Insert(child.id, 1, 7.1), ShouldBeNil) //[0 7.1 0.5 0]
+
 				length, _ := vec.Length(child.id)
 				So(length, ShouldEqual, 4)
-				val, _ := vec.Get(child.id, 0)
-				So(val, ShouldAlmostEqual, 0.5)
+				val, _ = vec.Get(child.id, 0)
+				So(val, ShouldEqual, 0)
 				val, _ = vec.Get(child.id, 1)
 				So(val, ShouldAlmostEqual, 7.1)
 				val, _ = vec.Get(child.id, 2)
-				So(val, ShouldAlmostEqual, 0)
+				So(val, ShouldAlmostEqual, 0.5)
 				val, _ = vec.Get(child.id, 3)
 				So(val, ShouldAlmostEqual, 0.0)
+
+				Convey("and swapping entries is a thing", func() {
+
+					main, err := rntm.getMainObjectSet()
+					So(err, ShouldBeNil)
+					child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
+					vec := child.obj.(*vector)
+					vec.Swap(child.id, 0, 2)
+
+					length, _ := vec.Length(child.id)
+					So(length, ShouldEqual, 4)
+					val, _ := vec.Get(child.id, 0)
+					So(val, ShouldAlmostEqual, 0.5)
+					val, _ = vec.Get(child.id, 1)
+					So(val, ShouldAlmostEqual, 7.1)
+					val, _ = vec.Get(child.id, 2)
+					So(val, ShouldAlmostEqual, 0)
+					val, _ = vec.Get(child.id, 3)
+					So(val, ShouldAlmostEqual, 0.0)
+				})
+			})
+			Convey("Creating a new Runtime with the existing datastore", func() {
+
+				rntm2 := NewRuntime()
+				err = rntm2.Parse(strings.NewReader(code))
+				So(err, ShouldBeNil)
+
+				rntm2.datastore = store //set internal datastore as we do not use Runtime API
+
+				Convey("The vector should be setup correctly", func() {
+
+					main, err := rntm2.getMainObjectSet()
+					So(err, ShouldBeNil)
+					child, _ := main.obj.(Data).GetChildByName(main.id, "IntVec")
+					vec := child.obj.(*vector)
+
+					//[0 1 2 3 4 5 6]
+					length, _ := vec.Length(child.id)
+					So(length, ShouldEqual, 7)
+					So(vec.Move(child.id, 2, 5), ShouldBeNil)
+					val, _ := vec.Get(child.id, 0)
+					So(val, ShouldEqual, 0)
+					val, _ = vec.Get(child.id, 1)
+					So(val, ShouldEqual, 1)
+					val, _ = vec.Get(child.id, 2)
+					So(val, ShouldEqual, 3)
+					val, _ = vec.Get(child.id, 3)
+					So(val, ShouldEqual, 4)
+					val, _ = vec.Get(child.id, 4)
+					So(val, ShouldEqual, 5)
+					val, _ = vec.Get(child.id, 5)
+					So(val, ShouldEqual, 2)
+					val, _ = vec.Get(child.id, 6)
+					So(val, ShouldEqual, 6)
+				})
 			})
 		})
-
 	})
 }
 
@@ -283,8 +283,10 @@ func TestTypeVector(t *testing.T) {
 					}
 				}`
 
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
 		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
 		So(err, ShouldBeNil)
 
 		Convey("Adding to type vector should work", func() {
@@ -301,7 +303,7 @@ func TestTypeVector(t *testing.T) {
 			code = `toplevel.TypeVec.AppendNew()
 					toplevel.TypeVec.AppendNew()
 			`
-			_, err = rntm.RunJavaScript("user3", code)
+			_, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -319,7 +321,7 @@ func TestTypeVector(t *testing.T) {
 					obj = toplevel.TypeVec.Get(0)
 					obj.test = 1
 				`
-				_, err := rntm.RunJavaScript("user3", code)
+				_, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -348,7 +350,7 @@ func TestTypeVector(t *testing.T) {
 			Convey("but setting complex types is forbidden", func() {
 
 				code = `	toplevel.TypeVec.Set(0, toplevel.TypeVec.Get(1))`
-				_, err = rntm.RunJavaScript("user3", code)
+				_, err = rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
 
 			})
@@ -361,7 +363,7 @@ func TestTypeVector(t *testing.T) {
 							throw "parent not set correctly"
 						}
 					`
-				_, err := rntm.RunJavaScript("user3", code)
+				_, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 			})
 
@@ -374,7 +376,7 @@ func TestTypeVector(t *testing.T) {
 							throw "Object removal failed"
 						}
 					`
-				_, err := rntm.RunJavaScript("user3", code)
+				_, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
 			})

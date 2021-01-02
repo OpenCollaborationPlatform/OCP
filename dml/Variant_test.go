@@ -13,12 +13,11 @@ import (
 
 func TestPODVariant(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Loading dml code into runtime including pod variant types,", t, func() {
 
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
@@ -33,26 +32,28 @@ func TestPODVariant(t *testing.T) {
 					}
 				}`
 
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
 		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
 		So(err, ShouldBeNil)
 
 		Convey("Adding to int variant should work", func() {
 
 			code = `toplevel.Variant.SetValue(10)`
-			_, err := rntm.RunJavaScript("", code)
+			_, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
-			res, err := rntm.Call("", "toplevel.Variant.GetValue")
+			res, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
 
 			Convey("but setting wrong type should fail", func() {
 
 				code = `toplevel.Variant.SetValue("hello")`
-				_, err := rntm.RunJavaScript("", code)
+				_, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldNotBeNil)
-				res, err := rntm.Call("", "toplevel.Variant.GetValue")
+				res, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 10)
 			})
@@ -60,11 +61,11 @@ func TestPODVariant(t *testing.T) {
 			Convey("Changeing the datatype works", func() {
 
 				code = `toplevel.Variant.type = toplevel.other`
-				_, err := rntm.RunJavaScript("", code)
+				_, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 
 				Convey("and initialized the value to the default of the new datatype", func() {
-					res, err := rntm.Call("", "toplevel.Variant.GetValue")
+					res, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
 					So(err, ShouldBeNil)
 					So(res, ShouldBeFalse)
 				})
@@ -75,12 +76,11 @@ func TestPODVariant(t *testing.T) {
 
 func TestTypeVariant(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Loading dml code into runtime including type variant,", t, func() {
 
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
@@ -101,8 +101,10 @@ func TestTypeVariant(t *testing.T) {
 					}
 				}`
 
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
 		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
 		So(err, ShouldBeNil)
 
 		Convey("The default complex type should be created", func() {
@@ -126,7 +128,7 @@ func TestTypeVariant(t *testing.T) {
 			code = `
 				toplevel.Variant.type = new DataType("Data{property int test: 10}")
 			`
-			_, err := rntm.RunJavaScript("user3", code)
+			_, err := rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldBeNil)
 
 			Convey("and the value should be a nicely initialized object", func() {
@@ -140,7 +142,7 @@ func TestTypeVariant(t *testing.T) {
 						throw "initialisation failed: value should be 10"
 					}
 				`
-				_, err := rntm.RunJavaScript("user3", code)
+				_, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 			})
 		})
