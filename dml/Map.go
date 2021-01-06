@@ -1,5 +1,14 @@
-// Vector
+// Map
 package dml
+
+/*
+ - Keys:		Allowed keys are all Datatype except "type", as for this no reasonable
+			Path can be build
+ - Values:	All datatypes are allowed as values
+ - Paths: 	A map exposes the stored values in the DML path. For example a string->obj map
+			exposes the object as MyMap.MyKey. If the key is a object it is exposed as
+			MyMap.keys.Identifier
+*/
 
 import (
 	"fmt"
@@ -493,6 +502,89 @@ func (self *mapImpl) GetValueByName(id Identifier, name string) (interface{}, er
 	}
 
 	return res, nil
+}
+
+func (self *mapImpl) SetObjectPath(id Identifier, path string) error {
+
+	//ourself and children
+	err := self.DataImpl.SetObjectPath(id, path)
+	if err != nil {
+		return err
+	}
+
+	//now we need to set all map objects, if available
+	valDt := self.valueDataType(id)
+	if valDt.IsComplex() {
+
+		dbEntries, err := self.GetDBMapVersioned(id, entryKey)
+		if err != nil {
+			return err
+		}
+
+		keys, err := dbEntries.GetKeys()
+		if err != nil {
+			return err
+		}
+		for _, key := range keys {
+
+			//build the path
+			fullpath := path
+			if subID, ok := key.(*Identifier); ok {
+				fullpath += "." + subID.Encode()
+
+			} else {
+				fullpath += fmt.Sprintf(".%v", key)
+			}
+
+			//get the object and set the path
+			val, err := dbEntries.Read(key)
+			if err != nil {
+				return err
+			}
+			objId, ok := val.(*Identifier)
+			if ok {
+				set, err := self.rntm.getObjectSet(*objId)
+				if err != nil {
+					return err
+				}
+				set.obj.SetObjectPath(set.id, fullpath)
+			}
+		}
+	}
+
+	//now we need to set all map objects, if available
+	keyDt := self.keyDataType(id)
+	if keyDt.IsComplex() {
+
+		dbEntries, err := self.GetDBMapVersioned(id, entryKey)
+		if err != nil {
+			return err
+		}
+
+		keys, err := dbEntries.GetKeys()
+		if err != nil {
+			return err
+		}
+		for _, key := range keys {
+
+			//build the path
+			fullpath := path
+			if subID, ok := key.(*Identifier); ok {
+				fullpath += ".keys." + subID.Encode()
+
+				set, err := self.rntm.getObjectSet(*subID)
+				if err != nil {
+					return err
+				}
+				set.obj.SetObjectPath(set.id, fullpath)
+
+			} else {
+				return fmt.Errorf("Unable to generate path for key object: Not stored as identifier")
+			}
+		}
+	}
+
+	return nil
 }
 
 func (self *mapImpl) valueDataType(id Identifier) DataType {

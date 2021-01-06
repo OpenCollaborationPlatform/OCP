@@ -638,7 +638,17 @@ func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
 		//check all childs to find the one with given name
 		child, err := dbSet.obj.(Data).GetSubobjectByName(dbSet.id, name, true)
 		if err != nil {
-			return dmlSet{}, utils.StackError(err, "Name %v is not available in object %v", name, dbSet.id.Name)
+			//it may be an identifier within the path!
+			id, err := IdentifierFromEncoded(name)
+			if err == nil {
+				set, err := self.getObjectSet(id)
+				if err != nil {
+					return dmlSet{}, utils.StackError(err, "Name %v is not available in object %v", name, dbSet.id.Name)
+				}
+				child = set
+			} else {
+				return dmlSet{}, utils.StackError(err, "Name %v is not available in object %v", name, dbSet.id.Name)
+			}
 		}
 
 		//check if it is a behaviour, and if so end here

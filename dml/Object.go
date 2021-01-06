@@ -9,8 +9,9 @@ import (
 	"github.com/dop251/goja"
 )
 
-var parentKey []byte = []byte("__parent")
-var dtKey []byte = []byte("__datatype")
+var parentKey []byte = []byte("__object_parent")
+var dtKey []byte = []byte("__object_datatype")
+var pathKey []byte = []byte("__object_path")
 
 //Interface of an object: All objects, data and behaviour, must be able to handle
 //  - Properties
@@ -37,6 +38,14 @@ type Object interface {
 	//the database for a object of different DataType
 	GetDataType(Identifier) (DataType, error)
 	SetDataType(Identifier, DataType) error
+
+	//Let the object know it's path in the dml runtime. This is important for event
+	//emitting, as it needs to know what exact uri to use. Note that the path cannot
+	//be determined at runtime from an object, as in maps or vectors it is not possible
+	//to get the key easily by value (only by iterating, but thats expensive for each
+	//event emit)
+	GetObjectPath(Identifier) (string, error)
+	SetObjectPath(Identifier, string) error //sets the full path including the object name
 
 	//Genertic
 	GetRuntime() *Runtime
@@ -206,6 +215,36 @@ func (self *object) GetJSPrototype() *goja.Object {
 
 func (self *object) GetJSRuntime() *goja.Runtime {
 	return self.rntm.jsvm
+}
+
+func (self *object) GetObjectPath(id Identifier) (string, error) {
+
+	value, err := self.GetDBValueVersioned(id, pathKey)
+	if err != nil {
+		return "", utils.StackError(err, "Unable to retreive path")
+	}
+	path, err := value.Read()
+	if err != nil {
+		return "", utils.StackError(err, "Unable to retreive path")
+	}
+
+	return path.(string), nil
+}
+
+//set the path without this object in it
+func (self *object) SetObjectPath(id Identifier, path string) error {
+
+	value, err := self.GetDBValueVersioned(id, pathKey)
+	if err != nil {
+		return utils.StackError(err, "Unable to retreive path DB")
+	}
+
+	err = value.Write(path)
+	if err != nil {
+		return utils.StackError(err, "Unable to write path")
+	}
+
+	return nil
 }
 
 //missing function from property handler

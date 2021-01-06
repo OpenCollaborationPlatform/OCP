@@ -73,6 +73,36 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 	return &dat, nil
 }
 
+func (self *DataImpl) SetObjectPath(id Identifier, path string) error {
+
+	err := self.object.SetObjectPath(id, path)
+	if err != nil {
+		return err
+	}
+
+	//we also need to update the path for all children. Note: Not subobjects,
+	//as we do not know exactly how to expose them in paths, that must be done by
+	//the concrete implementations
+	subs, err := self.GetChildIdentifiers(id)
+	if err != nil {
+		return utils.StackError(err, "Unable to access subobjects for path setting")
+	}
+	for _, sub := range subs {
+
+		//path in general is the listing of names of parents, but if no name is set it is the
+		//full encoded identifier
+		var fullpath string
+		if sub.Name != "" {
+			fullpath = path + "." + sub.Name
+		} else {
+			fullpath = sub.Encode()
+		}
+		self.SetObjectPath(sub, fullpath)
+	}
+
+	return nil
+}
+
 func (self *DataImpl) AddChildObject(child Data) {
 	self.children = append(self.children, child)
 }
