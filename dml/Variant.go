@@ -29,14 +29,14 @@ func NewVariant(rntm *Runtime) (Object, error) {
 
 	//add properties (with setup callback)
 	vari.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), false)
-	vari.GetProperty("type").GetEvent("onChanged").RegisterObjectGoCallback(vari.changedCallback)
+	//	vari.GetProperty("type").GetEvent("onChanged").RegisterObjectGoCallback(vari.changedCallback)
 
 	//add methods
 	vari.AddMethod("SetValue", MustNewMethod(vari.SetValue, false))
 	vari.AddMethod("GetValue", MustNewMethod(vari.GetValue, true))
 
-	vari.AddEvent(NewEvent("onTypeChanged", vari.GetJSPrototype(), rntm))
-	vari.AddEvent(NewEvent("onValueChanged", vari.GetJSPrototype(), rntm))
+	vari.AddEvent(NewEvent("onTypeChanged", vari))
+	vari.AddEvent(NewEvent("onValueChanged", vari))
 
 	return vari, nil
 }

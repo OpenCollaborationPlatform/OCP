@@ -44,8 +44,8 @@ func NewVector(rntm *Runtime) (Object, error) {
 	vec.AddMethod("Move", MustNewMethod(vec.Move, false))
 
 	//events of a vector
-	vec.AddEvent(NewEvent("onNewEntry", vec.GetJSPrototype(), rntm))
-	vec.AddEvent(NewEvent("onDeleteEntry", vec.GetJSPrototype(), rntm))
+	vec.AddEvent(NewEvent("onNewEntry", vec))
+	vec.AddEvent(NewEvent("onDeleteEntry", vec))
 
 	return vec, nil
 }
@@ -285,6 +285,14 @@ func (self *vector) AppendNew(id Identifier) (interface{}, error) {
 	}
 
 	if set, ok := result.(dmlSet); ok {
+		//build the object path and set it
+		path, err := self.GetObjectPath(id)
+		if err != nil {
+			return nil, err
+		}
+		set.obj.SetObjectPath(set.id, fmt.Sprintf("%v.%v", path, length))
+
+		//call "created"
 		if data, ok := set.obj.(Data); ok {
 			data.Created(set.id)
 		}
@@ -670,4 +678,49 @@ func (self *vector) GetValueByName(id Identifier, name string) (interface{}, err
 	}
 
 	return res, nil
+}
+
+func (self *vector) SetObjectPath(id Identifier, path string) error {
+
+	//ourself and children
+	err := self.DataImpl.SetObjectPath(id, path)
+	if err != nil {
+		return err
+	}
+
+	//now we need to set all map objects, if available
+	dt := self.entryDataType(id)
+	if dt.IsComplex() {
+
+		dbEntries, err := self.GetDBMapVersioned(id, entryKey)
+		if err != nil {
+			return err
+		}
+
+		keys, err := dbEntries.GetKeys()
+		if err != nil {
+			return err
+		}
+		for _, key := range keys {
+
+			//build the path
+			fullpath := fmt.Sprintf("%v.%v", path, key)
+
+			//get the object and set the path
+			val, err := dbEntries.Read(key)
+			if err != nil {
+				return err
+			}
+			objId, ok := val.(*Identifier)
+			if ok {
+				set, err := self.rntm.getObjectSet(*objId)
+				if err != nil {
+					return err
+				}
+				set.obj.SetObjectPath(set.id, fullpath)
+			}
+		}
+	}
+
+	return nil
 }

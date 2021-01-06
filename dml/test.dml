@@ -12,9 +12,11 @@
 	
 	const   property int testConst:4
 	
-	.testF.onChanged: function(val) {Document.testI = Math.floor(val)}
-	
-	.onPropertyChanged: function(name) {}
+	.onPropertyChanged: function(name) {
+		if (name == "testF") {
+			Document.testI = Math.floor(Document.testF)
+		}
+	}
 	
 	event testE: function(a,b) {
 		Document.testB = false

@@ -94,7 +94,7 @@ func NewObject(rntm *Runtime) (*object, error) {
 	//jsProto.DefineDataProperty("identifier", rntm.jsvm.ToValue(nil), goja.FLAG_FALSE, goja.FLAG_FALSE, goja.FLAG_FALSE)
 
 	//build the object
-	obj := object{
+	obj := &object{
 		NewPropertyHandler(),
 		NewEventHandler(),
 		NewMethodHandler(),
@@ -107,12 +107,12 @@ func NewObject(rntm *Runtime) (*object, error) {
 	obj.AddProperty("name", MustNewDataType("string"), "", true)
 
 	//add default events
-	obj.AddEvent(NewEvent("onBeforePropertyChange", obj.GetJSPrototype(), rntm))
-	obj.AddEvent(NewEvent("onPropertyChanged", obj.GetJSPrototype(), rntm))
-	obj.AddEvent(NewEvent("onBeforeChange", obj.GetJSPrototype(), rntm))
-	obj.AddEvent(NewEvent("onChanged", obj.GetJSPrototype(), rntm))
+	obj.AddEvent(NewEvent("onBeforePropertyChange", obj))
+	obj.AddEvent(NewEvent("onPropertyChanged", obj))
+	obj.AddEvent(NewEvent("onBeforeChange", obj))
+	obj.AddEvent(NewEvent("onChanged", obj))
 
-	return &obj, nil
+	return obj, nil
 }
 
 func (self *object) GetParentIdentifier(id Identifier) (Identifier, error) {
@@ -255,30 +255,24 @@ func (self *object) AddProperty(name string, dtype DataType, default_val interfa
 	}
 
 	//we add properties
-	prop, err := NewProperty(name, dtype, default_val, self.GetRuntime(), self.GetJSPrototype(), constprop)
+	prop, err := NewProperty(name, dtype, default_val, self, constprop)
 	if err != nil {
 		return err
 	}
-	/*
-		//register change events
-		prop.GetEvent("onBeforeChange").RegisterCallback(func(id Identifier, args ...interface{}) error {
-			err := self.GetEvent("onBeforePropertyChange").Emit(id, name)
-			if err != nil {
-				return err
-			}
-			return self.GetEvent("onBeforeChange").Emit(id)
-		})
-		prop.GetEvent("onChanged").RegisterCallback(func(id Identifier, args ...interface{}) error {
-			err := self.GetEvent("onPropertyChanged").Emit(id, name)
-			if err != nil {
-				return err
-			}
-			return self.GetEvent("onChanged").Emit(id)
-		})*/
 
 	//everthing went without error, now we can set this property
 	self.propertyHandler.properties[name] = prop
 
+	return nil
+}
+
+func (self *object) BeforePropertyChange(id Identifier, name string) error {
+	self.GetEvent("onBeforePropertyChange").Emit(id, name)
+	return nil
+}
+
+func (self *object) PropertyChanged(id Identifier, name string) error {
+	self.GetEvent("onPropertyChanged").Emit(id, name)
 	return nil
 }
 

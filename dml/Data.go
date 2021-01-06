@@ -61,16 +61,16 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 		return nil, err
 	}
 
-	dat := DataImpl{
+	dat := &DataImpl{
 		obj,
 		NewBehaviourHandler(rntm),
 		make([]Data, 0),
 	}
 
-	dat.AddEvent(NewEvent("onCreated", dat.GetJSPrototype(), rntm))
-	dat.AddEvent(NewEvent("onRemove", dat.GetJSPrototype(), rntm))
+	dat.AddEvent(NewEvent("onCreated", dat))
+	dat.AddEvent(NewEvent("onRemove", dat))
 
-	return &dat, nil
+	return dat, nil
 }
 
 func (self *DataImpl) SetObjectPath(id Identifier, path string) error {

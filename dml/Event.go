@@ -44,17 +44,18 @@ type Event interface {
 	RegisterObjectGoCallback(EventCallback) error
 }
 
-func NewEvent(name string, jsParentProto *goja.Object, rntm *Runtime) Event {
+func NewEvent(name string, owner Object) Event {
 
 	evt := &event{
 		methodHandler: NewMethodHandler(),
 		callbacks:     make([]EventCallback, 0),
 		enabled:       true,
 		name:          name,
+		owner:         owner,
 	}
 
 	//now the js object
-	evtObj := rntm.jsvm.NewObject()
+	evtObj := owner.GetJSRuntime().NewObject()
 
 	emitMethod, _ := NewMethod(evt.Emit, false)
 	evt.AddMethod("Emit", emitMethod)
@@ -68,9 +69,7 @@ func NewEvent(name string, jsParentProto *goja.Object, rntm *Runtime) Event {
 	evt.AddMethod("RegisterCallback", registerMethod)
 
 	evt.jsProto = evtObj
-	evt.rntm = rntm
-	evt.jsParentProto = jsParentProto
-	evt.SetupJSMethods(rntm, evtObj)
+	evt.SetupJSMethods(owner.GetRuntime(), evtObj)
 
 	return evt
 }
@@ -82,9 +81,8 @@ type event struct {
 	enabled   bool
 	name      string
 
-	rntm          *Runtime
-	jsProto       *goja.Object
-	jsParentProto *goja.Object //needs to be passed as "this" to event functions
+	owner   Object
+	jsProto *goja.Object
 }
 
 func (self *event) GetName() string {
@@ -112,7 +110,7 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 
 	//call all runtime created callbacks
 	var cbs datastore.ListVersioned
-	cbs, err = listVersionedFromStore(self.rntm.datastore, id, []byte("__event_"+self.name))
+	cbs, err = listVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__event_"+self.name))
 	entries, err := cbs.GetEntries()
 	if err == nil && len(entries) > 0 {
 
@@ -129,7 +127,7 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 
 			//get the object to call
 			var set dmlSet
-			set, err = self.rntm.getObjectSet(cb.Id)
+			set, err = self.owner.GetRuntime().getObjectSet(cb.Id)
 			if err != nil {
 				break
 			}
@@ -142,12 +140,17 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 		}
 	}
 
-	return err
+	//inform runtime about event
+	path, err := self.owner.GetObjectPath(id)
+	if err != nil {
+		return err
+	}
+	return self.owner.GetRuntime().emitEvent(path, self.name, args...)
 }
 
 func (self *event) Enabled(id Identifier) (bool, error) {
 
-	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__enabled"))
+	value, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__enabled"))
 	if err != nil {
 		return false, utils.StackError(err, "Unable to access event status from DB")
 	}
@@ -167,7 +170,7 @@ func (self *event) Enabled(id Identifier) (bool, error) {
 
 func (self *event) Enable(id Identifier) error {
 
-	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__enabled"))
+	value, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__enabled"))
 	if err != nil {
 		return utils.StackError(err, "Unable to access event status from DB")
 	}
@@ -181,7 +184,7 @@ func (self *event) Enable(id Identifier) error {
 
 func (self *event) Disable(id Identifier) error {
 
-	value, err := valueVersionedFromStore(self.rntm.datastore, id, []byte("__enabled"))
+	value, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__enabled"))
 	if err != nil {
 		return utils.StackError(err, "Unable to access event status from DB")
 	}
@@ -198,7 +201,7 @@ func (self *event) Disable(id Identifier) error {
 //type
 func (self *event) RegisterCallback(id Identifier, cbID Identifier, function string) error {
 
-	cbs, err := listVersionedFromStore(self.rntm.datastore, id, []byte("__event_"+self.name))
+	cbs, err := listVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__event_"+self.name))
 	if err != nil {
 		return utils.StackError(err, "Unable to register callback")
 	}
@@ -226,9 +229,9 @@ func (self *event) RegisterObjectJSCallback(cb func(goja.FunctionCall) goja.Valu
 
 		jsArgs := make([]goja.Value, len(args))
 		for i, arg := range args {
-			jsArgs[i] = self.rntm.jsvm.ToValue(arg)
+			jsArgs[i] = self.owner.GetJSRuntime().ToValue(arg)
 		}
-		jsObj := self.rntm.jsvm.CreateObject(self.jsParentProto)
+		jsObj := self.owner.GetJSRuntime().CreateObject(self.owner.GetJSPrototype())
 		jsObj.Set("identifier", id)
 		cb(goja.FunctionCall{This: jsObj, Arguments: jsArgs})
 
@@ -256,7 +259,7 @@ func (self *event) GetJSPrototype() *goja.Object {
 }
 
 func (self *event) GetJSRuntime() *goja.Runtime {
-	return self.rntm.jsvm
+	return self.owner.GetRuntime().jsvm
 }
 
 type EventHandler interface {

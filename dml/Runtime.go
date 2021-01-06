@@ -245,6 +245,18 @@ func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
 		return utils.StackError(err, "Unable to store runtime datatype")
 	}
 
+	//setup all object paths
+	var path string
+	if mainID.Name != "" {
+		path = mainID.Name
+	} else {
+		path = mainID.Encode()
+	}
+	err = mainObj.SetObjectPath(mainID, path)
+	if err != nil {
+		return err
+	}
+
 	return ds.Commit()
 }
 
@@ -782,14 +794,17 @@ func (self *Runtime) getObjectSet(id Identifier) (dmlSet, error) {
 }
 
 //Construct a data object from encoded description (as provided by type property)
-//it does not call "Created()" for event emission
+// - it does not call "Created()" for event emission: to be done by caller
+// - it does not call "SetObjectPath": to be done by caller
 func (self *Runtime) constructObjectSet(dt DataType, parent Identifier) (dmlSet, error) {
 
+	//build or get
 	obj, err := self.getOrCreateObject(dt)
 	if err != nil {
 		return dmlSet{}, utils.StackError(err, "Unable to access or create object for datatype")
 	}
 
+	//setup DB
 	id, err := self.setupObject(obj, parent)
 	if err != nil {
 		return dmlSet{}, utils.StackError(err, "Unable to setup database for object")
@@ -1053,15 +1068,6 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 
 func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 
-	parts := asgn.Key
-
-	//possibilities are:
-	//	1.the last key is the property
-	//	2.the second last is the property and the last the event
-	if prop.HasEvent(parts[len(parts)-1]) {
-		return self.assignEvent(asgn, prop.GetEvent(parts[len(parts)-1]))
-	}
-
 	//we really assign a property, lets go
 	if asgn.Function != nil {
 		return fmt.Errorf("A function cannot be assigned to a property")
@@ -1142,7 +1148,7 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) {
 
 	//build the event
-	evt := NewEvent(astEvt.Key, parent.GetJSPrototype(), self)
+	evt := NewEvent(astEvt.Key, parent)
 
 	//and see if we should add a default callback
 	if astEvt.Default != nil {
@@ -1231,6 +1237,13 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to add property to object")
 	}
+
+	return nil
+}
+
+//This function is called by all emitted events. It does forward it to outside of
+//The runtime
+func (self *Runtime) emitEvent(path, event string, args ...interface{}) error {
 
 	return nil
 }

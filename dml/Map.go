@@ -2,12 +2,13 @@
 package dml
 
 /*
- - Keys:		Allowed keys are all Datatype except "type", as for this no reasonable
-			Path can be build
+ A Map is a standart datatype as avilable in all languages, sometimes nown as Dictionary.
+
+ - Keys:		Allowed keys are all Datatype except "type" (as for this no reasonable
+			Path can be build) and "complex" (as those cannot be created as key)
  - Values:	All datatypes are allowed as values
  - Paths: 	A map exposes the stored values in the DML path. For example a string->obj map
-			exposes the object as MyMap.MyKey. If the key is a object it is exposed as
-			MyMap.keys.Identifier
+			exposes the object as MyMap.MyKey.
 */
 
 import (
@@ -306,6 +307,18 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to append new object to mapImpl: construction failed")
 		}
+		//build the object path and set it
+		path, err := self.GetObjectPath(id)
+		if err != nil {
+			return nil, err
+		}
+		if subID, ok := key.(*Identifier); ok {
+			path += "." + subID.Encode()
+		} else {
+			path += fmt.Sprintf(".%v", key)
+		}
+		set.obj.SetObjectPath(set.id, path)
+
 		result = set
 
 	} else {
@@ -548,38 +561,6 @@ func (self *mapImpl) SetObjectPath(id Identifier, path string) error {
 					return err
 				}
 				set.obj.SetObjectPath(set.id, fullpath)
-			}
-		}
-	}
-
-	//now we need to set all map objects, if available
-	keyDt := self.keyDataType(id)
-	if keyDt.IsComplex() {
-
-		dbEntries, err := self.GetDBMapVersioned(id, entryKey)
-		if err != nil {
-			return err
-		}
-
-		keys, err := dbEntries.GetKeys()
-		if err != nil {
-			return err
-		}
-		for _, key := range keys {
-
-			//build the path
-			fullpath := path
-			if subID, ok := key.(*Identifier); ok {
-				fullpath += ".keys." + subID.Encode()
-
-				set, err := self.rntm.getObjectSet(*subID)
-				if err != nil {
-					return err
-				}
-				set.obj.SetObjectPath(set.id, fullpath)
-
-			} else {
-				return fmt.Errorf("Unable to generate path for key object: Not stored as identifier")
 			}
 		}
 	}
