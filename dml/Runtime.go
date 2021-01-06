@@ -227,14 +227,6 @@ func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
 		return utils.StackError(err, "Unable to access  database while setup")
 	}
 
-	//call the created events
-	if data, ok := mainObj.(Data); ok {
-		data.Created(mainID)
-
-	} else {
-		return fmt.Errorf("Main object is Behaviour, not Data")
-	}
-
 	//store the DB type
 	dbDt, err := vSet.GetOrCreateValue(mainDtKey)
 	if err != nil {
@@ -255,6 +247,14 @@ func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
 	err = mainObj.SetObjectPath(mainID, path)
 	if err != nil {
 		return err
+	}
+
+	//call the created events
+	if data, ok := mainObj.(Data); ok {
+		data.Created(mainID)
+
+	} else {
+		return fmt.Errorf("Main object is Behaviour, not Data")
 	}
 
 	return ds.Commit()

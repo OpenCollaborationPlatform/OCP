@@ -139,6 +139,9 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 			_, err = set.obj.GetMethod(cb.Function).Call(set.id, args...)
 		}
 	}
+	if err != nil {
+		return err
+	}
 
 	//inform runtime about event
 	path, err := self.owner.GetObjectPath(id)
