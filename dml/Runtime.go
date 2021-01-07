@@ -854,7 +854,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 			return nil, utils.StackError(err, "Unable to create property %v in object %v", astProp.Key, objName)
 		}
 	}
-	err = obj.SetupJSProperties(self, obj.GetJSPrototype())
+	err = obj.SetupProperties(self, obj.GetJSPrototype(), obj)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create javascript property interface for %v", objName)
 	}

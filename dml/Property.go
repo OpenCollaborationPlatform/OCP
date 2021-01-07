@@ -9,24 +9,28 @@ import (
 	"github.com/dop251/goja"
 )
 
+//Defines a interface that is called by a Property on changes
+type PropertyChangeNotifyer interface {
+	BeforePropertyChange(Identifier, string) error
+	PropertyChanged(Identifier, string) error
+}
+
 //Defines the default Property interface under which different data types can be stored.
 //It uses a getter setter interface for better interactibility between dml, js and go
 type Property interface {
 	//	EventHandler
-
 	Type() DataType
 	IsConst() bool
 
 	SetValue(id Identifier, value interface{}) error
 	GetValue(id Identifier) interface{}
 
-	//required for startup, sets the initial value. If the property already
-	//has a value set (in database) this call does nothing.
+	//required for startup, sets the initial value
 	SetDefaultValue(value interface{}) error
 	GetDefaultValue() interface{}
 }
 
-func NewProperty(name string, dtype DataType, default_value interface{}, owner Object, constprop bool) (Property, error) {
+func NewProperty(name string, dtype DataType, default_value interface{}, constprop bool) (Property, error) {
 
 	err := dtype.MustBeTypeOf(default_value)
 	if err != nil {
@@ -40,16 +44,14 @@ func NewProperty(name string, dtype DataType, default_value interface{}, owner O
 		if dtype.IsPOD() {
 
 			//setup default value if needed
-			prop = &dataProperty{name, dtype, nil, owner}
-			err := prop.SetDefaultValue(default_value)
+			prop = &dataProperty{name, dtype, default_value, nil, nil}
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to use provided value as default for property")
 			}
 
 		} else if dtype.IsType() {
 			//setup default value if needed
-			prop = &typeProperty{name, DataType{}, owner}
-			err := prop.SetDefaultValue(default_value)
+			prop = &typeProperty{name, default_value.(DataType), nil, nil}
 			if err != nil {
 				return nil, utils.StackError(err, "Unable to use provided value as default for property")
 			}
@@ -76,10 +78,6 @@ func NewProperty(name string, dtype DataType, default_value interface{}, owner O
 		}
 	}
 
-	//add all required events
-	//	prop.AddEvent(NewEvent("onBeforeChange", parentProto, rntm))
-	//	prop.AddEvent(NewEvent("onChanged", parentProto, rntm))
-
 	return prop, nil
 }
 
@@ -90,7 +88,8 @@ type dataProperty struct {
 	name         string
 	propertyType DataType
 	default_val  interface{}
-	owner        Object
+	rntm         *Runtime
+	callback     PropertyChangeNotifyer
 }
 
 func (self dataProperty) Type() DataType {
@@ -109,13 +108,13 @@ func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
 		return err
 	}
 
-	err = self.owner.BeforePropertyChange(id, self.name)
+	err = self.callback.BeforePropertyChange(id, self.name)
 	if err != nil {
 		return err
 	}
 
 	//store it
-	dbValue, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte(self.name))
+	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
 		return err
 	}
@@ -128,8 +127,7 @@ func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
 	if err != nil {
 		return err
 	}
-
-	return self.owner.PropertyChanged(id, self.name)
+	return self.callback.PropertyChanged(id, self.name)
 }
 
 func (self *dataProperty) SetDefaultValue(val interface{}) error {
@@ -149,7 +147,7 @@ func (self *dataProperty) GetDefaultValue() interface{} {
 
 func (self *dataProperty) GetValue(id Identifier) interface{} {
 
-	dbValue, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte(self.name))
+	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
 		return utils.StackError(err, "Unable to access DB for property value")
 	}
@@ -170,7 +168,8 @@ type typeProperty struct {
 	//	eventHandler
 	name        string
 	default_val DataType
-	owner       Object
+	rntm        *Runtime
+	callback    PropertyChangeNotifyer
 }
 
 func (self typeProperty) Type() DataType {
@@ -190,14 +189,14 @@ func (self *typeProperty) SetValue(id Identifier, val interface{}) error {
 		return utils.StackError(err, "Cannot set type property: invalid argument")
 	}
 
-	err = self.owner.BeforePropertyChange(id, self.name)
+	err = self.callback.BeforePropertyChange(id, self.name)
 	if err != nil {
 		return err
 	}
 
 	data := val.(DataType)
 
-	dbValue, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte(self.name))
+	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
 		return err
 	}
@@ -206,13 +205,13 @@ func (self *typeProperty) SetValue(id Identifier, val interface{}) error {
 		return err
 	}
 
-	return self.owner.PropertyChanged(id, self.name)
+	return self.callback.PropertyChanged(id, self.name)
 }
 
 //we only return basic information, mailny for JS accessibility
 func (self *typeProperty) GetValue(id Identifier) interface{} {
 
-	dbValue, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte(self.name))
+	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
 		return err
 	}
@@ -231,7 +230,7 @@ func (self *typeProperty) GetValue(id Identifier) interface{} {
 
 func (self *typeProperty) GetDataType(id Identifier) DataType {
 
-	dbValue, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte(self.name))
+	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
 		return self.default_val
 	}
@@ -355,11 +354,7 @@ type PropertyHandler interface {
 	GetProperty(name string) Property
 	GetProperties() []string
 
-	SetupJSProperties(rntm *Runtime, obj *goja.Object) error
-
-	//callback functions, to be overriden by objects using the PropertyHandler
-	BeforePropertyChange(Identifier, string) error
-	PropertyChanged(Identifier, string) error
+	SetupProperties(rntm *Runtime, jsobj *goja.Object, cb PropertyChangeNotifyer) error
 }
 
 func NewPropertyHandler() propertyHandler {
@@ -371,6 +366,23 @@ func NewPropertyHandler() propertyHandler {
 //shall be used
 type propertyHandler struct {
 	properties map[string]Property
+}
+
+func (self *propertyHandler) AddProperty(name string, dtype DataType, default_val interface{}, constprop bool) error {
+
+	if self.HasProperty(name) {
+		return fmt.Errorf("Property %s already exists", name)
+	}
+
+	//we add properties
+	prop, err := NewProperty(name, dtype, default_val, constprop)
+	if err != nil {
+		return err
+	}
+
+	//everthing went without error, now we can set this property
+	self.properties[name] = prop
+	return nil
 }
 
 func (self *propertyHandler) HasProperty(name string) bool {
@@ -395,11 +407,11 @@ func (self *propertyHandler) GetProperties() []string {
 	return result
 }
 
-func (self *propertyHandler) SetupJSProperties(rntm *Runtime, proto *goja.Object) error {
+func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, cb PropertyChangeNotifyer) error {
 
 	keys := proto.Keys()
 
-	for name, _ := range self.properties {
+	for name, prop := range self.properties {
 
 		//check if proeprty is already set up
 		cont := false
@@ -413,6 +425,17 @@ func (self *propertyHandler) SetupJSProperties(rntm *Runtime, proto *goja.Object
 			continue
 		}
 
+		//set the property callback
+		if dp, ok := prop.(*dataProperty); ok {
+			dp.callback = cb
+			dp.rntm = rntm
+
+		} else if tp, ok := prop.(*typeProperty); ok {
+			tp.callback = cb
+			tp.rntm = rntm
+		}
+
+		//expose to JavaScript
 		var propname string = name
 		getter := rntm.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
 

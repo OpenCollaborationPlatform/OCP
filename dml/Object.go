@@ -21,6 +21,7 @@ var pathKey []byte = []byte("__object_path")
 //It also implements the VersionedData interface, but on identifier basis
 type Object interface {
 	PropertyHandler
+	PropertyChangeNotifyer
 	EventHandler
 	MethodHandler
 	JSObject
@@ -247,25 +248,6 @@ func (self *object) SetObjectPath(id Identifier, path string) error {
 	return nil
 }
 
-//missing function from property handler
-func (self *object) AddProperty(name string, dtype DataType, default_val interface{}, constprop bool) error {
-
-	if self.HasProperty(name) {
-		return fmt.Errorf("Property %s already exists", name)
-	}
-
-	//we add properties
-	prop, err := NewProperty(name, dtype, default_val, self, constprop)
-	if err != nil {
-		return err
-	}
-
-	//everthing went without error, now we can set this property
-	self.propertyHandler.properties[name] = prop
-
-	return nil
-}
-
 func (self *object) BeforePropertyChange(id Identifier, name string) error {
 	self.GetEvent("onBeforePropertyChange").Emit(id, name)
 	return nil
@@ -274,6 +256,15 @@ func (self *object) BeforePropertyChange(id Identifier, name string) error {
 func (self *object) PropertyChanged(id Identifier, name string) error {
 	self.GetEvent("onPropertyChanged").Emit(id, name)
 	return nil
+}
+
+func (self *object) EventEmitted(id Identifier, name string, args ...interface{}) error {
+
+	path, err := self.GetObjectPath(id)
+	if err != nil {
+		return err
+	}
+	return self.rntm.emitEvent(path, name, args...)
 }
 
 func (self *object) GetRuntime() *Runtime {

@@ -29,7 +29,6 @@ func NewVariant(rntm *Runtime) (Object, error) {
 
 	//add properties (with setup callback)
 	vari.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), false)
-	//	vari.GetProperty("type").GetEvent("onChanged").RegisterObjectGoCallback(vari.changedCallback)
 
 	//add methods
 	vari.AddMethod("SetValue", MustNewMethod(vari.SetValue, false))
@@ -169,16 +168,98 @@ func (self *variant) GetSubobjectByName(id Identifier, name string, bhvr bool) (
 	return dmlSet{}, fmt.Errorf("Unable to find object with given name")
 }
 
-func (self *variant) InitializeDB(id Identifier) error {
+func (self *variant) PropertyChanged(id Identifier, name string) error {
 
-	err := self.object.InitializeDB(id)
+	if name == "type" {
+
+		//build the default values! And set the value. Don't use SetValue as this
+		//assumes old and new value have same datatype
+		dbValue, e := self.GetDBValueVersioned(id, variantKey)
+		if e != nil {
+			return utils.StackError(e, "Unable to access DB for reading variant")
+		}
+
+		dt := self.getDataType(id)
+		var err error
+		if dt.IsComplex() {
+			set, err := self.rntm.constructObjectSet(dt, id)
+			if err != nil {
+				return utils.StackError(err, "Unable to setup variant object: construction failed")
+			}
+			err = dbValue.Write(set.id)
+
+			//build the path
+			path, err := self.GetObjectPath(id)
+			if err != nil {
+				return err
+			}
+			path += ".value"
+			set.obj.SetObjectPath(set.id, path)
+			if data, ok := set.obj.(Data); ok {
+				data.Created(id)
+			}
+
+			set.obj.(Data).Created(set.id)
+
+		} else if dt.IsType() {
+
+			val, _ := dt.GetDefaultValue().(DataType)
+			err = dbValue.Write(val.AsString())
+
+		} else {
+			result := dt.GetDefaultValue()
+			err = dbValue.Write(result)
+		}
+
+		if err != nil {
+			return err
+		}
+
+		self.GetEvent("onTypeChanged").Emit(id)
+	}
+
+	return self.DataImpl.PropertyChanged(id, name)
+}
+
+func (self *variant) Created(id Identifier) error {
+
+	//on initialisation we want to set default values. That is the same as happens
+	//with a changed type proeprty, hence we reuse this function
+	err := self.PropertyChanged(id, "type")
+	if err != nil {
+		return err
+	}
+	return self.DataImpl.Created(id)
+}
+
+func (self *variant) SetObjectPath(id Identifier, path string) error {
+
+	//ourself and children
+	err := self.DataImpl.SetObjectPath(id, path)
 	if err != nil {
 		return err
 	}
 
-	//on initialisation we want to set default values. That is the same as happens
-	//with a changed type proeprty, hence we reuse this function
-	return self.changedCallback(id)
+	//now we need to set the data if it is a object
+	dt := self.getDataType(id)
+	if dt.IsComplex() {
+
+		//get the object
+		result, err := self.getStoredObject(id)
+		if err != nil {
+			return utils.StackError(err, "Invalid object stored in variant")
+		}
+
+		//build the path
+		path, err := self.GetObjectPath(id)
+		if err != nil {
+			return err
+		}
+		path += ".value"
+		result.obj.SetObjectPath(result.id, path)
+	}
+
+	return nil
 }
 
 //*****************************************************************************
@@ -210,47 +291,8 @@ func (self *variant) getStoredObject(id Identifier) (dmlSet, error) {
 	return set, nil
 }
 
-func (self *variant) changedCallback(id Identifier, args ...interface{}) error {
-
-	//build the default values! And set the value. Don't use SetValue as this
-	//assumes old and new value have same datatype
-
-	dbValue, e := self.GetDBValueVersioned(id, variantKey)
-	if e != nil {
-		return utils.StackError(e, "Unable to access DB for reading variant")
-	}
-
-	dt := self.getDataType(id)
-	var err error
-	if dt.IsComplex() {
-		set, err := self.rntm.constructObjectSet(dt, id)
-		if err != nil {
-			return utils.StackError(err, "Unable to setup variant object: construction failed")
-		}
-		err = dbValue.Write(set.id)
-		set.obj.(Data).Created(set.id)
-
-	} else if dt.IsType() {
-
-		val, _ := dt.GetDefaultValue().(DataType)
-		err = dbValue.Write(val.AsString())
-
-	} else {
-		result := dt.GetDefaultValue()
-		err = dbValue.Write(result)
-	}
-
-	if err != nil {
-		return err
-	}
-
-	self.GetEvent("onTypeChanged").Emit(id)
-	return nil
-}
-
 func (self *variant) getDataType(id Identifier) DataType {
 
 	prop := self.GetProperty("type").(*typeProperty)
-	dt := prop.GetDataType(id)
-	return dt
+	return prop.GetDataType(id)
 }

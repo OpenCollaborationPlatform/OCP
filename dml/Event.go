@@ -144,11 +144,7 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 	}
 
 	//inform runtime about event
-	path, err := self.owner.GetObjectPath(id)
-	if err != nil {
-		return err
-	}
-	return self.owner.GetRuntime().emitEvent(path, self.name, args...)
+	return self.owner.EventEmitted(id, self.name, args...)
 }
 
 func (self *event) Enabled(id Identifier) (bool, error) {
@@ -272,6 +268,8 @@ type EventHandler interface {
 	Events() []string
 	SetupJSEvents(*goja.Object) error
 	InitializeEventDB(Identifier) error
+
+	EventEmitted(Identifier, string, ...interface{}) error
 }
 
 func NewEventHandler() eventHandler {
