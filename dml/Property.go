@@ -2,7 +2,6 @@ package dml
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -40,25 +39,12 @@ func NewProperty(name string, dtype DataType, default_value interface{}, constpr
 	var prop Property
 
 	if !constprop {
-
-		if dtype.IsPOD() || dtype.IsRaw() {
-
-			//setup default value if needed
-			prop = &dataProperty{name, dtype, default_value, nil, nil}
-			if err != nil {
-				return nil, utils.StackError(err, "Unable to use provided value as default for property")
-			}
-
-		} else if dtype.IsType() {
-			//setup default value if needed
-			prop = &typeProperty{name, default_value.(DataType), nil, nil}
-			if err != nil {
-				return nil, utils.StackError(err, "Unable to use provided value as default for property")
-			}
-
-		} else {
-			return nil, fmt.Errorf("Unknown type")
+		//setup default value if needed
+		prop = &dataProperty{name, dtype, default_value, nil, nil}
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to use provided value as default for property")
 		}
+
 	} else {
 		if dtype.IsPOD() || dtype.IsRaw() {
 			prop = &constProperty{dtype, nil}
@@ -167,102 +153,6 @@ func (self *dataProperty) GetValue(id Identifier) interface{} {
 
 	val = UnifyDataType(val)
 	return val
-}
-
-type typeProperty struct {
-	//	eventHandler
-	name        string
-	default_val DataType
-	rntm        *Runtime
-	callback    PropertyChangeNotifyer
-}
-
-func (self typeProperty) Type() DataType {
-	return MustNewDataType("type")
-}
-
-func (self typeProperty) IsConst() bool {
-	return false
-}
-
-//we store the basic information, plain type string or parser result for object
-func (self *typeProperty) SetValue(id Identifier, val interface{}) error {
-
-	//check if the type is correct
-	err := MustNewDataType("type").MustBeTypeOf(val)
-	if err != nil {
-		return utils.StackError(err, "Cannot set type property: invalid argument")
-	}
-
-	err = self.callback.BeforePropertyChange(id, self.name)
-	if err != nil {
-		return err
-	}
-
-	data := val.(DataType)
-
-	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
-	if err != nil {
-		return err
-	}
-	err = dbValue.Write(data.AsString())
-	if err != nil {
-		return err
-	}
-
-	return self.callback.PropertyChanged(id, self.name)
-}
-
-//we only return basic information, mailny for JS accessibility
-func (self *typeProperty) GetValue(id Identifier) interface{} {
-
-	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
-	if err != nil {
-		return err
-	}
-
-	if !dbValue.IsValid() {
-		return self.default_val
-	}
-
-	data, err := dbValue.Read()
-	if err != nil {
-		log.Printf("Error reading value: %s", err)
-		return nil
-	}
-	return DataType{data.(string)}
-}
-
-func (self *typeProperty) GetDataType(id Identifier) DataType {
-
-	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
-	if err != nil {
-		return self.default_val
-	}
-
-	if !dbValue.IsValid() {
-		return self.default_val
-	}
-
-	data, err := dbValue.Read()
-	if err != nil {
-		log.Printf("Cannot access datastore: %v", err)
-	}
-	return DataType{data.(string)}
-}
-
-func (self *typeProperty) SetDefaultValue(val interface{}) error {
-	err := MustNewDataType("type").MustBeTypeOf(val)
-	if err != nil {
-		utils.StackError(err, "default value for type property set with wrong type")
-	}
-
-	self.default_val = val.(DataType)
-	return nil
-}
-
-func (self *typeProperty) GetDefaultValue() interface{} {
-	return self.default_val
 }
 
 //Const property
@@ -434,10 +324,6 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 		if dp, ok := prop.(*dataProperty); ok {
 			dp.callback = cb
 			dp.rntm = rntm
-
-		} else if tp, ok := prop.(*typeProperty); ok {
-			tp.callback = cb
-			tp.rntm = rntm
 		}
 
 		//expose to JavaScript

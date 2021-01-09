@@ -44,6 +44,9 @@ func UnifyDataType(val interface{}) interface{} {
 	case *cid.Cid:
 		id := val.(*cid.Cid)
 		return *id
+	case *DataType:
+		dt := val.(*DataType)
+		return *dt
 	}
 
 	//everything else is correct

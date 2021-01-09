@@ -360,6 +360,50 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 					}
 				}
 				return nxclient.InvokeResult{}
+
+			case "CidByPath":
+				if len(inv.Arguments) != 1 {
+					return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to file or directory"}, Err: wamp.URI("ocp.error")}
+				}
+				filepath, ok := inv.Arguments[0].(string)
+				if !ok {
+					return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to file or directory"}, Err: wamp.URI("ocp.error")}
+				}
+				//add the file!
+				cid, err := self.swarm.Data.Add(ctx, filepath)
+				if err != nil {
+					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				}
+				return nxclient.InvokeResult{Args: wamp.List{cid.String()}}
+
+			case "PathByCid":
+				if len(inv.Arguments) != 2 {
+					return nxclient.InvokeResult{Args: wamp.List{"Argument must be Cid and path to directory"}, Err: wamp.URI("ocp.error")}
+				}
+
+				strcid, ok := inv.Arguments[0].(string)
+				if !ok {
+					return nxclient.InvokeResult{Args: wamp.List{"First argument must be Cid"}, Err: wamp.URI("ocp.error")}
+				}
+
+				id, err := cid.Decode(strcid)
+				if err != nil {
+					return nxclient.InvokeResult{Args: wamp.List{"First argument seems not to be a Cid"}, Err: wamp.URI("ocp.error")}
+				}
+
+				dirpath, ok := inv.Arguments[1].(string)
+				if !ok {
+					return nxclient.InvokeResult{Args: wamp.List{"Second argument must be path to directory"}, Err: wamp.URI("ocp.error")}
+				}
+
+				//write the data
+				filepath, err := self.swarm.Data.Write(ctx, id, dirpath)
+				if err != nil {
+					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+				}
+
+				//return the exact path of new file
+				return nxclient.InvokeResult{Args: wamp.List{filepath}}
 			}
 
 		} else {

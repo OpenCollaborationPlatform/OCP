@@ -269,7 +269,7 @@ func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 
 	_, ok := self.creators[name]
 	if ok {
-		return fmt.Errorf("Object name '%v' already registered", name)
+		return nil //not an error, as due to import it could happen that things are reimportet
 	}
 
 	self.creators[name] = fnc

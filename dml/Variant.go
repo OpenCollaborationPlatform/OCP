@@ -293,6 +293,6 @@ func (self *variant) getStoredObject(id Identifier) (dmlSet, error) {
 
 func (self *variant) getDataType(id Identifier) DataType {
 
-	prop := self.GetProperty("type").(*typeProperty)
-	return prop.GetDataType(id)
+	value := self.GetProperty("type").GetValue(id)
+	return value.(DataType)
 }
