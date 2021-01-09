@@ -50,7 +50,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	}
 
 	//setup the datastructure
-	prefix := "ocp.documents.edit." + id
+	prefix := "ocp.documents." + id
 	ds, err := NewDatastructure(path, prefix, client)
 	if err != nil {
 		client.Close()

@@ -82,11 +82,11 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	rntm.RegisterEventCallback("events", self.createWampPublishFunction())
 
 	//register the function handler
-	uri := self.prefix + "call"
+	uri := self.prefix + "content"
 	self.client.Register(uri, self.createWampInvokeFunction(), options)
 
 	//register raw data handler
-	uri = self.prefix + "rawdata"
+	uri = self.prefix + "raw"
 	self.client.Register(uri, self.createWampRawFunction(), options)
 
 	//register javascript handler
@@ -104,8 +104,10 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 
 func (self Datastructure) Close() {
 	self.dmlState.Close()
-	self.client.Unregister(self.prefix + "methods")
-	self.client.Unregister(self.prefix + "properties")
+	self.client.Unregister(self.prefix + "content")
+	self.client.Unregister(self.prefix + "raw")
+	self.client.Unregister(self.prefix + "execute")
+	self.client.Unregister(self.prefix + "prints")
 }
 
 func (self Datastructure) GetState() p2p.State {
@@ -125,8 +127,8 @@ func (self Datastructure) createWampPublishFunction() dml.EventCallbackFunc {
 			wampArgs[i] = arg
 		}
 
-		//connvert the path into wamp style
-		uri := self.prefix + "events." + path
+		//connvert the path into wamp style uri
+		uri := self.prefix + "content." + path
 
 		//other arguments we do not need
 		kwargs := make(wamp.Dict, 0)
@@ -181,7 +183,7 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 		}
 
 		//build dml path
-		path := procedure[(len(self.prefix) + 5):] // 5 for call.
+		path := procedure[(len(self.prefix) + 8):] // 8 content.
 
 		//check if we execute local or globally
 		local, err := self.dmlState.CanCallLocal(string(path))
@@ -313,7 +315,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 
 		//get the paths
 		procedure := string(wamp.OptionURI(inv.Details, "procedure"))
-		procedure = procedure[(len(self.prefix) + 8):]
+		procedure = procedure[(len(self.prefix) + 4):] // 4 for raw.
 
 		if !strings.Contains(procedure, ".") {
 			//generall, non-object raw methods
