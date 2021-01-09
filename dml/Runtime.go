@@ -1141,21 +1141,7 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 	if astProp.Type.Object != nil {
 		return fmt.Errorf("object can only be of plain type")
 	}
-	var dt DataType
-	switch astProp.Type.Pod {
-	case "string":
-		dt = MustNewDataType("string")
-	case "int":
-		dt = MustNewDataType("int")
-	case "float":
-		dt = MustNewDataType("float")
-	case "bool":
-		dt = MustNewDataType("bool")
-	case "type":
-		dt = MustNewDataType("type")
-	case "raw":
-		dt = MustNewDataType("raw")
-	}
+	dt := MustNewDataType(astProp.Type.Pod)
 
 	var constprop bool = false
 	if astProp.Const != "" {

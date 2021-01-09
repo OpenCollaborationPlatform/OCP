@@ -78,6 +78,10 @@ func UnifyDataType(val interface{}) interface{} {
  *		- Describing nothing. Can be used as DataType, but does not reflect any
  * 		  type
  * 		- used for properties: property type MyType: none
+ *
+ *  Var:
+ * 		- Variable, can be any of the above datatypes
+ *      - Is allowed to change at runtime if not const
  */
 
 //a datatype can be either a pod type or any complex dml object
@@ -173,32 +177,27 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 	//check if the type is correct
 	switch UnifyDataType(val).(type) {
 	case int64:
-		if !self.IsInt() && !self.IsFloat() {
+		if !self.IsInt() && !self.IsFloat() && !self.IsVar() {
 			return fmt.Errorf(`wrong type, got 'int' and expected '%s'`, self.AsString())
 		}
 	case float64:
-		if !self.IsFloat() {
+		if !self.IsFloat() && !self.IsVar() {
 			return fmt.Errorf(`wrong type, got 'float' and expected '%s'`, self.AsString())
 		}
 	case string:
-		if !self.IsString() {
+		if !self.IsString() && !self.IsVar() {
 			return fmt.Errorf(`wrong type, got 'string' and expected '%s'`, self.AsString())
 		}
 	case bool:
-		if !self.IsBool() {
+		if !self.IsBool() && !self.IsVar() {
 			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, self.AsString())
 		}
-	case DataType:
-		if !self.IsType() {
+	case DataType, *DataType:
+		if !self.IsType() && !self.IsVar() {
 			return fmt.Errorf(`wrong type, got 'type' and expected '%s'`, self.AsString())
 		}
-
-	case cid.Cid:
-		if !self.IsRaw() {
-			return fmt.Errorf(`wrong type, got 'raw' and expected '%s'`, self.AsString())
-		}
-	case *cid.Cid:
-		if !self.IsRaw() {
+	case cid.Cid, *cid.Cid:
+		if !self.IsRaw() && !self.IsVar() {
 			return fmt.Errorf(`wrong type, got 'raw' and expected '%s'`, self.AsString())
 		}
 	default:
@@ -229,11 +228,13 @@ func (self DataType) IsFloat() bool  { return self.Value == "float" }
 func (self DataType) IsBool() bool   { return self.Value == "bool" }
 func (self DataType) IsType() bool   { return self.Value == "type" }
 func (self DataType) IsRaw() bool    { return self.Value == "raw" }
+func (self DataType) IsVar() bool    { return self.Value == "var" }
 func (self DataType) IsComplex() bool {
 	return !self.IsPOD() &&
 		!self.IsNone() &&
 		!self.IsRaw() &&
-		!self.IsType()
+		!self.IsType() &&
+		!self.IsVar()
 }
 
 func (self DataType) GetDefaultValue() interface{} {
@@ -253,5 +254,6 @@ func (self DataType) GetDefaultValue() interface{} {
 		return MustNewDataType("none")
 	}
 
+	//none and var return nil as default
 	return nil
 }

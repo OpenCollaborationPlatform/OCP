@@ -109,3 +109,55 @@ func TestTypeProperty(t *testing.T) {
 
 	})
 }
+
+func TestVarProperty(t *testing.T) {
+
+	Convey("Loading dml code into runtime including a var property,", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
+		store, err := datastore.NewDatastore(path)
+		defer store.Close()
+		So(err, ShouldBeNil)
+
+		code := `Data {
+				.name:"toplevel"
+
+				const property var constVarProp: "Hello"
+				property var varProp: 2
+			}`
+
+		rntm := NewRuntime()
+		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
+		So(err, ShouldBeNil)
+
+		Convey("The properties must be accessbile", func() {
+
+			res, err := rntm.Call(store, "", "toplevel.constVarProp")
+			So(err, ShouldBeNil)
+			So(res, ShouldEqual, "Hello")
+			res, err = rntm.Call(store, "", "toplevel.varProp")
+			So(err, ShouldBeNil)
+			So(res, ShouldEqual, 2)
+		})
+
+		Convey("and non-const var properties can be changed at runtime", func() {
+			code := `toplevel.varProp = true
+					if (toplevel.varProp != true) {
+						throw "not boolean, but should be"
+					}`
+			_, err := rntm.RunJavaScript(store, "", code)
+			So(err, ShouldBeNil)
+		})
+
+		Convey("but const var properties canot", func() {
+			code := `toplevel.constVarProp = true
+					`
+			_, err := rntm.RunJavaScript(store, "", code)
+			So(err, ShouldNotBeNil)
+		})
+	})
+}

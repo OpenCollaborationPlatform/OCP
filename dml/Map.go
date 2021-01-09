@@ -570,14 +570,12 @@ func (self *mapImpl) SetObjectPath(id Identifier, path string) error {
 
 func (self *mapImpl) valueDataType(id Identifier) DataType {
 
-	prop := self.GetProperty("value").(*constTypeProperty)
-	dt := prop.GetDataType()
-	return dt
+	prop := self.GetProperty("value").GetValue(Identifier{})
+	return prop.(DataType)
 }
 
 func (self *mapImpl) keyDataType(id Identifier) DataType {
 
-	prop := self.GetProperty("key").(*constTypeProperty)
-	dt := prop.GetDataType()
-	return dt
+	prop := self.GetProperty("key").GetValue(Identifier{})
+	return prop.(DataType)
 }

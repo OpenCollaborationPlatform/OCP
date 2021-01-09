@@ -847,16 +847,14 @@ func (self *graph) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 
 func (self *graph) nodeDataType() DataType {
 
-	prop := self.GetProperty("node").(*constTypeProperty)
-	dt := prop.GetDataType()
-	return dt
+	prop := self.GetProperty("node").GetValue(Identifier{})
+	return prop.(DataType)
 }
 
 func (self *graph) edgeDataType() DataType {
 
-	prop := self.GetProperty("edge").(*constTypeProperty)
-	dt := prop.GetDataType()
-	return dt
+	prop := self.GetProperty("edge").GetValue(Identifier{})
+	return prop.(DataType)
 }
 
 func (self *graph) isDirected() bool {

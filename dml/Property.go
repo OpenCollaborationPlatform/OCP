@@ -46,21 +46,10 @@ func NewProperty(name string, dtype DataType, default_value interface{}, constpr
 		}
 
 	} else {
-		if dtype.IsPOD() || dtype.IsRaw() {
-			prop = &constProperty{dtype, nil}
-			err := prop.SetDefaultValue(default_value)
-			if err != nil {
-				return nil, utils.StackError(err, "Unable to use provided value as default for property")
-			}
-
-		} else if dtype.IsType() {
-			prop = &constTypeProperty{MustNewDataType("int")}
-			err := prop.SetDefaultValue(default_value)
-			if err != nil {
-				return nil, utils.StackError(err, "Unable to use provided value as default for property")
-			}
-		} else {
-			return nil, fmt.Errorf("Unknown type")
+		prop = &constProperty{dtype, nil}
+		err := prop.SetDefaultValue(default_value)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to use provided value as default for property")
 		}
 	}
 
@@ -196,50 +185,6 @@ func (self *constProperty) SetDefaultValue(val interface{}) error {
 
 func (self *constProperty) GetDefaultValue() interface{} {
 	return self.value
-}
-
-type constTypeProperty struct {
-	//	eventHandler
-	data DataType
-}
-
-func (self constTypeProperty) Type() DataType {
-	return MustNewDataType("type")
-}
-
-func (self constTypeProperty) IsConst() bool {
-	return true
-}
-
-func (self *constTypeProperty) SetValue(id Identifier, val interface{}) error {
-	return fmt.Errorf("Const property cannot set value")
-}
-
-//we only return basic information, mailny for JS accessibility
-func (self *constTypeProperty) GetValue(id Identifier) interface{} {
-	return self.data
-}
-
-//we store the basic information, plain type string or parser result for object
-func (self *constTypeProperty) SetDefaultValue(val interface{}) error {
-
-	//check if the type is correct
-	err := MustNewDataType("type").MustBeTypeOf(val)
-	if err != nil {
-		return utils.StackError(err, "Cannot set type property default value: invalid argument")
-	}
-
-	self.data = val.(DataType)
-
-	return nil
-}
-
-func (self *constTypeProperty) GetDefaultValue() interface{} {
-	return self.data
-}
-
-func (self *constTypeProperty) GetDataType() DataType {
-	return self.data
 }
 
 //Property handler, which defines a interface for holding and using multiple properties

@@ -664,9 +664,8 @@ func (self *vector) changeLength(id Identifier, amount int64) (int64, error) {
 
 func (self *vector) entryDataType(id Identifier) DataType {
 
-	prop := self.GetProperty("type").(*constTypeProperty)
-	dt := prop.GetDataType()
-	return dt
+	prop := self.GetProperty("type").GetValue(Identifier{})
+	return prop.(DataType)
 }
 
 func (self *vector) buildNew(id Identifier) (interface{}, error) {
