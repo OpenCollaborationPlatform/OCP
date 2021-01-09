@@ -73,22 +73,13 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 
 	//initiate the client connections for events
 	rntm := self.dmlState.dml
-	rntm.SetupAllObjects(func(objpath string, obj dml.Data) error {
-		/*
-			//build the full path
-			if objpath != "" {
-				objpath += "."
-			}
-			objpath += obj.Id().Name
-
-			//go over all events and set them up
-			self.setupDmlEvents(obj, objpath)*/
-		return nil
-	})
 
 	//general options
 	options := wamp.SetOption(wamp.Dict{}, wamp.OptMatch, wamp.MatchPrefix)
 	options = wamp.SetOption(options, wamp.OptDiscloseCaller, true)
+
+	//register the event handler
+	rntm.RegisterEventCallback("events", self.createWampPublishFunction())
 
 	//register the function handler
 	uri := self.prefix + "call"
@@ -124,30 +115,18 @@ func (self Datastructure) GetState() p2p.State {
 //							helper functions
 //******************************************************************************
 
-//setup events so that they publish in the wamp client!
-func (self Datastructure) setupDmlEvents(obj dml.EventHandler, path string) {
-	/*
-		//go over all events and set them up
-		for _, evtName := range obj.Events() {
+func (self Datastructure) createWampPublishFunction() dml.EventCallbackFunc {
 
-			evt := obj.GetEvent(evtName)
-			evt.RegisterCallback(self.createWampPublishFunction(path, evtName))
-		}*/
-}
-
-/*
-func (self Datastructure) createWampPublishFunction(path string, event string) dml.EventCallback {
-
-	return func(vals ...interface{}) error {
+	return func(path string, args ...interface{}) {
 
 		//convert the arguments into wamp style
-		args := make(wamp.List, len(vals))
-		for i, val := range vals {
-			args[i] = val
+		wampArgs := make(wamp.List, len(args))
+		for i, arg := range args {
+			wampArgs[i] = arg
 		}
 
 		//connvert the path into wamp style
-		uri := self.prefix + "events." + path + "." + event
+		uri := self.prefix + "events." + path
 
 		//other arguments we do not need
 		kwargs := make(wamp.Dict, 0)
@@ -160,11 +139,10 @@ func (self Datastructure) createWampPublishFunction(path string, event string) d
 		}
 
 		//publish!
-		//fmt.Printf("Publish event %v with args %v\n", uri, args)
-		return self.client.Publish(uri, opts, args, kwargs)
+		self.client.Publish(uri, opts, args, kwargs)
 	}
 }
-*/
+
 func (self Datastructure) executeOperation(ctx context.Context, op Operation) nxclient.InvokeResult {
 
 	//execute the operation!

@@ -45,6 +45,9 @@ func init() {
 //Function prototype that can create new object types in DML
 type CreatorFunc func(rntm *Runtime) (Object, error)
 
+//Function prototype that gets called on any runtime event
+type EventCallbackFunc func(path string, args ...interface{})
+
 func NewRuntime() *Runtime {
 
 	//js runtime with console support
@@ -52,10 +55,10 @@ func NewRuntime() *Runtime {
 	new(require.Registry).Enable(js)
 	console.Enable(js)
 
-	cr := make(map[string]CreatorFunc, 0)
 	rntm := &Runtime{
 		printManager: NewPrintManager(),
-		creators:     cr,
+		creators:     make(map[string]CreatorFunc, 0),
+		eventCBs:     make(map[string]EventCallbackFunc, 0),
 		jsvm:         js,
 		datastore:    nil,
 		mutex:        &sync.Mutex{},
@@ -93,6 +96,7 @@ type Runtime struct {
 	*printManager
 
 	creators map[string]CreatorFunc
+	eventCBs map[string]EventCallbackFunc
 
 	//components of the runtime
 	jsvm      *goja.Runtime
@@ -260,52 +264,34 @@ func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
 	return ds.Commit()
 }
 
-//calls setup on all Data Objects. The string is the path up to the object,
-//e.g. for object Toplevel.Sublevel.MyObject path ist Toplevel.Sublevel
-//th epath is empty for the main object as well as all dynamic data, e.g. vector entries
-func (self *Runtime) SetupAllObjects(setup func(string, Data) error) error {
-	/*
-		//check if setup is possible
-		if !self.ready {
-			return fmt.Errorf("Unable to setup objects: Runtime not initialized")
-		}
-
-		//iterate all data object in the hirarchy
-		has := make(map[Identifier]struct{}, 0)
-		err := setupDataChildren("", self.mainObj, has, setup)
-		if err != nil {
-			return utils.StackError(err, "Unable to setup all objects")
-		}
-
-		//call setup for all dynamic objects (objects in the global list but not yet
-		//reached via the hirarchy)
-		for _, obj := range self.objects {
-			_, ok := has[obj.Id()]
-			if ok {
-				continue
-			}
-			dataobj, ok := obj.(Data)
-			if !ok {
-				continue
-			}
-			err := setup("", dataobj)
-			if err != nil {
-				return utils.StackError(err, "Unable to setup all dynamic objects")
-			}
-		}
-	*/
-	return nil
-}
-
 //Function to extend the available data and behaviour types for this runtime
 func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 
-	/*	_, ok := self.creators[name]
-		if ok {
-			return fmt.Errorf("Object name '%v' already registered", name)
-		}
-	*/
+	_, ok := self.creators[name]
+	if ok {
+		return fmt.Errorf("Object name '%v' already registered", name)
+	}
+
 	self.creators[name] = fnc
+	return nil
+}
+
+//Function to register function to catch all runtime events
+func (self *Runtime) RegisterEventCallback(name string, fnc EventCallbackFunc) error {
+
+	_, ok := self.eventCBs[name]
+	if ok {
+		return fmt.Errorf("Event callback '%v' already registered", name)
+	}
+
+	self.eventCBs[name] = fnc
+	return nil
+}
+
+//Function to register function to catch all runtime events
+func (self *Runtime) UnregisterEventCallback(name string) error {
+
+	delete(self.eventCBs, name)
 	return nil
 }
 
@@ -519,34 +505,6 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 
 // 							Internal Functions
 //*********************************************************************************
-func setupDataChildren(path string, obj Data, has map[Identifier]struct{}, setup func(string, Data) error) error {
-	/*
-		//execute on the object itself!
-		err := setup(path, obj)
-		if err != nil {
-			return err
-		}
-		has[obj.Id()] = struct{}{}
-
-		//advance path and execute all children
-		if path != "" {
-			path += "."
-		}
-		path += obj.Id().Name
-		for _, child := range obj.GetChildren() {
-
-			datachild, ok := child.(Data)
-			if ok {
-				err := setupDataChildren(path, datachild, has, setup)
-				if err != nil {
-					return err
-				}
-			}
-		}
-	*/
-	return nil
-}
-
 func (self *Runtime) checkDatastore(ds *datastore.Datastore) error {
 
 	set, err := ds.GetOrCreateSet(datastore.ValueType, false, internalKey)
@@ -1243,7 +1201,11 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
 //This function is called by all emitted events. It does forward it to outside of
 //The runtime
-func (self *Runtime) emitEvent(path, event string, args ...interface{}) error {
+func (self *Runtime) emitEvent(objPath, event string, args ...interface{}) error {
 
+	eventpath := objPath + "." + event
+	for _, cb := range self.eventCBs {
+		cb(eventpath, args...)
+	}
 	return nil
 }
