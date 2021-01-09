@@ -1153,8 +1153,8 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 		dt = MustNewDataType("bool")
 	case "type":
 		dt = MustNewDataType("type")
-	case "object":
-		dt = MustNewDataType("object")
+	case "raw":
+		dt = MustNewDataType("raw")
 	}
 
 	var constprop bool = false

@@ -6,10 +6,12 @@ import (
 	"fmt"
 
 	"github.com/ickby/CollaborationNode/utils"
+	cid "github.com/ipfs/go-cid"
 )
 
 func init() {
 	gob.Register(new(DataType))
+	gob.Register(new(cid.Cid))
 }
 
 //changes Value to its main type from multiple subtypes, e.g. int64 from int and int16
@@ -39,6 +41,9 @@ func UnifyDataType(val interface{}) interface{} {
 		return int64(val.(float32))
 	case Boolean:
 		return bool(val.(bool))
+	case *cid.Cid:
+		id := val.(*cid.Cid)
+		return *id
 	}
 
 	//everything else is correct
@@ -50,6 +55,10 @@ func UnifyDataType(val interface{}) interface{} {
  *	POD:
  * 		- The usual supported datatypes of every language
  * 		- int, float, bool, string
+ *
+ * 	Raw:
+ *  		- This behaves like a POD type and exposes a CID
+ * 		- It can not realy do anything except convey the information
  *
  *	Type:
  * 		- This describes the DataType itself. So a DataType can be a DataType.
@@ -180,6 +189,15 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 		if !self.IsType() {
 			return fmt.Errorf(`wrong type, got 'type' and expected '%s'`, self.AsString())
 		}
+
+	case cid.Cid:
+		if !self.IsRaw() {
+			return fmt.Errorf(`wrong type, got 'raw' and expected '%s'`, self.AsString())
+		}
+	case *cid.Cid:
+		if !self.IsRaw() {
+			return fmt.Errorf(`wrong type, got 'raw' and expected '%s'`, self.AsString())
+		}
 	default:
 		return fmt.Errorf("Unknown type: %T", val)
 	}
@@ -207,9 +225,11 @@ func (self DataType) IsInt() bool    { return self.Value == "int" }
 func (self DataType) IsFloat() bool  { return self.Value == "float" }
 func (self DataType) IsBool() bool   { return self.Value == "bool" }
 func (self DataType) IsType() bool   { return self.Value == "type" }
+func (self DataType) IsRaw() bool    { return self.Value == "raw" }
 func (self DataType) IsComplex() bool {
 	return !self.IsPOD() &&
 		!self.IsNone() &&
+		!self.IsRaw() &&
 		!self.IsType()
 }
 
@@ -224,6 +244,8 @@ func (self DataType) GetDefaultValue() interface{} {
 		return float64(0.0)
 	case "bool":
 		return bool(false)
+	case "raw":
+		return cid.Undef
 	case "type":
 		return MustNewDataType("none")
 	}

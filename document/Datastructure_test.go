@@ -16,6 +16,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"
+	cid "github.com/ipfs/go-cid"
 	uuid "github.com/satori/go.uuid"
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -26,6 +27,10 @@ const (
 
 			    property string 	testS: "Hallo"
 			    property int 	testI: 1
+
+				//the two raw dat properties
+				property raw RawData
+				property raw RawData2
 
 				event TestEventZeroArgs
 				event TestEventTwoArgs
@@ -53,14 +58,6 @@ const (
 					.name: "Graph"
 					.node: string
 					.edge: none	
-				}
-				
-				Raw {
-					.name: "RawData"
-				}
-
-				Raw {
-					.name: "RawData2"
 				}
 			}`
 )
@@ -313,24 +310,26 @@ func TestDatastructureData(t *testing.T) {
 			_, err := testClient.Call(ctx, "ocp.test.raw.Test.RawData.SetByPath", opts, wamp.List{testfilepath}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 
-			Convey("which markes the object \"set\" in dml", func() {
+			Convey("which makes the properties cid Defined()", func() {
 
-				res, err := testClient.Call(ctx, "ocp.test.content.Test.RawData.IsSet", opts, wamp.List{}, wamp.Dict{}, nil)
+				res, err := testClient.Call(ctx, "ocp.test.content.Test.RawData", opts, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				So(res.Arguments[0], ShouldBeTrue)
+				id, ok := res.Arguments[0].(cid.Cid)
+				So(ok, ShouldBeTrue)
+				So(id.Defined(), ShouldBeTrue)
 			})
 
 			Convey("and lets access and use the cid", func() {
 
-				code := `Test.RawData2.Set(Test.RawData.Get())`
+				code := `Test.RawData2 = Test.RawData`
 				_, err := testClient.Call(ctx, "ocp.test.execute", opts, wamp.List{code}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
 
-				res1, err := testClient.Call(ctx, "ocp.test.content.Test.RawData.Get", opts, wamp.List{}, wamp.Dict{}, nil)
+				res1, err := testClient.Call(ctx, "ocp.test.content.Test.RawData", opts, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				res2, err := testClient.Call(ctx, "ocp.test.content.Test.RawData2.Get", opts, wamp.List{}, wamp.Dict{}, nil)
+				res2, err := testClient.Call(ctx, "ocp.test.content.Test.RawData2", opts, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				So(res1.Arguments[0], ShouldEqual, res2.Arguments[0])
+				So(res1.Arguments[0], ShouldResemble, res2.Arguments[0])
 				So(res1.Arguments, ShouldNotEqual, "")
 			})
 
@@ -384,24 +383,26 @@ func TestDatastructureData(t *testing.T) {
 			_, err := testClient.Call(ctx, "ocp.test.raw.Test.RawData.SetByBinary", opts, wamp.List{"fc.myfiles.load", 42}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 
-			Convey("which markes the object \"set\" in dml", func() {
+			Convey("which markes the stored cid Defined() in dml", func() {
 
-				res, err := testClient.Call(ctx, "ocp.test.content.Test.RawData.IsSet", opts, wamp.List{}, wamp.Dict{}, nil)
+				res, err := testClient.Call(ctx, "ocp.test.content.Test.RawData", opts, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				So(res.Arguments[0], ShouldBeTrue)
+				id, ok := res.Arguments[0].(cid.Cid)
+				So(ok, ShouldBeTrue)
+				So(id.Defined(), ShouldBeTrue)
 			})
 
 			Convey("and lets access and use the cid", func() {
 
-				code := `Test.RawData2.Set(Test.RawData.Get())`
+				code := `Test.RawData2 = Test.RawData`
 				_, err := testClient.Call(ctx, "ocp.test.execute", opts, wamp.List{code}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
 
-				res1, err := testClient.Call(ctx, "ocp.test.content.Test.RawData.Get", opts, wamp.List{}, wamp.Dict{}, nil)
+				res1, err := testClient.Call(ctx, "ocp.test.content.Test.RawData", opts, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				res2, err := testClient.Call(ctx, "ocp.test.content.Test.RawData2.Get", opts, wamp.List{}, wamp.Dict{}, nil)
+				res2, err := testClient.Call(ctx, "ocp.test.content.Test.RawData2", opts, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				So(res1.Arguments[0], ShouldEqual, res2.Arguments[0])
+				So(res1.Arguments[0], ShouldResemble, res2.Arguments[0])
 				So(res1.Arguments, ShouldNotEqual, "")
 			})
 

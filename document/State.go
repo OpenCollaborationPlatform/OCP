@@ -57,7 +57,6 @@ func newState(path string) (dmlState, error) {
 
 	//create the runtime
 	rntm := dml.NewRuntime()
-	rntm.RegisterObjectCreator("Raw", NewRawDmlObject)
 
 	//parse the dm file in path/Dml/main.dml
 	dmlpath := filepath.Join(path, "Dml")

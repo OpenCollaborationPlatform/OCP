@@ -363,7 +363,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			}
 
 		} else {
-			//object raw methods
+			//property raw methods
 
 			idx := strings.LastIndex(string(procedure), ".")
 			path := procedure[:idx]
@@ -383,8 +383,8 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
-				//set the cid to the dml object
-				op := newCallOperation(dml.User(auth), string(path)+".Set", wamp.List{cid.String()}, node, session)
+				//set the cid to the dml property
+				op := newCallOperation(dml.User(auth), string(path), wamp.List{cid}, node, session)
 				return self.executeOperation(ctx, op)
 
 			case "WriteIntoPath":
@@ -397,17 +397,16 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				}
 
 				//get the cid from the data object!
-				val, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path)+".Get")
+				val, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path))
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
-				sval, ok := val.(string)
+				id, ok := val.(cid.Cid)
 				if !ok {
-					return nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
+					return nxclient.InvokeResult{Args: wamp.List{"Raw proeprty faulty, does not contain Cid"}, Err: wamp.URI("ocp.error")}
 				}
-				id, err := cid.Decode(sval)
-				if err != nil {
-					return nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
+				if !id.Defined() {
+					return nxclient.InvokeResult{Args: wamp.List{"Raw property does not contain any data"}, Err: wamp.URI("ocp.error")}
 				}
 
 				//write the data
@@ -428,23 +427,22 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				}
 
 				//set the cid to the dml object
-				op := newCallOperation(dml.User(auth), string(path)+".Set", wamp.List{cid.String()}, node, session)
+				op := newCallOperation(dml.User(auth), string(path), wamp.List{cid}, node, session)
 				return self.executeOperation(ctx, op)
 
 			case "ReadBinary":
 
 				//get the cid from the data object!
-				val, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path)+".Get")
+				val, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path))
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
-				sval, ok := val.(string)
+				id, ok := val.(cid.Cid)
 				if !ok {
-					return nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
+					return nxclient.InvokeResult{Args: wamp.List{"Raw property is not setup correctly"}, Err: wamp.URI("ocp.error")}
 				}
-				id, err := cid.Decode(sval)
-				if err != nil {
-					return nxclient.InvokeResult{Args: wamp.List{"Raw object does not contain any data"}, Err: wamp.URI("ocp.error")}
+				if !id.Defined() {
+					return nxclient.InvokeResult{Args: wamp.List{"Raw property does not contain any data"}, Err: wamp.URI("ocp.error")}
 				}
 
 				// Read and send chunks of data

@@ -41,7 +41,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, constpr
 
 	if !constprop {
 
-		if dtype.IsPOD() {
+		if dtype.IsPOD() || dtype.IsRaw() {
 
 			//setup default value if needed
 			prop = &dataProperty{name, dtype, default_value, nil, nil}
@@ -60,7 +60,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, constpr
 			return nil, fmt.Errorf("Unknown type")
 		}
 	} else {
-		if dtype.IsPOD() {
+		if dtype.IsPOD() || dtype.IsRaw() {
 			prop = &constProperty{dtype, nil}
 			err := prop.SetDefaultValue(default_value)
 			if err != nil {
@@ -108,6 +108,8 @@ func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
 		return err
 	}
 
+	val = UnifyDataType(val)
+
 	err = self.callback.BeforePropertyChange(id, self.name)
 	if err != nil {
 		return err
@@ -137,6 +139,8 @@ func (self *dataProperty) SetDefaultValue(val interface{}) error {
 		return utils.StackError(err, "Unable to set property defult value")
 	}
 
+	val = UnifyDataType(val)
+
 	self.default_val = val
 	return nil
 }
@@ -161,6 +165,7 @@ func (self *dataProperty) GetValue(id Identifier) interface{} {
 		return utils.StackError(err, "Error reading database vaue for property access")
 	}
 
+	val = UnifyDataType(val)
 	return val
 }
 
