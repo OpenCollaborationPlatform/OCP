@@ -315,6 +315,24 @@ func TestTypeVector(t *testing.T) {
 			So(length, ShouldEqual, 2)
 			store.Commit()
 
+			Convey("Accessing the object via path is possible", func() {
+
+				store.Begin()
+				defer store.Rollback()
+
+				path := "toplevel.TypeVec.0"
+				set, err := rntm.getObjectFromPath(path)
+				So(err, ShouldBeNil)
+				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 0)
+
+				Convey("and the same path is set in the object", func() {
+
+					res, err := set.obj.GetObjectPath(set.id)
+					So(err, ShouldBeNil)
+					So(res, ShouldEqual, path)
+				})
+			})
+
 			Convey("Setting data to the new type is supported", func() {
 
 				code = `
@@ -369,6 +387,12 @@ func TestTypeVector(t *testing.T) {
 
 			Convey("Removing the object works", func() {
 
+				store.Begin()
+				path := "toplevel.TypeVec.1"
+				set, err := rntm.getObjectFromPath(path)
+				So(err, ShouldBeNil)
+				store.Rollback()
+
 				code = `
 						var l =  toplevel.TypeVec.Length()
 						toplevel.TypeVec.Remove(0)
@@ -376,9 +400,85 @@ func TestTypeVector(t *testing.T) {
 							throw "Object removal failed"
 						}
 					`
-				_, err := rntm.RunJavaScript(store, "user3", code)
+				_, err = rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
+				store.Begin()
+				path = "toplevel.TypeVec.0"
+				newSet, err := rntm.getObjectFromPath(path)
+				So(err, ShouldBeNil)
+				So(newSet.id.Equals(set.id), ShouldBeTrue)
+				store.Rollback()
+
+				Convey("and the objects path is updated accordingly", func() {
+
+					store.Begin()
+					defer store.Rollback()
+					objPath, err := set.obj.GetObjectPath(set.id)
+					So(err, ShouldBeNil)
+					So(objPath, ShouldEqual, path)
+				})
+			})
+
+			Convey("Swaping works and updates the paths", func() {
+
+				store.Begin()
+				defer store.Rollback()
+				setV, _ := rntm.getObjectFromPath("toplevel.TypeVec")
+
+				set0, _ := rntm.getObjectFromPath("toplevel.TypeVec.0")
+				path0, _ := set0.obj.GetObjectPath(set0.id)
+				set1, _ := rntm.getObjectFromPath("toplevel.TypeVec.1")
+				path1, _ := set1.obj.GetObjectPath(set1.id)
+
+				vec := setV.obj.(*vector)
+				So(vec.Swap(setV.id, 0, 1), ShouldBeNil)
+
+				//new sets after swap
+				setS0, _ := rntm.getObjectFromPath("toplevel.TypeVec.0")
+				setS1, _ := rntm.getObjectFromPath("toplevel.TypeVec.1")
+
+				//new paths after swap of the old objects (Note: not new sets)
+				pathS0, _ := set0.obj.GetObjectPath(set0.id)
+				pathS1, _ := set1.obj.GetObjectPath(set1.id)
+
+				So(set0.id.Equals(setS1.id), ShouldBeTrue)
+				So(set1.id.Equals(setS0.id), ShouldBeTrue)
+				So(path0, ShouldEqual, pathS1)
+				So(path1, ShouldEqual, pathS0)
+			})
+
+			Convey("Moving works and updates the paths", func() {
+
+				store.Begin()
+				defer store.Rollback()
+				setV, _ := rntm.getObjectFromPath("toplevel.TypeVec")
+
+				vec := setV.obj.(*vector)
+				//[0 1 2 3]
+				// e.g. old: 1, new: 2 [0 2 1 3]
+				vec.AppendNew(setV.id) //2
+				vec.AppendNew(setV.id) //3
+				set0, _ := rntm.getObjectFromPath("toplevel.TypeVec.0")
+				path0, _ := set0.obj.GetObjectPath(set0.id)
+				set1, _ := rntm.getObjectFromPath("toplevel.TypeVec.1")
+				path1, _ := set1.obj.GetObjectPath(set1.id)
+				set2, _ := rntm.getObjectFromPath("toplevel.TypeVec.2")
+				path2, _ := set2.obj.GetObjectPath(set2.id)
+				set3, _ := rntm.getObjectFromPath("toplevel.TypeVec.3")
+				path3, _ := set3.obj.GetObjectPath(set3.id)
+				So(vec.Move(child.id, 1, 2), ShouldBeNil)
+
+				//paths after move
+				pathS0, _ := set0.obj.GetObjectPath(set0.id)
+				pathS1, _ := set1.obj.GetObjectPath(set1.id)
+				pathS2, _ := set2.obj.GetObjectPath(set2.id)
+				pathS3, _ := set3.obj.GetObjectPath(set3.id)
+
+				So(path0, ShouldEqual, pathS0)
+				So(path1, ShouldEqual, pathS2)
+				So(path2, ShouldEqual, pathS1)
+				So(path3, ShouldEqual, pathS3)
 			})
 		})
 	})

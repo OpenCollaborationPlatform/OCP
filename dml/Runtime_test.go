@@ -249,12 +249,12 @@ func TestDmlFile(t *testing.T) {
 			So(c, ShouldBeFalse)
 		})
 
-		Convey("Behaviour Managers shall be callable", func() {
+		/*	Convey("Behaviour Managers shall be callable", func() {
 
 			c, err := rntm.Call(store, "", "Transaction.IsOpen")
 			So(err, ShouldBeNil)
 			So(c, ShouldBeFalse)
-		})
+		})*/
 
 		Convey("and created event was emitted", func() {
 

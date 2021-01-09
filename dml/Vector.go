@@ -388,6 +388,12 @@ func (self *vector) Remove(id Identifier, idx int64) error {
 		return err
 	}
 
+	dt := self.entryDataType(id)
+	path, err := self.GetObjectPath(id)
+	if err != nil {
+		return err
+	}
+
 	for i := idx; i < (length - 1); i++ {
 		data, err := dbEntries.Read(i + 1)
 		if err != nil {
@@ -396,6 +402,20 @@ func (self *vector) Remove(id Identifier, idx int64) error {
 		err = dbEntries.Write(i, data)
 		if err != nil {
 			return utils.StackError(err, "Unable to move vector entries after deleting entry")
+		}
+
+		//change the path for objects
+		if dt.IsComplex() {
+			if id, ok := data.(*Identifier); ok {
+				set, err := self.rntm.getObjectSet(*id)
+				if err != nil {
+					return utils.StackError(err, "Unable to access object for path update during remove")
+				}
+				err = set.obj.SetObjectPath(set.id, fmt.Sprintf("%v.%v", path, i))
+				if err != nil {
+					return utils.StackError(err, "Unable to update path during remove")
+				}
+			}
 		}
 	}
 
@@ -459,6 +479,34 @@ func (self *vector) Swap(id Identifier, idx1 int64, idx2 int64) error {
 		return utils.StackError(err, "Unable to swap vector entries")
 	}
 
+	//change the path for objects
+	if self.entryDataType(id).IsComplex() {
+		path, err := self.GetObjectPath(id)
+		if err != nil {
+			return utils.StackError(err, "Unable to access path for swaping entries")
+		}
+		if sid, ok := data1.(*Identifier); ok {
+			set, err := self.rntm.getObjectSet(*sid)
+			if err != nil {
+				return utils.StackError(err, "Unable to access object for path update during remove")
+			}
+			err = set.obj.SetObjectPath(set.id, fmt.Sprintf("%v.%v", path, idx2))
+			if err != nil {
+				return utils.StackError(err, "Unable to update path during remove")
+			}
+		}
+		if sid, ok := data2.(*Identifier); ok {
+			set, err := self.rntm.getObjectSet(*sid)
+			if err != nil {
+				return utils.StackError(err, "Unable to access object for path update during remove")
+			}
+			err = set.obj.SetObjectPath(set.id, fmt.Sprintf("%v.%v", path, idx1))
+			if err != nil {
+				return utils.StackError(err, "Unable to update path during remove")
+			}
+		}
+	}
+
 	self.GetEvent("onChanged").Emit(id)
 	return nil
 }
@@ -509,6 +557,12 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 		return utils.StackError(err, "Unable to move vector entries")
 	}
 
+	dt := self.entryDataType(id)
+	path, err := self.GetObjectPath(id)
+	if err != nil {
+		return utils.StackError(err, "Unable to access path for swaping entries")
+	}
+
 	//move the in-between idx 1 down
 	if oldIdx < newIdx {
 		for i := oldIdx + 1; i <= newIdx; i++ {
@@ -519,6 +573,20 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 			err = dbEntries.Write(i-1, res)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
+			}
+
+			//update path
+			if dt.IsComplex() {
+				if sid, ok := res.(*Identifier); ok {
+					set, err := self.rntm.getObjectSet(*sid)
+					if err != nil {
+						return utils.StackError(err, "Unable to access object for path update during remove")
+					}
+					err = set.obj.SetObjectPath(set.id, fmt.Sprintf("%v.%v", path, i-1))
+					if err != nil {
+						return utils.StackError(err, "Unable to update path during remove")
+					}
+				}
 			}
 		}
 	} else {
@@ -532,11 +600,42 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
 			}
+
+			//update path
+			if dt.IsComplex() {
+				if sid, ok := res.(*Identifier); ok {
+					set, err := self.rntm.getObjectSet(*sid)
+					if err != nil {
+						return utils.StackError(err, "Unable to access object for path update during remove")
+					}
+					err = set.obj.SetObjectPath(set.id, fmt.Sprintf("%v.%v", path, i))
+					if err != nil {
+						return utils.StackError(err, "Unable to update path during remove")
+					}
+				}
+			}
 		}
 	}
 
 	//write the data into the correct location
-	return dbEntries.Write(newIdx, data)
+	err = dbEntries.Write(newIdx, data)
+	if err != nil {
+		return utils.StackError(err, "Failed to write entry")
+	}
+	//update path
+	if dt.IsComplex() {
+		if sid, ok := data.(*Identifier); ok {
+			set, err := self.rntm.getObjectSet(*sid)
+			if err != nil {
+				return utils.StackError(err, "Unable to access object for path update during remove")
+			}
+			err = set.obj.SetObjectPath(set.id, fmt.Sprintf("%v.%v", path, newIdx))
+			if err != nil {
+				return utils.StackError(err, "Unable to update path during remove")
+			}
+		}
+	}
+	return nil
 }
 
 //*****************************************************************************

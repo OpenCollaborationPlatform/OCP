@@ -21,6 +21,10 @@ type EventObjectCallback struct {
 	Function string
 }
 
+type EventEmitNotifyer interface {
+	EventEmitted(Identifier, string, ...interface{}) error
+}
+
 type Event interface {
 	JSObject
 	MethodHandler
@@ -268,8 +272,6 @@ type EventHandler interface {
 	Events() []string
 	SetupJSEvents(*goja.Object) error
 	InitializeEventDB(Identifier) error
-
-	EventEmitted(Identifier, string, ...interface{}) error
 }
 
 func NewEventHandler() eventHandler {

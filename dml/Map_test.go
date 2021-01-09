@@ -248,6 +248,24 @@ func TestComplexTypeMap(t *testing.T) {
 			_, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
 
+			Convey("Accessing the object via path is possible", func() {
+
+				store.Begin()
+				defer store.Rollback()
+
+				path := "toplevel.TypeMap.test"
+				set, err := rntm.getObjectFromPath(path)
+				So(err, ShouldBeNil)
+				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 0)
+
+				Convey("and the same path is set in the object", func() {
+
+					res, err := set.obj.GetObjectPath(set.id)
+					So(err, ShouldBeNil)
+					So(res, ShouldEqual, path)
+				})
+			})
+
 			Convey("The created event was called", func() {
 
 				store.Begin()
@@ -297,17 +315,7 @@ func TestComplexTypeMap(t *testing.T) {
 				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 2)
 			})
 
-			Convey("And accessing the object via path is possible", func() {
-
-				store.Begin()
-				defer store.Rollback()
-
-				set, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
-				So(err, ShouldBeNil)
-				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 0)
-			})
-
-			Convey("The hirarchy is set correctl", func() {
+			Convey("The hirarchy is set correct", func() {
 
 				code = `
 					obj = toplevel.TypeMap.Get("test")

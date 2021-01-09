@@ -23,6 +23,7 @@ type Object interface {
 	PropertyHandler
 	PropertyChangeNotifyer
 	EventHandler
+	EventEmitNotifyer
 	MethodHandler
 	JSObject
 
