@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/mr-tron/base58"
+
 	"github.com/ickby/CollaborationNode/utils"
-	cid "github.com/ipfs/go-cid"
 )
 
 func init() {
 	gob.Register(new(DataType))
-	gob.Register(new(cid.Cid))
+	utils.Decoder.RegisterEncotable("dt", DataTypeDecode)
 }
 
 //changes Value to its main type from multiple subtypes, e.g. int64 from int and int16
@@ -41,8 +42,8 @@ func UnifyDataType(val interface{}) interface{} {
 		return int64(val.(float32))
 	case Boolean:
 		return bool(val.(bool))
-	case *cid.Cid:
-		id := val.(*cid.Cid)
+	case *utils.Cid:
+		id := val.(*utils.Cid)
 		return *id
 	case *DataType:
 		dt := val.(*DataType)
@@ -130,6 +131,15 @@ func NewDataType(val interface{}) (DataType, error) {
 	return result, nil
 }
 
+func DataTypeDecode(code string) (interface{}, error) {
+
+	data, err := base58.Decode(code)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to decode string to DataType")
+	}
+	return DataType{string(data)}, nil
+}
+
 func MustNewDataType(val interface{}) DataType {
 	res, err := NewDataType(val)
 	if err != nil {
@@ -168,7 +178,7 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 
 	//nil is special
 	if val == nil {
-		if self.IsNone() {
+		if self.IsNone() || self.IsVar() {
 			return nil
 		}
 		return fmt.Errorf("wrong object type, got '%T' and expected 'nil'", val)
@@ -196,7 +206,7 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 		if !self.IsType() && !self.IsVar() {
 			return fmt.Errorf(`wrong type, got 'type' and expected '%s'`, self.AsString())
 		}
-	case cid.Cid, *cid.Cid:
+	case utils.Cid, *utils.Cid:
 		if !self.IsRaw() && !self.IsVar() {
 			return fmt.Errorf(`wrong type, got 'raw' and expected '%s'`, self.AsString())
 		}
@@ -249,11 +259,15 @@ func (self DataType) GetDefaultValue() interface{} {
 	case "bool":
 		return bool(false)
 	case "raw":
-		return cid.Undef
+		return utils.CidUndef
 	case "type":
 		return MustNewDataType("none")
 	}
 
 	//none and var return nil as default
 	return nil
+}
+
+func (self DataType) Encode() string {
+	return "ocp_dt_" + base58.Encode([]byte(self.Value))
 }

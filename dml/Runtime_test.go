@@ -172,8 +172,8 @@ func TestDmlFile(t *testing.T) {
 		Convey("Object hirarchy must be established", func() {
 
 			code := `
-				if (Document.children.length != 3) {
-					throw "It must have exactly 3 child, not " + Document.children.length
+				if (Document.children.length != 4) {
+					throw "It must have exactly 4 child, not " + Document.children.length
 				}
 				if (Document.children[0].name != "DocumentObject") {
 					throw "child access seems not to work"
@@ -190,6 +190,9 @@ func TestDmlFile(t *testing.T) {
 				}
 				if (Document.DocumentObject.name != "DocumentObject") {
 					throw "no direkt children access possible"
+				}
+				if (Document.ImportTest.name != "ImportTest") {
+					throw "Import hirarchy somehowe corrupted"
 				}
 				`
 

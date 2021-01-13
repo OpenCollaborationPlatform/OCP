@@ -329,20 +329,20 @@ func (h *Host) Routing() *kaddht.IpfsDHT {
 ******************************** */
 
 //provides for 24h, afterwards gets deletet if not provided again
-func (h *Host) Provide(ctx context.Context, cid Cid) error {
+func (h *Host) Provide(ctx context.Context, cid utils.Cid) error {
 
 	if len(h.host.Network().Conns()) == 0 {
 		return fmt.Errorf("Cannot provide, no connected peers")
 	}
 
-	return h.dht.Provide(ctx, cid, true)
+	return h.dht.Provide(ctx, cid.P2P(), true)
 }
 
 //find peers that provide the given cid. The returned slice can have less than num
 //entries, depending on the find results
-func (h *Host) FindProviders(ctx context.Context, cid Cid, num int) ([]PeerID, error) {
+func (h *Host) FindProviders(ctx context.Context, cid utils.Cid, num int) ([]PeerID, error) {
 
-	input := h.dht.FindProvidersAsync(ctx, cid, num)
+	input := h.dht.FindProvidersAsync(ctx, cid.P2P(), num)
 	result := make([]PeerID, 0)
 	for {
 		select {
@@ -363,7 +363,7 @@ func (h *Host) FindProviders(ctx context.Context, cid Cid, num int) ([]PeerID, e
 }
 
 //find peers that provide the given cid
-func (h *Host) FindProvidersAsync(ctx context.Context, cid Cid, num int) (chan PeerID, error) {
+func (h *Host) FindProvidersAsync(ctx context.Context, cid utils.Cid, num int) (chan PeerID, error) {
 
 	ret := make(chan PeerID, num)
 
@@ -371,7 +371,7 @@ func (h *Host) FindProvidersAsync(ctx context.Context, cid Cid, num int) (chan P
 
 		found := 0
 		dhtCtx, cncl := context.WithCancel(ctx)
-		input := h.dht.FindProvidersAsync(dhtCtx, cid, num*2)
+		input := h.dht.FindProvidersAsync(dhtCtx, cid.P2P(), num*2)
 		for {
 			select {
 

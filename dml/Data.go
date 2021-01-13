@@ -7,6 +7,8 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 )
 
+var childKey = []byte("__children")
+
 //the most basic implementation of an dml Object. All it does is to allow adding
 //fundamental types, like properties, events and functions, as well as holding Behaviours.
 //It has no other special functionality. It is intended as dml grouping object as well as
@@ -113,7 +115,7 @@ func (self *DataImpl) GetChildObjects() []Data {
 
 func (self *DataImpl) AddChildIdentifier(id Identifier, child Identifier) error {
 
-	list, err := self.GetDBList(id, []byte("__children"))
+	list, err := self.GetDBList(id, childKey)
 	if err != nil {
 		return err
 	}
@@ -126,7 +128,7 @@ func (self *DataImpl) AddChildIdentifier(id Identifier, child Identifier) error 
 
 func (self *DataImpl) GetChildIdentifiers(id Identifier) ([]Identifier, error) {
 
-	list, err := self.GetDBList(id, []byte("__children"))
+	list, err := self.GetDBList(id, childKey)
 	if err != nil {
 		return nil, err
 	}

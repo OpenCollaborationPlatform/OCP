@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -14,6 +15,7 @@ import (
 
 func init() {
 	gob.Register(new(Identifier))
+	utils.Decoder.RegisterEncotable("id", identifierDecode)
 }
 
 type Identifier struct {
@@ -35,6 +37,18 @@ func IdentifierFromData(data []byte) (Identifier, error) {
 
 func IdentifierFromEncoded(code string) (Identifier, error) {
 
+	parts := strings.Split(code, "_")
+	if len(parts) != 3 || parts[0] != "ocp" || parts[1] != "id" {
+		return Identifier{}, fmt.Errorf("Invalid ecoded identifier")
+	}
+	data, err := base58.Decode(parts[2])
+	if err != nil {
+		return Identifier{}, utils.StackError(err, "Unable to decode strig to Identifier data")
+	}
+	return IdentifierFromData(data)
+}
+
+func identifierDecode(code string) (interface{}, error) {
 	data, err := base58.Decode(code)
 	if err != nil {
 		return Identifier{}, utils.StackError(err, "Unable to decode strig to Identifier data")
@@ -55,7 +69,7 @@ func (self Identifier) Hash() [32]byte {
 }
 
 func (self Identifier) Encode() string {
-	return base58.Encode(self.Data())
+	return "ocp_id_" + base58.Encode(self.Data())
 }
 
 func (self Identifier) Equals(id Identifier) bool {

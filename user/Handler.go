@@ -1,14 +1,12 @@
 package user
 
 import (
+	"context"
 	"fmt"
 	"time"
-)
-
-import (
-	"context"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
+
 	wamp "github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"

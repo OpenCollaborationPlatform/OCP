@@ -10,13 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ickby/CollaborationNode/utils"
+
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"
-	cid "github.com/ipfs/go-cid"
 	uuid "github.com/satori/go.uuid"
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -314,9 +315,11 @@ func TestDatastructureData(t *testing.T) {
 
 				res, err := testClient.Call(ctx, "ocp.test.content.Test.RawData", opts, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				id, ok := res.Arguments[0].(cid.Cid)
+				strid, ok := res.Arguments[0].(string)
 				So(ok, ShouldBeTrue)
-				So(id.Defined(), ShouldBeTrue)
+				cid, err := utils.CidDecode(strid)
+				So(err, ShouldBeNil)
+				So(cid.Defined(), ShouldBeTrue)
 			})
 
 			Convey("and lets access and use the cid", func() {
@@ -387,9 +390,11 @@ func TestDatastructureData(t *testing.T) {
 
 				res, err := testClient.Call(ctx, "ocp.test.content.Test.RawData", opts, wamp.List{}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				id, ok := res.Arguments[0].(cid.Cid)
+				strid, ok := res.Arguments[0].(string)
 				So(ok, ShouldBeTrue)
-				So(id.Defined(), ShouldBeTrue)
+				cid, err := utils.CidDecode(strid)
+				So(err, ShouldBeNil)
+				So(cid.Defined(), ShouldBeTrue)
 			})
 
 			Convey("and lets access and use the cid", func() {

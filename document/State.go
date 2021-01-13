@@ -193,16 +193,27 @@ func (self dmlState) CanCallLocal(path string) (bool, error) {
 }
 
 func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) (interface{}, error) {
+
+	//convert all encoded arguments
+	for i, arg := range args {
+		if utils.Decoder.InterfaceIsEncoded(arg) {
+			val, err := utils.Decoder.DecodeInterface(arg)
+			if err == nil {
+				args[i] = val
+			}
+		}
+	}
+
 	val, err := self.dml.Call(self.store, user, path, args...)
 	if err != nil {
 		return nil, err
 	}
 
 	//check if it is a Object, if so we only return the encoded identifier!
-	id, ok := val.(dml.Identifier)
-	if ok {
-		return id.Encode(), nil
+	if enc, ok := val.(utils.Encotable); ok {
+		val = enc.Encode()
 	}
+
 	return val, nil
 }
 

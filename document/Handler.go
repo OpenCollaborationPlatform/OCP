@@ -18,7 +18,7 @@ type DocumentAPI struct {
 	handler *DocumentHandler
 }
 
-func (self DocumentAPI) DocumentDML(ctx context.Context, val string, ret *p2p.Cid) error {
+func (self DocumentAPI) DocumentDML(ctx context.Context, val string, ret *utils.Cid) error {
 
 	//find the correct document
 	self.handler.mutex.RLock()
@@ -154,7 +154,7 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	}
 
 	//ask the peer what the correct dml cid for this document is!
-	var cid p2p.Cid
+	var cid utils.Cid
 	err = self.host.Rpc.Call(peer, "DocumentAPI", "DocumentDML", docID, &cid)
 	if err != nil {
 		return fmt.Errorf("No dml description for document found: " + err.Error())

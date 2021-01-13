@@ -3,16 +3,15 @@ package document
 import (
 	"encoding/gob"
 
-	"github.com/ickby/CollaborationNode/dml"
-	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ickby/CollaborationNode/utils"
 
-	cid "github.com/ipfs/go-cid"
+	"github.com/ickby/CollaborationNode/dml"
 )
 
 var cidKey = []byte("__raw_cid")
 
 func init() {
-	gob.Register(new(p2p.Cid))
+	gob.Register(new(utils.Cid))
 }
 
 //Raw dml type: stores data identifiers and allows some information gathering
@@ -48,7 +47,7 @@ func NewRawDmlObject(rntm *dml.Runtime) (dml.Object, error) {
 func (self *Raw) Set(id dml.Identifier, cidstr string) error {
 
 	//check if it is a valid cid
-	cId, err := cid.Decode(cidstr)
+	cId, err := utils.CidDecode(cidstr)
 	if err != nil {
 		return err
 	}
@@ -76,7 +75,7 @@ func (self *Raw) Get(id dml.Identifier) (string, error) {
 		return "", err
 	}
 	cId, err := value.Read()
-	return cId.(*p2p.Cid).String(), err
+	return cId.(*utils.Cid).String(), err
 }
 
 //adds the path, either file or directory, to the Raw object
@@ -95,7 +94,7 @@ func (self *Raw) IsSet(id dml.Identifier) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return cId.(*p2p.Cid).Defined(), nil
+	return cId.(*utils.Cid).Defined(), nil
 }
 
 //adds the path, either file or directory, to the Raw object
@@ -105,9 +104,9 @@ func (self *Raw) Clear(id dml.Identifier) error {
 	if err != nil {
 		return err
 	}
-	err = value.Write(p2p.Cid{})
+	err = value.Write(utils.Cid{})
 	if err != nil {
 		return err
 	}
-	return self.GetEvent("onDataChanged").Emit(id, p2p.Cid{}.String())
+	return self.GetEvent("onDataChanged").Emit(id, utils.Cid{}.String())
 }

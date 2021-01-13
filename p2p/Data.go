@@ -15,7 +15,6 @@ import (
 
 	bs "github.com/ipfs/go-bitswap"
 	bsnetwork "github.com/ipfs/go-bitswap/network"
-	cid "github.com/ipfs/go-cid"
 	"github.com/ipfs/go-datastore"
 	ds "github.com/ipfs/go-ds-badger2"
 	blockDS "github.com/ipfs/go-ipfs-blockstore"
@@ -27,21 +26,18 @@ import (
 	"github.com/ipfs/go-datastore/query"
 )
 
-//condent identifier
-type Cid = cid.Cid
-
 //the data service interface!
 type DataService interface {
-	Add(ctx context.Context, path string) (Cid, error)              //adds a file or directory
-	AddData(ctx context.Context, data []byte) (Cid, error)          //adds a Blockifyer
-	AddAsync(path string) (Cid, error)                              //adds a file or directory, but returns when the local operation is done
-	Drop(ctx context.Context, id Cid) error                         //removes a file or directory
-	Fetch(ctx context.Context, id Cid) error                        //Fetches the given data
-	FetchAsync(id Cid) error                                        //Fetches the given data async
-	Get(ctx context.Context, id Cid) (io.Reader, error)             //gets the file described by the id (fetches if needed)
-	Write(ctx context.Context, id Cid, path string) (string, error) //writes the file or directory to the given path (fetches if needed)
-	ReadChannel(ctx context.Context, id Cid) (chan []byte, error)   //reads the data in individual binary blocks (does not work for directory)
-	HasLocal(id Cid) bool                                           //checks if the given id is available locally
+	Add(ctx context.Context, path string) (utils.Cid, error)              //adds a file or directory
+	AddData(ctx context.Context, data []byte) (utils.Cid, error)          //adds a Blockifyer
+	AddAsync(path string) (utils.Cid, error)                              //adds a file or directory, but returns when the local operation is done
+	Drop(ctx context.Context, id utils.Cid) error                         //removes a file or directory
+	Fetch(ctx context.Context, id utils.Cid) error                        //Fetches the given data
+	FetchAsync(id utils.Cid) error                                        //Fetches the given data async
+	Get(ctx context.Context, id utils.Cid) (io.Reader, error)             //gets the file described by the id (fetches if needed)
+	Write(ctx context.Context, id utils.Cid, path string) (string, error) //writes the file or directory to the given path (fetches if needed)
+	ReadChannel(ctx context.Context, id utils.Cid) (chan []byte, error)   //reads the data in individual binary blocks (does not work for directory)
+	HasLocal(id utils.Cid) bool                                           //checks if the given id is available locally
 	Close()
 }
 
@@ -51,60 +47,60 @@ type dagHelper struct {
 	dag ipld.DAGService
 }
 
-func (self *dagHelper) Add(ctx context.Context, path string) (Cid, error) {
+func (self *dagHelper) Add(ctx context.Context, path string) (utils.Cid, error) {
 
 	stat, _ := os.Stat(path)
 	file, err := files.NewSerialFile(path, false, stat)
 	if err != nil {
-		return cid.Cid{}, err
+		return utils.Cid{}, err
 	}
 	adder, err := NewAdder(ctx, self.dag)
 	if err != nil {
-		return cid.Cid{}, err
+		return utils.Cid{}, err
 	}
 
 	node, err := adder.Add(file)
 	if err != nil {
-		return cid.Cid{}, err
+		return utils.Cid{}, err
 	}
 
 	//return
-	return node.Cid(), nil
+	return utils.Cid{node.Cid()}, nil
 }
 
-func (self *dagHelper) AddData(ctx context.Context, data []byte) (Cid, error) {
+func (self *dagHelper) AddData(ctx context.Context, data []byte) (utils.Cid, error) {
 
 	file := files.NewBytesFile(data)
 
 	adder, err := NewAdder(ctx, self.dag)
 	if err != nil {
-		return cid.Cid{}, err
+		return utils.Cid{}, err
 	}
 
 	node, err := adder.Add(file)
 	if err != nil {
-		return cid.Cid{}, err
+		return utils.Cid{}, err
 	}
 
 	//return
-	return node.Cid(), nil
+	return utils.Cid{node.Cid()}, nil
 }
 
-func (self *dagHelper) AddAsync(path string) (Cid, error) {
+func (self *dagHelper) AddAsync(path string) (utils.Cid, error) {
 
 	//we don't do any network operation...
 	ctx, _ := context.WithTimeout(context.Background(), 1*time.Hour)
 	return self.Add(ctx, path)
 }
 
-func (self *dagHelper) Drop(ctx context.Context, id Cid) error {
+func (self *dagHelper) Drop(ctx context.Context, id utils.Cid) error {
 
-	return self.dag.Remove(ctx, id)
+	return self.dag.Remove(ctx, id.P2P())
 }
 
-func (self *dagHelper) Fetch(ctx context.Context, id Cid) error {
+func (self *dagHelper) Fetch(ctx context.Context, id utils.Cid) error {
 
-	resnode, err := self.dag.Get(ctx, id)
+	resnode, err := self.dag.Get(ctx, id.P2P())
 	if err != nil {
 		return err
 	}
@@ -121,7 +117,7 @@ func (self *dagHelper) Fetch(ctx context.Context, id Cid) error {
 	return nil
 }
 
-func (self *dagHelper) FetchAsync(id Cid) error {
+func (self *dagHelper) FetchAsync(id utils.Cid) error {
 
 	go func() {
 		ctx, _ := context.WithTimeout(context.Background(), 1*time.Hour)
@@ -130,9 +126,9 @@ func (self *dagHelper) FetchAsync(id Cid) error {
 	return nil
 }
 
-func (self *dagHelper) Get(ctx context.Context, id Cid) (io.Reader, error) {
+func (self *dagHelper) Get(ctx context.Context, id utils.Cid) (io.Reader, error) {
 
-	resnode, err := self.dag.Get(ctx, id)
+	resnode, err := self.dag.Get(ctx, id.P2P())
 	if err != nil {
 		return nil, err
 	}
@@ -144,9 +140,9 @@ func (self *dagHelper) Get(ctx context.Context, id Cid) (io.Reader, error) {
 }
 
 //write result into path (including file/dir name)
-func (self *dagHelper) Write(ctx context.Context, id Cid, path string) (string, error) {
+func (self *dagHelper) Write(ctx context.Context, id utils.Cid, path string) (string, error) {
 
-	resnode, err := self.dag.Get(ctx, id)
+	resnode, err := self.dag.Get(ctx, id.P2P())
 	if err != nil {
 		return "", err
 	}
@@ -163,7 +159,7 @@ func (self *dagHelper) Write(ctx context.Context, id Cid, path string) (string, 
 
 }
 
-func (self *dagHelper) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
+func (self *dagHelper) ReadChannel(ctx context.Context, id utils.Cid) (chan []byte, error) {
 
 	reader, err := self.Get(ctx, id)
 	if err != nil {
@@ -255,8 +251,8 @@ func NewDataService(host *Host) (DataService, error) {
 	return service, nil
 }
 
-func (self *hostDataService) HasLocal(id Cid) bool {
-	val, _ := self.blockStore.Has(id)
+func (self *hostDataService) HasLocal(id utils.Cid) bool {
+	val, _ := self.blockStore.Has(id.P2P())
 	return val
 }
 
@@ -291,8 +287,8 @@ func (self *hostDataService) announceAllGlobal() {
 	go func() {
 		for _, id := range globals {
 			ctx, _ := context.WithTimeout(context.Background(), 30*time.Second)
-			parsed, _ := cid.Decode(id)
-			self.dht.Provide(ctx, parsed, true)
+			parsed, _ := utils.CidDecode(id)
+			self.dht.Provide(ctx, parsed.P2P(), true)
 		}
 	}()
 }
@@ -305,8 +301,8 @@ func (self *hostDataService) announceAllGlobal() {
 // - Adding/Dropping a file automatically distributes it within the swarm
 
 type dataStateCommand struct {
-	File   cid.Cid //the cid to add or remove from the list
-	Remove bool    //if true is removed from list, if false it is added
+	File   utils.Cid //the cid to add or remove from the list
+	Remove bool      //if true is removed from list, if false it is added
 }
 
 func (self dataStateCommand) toByte() ([]byte, error) {
@@ -326,7 +322,7 @@ func dataStateCommandFromByte(data []byte) (dataStateCommand, error) {
 
 //a shared state that is a list of CIDs this swarm shares.
 type dataState struct {
-	files   []cid.Cid
+	files   []utils.Cid
 	service *swarmDataService
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -337,7 +333,7 @@ func newDataState(service *swarmDataService) *dataState {
 
 	ctx, cncl := context.WithCancel(context.Background())
 	return &dataState{
-		files:   make([]cid.Cid, 0),
+		files:   make([]utils.Cid, 0),
 		service: service,
 		ctx:     ctx,
 		cancel:  cncl,
@@ -394,7 +390,7 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 
 	//we make it simple: remove all, add the new ones and than garbage collect
 	buf := bytes.NewBuffer(snap)
-	var list []cid.Cid
+	var list []utils.Cid
 	err := gob.NewEncoder(buf).Encode(&list)
 	if err != nil {
 		return err
@@ -420,7 +416,7 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 	return nil
 }
 
-func (self *dataState) HasFile(id cid.Cid) bool {
+func (self *dataState) HasFile(id utils.Cid) bool {
 
 	self.mutex.RLock()
 	defer self.mutex.RUnlock()
@@ -464,57 +460,57 @@ func newSwarmDataService(swarm *Swarm) DataService {
 	return service
 }
 
-func (self *swarmDataService) Add(ctx context.Context, path string) (Cid, error) {
+func (self *swarmDataService) Add(ctx context.Context, path string) (utils.Cid, error) {
 
 	//add the file
 	filecid, err := self.dag.Add(ctx, path)
 	if err != nil {
-		return cid.Undef, err
+		return utils.CidUndef, err
 	}
 
 	//store in shared state
 	cmd, err := dataStateCommand{filecid, false}.toByte()
 	if err != nil {
-		return cid.Undef, utils.StackError(err, "Unable to create command")
+		return utils.CidUndef, utils.StackError(err, "Unable to create command")
 	}
 	_, err = self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	if err != nil {
 		self.dag.Drop(ctx, filecid)
-		return cid.Undef, utils.StackError(err, "Unable to share file with swarm members")
+		return utils.CidUndef, utils.StackError(err, "Unable to share file with swarm members")
 	}
 
 	//return
 	return filecid, nil
 }
 
-func (self *swarmDataService) AddData(ctx context.Context, data []byte) (Cid, error) {
+func (self *swarmDataService) AddData(ctx context.Context, data []byte) (utils.Cid, error) {
 
 	filecid, err := self.dag.AddData(ctx, data)
 	if err != nil {
-		return cid.Undef, err
+		return utils.CidUndef, err
 	}
 
 	//store in shared state
 	cmd, err := dataStateCommand{filecid, false}.toByte()
 	if err != nil {
-		return cid.Undef, utils.StackError(err, "Unable to create command")
+		return utils.CidUndef, utils.StackError(err, "Unable to create command")
 	}
 	_, err = self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	if err != nil {
 		self.dag.Drop(ctx, filecid)
-		return cid.Undef, utils.StackError(err, "Unable to share blocks with swarm members")
+		return utils.CidUndef, utils.StackError(err, "Unable to share blocks with swarm members")
 	}
 
 	//return
 	return filecid, err
 }
 
-func (self *swarmDataService) AddAsync(path string) (Cid, error) {
+func (self *swarmDataService) AddAsync(path string) (utils.Cid, error) {
 
 	//add the file
 	filecid, err := self.dag.AddAsync(path)
 	if err != nil {
-		return cid.Undef, err
+		return utils.CidUndef, err
 	}
 
 	go func() {
@@ -528,7 +524,7 @@ func (self *swarmDataService) AddAsync(path string) (Cid, error) {
 	return filecid, nil
 }
 
-func (self *swarmDataService) Drop(ctx context.Context, id Cid) error {
+func (self *swarmDataService) Drop(ctx context.Context, id utils.Cid) error {
 
 	//drop the file in the swarm (real drop handled in state handler)
 	cmd, err := dataStateCommand{id, true}.toByte()
@@ -543,7 +539,7 @@ func (self *swarmDataService) Drop(ctx context.Context, id Cid) error {
 	return nil
 }
 
-func (self *swarmDataService) Fetch(ctx context.Context, id Cid) error {
+func (self *swarmDataService) Fetch(ctx context.Context, id utils.Cid) error {
 
 	//check if we have the file, if not fetching makes no sense in swarm context
 	if !self.state.HasFile(id) {
@@ -554,7 +550,7 @@ func (self *swarmDataService) Fetch(ctx context.Context, id Cid) error {
 	return self.dag.Fetch(ctx, id)
 }
 
-func (self *swarmDataService) FetchAsync(id Cid) error {
+func (self *swarmDataService) FetchAsync(id utils.Cid) error {
 
 	//check if we have the file, if not fetching makes no sense in swarm context
 	if !self.state.HasFile(id) {
@@ -566,7 +562,7 @@ func (self *swarmDataService) FetchAsync(id Cid) error {
 	return nil
 }
 
-func (self *swarmDataService) Get(ctx context.Context, id Cid) (io.Reader, error) {
+func (self *swarmDataService) Get(ctx context.Context, id utils.Cid) (io.Reader, error) {
 
 	reader, err := self.dag.Get(ctx, id)
 	if err != nil {
@@ -583,7 +579,7 @@ func (self *swarmDataService) Get(ctx context.Context, id Cid) (io.Reader, error
 	return reader, err
 }
 
-func (self *swarmDataService) Write(ctx context.Context, id Cid, path string) (string, error) {
+func (self *swarmDataService) Write(ctx context.Context, id utils.Cid, path string) (string, error) {
 
 	//see if we can get the data
 	path, err := self.dag.Write(ctx, id, path)
@@ -601,7 +597,7 @@ func (self *swarmDataService) Write(ctx context.Context, id Cid, path string) (s
 	return path, nil
 }
 
-func (self *swarmDataService) ReadChannel(ctx context.Context, id Cid) (chan []byte, error) {
+func (self *swarmDataService) ReadChannel(ctx context.Context, id utils.Cid) (chan []byte, error) {
 
 	c, err := self.dag.ReadChannel(ctx, id)
 	if err != nil {
@@ -618,7 +614,7 @@ func (self *swarmDataService) ReadChannel(ctx context.Context, id Cid) (chan []b
 	return c, nil
 }
 
-func (self *swarmDataService) HasLocal(id Cid) bool {
+func (self *swarmDataService) HasLocal(id utils.Cid) bool {
 	return self.state.HasFile(id)
 }
 
@@ -629,7 +625,7 @@ func (self *swarmDataService) Close() {
 //internal data service functions to be called by data state
 //(without adding stuff to the state)
 
-func (self *swarmDataService) internalFetch(ctx context.Context, id cid.Cid) error {
+func (self *swarmDataService) internalFetch(ctx context.Context, id utils.Cid) error {
 
 	err := self.dag.Fetch(ctx, id)
 	if err != nil {
@@ -639,7 +635,7 @@ func (self *swarmDataService) internalFetch(ctx context.Context, id cid.Cid) err
 	return nil
 }
 
-func (self *swarmDataService) internalFetchAsync(id cid.Cid) error {
+func (self *swarmDataService) internalFetchAsync(id utils.Cid) error {
 
 	go func() {
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
@@ -648,7 +644,7 @@ func (self *swarmDataService) internalFetchAsync(id cid.Cid) error {
 	return nil
 }
 
-func (self *swarmDataService) internalDrop(id cid.Cid) error {
+func (self *swarmDataService) internalDrop(id utils.Cid) error {
 
 	ctx, _ := context.WithTimeout(self.ctx, 1*time.Hour)
 	err := self.dag.Drop(ctx, id)

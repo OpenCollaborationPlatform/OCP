@@ -25,6 +25,8 @@
       <item>type</item>
       <item>object</item>
       <item>none</item>
+      <item>raw</item>
+      <item>var</item>
      </list>
     <contexts>
       <context attribute="Normal Text" lineEndContext="#stay" name="Normal">

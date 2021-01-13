@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ickby/CollaborationNode/utils"
+
 	datastore "github.com/ickby/CollaborationNode/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -161,3 +163,79 @@ func TestVarProperty(t *testing.T) {
 		})
 	})
 }
+
+func TestRawProperty(t *testing.T) {
+
+	Convey("Loading dml code into runtime including a raw property,", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
+		store, err := datastore.NewDatastore(path)
+		defer store.Close()
+		So(err, ShouldBeNil)
+
+		code := `Data {
+				.name:"toplevel"
+
+				property raw rawProp
+			}`
+
+		rntm := NewRuntime()
+		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
+		So(err, ShouldBeNil)
+
+		Convey("The default value must be undefined Cid", func() {
+
+			res, err := rntm.Call(store, "", "toplevel.rawProp")
+			So(err, ShouldBeNil)
+			id, ok := res.(utils.Cid)
+			So(ok, ShouldBeTrue)
+			So(id.Defined(), ShouldBeFalse)
+		})
+	})
+}
+
+func TestPropertyTypeIdentification(t *testing.T) {
+
+	Convey("Loading dml code into runtime including a raw property,", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
+		store, err := datastore.NewDatastore(path)
+		defer store.Close()
+		So(err, ShouldBeNil)
+
+		code := `Data {
+					.name:"toplevel"
+	
+					property raw  	rawProp
+					property type 	typeProp
+					property string	stringProp
+					property bool 	boolProp
+					property var 	varProp 
+				}`
+
+		rntm := NewRuntime()
+		err = rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
+		So(err, ShouldBeNil)
+
+		Convey("The default values must be identifiable in JavaSript", func() {
+
+			code := `
+				if (typeof toplevel.stringProp == "object") {
+					throw "is object"
+				}
+			`
+			_, err := rntm.RunJavaScript(store, "", code)
+			So(err, ShouldBeNil)
+		})
+	})
+}
+
+//Object.prototype.toString.call(t)

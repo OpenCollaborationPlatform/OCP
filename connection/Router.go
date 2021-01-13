@@ -14,6 +14,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	nxrouter "github.com/gammazero/nexus/v3/router"
+
 	nxserialize "github.com/gammazero/nexus/v3/transport/serialize"
 	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/spf13/viper"

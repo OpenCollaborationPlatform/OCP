@@ -163,7 +163,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	}
 
 	//process the AST into usable objects
-	mainObj, err := self.buildObject(ast.Object)
+	mainObj, err := self.buildObject(ast.Object, false)
 	if err != nil {
 		return utils.StackError(err, "Unable to parse dml code")
 		//TODO clear the database entries...
@@ -609,8 +609,8 @@ func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
 		child, err := dbSet.obj.(Data).GetSubobjectByName(dbSet.id, name, true)
 		if err != nil {
 			//it may be an identifier within the path!
-			id, err := IdentifierFromEncoded(name)
-			if err == nil {
+			id, err2 := IdentifierFromEncoded(name)
+			if err2 == nil {
 				set, err := self.getObjectSet(id)
 				if err != nil {
 					return dmlSet{}, utils.StackError(err, "Name %v is not available in object %v", name, dbSet.id.Name)
@@ -690,7 +690,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 
 	//we now register the imported ast as a creator
 	creator := func(rntm *Runtime) (Object, error) {
-		return rntm.buildObject(ast.Object)
+		return rntm.buildObject(ast.Object, true)
 	}
 
 	//build the name, file or alias
@@ -721,7 +721,7 @@ func (self *Runtime) getOrCreateObject(dt DataType) (Object, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to parse DataType for object creation")
 		}
-		obj, err = self.buildObject(ast)
+		obj, err = self.buildObject(ast, false)
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to build object from DataType")
 		}
@@ -772,15 +772,20 @@ func (self *Runtime) constructObjectSet(dt DataType, parent Identifier) (dmlSet,
 }
 
 //due to recursive nature of objects we need an extra function
-func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
+func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, error) {
 
 	//get the datatype, and check if we have that type already
 	dt := MustNewDataType(astObj)
 
 	//check if we build this already
-	obj, exist := self.objects[dt]
-	if exist {
-		return obj, nil
+	if !forceNew {
+		//the reson to not always use existing objects is importing, that uses buildOBject in the creator method:
+		//if a imported type is used twice, the same object would be returned, but than the object DataType would
+		//be overiden. On DB setup this leads to both objects using the name of the second usage
+		obj, exist := self.objects[dt]
+		if exist {
+			return obj, nil
+		}
 	}
 
 	//we need the objects name first. Search for the id property assignment
@@ -798,12 +803,16 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 	}
 
 	var err error
-	obj, err = creator(self)
+	obj, err := creator(self)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create object %v (%v)", objName, astObj.Identifier)
 	}
-	obj.SetObjectDataType(dt)
-	self.objects[dt] = obj
+
+	if !forceNew {
+		//see comment on initial forceNew usage
+		obj.SetObjectDataType(dt)
+		self.objects[dt] = obj
+	}
 
 	//Now we create all additional properties and set them up in js
 	for _, astProp := range astObj.Properties {
@@ -868,7 +877,7 @@ func (self *Runtime) buildObject(astObj *astObject) (Object, error) {
 		for _, astChild := range astObj.Objects {
 
 			//build the child
-			child, err := self.buildObject(astChild)
+			child, err := self.buildObject(astChild, false)
 			if err != nil {
 				return nil, err
 			}

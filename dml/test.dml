@@ -71,6 +71,11 @@
 		}
 	}
 	
+	//There was an error with changed names of Imported objects when used multiple times
+	Imported {
+		.name: "ImportTest2"
+	}
+	
 	Data {
 		.name: "ThisTest"
 		

@@ -21,12 +21,12 @@ type Document struct {
 	swarm  *p2p.Swarm
 
 	//DML
-	cid           p2p.Cid
+	cid           utils.Cid
 	datastructure Datastructure
 	ID            string
 }
 
-func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host, dml p2p.Cid, id string, join bool) (Document, error) {
+func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host, dml utils.Cid, id string, join bool) (Document, error) {
 
 	//lets create the folder for the document
 	path := filepath.Join(host.GetPath(), id)

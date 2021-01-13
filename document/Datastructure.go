@@ -11,7 +11,6 @@ import (
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
-	cid "github.com/ipfs/go-cid"
 )
 
 func init() {
@@ -236,17 +235,17 @@ func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 	return res
 }
 
-func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation) (p2p.Cid, error) {
+func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation) (utils.Cid, error) {
 
 	//as progressive results are only possible when calling, not when
 	//get called, we call back and get the data progressivly
 	//the arguments is the uri to call, and the arg to identify the data!
 	if len(inv.Arguments) != 2 {
-		return p2p.Cid{}, fmt.Errorf("Arguments must be URI to call for progressive data and the argsument for that uri")
+		return utils.Cid{}, fmt.Errorf("Arguments must be URI to call for progressive data and the argsument for that uri")
 	}
 	uri, ok := inv.Arguments[0].(string)
 	if !ok {
-		return p2p.Cid{}, fmt.Errorf("First argument must be URI")
+		return utils.Cid{}, fmt.Errorf("First argument must be URI")
 	}
 	arg := inv.Arguments[1] //Arg is allowed to be everything
 
@@ -269,7 +268,7 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 	}
 	res, err := self.client.Call(ctx, uri, wamp.Dict{}, wamp.List{arg}, wamp.Dict{}, callback)
 	if err != nil {
-		return p2p.Cid{}, err
+		return utils.Cid{}, err
 	}
 	if len(res.Arguments) > 0 && res.Arguments[0] != nil {
 
@@ -281,19 +280,19 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 			block = append(block, []byte(data.(string))...)
 		default:
 			msg := fmt.Sprintf("Binary data not received as binary but %T", res.Arguments[0])
-			return p2p.Cid{}, fmt.Errorf(msg)
+			return utils.Cid{}, fmt.Errorf(msg)
 		}
 	}
 	if err != nil {
 		msg := utils.StackError(err, "Cannot call provided URI").Error()
-		return p2p.Cid{}, fmt.Errorf(msg)
+		return utils.Cid{}, fmt.Errorf(msg)
 	}
 
 	//add the data we received
 	cid, err := self.swarm.Data.AddData(ctx, block)
 	if err != nil {
 		msg := utils.StackError(err, "Unable to distribute data").Error()
-		return p2p.Cid{}, fmt.Errorf(msg)
+		return utils.Cid{}, fmt.Errorf(msg)
 	}
 
 	return cid, nil
@@ -329,7 +328,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
 				//return the cid (no operation started, this is just to setup the data!
-				return nxclient.InvokeResult{Args: wamp.List{cid.String()}}
+				return nxclient.InvokeResult{Args: wamp.List{cid.Encode()}}
 
 			case "BinaryByCid":
 
@@ -341,7 +340,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 					return nxclient.InvokeResult{Args: wamp.List{"Argument must be Cid"}, Err: wamp.URI("ocp.error")}
 				}
 
-				id, err := cid.Decode(strcid)
+				id, err := utils.CidDecode(strcid)
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{"Argument seems not to be a Cid"}, Err: wamp.URI("ocp.error")}
 				}
@@ -374,7 +373,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
-				return nxclient.InvokeResult{Args: wamp.List{cid.String()}}
+				return nxclient.InvokeResult{Args: wamp.List{cid.Encode()}}
 
 			case "PathByCid":
 				if len(inv.Arguments) != 2 {
@@ -386,7 +385,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 					return nxclient.InvokeResult{Args: wamp.List{"First argument must be Cid"}, Err: wamp.URI("ocp.error")}
 				}
 
-				id, err := cid.Decode(strcid)
+				id, err := utils.CidDecode(strcid)
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{"First argument seems not to be a Cid"}, Err: wamp.URI("ocp.error")}
 				}
@@ -428,7 +427,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
 				//set the cid to the dml property
-				op := newCallOperation(dml.User(auth), string(path), wamp.List{cid}, node, session)
+				op := newCallOperation(dml.User(auth), string(path), wamp.List{cid.Encode()}, node, session)
 				return self.executeOperation(ctx, op)
 
 			case "WriteIntoPath":
@@ -445,7 +444,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
-				id, ok := val.(cid.Cid)
+				id, ok := val.(utils.Cid)
 				if !ok {
 					return nxclient.InvokeResult{Args: wamp.List{"Raw proeprty faulty, does not contain Cid"}, Err: wamp.URI("ocp.error")}
 				}
@@ -471,7 +470,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				}
 
 				//set the cid to the dml object
-				op := newCallOperation(dml.User(auth), string(path), wamp.List{cid}, node, session)
+				op := newCallOperation(dml.User(auth), string(path), wamp.List{cid.Encode()}, node, session)
 				return self.executeOperation(ctx, op)
 
 			case "ReadBinary":
@@ -481,7 +480,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
-				id, ok := val.(cid.Cid)
+				id, ok := val.(utils.Cid)
 				if !ok {
 					return nxclient.InvokeResult{Args: wamp.List{"Raw property is not setup correctly"}, Err: wamp.URI("ocp.error")}
 				}

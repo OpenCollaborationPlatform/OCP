@@ -1,6 +1,7 @@
 package user
 
 import (
+	"github.com/ickby/CollaborationNode/utils"
 	cid "github.com/ipfs/go-cid"
 	mh "github.com/multiformats/go-multihash"
 )
@@ -12,7 +13,7 @@ func (id UserID) Pretty() string {
 }
 
 //create a cid from the swarm ID to be used in the dht
-func (id UserID) Cid() cid.Cid {
+func (id UserID) Cid() utils.Cid {
 	pref := cid.Prefix{
 		Version:  1,
 		Codec:    cid.Raw,
@@ -20,5 +21,5 @@ func (id UserID) Cid() cid.Cid {
 		MhLength: -1}
 
 	c, _ := pref.Sum([]byte(id))
-	return c
+	return utils.Cid{c}
 }

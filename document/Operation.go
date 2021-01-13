@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/gob"
 
+	"github.com/ickby/CollaborationNode/utils"
+
 	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
@@ -44,6 +46,16 @@ type callOperation struct {
 
 func newCallOperation(user dml.User, path string, args []interface{}, node p2p.PeerID, session wamp.ID) Operation {
 
+	//convert all encoded arguments
+	for i, arg := range args {
+		if utils.Decoder.InterfaceIsEncoded(arg) {
+			val, err := utils.Decoder.DecodeInterface(arg)
+			if err == nil {
+				args[i] = val
+			}
+		}
+	}
+
 	return callOperation{user, path, args, node, session}
 }
 
@@ -63,10 +75,9 @@ func (self callOperation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) in
 		return err
 	}
 
-	//check if it is a Object, if so we only return the encoded identifier!
-	id, ok := val.(dml.Identifier)
-	if ok {
-		return id.Encode()
+	//check if it is a Encotable, if so we only return the encoded identifier!
+	if enc, ok := val.(utils.Encotable); ok {
+		val = enc.Encode()
 	}
 
 	return val
@@ -105,10 +116,9 @@ func (self jsOperation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) inte
 		return err
 	}
 
-	//check if it is a Object, if so we only return the encoded identifier!
-	id, ok := val.(dml.Identifier)
-	if ok {
-		return id.Encode()
+	//check if it is a Encotable, if so we only return the encoded identifier!
+	if enc, ok := val.(utils.Encotable); ok {
+		val = enc.Encode()
 	}
 
 	return val
