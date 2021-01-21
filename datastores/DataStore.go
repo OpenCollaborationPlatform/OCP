@@ -56,6 +56,7 @@ const Error_Operation_Invalid = "operation_invalid"
 const Error_Bolt_Access_Failure = "bolt_access_failure"
 const Error_Setup_Incorrectly = "setup_incorectly"
 const Error_Transaction_Invalid = "transaction_invalid"
+const Error_Datastore_invalid = "datastore_invalid"
 
 //Describes a
 type DataBase interface {
@@ -93,7 +94,7 @@ func NewDatastore(path string) (*Datastore, error) {
 	dir := filepath.Join(path, "Datastore")
 	err := os.MkdirAll(dir, os.ModePerm)
 	if err != nil {
-		return nil, NewDSError("datastore not available", err.Error(), dir)
+		return nil, NewDSError(Error_Datastore_invalid, err.Error(), dir)
 	}
 
 	//database storages
@@ -104,7 +105,7 @@ func NewDatastore(path string) (*Datastore, error) {
 	path = filepath.Join(dir, "bolt.db")
 	db_, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return nil, NewDSError("datastore not available", err.Error(), path)
+		return nil, NewDSError(Error_Datastore_invalid, err.Error(), path)
 	}
 	bolt := boltWrapper{db_, nil, sync.Mutex{}}
 
@@ -174,7 +175,7 @@ func (self *Datastore) GetDatabase(kind StorageType, versioned bool) (DataBase, 
 		db, ok = self.dbs[kind]
 	}
 	if !ok {
-		return nil, NewDSError("database not available", "", kind)
+		return nil, NewDSError(Error_Setup_Incorrectly, "", kind)
 	}
 
 	return db, nil
@@ -218,14 +219,14 @@ func (self *Datastore) Close() error {
 	}
 
 	//close the boltdb
-	return wrapDSError(self.boltdb.db.Close(), "datastore not closable")
+	return wrapDSError(self.boltdb.db.Close(), Error_Datastore_invalid)
 }
 
 func (self *Datastore) Delete() error {
 
 	//we fully remove the datastore!
 	self.Close()
-	return wrapDSError(os.RemoveAll(self.path), "datastore not removable")
+	return wrapDSError(os.RemoveAll(self.path), Error_Datastore_invalid)
 }
 
 func (self *Datastore) Path() string {
@@ -236,7 +237,7 @@ func (self *Datastore) Path() string {
 func (self *Datastore) PrepareFileBackup() error {
 
 	//close boltdb!
-	return wrapDSError(self.boltdb.db.Close(), "datastore not closable")
+	return wrapDSError(self.boltdb.db.Close(), Error_Datastore_invalid)
 }
 
 //finishes backup: normal operation is restored afterwards
@@ -246,7 +247,7 @@ func (self *Datastore) FinishFileBackup() error {
 	path := filepath.Join(self.path, "bolt.db")
 	db_, err := bolt.Open(path, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return NewDSError("datastore not available", err.Error(), path)
+		return wrapDSError(err, Error_Datastore_invalid)
 	}
 	self.boltdb.db = db_
 
