@@ -211,7 +211,9 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 			return fmt.Errorf(`wrong type, got 'raw' and expected '%s'`, self.AsString())
 		}
 	default:
-		return fmt.Errorf("Unknown type: %T", val)
+		if !self.IsVar() {
+			return fmt.Errorf("Unknown type: %T", val)
+		}
 	}
 
 	return nil

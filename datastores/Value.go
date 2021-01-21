@@ -16,8 +16,6 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	"github.com/ickby/CollaborationNode/utils"
-
 	"github.com/boltdb/bolt"
 )
 
@@ -36,12 +34,12 @@ func isInvalid(val []byte) bool {
 func NewValueDatabase(db *boltWrapper) (*ValueDatabase, error) {
 
 	//make sure key value store exists in bolts db:
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucketIfNotExists([]byte("Value"))
-		return nil
+	err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("Value"))
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
 
-	return &ValueDatabase{db, []byte("Value")}, nil
+	return &ValueDatabase{db, []byte("Value")}, err
 }
 
 //implements the database interface
@@ -53,19 +51,19 @@ type ValueDatabase struct {
 func (self ValueDatabase) HasSet(set [32]byte) (bool, error) {
 
 	var result bool = false
-	err := self.db.View(func(tx *bolt.Tx) error {
+	self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
-	return result, err
+	return result, nil
 }
 
 func (self ValueDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
 	if !self.db.CanAccess() {
-		return nil, fmt.Errorf("No transaction open")
+		return nil, NewDSError(Error_Transaction_Invalid, "No transaction open")
 	}
 
 	if has, _ := self.HasSet(set); !has {
@@ -74,14 +72,14 @@ func (self ValueDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 			bucket := tx.Bucket(self.dbkey)
 			_, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
-				return err
+				return wrapDSError(err, Error_Bolt_Access_Failure)
 			}
 
 			return nil
 		})
 
 		if err != nil {
-			return nil, utils.StackError(err, "Cannot create set")
+			return nil, err
 		}
 	}
 
@@ -92,16 +90,11 @@ func (self ValueDatabase) RemoveSet(set [32]byte) error {
 
 	if has, _ := self.HasSet(set); has {
 
-		var result error
-		self.db.Update(func(tx *bolt.Tx) error {
+		return self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
-			result = bucket.DeleteBucket(set[:])
-			return nil
+			return wrapDSError(bucket.DeleteBucket(set[:]), Error_Bolt_Access_Failure)
 		})
-
-		return result
 	}
-
 	return nil
 }
 
@@ -213,7 +206,8 @@ func (self *ValueSet) GetOrCreateValue(key []byte) (*Value, error) {
 			for _, bkey := range self.setkey {
 				bucket = bucket.Bucket(bkey)
 			}
-			return bucket.Put(key, make([]byte, 0))
+			err := bucket.Put(key, make([]byte, 0))
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
 		if err != nil {
 			return nil, err
@@ -226,14 +220,14 @@ func (self *ValueSet) GetOrCreateValue(key []byte) (*Value, error) {
 func (self *ValueSet) removeKey(key []byte) error {
 
 	if !self.HasKey(key) {
-		return fmt.Errorf("key does not exists, cannot be removed")
+		return NewDSError(Error_Key_Not_Existant, "key does not exists, cannot be removed")
 	}
 	value, err := self.GetOrCreateValue(key)
 	if err != nil {
 		return err
 	}
-	if value.remove() != nil {
-		return fmt.Errorf("Unable to remove key")
+	if err := value.remove(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -264,7 +258,7 @@ func (self *ValueSet) getKeys() ([][]byte, error) {
 		return err
 	})
 
-	return entries, err
+	return entries, wrapDSError(err, Error_Bolt_Access_Failure)
 }
 
 /*
@@ -285,14 +279,16 @@ func (self *Value) Write(value interface{}) error {
 		return err
 	}
 
-	return self.db.Update(func(tx *bolt.Tx) error {
+	err = self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range self.setkey {
 			bucket = bucket.Bucket(bkey)
 		}
-		return bucket.Put(self.key, bts)
+		return wrapDSError(bucket.Put(self.key, bts), Error_Bolt_Access_Failure)
 	})
+
+	return err
 }
 
 func (self *Value) Read() (interface{}, error) {
@@ -306,18 +302,14 @@ func (self *Value) Read() (interface{}, error) {
 		}
 		data := bucket.Get(self.key)
 		if data == nil {
-			return fmt.Errorf("Value was not set before read")
+			return NewDSError(Error_Invalid_Data, "Value was not set before read")
 		}
 		var err error
 		res, err = getInterface(data)
 		return err
 	})
 
-	if err != nil {
-		return nil, utils.StackError(err, "Unable to read value")
-	}
-
-	return res, nil
+	return res, err
 }
 
 //returns true if:
@@ -346,7 +338,7 @@ func (self *Value) WasWrittenOnce() (bool, error) {
 	//does still mean nothing was written
 
 	valid := true
-	err := self.db.View(func(tx *bolt.Tx) error {
+	self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		if bucket == nil {
@@ -365,9 +357,7 @@ func (self *Value) WasWrittenOnce() (bool, error) {
 		valid = !((data == nil) || (isInvalid(data)))
 		return nil
 	})
-	if err != nil {
-		return false, err
-	}
+
 	return valid, nil
 }
 
@@ -380,8 +370,8 @@ func (self *Value) Exists() (bool, error) {
 	//allows to distuinguish if it was already created or not. Hence we only need
 	//to check  if the stored value is nil
 
-	var exists bool
-	err := self.db.View(func(tx *bolt.Tx) error {
+	var exists bool = false
+	self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range self.setkey {
@@ -392,24 +382,20 @@ func (self *Value) Exists() (bool, error) {
 		return nil
 	})
 
-	if err != nil {
-		return false, utils.StackError(err, "Cannot check if value exists")
-	}
 	return exists, nil
 }
 
 func (self *Value) remove() error {
 
-	err := self.db.Update(func(tx *bolt.Tx) error {
+	return self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range self.setkey {
 			bucket = bucket.Bucket(bkey)
 		}
-		return bucket.Delete(self.key)
+		err := bucket.Delete(self.key)
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
-
-	return err
 }
 
 //helper functions
@@ -418,7 +404,7 @@ func getBytes(data interface{}) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(&data); err != nil {
-		return nil, err
+		return nil, wrapDSError(err, Error_Invalid_Data)
 	}
 
 	return buf.Bytes(), nil
@@ -432,7 +418,7 @@ func getInterface(bts []byte) (interface{}, error) {
 	dec := gob.NewDecoder(buf)
 
 	if err := dec.Decode(&res); err != nil {
-		return nil, err
+		return nil, wrapDSError(err, Error_Invalid_Data)
 	}
 
 	return res, nil

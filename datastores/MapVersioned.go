@@ -4,6 +4,7 @@ package datastore
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
@@ -29,10 +30,13 @@ bucket(SetKey) [
 func NewMapVersionedDatabase(db *boltWrapper) (*MapVersionedDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucketIfNotExists([]byte("MapVersioned"))
-		return nil
+	err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("MapVersioned"))
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &MapVersionedDatabase{db, []byte("MapVersioned")}, nil
 }
@@ -58,12 +62,12 @@ func (self MapVersionedDatabase) HasSet(set [32]byte) (bool, error) {
 func (self MapVersionedDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
 	if !self.db.CanAccess() {
-		return nil, fmt.Errorf("No transaction open")
+		return nil, NewDSError(Error_Transaction_Invalid, "No transaction open")
 	}
 
 	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
-		self.db.Update(func(tx *bolt.Tx) error {
+		err := self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
 			bucket, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
@@ -71,14 +75,15 @@ func (self MapVersionedDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 			}
 
 			//setup the basic structure
-			err = bucket.Put(itob(CURRENT), itob(HEAD))
-			if err != nil {
-				return err
+			if err := bucket.Put(itob(CURRENT), itob(HEAD)); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
 			}
 			_, err = bucket.CreateBucketIfNotExists(itob(VERSIONS))
-
-			return nil
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &MapVersionedSet{self.db, self.dbkey, set[:]}, nil
@@ -88,16 +93,12 @@ func (self MapVersionedDatabase) RemoveSet(set [32]byte) error {
 
 	if has, _ := self.HasSet(set); has {
 
-		var result error
-		self.db.Update(func(tx *bolt.Tx) error {
+		return self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
-			result = bucket.DeleteBucket(set[:])
-			return nil
+			err := bucket.DeleteBucket(set[:])
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
-
-		return result
 	}
-
 	return nil
 }
 
@@ -221,7 +222,7 @@ func (self *MapVersionedSet) HasUpdates() (bool, error) {
 	for _, mp := range mapVersioneds {
 		has, err := mp.HasUpdates()
 		if err != nil {
-			return false, utils.StackError(err, "Unable to check for updates")
+			return false, utils.StackError(err, "Unable to check map for updates")
 		}
 		if has {
 			return true, nil
@@ -263,10 +264,10 @@ func (self *MapVersionedSet) FixStateAsVersion() (VersionID, error) {
 	//check if opertion is possible
 	cv, err := self.GetCurrentVersion()
 	if err != nil {
-		return VersionID(INVALID), err
+		return VersionID(INVALID), utils.StackError(err, "Unable to access current version")
 	}
 	if !cv.IsHead() {
-		return VersionID(INVALID), fmt.Errorf("Unable to create version if HEAD is not checked out")
+		return VersionID(INVALID), NewDSError(Error_Operation_Invalid, "Unable to create version if HEAD is not checked out")
 	}
 
 	//collect all versions we need for the current version
@@ -276,21 +277,21 @@ func (self *MapVersionedSet) FixStateAsVersion() (VersionID, error) {
 		if has, _ := mp.HasUpdates(); has {
 			v, err := mp.kvset.FixStateAsVersion()
 			if err != nil {
-				return VersionID(INVALID), err
+				return VersionID(INVALID), utils.StackError(err, "Unable to fix state in ds value set")
 			}
 			version[btos(mp.getMapVersionedKey())] = itos(uint64(v))
 
 		} else {
 			v, err := mp.kvset.GetLatestVersion()
 			if err != nil {
-				return VersionID(INVALID), err
+				return VersionID(INVALID), utils.StackError(err, "Unable to get latest version from ds value set")
 			}
 			version[btos(mp.getMapVersionedKey())] = itos(uint64(v))
 		}
 	}
 
 	//write the new version into store
-	var currentVersion uint64
+	var currentVersion uint64 = INVALID
 	err = self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
@@ -303,13 +304,13 @@ func (self *MapVersionedSet) FixStateAsVersion() (VersionID, error) {
 		}
 		currentVersion, err = bucket.NextSequence()
 		if err != nil {
-			return nil
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		}
-		bucket.Put(itob(currentVersion), data)
-		return nil
+		err = bucket.Put(itob(currentVersion), data)
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
 
-	return VersionID(currentVersion), nil
+	return VersionID(currentVersion), err
 }
 
 func (self *MapVersionedSet) getVersionInfo(id VersionID) (map[string]string, error) {
@@ -322,7 +323,7 @@ func (self *MapVersionedSet) getVersionInfo(id VersionID) (map[string]string, er
 		}
 		data := bucket.Get(itob(uint64(id)))
 		if data == nil || len(data) == 0 {
-			return fmt.Errorf("Version does not exist")
+			return NewDSError(Error_Key_Not_Existant, "Version does not exist", id)
 		}
 		res, err := getInterface(data)
 		if err != nil {
@@ -330,7 +331,7 @@ func (self *MapVersionedSet) getVersionInfo(id VersionID) (map[string]string, er
 		}
 		resmapVersioned, ok := res.(*map[string]string)
 		if !ok {
-			return fmt.Errorf("Problem with parsing the saved data")
+			return NewDSError(Error_Invalid_Data, "Problem with parsing the saved data")
 		}
 		version = *resmapVersioned
 		return nil
@@ -353,7 +354,7 @@ func (self *MapVersionedSet) LoadVersion(id VersionID) error {
 		var err error
 		version, err = self.getVersionInfo(id)
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to get information for version %v", id)
 		}
 	}
 
@@ -362,66 +363,67 @@ func (self *MapVersionedSet) LoadVersion(id VersionID) error {
 	for _, mp := range mapVersioneds {
 
 		if id.IsHead() {
-			mp.kvset.LoadVersion(id)
+			if err := mp.kvset.LoadVersion(id); err != nil {
+				return utils.StackError(err, "unable to load version %v in ds value set", id)
+			}
 
 		} else {
 			v, ok := version[btos(mp.getMapVersionedKey())]
 			if !ok {
-				return fmt.Errorf("Unable to load version information for %v", string(mp.getMapVersionedKey()))
+				return NewDSError(Error_Invalid_Data, "Unable to load version information for %v", string(mp.getMapVersionedKey()))
 			}
-			mp.kvset.LoadVersion(VersionID(stoi(v)))
+			if err := mp.kvset.LoadVersion(VersionID(stoi(v))); err != nil {
+				return utils.StackError(err, "Unable to load version %v in ds value set", v)
+			}
 		}
 	}
 
 	//write the current version
-	err := self.db.Update(func(tx *bolt.Tx) error {
+	return self.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		bucket = bucket.Bucket(self.setkey)
 
-		return bucket.Put(itob(CURRENT), itob(uint64(id)))
+		err := bucket.Put(itob(CURRENT), itob(uint64(id)))
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
-
-	return err
 }
 
 func (self *MapVersionedSet) GetLatestVersion() (VersionID, error) {
 
+	var found bool = false
 	var version uint64 = 0
-	found := false
-	self.db.View(func(tx *bolt.Tx) error {
+	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
 			bucket = bucket.Bucket(bkey)
 		}
 		//look at each entry and get the largest version
-		bucket.ForEach(func(k, v []byte) error {
-			found = true
+		return bucket.ForEach(func(k, v []byte) error {
 			if btoi(k) > version {
+				found = true
 				version = btoi(k)
 			}
 			return nil
 		})
-		return nil
 	})
-
 	if !found {
-		return VersionID(INVALID), nil
+		return VersionID(INVALID), err
 	}
 
-	return VersionID(version), nil
+	return VersionID(version), err
 }
 
 func (self *MapVersionedSet) GetCurrentVersion() (VersionID, error) {
 
-	var version uint64
+	var version uint64 = INVALID
 	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		bucket = bucket.Bucket(self.setkey)
 
 		val := bucket.Get(itob(CURRENT))
 		if val == nil {
-			return fmt.Errorf("No current version set")
+			return NewDSError(Error_Operation_Invalid, "No current version set")
 		}
 		version = btoi(val)
 		return nil
@@ -435,7 +437,7 @@ func (self *MapVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 	mapVersioneds := self.collectMapVersioneds()
 	version, err := self.getVersionInfo(ID)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to get version info for %v", ID)
 	}
 
 	for _, mp := range mapVersioneds {
@@ -444,12 +446,12 @@ func (self *MapVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 		ival := stoi(val)
 		err := mp.kvset.RemoveVersionsUpTo(VersionID(ival))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to remove version up to %v in ds value set", ival)
 		}
 	}
 
 	//remove the versions from the relevant bucket
-	err = self.db.Update(func(tx *bolt.Tx) error {
+	return self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, sk := range [][]byte{self.setkey, itob(VERSIONS)} {
@@ -468,13 +470,13 @@ func (self *MapVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 			return nil
 		})
 		for _, k := range todelete {
-			bucket.Delete(k)
+			if err := bucket.Delete(k); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
 		}
 
 		return nil
 	})
-
-	return err
 }
 
 func (self *MapVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
@@ -482,7 +484,7 @@ func (self *MapVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 	mapVersioneds := self.collectMapVersioneds()
 	version, err := self.getVersionInfo(ID)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to get version info for %v", ID)
 	}
 
 	for _, mp := range mapVersioneds {
@@ -491,12 +493,12 @@ func (self *MapVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 		ival := stoi(val)
 		err := mp.kvset.RemoveVersionsUpFrom(VersionID(ival))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to remove version up to %v in ds value set", ival)
 		}
 	}
 
 	//remove the versions from the relevant bucket
-	err = self.db.Update(func(tx *bolt.Tx) error {
+	return self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, sk := range [][]byte{self.setkey, itob(VERSIONS)} {
@@ -515,13 +517,12 @@ func (self *MapVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 			return nil
 		})
 		for _, k := range todelete {
-			bucket.Delete(k)
+			if err := bucket.Delete(k); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
 		}
-
 		return nil
 	})
-
-	return err
 }
 
 /*
@@ -552,10 +553,10 @@ func (self *MapVersionedSet) GetOrCreateMap(key []byte) (*MapVersioned, error) {
 
 		curr, err := self.GetCurrentVersion()
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to access current version")
 		}
 		if !curr.IsHead() {
-			return nil, fmt.Errorf("Key does not exist and cannot be created when version is loaded")
+			return nil, NewDSError(Error_Operation_Invalid, "Key does not exist and cannot be created when version is loaded")
 		}
 
 		//make sure the set exists in the db with null valueVersioned
@@ -566,12 +567,13 @@ func (self *MapVersionedSet) GetOrCreateMap(key []byte) (*MapVersioned, error) {
 			bucket = bucket.Bucket(self.setkey)
 			newbucket, err := bucket.CreateBucketIfNotExists(key)
 			if err != nil {
-				return err
+				return wrapDSError(err, Error_Bolt_Access_Failure)
 			}
-			newbucket.Put(itob(CURRENT), itob(HEAD))
-			newbucket.CreateBucketIfNotExists(itob(VERSIONS))
-
-			return err
+			if err := newbucket.Put(itob(CURRENT), itob(HEAD)); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
+			_, err = newbucket.CreateBucketIfNotExists(itob(VERSIONS))
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
 
 		if err != nil {
@@ -606,9 +608,9 @@ func (self *MapVersioned) Write(key interface{}, valueVersioned interface{}) err
 	}
 	pair, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to access or create value in ds value set")
 	}
-	return pair.Write(valueVersioned)
+	return utils.StackOnError(pair.Write(valueVersioned), "Unable to write ds value")
 }
 
 func (self *MapVersioned) IsValid() bool {
@@ -633,7 +635,7 @@ func (self *MapVersioned) HasKey(key interface{}) bool {
 func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 
 	if !self.HasKey(key) {
-		return nil, fmt.Errorf("Key does not exist, cannot read")
+		return nil, NewDSError(Error_Key_Not_Existant, "Key does not exist, cannot read value")
 	}
 
 	k, err := getBytes(key)
@@ -642,22 +644,23 @@ func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 	}
 	pair, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to access or create value in ds value set")
 	}
-	return pair.Read()
+	res, err := pair.Read()
+	return res, utils.StackOnError(err, "Unable to write ds value")
 }
 
 func (self *MapVersioned) Remove(key interface{}) error {
 
 	if !self.HasKey(key) {
-		return fmt.Errorf("Key does not exist, cannot remove")
+		return NewDSError(Error_Key_Not_Existant, "Key does not exist, cannot remove")
 	}
 
 	k, err := getBytes(key)
 	if err != nil {
-		return utils.StackError(err, "Cannot remove MapVersioned key")
+		return err
 	}
-	return self.kvset.removeKey(k)
+	return utils.StackOnError(self.kvset.removeKey(k), "Unable to remove entry in ds value set")
 }
 
 func (self *MapVersioned) CurrentVersion() VersionID {
@@ -674,19 +677,21 @@ func (self *MapVersioned) LatestVersion() VersionID {
 
 func (self *MapVersioned) HasUpdates() (bool, error) {
 
-	return self.kvset.HasUpdates()
+	res, err := self.kvset.HasUpdates()
+	return res, utils.StackOnError(err, "Unable to query updates in ds value set")
 }
 
 func (self *MapVersioned) HasVersions() (bool, error) {
 
-	return self.kvset.HasVersions()
+	res, err := self.kvset.HasVersions()
+	return res, utils.StackOnError(err, "Unable to query uversions in ds value set")
 }
 
 func (self *MapVersioned) GetKeys() ([]interface{}, error) {
 
 	bytekeys, err := self.kvset.getKeys()
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to read map keys")
+		return nil, utils.StackError(err, "Unable to read ds  value set keys")
 	}
 
 	//convert from byte keys to user type keys
@@ -694,7 +699,7 @@ func (self *MapVersioned) GetKeys() ([]interface{}, error) {
 	for i, bytekey := range bytekeys {
 		key, err := getInterface(bytekey)
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to convert a key into user type")
+			return nil, err
 		}
 		keys[i] = key
 	}

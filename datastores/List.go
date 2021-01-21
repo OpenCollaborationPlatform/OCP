@@ -27,14 +27,10 @@ func NewListDatabase(db *boltWrapper) (*ListDatabase, error) {
 	//make sure key valueVersioned store exists in bolts db:
 	err := db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("List"))
-		return err
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
 
-	if err != nil {
-		return nil, utils.StackError(err, "Cannot create bucket \"List\"")
-	}
-
-	return &ListDatabase{db, []byte("List")}, nil
+	return &ListDatabase{db, []byte("List")}, err
 }
 
 //implements the database interface
@@ -58,19 +54,22 @@ func (self ListDatabase) HasSet(set [32]byte) (bool, error) {
 func (self ListDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
 	if !self.db.CanAccess() {
-		return nil, fmt.Errorf("No transaction open")
+		return nil, NewDSError(Error_Transaction_Invalid, "No transaction open")
 	}
 
 	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
-		self.db.Update(func(tx *bolt.Tx) error {
+		err := self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
 			bucket, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
-				return err
+				return wrapDSError(err, Error_Bolt_Access_Failure)
 			}
 			return nil
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &ListSet{self.db, self.dbkey, set[:]}, nil
@@ -80,13 +79,15 @@ func (self ListDatabase) RemoveSet(set [32]byte) error {
 
 	if has, _ := self.HasSet(set); has {
 
-		return self.db.Update(func(tx *bolt.Tx) error {
+		err := self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
-			return bucket.DeleteBucket(set[:])
+			err := bucket.DeleteBucket(set[:])
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
+		return err
 	}
 
-	return fmt.Errorf("no such set available")
+	return NewDSError(Error_Key_Not_Existant, "No such set available")
 }
 
 func (self ListDatabase) Close() {
@@ -200,7 +201,7 @@ func (self *ListSet) GetOrCreateList(key []byte) (*List, error) {
 			bucket := tx.Bucket(self.dbkey)
 			bucket = bucket.Bucket(self.setkey)
 			_, err := bucket.CreateBucketIfNotExists(key)
-			return err
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
 
 		if err != nil {
@@ -238,7 +239,7 @@ func (self *List) Add(value interface{}) (ListEntry, error) {
 		}
 		val, err := bucket.NextSequence()
 		if err != nil {
-			return err
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		}
 		id = val
 		return nil
@@ -249,9 +250,9 @@ func (self *List) Add(value interface{}) (ListEntry, error) {
 
 	entry, err := self.kvset.GetOrCreateValue(itob(id))
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to get or create value Set")
 	}
-	return &listEntry{*entry}, entry.Write(value)
+	return &listEntry{*entry}, utils.StackOnError(entry.Write(value), "Unable to write value")
 }
 
 func (self *List) GetEntries() ([]ListEntry, error) {
@@ -287,7 +288,7 @@ func (self *List) GetEntries() ([]ListEntry, error) {
 		return err
 	})
 
-	return entries, err
+	return entries, wrapDSError(err, Error_Bolt_Access_Failure)
 }
 
 func (self *List) getListKey() []byte {
@@ -311,11 +312,12 @@ type listEntry struct {
 }
 
 func (self *listEntry) Write(value interface{}) error {
-	return self.value.Write(value)
+	return utils.StackOnError(self.value.Write(value), "Unable to write ds value")
 }
 
 func (self *listEntry) Read() (interface{}, error) {
-	return self.value.Read()
+	val, err := self.value.Read()
+	return val, utils.StackOnError(err, "Unable to read ds value")
 }
 
 func (self *listEntry) IsValid() bool {
@@ -323,7 +325,7 @@ func (self *listEntry) IsValid() bool {
 }
 
 func (self *listEntry) Remove() error {
-	return self.value.remove()
+	return utils.StackOnError(self.value.remove(), "Unable to remove ds value")
 }
 
 func (self *listEntry) Id() uint64 {

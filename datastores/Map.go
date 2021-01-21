@@ -4,6 +4,7 @@ package datastore
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
@@ -24,10 +25,14 @@ bucket(SetKey) [
 func NewMapDatabase(db *boltWrapper) (*MapDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucketIfNotExists([]byte("Map"))
-		return nil
+	err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("Map"))
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	return &MapDatabase{db, []byte("Map")}, nil
 }
@@ -41,19 +46,19 @@ type MapDatabase struct {
 func (self MapDatabase) HasSet(set [32]byte) (bool, error) {
 
 	var result bool = false
-	err := self.db.View(func(tx *bolt.Tx) error {
+	self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		result = bucket.Bucket(set[:]) != nil
 		return nil
 	})
 
-	return result, err
+	return result, nil
 }
 
 func (self MapDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
 	if !self.db.CanAccess() {
-		return nil, fmt.Errorf("No transaction open")
+		return nil, NewDSError(Error_Transaction_Invalid, "No transaction open")
 	}
 
 	if has, _ := self.HasSet(set); !has {
@@ -62,7 +67,7 @@ func (self MapDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 			bucket := tx.Bucket(self.dbkey)
 			bucket, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
-				return err
+				return wrapDSError(err, Error_Bolt_Access_Failure)
 			}
 			return nil
 		})
@@ -79,14 +84,11 @@ func (self MapDatabase) RemoveSet(set [32]byte) error {
 
 	if has, _ := self.HasSet(set); has {
 
-		var result error
-		self.db.Update(func(tx *bolt.Tx) error {
+		return self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
-			result = bucket.DeleteBucket(set[:])
-			return nil
+			err := bucket.DeleteBucket(set[:])
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
-
-		return result
 	}
 
 	return nil
@@ -203,7 +205,7 @@ func (self *MapSet) GetOrCreateMap(key []byte) (*Map, error) {
 			bucket := tx.Bucket(self.dbkey)
 			bucket = bucket.Bucket(self.setkey)
 			_, err := bucket.CreateBucketIfNotExists(key)
-			return err
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
 
 		if err != nil {
@@ -238,9 +240,9 @@ func (self *Map) Write(key interface{}, value interface{}) error {
 	}
 	entry, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to access key in value set")
 	}
-	return entry.Write(value)
+	return utils.StackOnError(entry.Write(value), "Unable to write ds value")
 }
 
 func (self *Map) IsValid() bool {
@@ -265,30 +267,34 @@ func (self *Map) Read(key interface{}) (interface{}, error) {
 	}
 
 	if !self.kvset.HasKey(k) {
-		return nil, fmt.Errorf("Key not available in map")
+		return nil, NewDSError(Error_Key_Not_Existant, "Key not available in map")
 	}
 
 	entry, err := self.kvset.GetOrCreateValue(k)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to acces key in value set")
 	}
-	return entry.Read()
+	res, err := entry.Read()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to read ds value")
+	}
+	return res, err
 }
 
 func (self *Map) Remove(key interface{}) error {
 
 	k, err := getBytes(key)
 	if err != nil {
-		return utils.StackError(err, "Cannot remove Map key")
+		return err
 	}
-	return self.kvset.removeKey(k)
+	return utils.StackOnError(self.kvset.removeKey(k), "Unable to remove in ds value set")
 }
 
 func (self *Map) GetKeys() ([]interface{}, error) {
 
 	bytekeys, err := self.kvset.getKeys()
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to read map keys")
+		return nil, utils.StackError(err, "Unable to get keys from ds value set")
 	}
 
 	//convert from byte keys to user type keys
@@ -296,7 +302,7 @@ func (self *Map) GetKeys() ([]interface{}, error) {
 	for i, bytekey := range bytekeys {
 		key, err := getInterface(bytekey)
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to convert a key into user type")
+			return nil, err
 		}
 		keys[i] = key
 	}

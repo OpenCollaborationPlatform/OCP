@@ -4,6 +4,7 @@ package datastore
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
@@ -29,10 +30,13 @@ bucket(SetKey) [
 func NewListVersionedDatabase(db *boltWrapper) (*ListVersionedDatabase, error) {
 
 	//make sure key valueVersioned store exists in bolts db:
-	db.Update(func(tx *bolt.Tx) error {
-		tx.CreateBucketIfNotExists([]byte("ListVersioned"))
-		return nil
+	err := db.Update(func(tx *bolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte("ListVersioned"))
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return &ListVersionedDatabase{db, []byte("ListVersioned")}, nil
 }
@@ -58,27 +62,33 @@ func (self ListVersionedDatabase) HasSet(set [32]byte) (bool, error) {
 func (self ListVersionedDatabase) GetOrCreateSet(set [32]byte) (Set, error) {
 
 	if !self.db.CanAccess() {
-		return nil, fmt.Errorf("No transaction open")
+		return nil, NewDSError(Error_Transaction_Invalid, "No transaction open")
 	}
 
 	if has, _ := self.HasSet(set); !has {
 		//make sure the bucket exists
-		self.db.Update(func(tx *bolt.Tx) error {
+		err := self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
 			bucket, err := bucket.CreateBucketIfNotExists(set[:])
 			if err != nil {
-				return err
+				return wrapDSError(err, Error_Bolt_Access_Failure)
 			}
 
 			//setup the basic structure
 			err = bucket.Put(itob(CURRENT), itob(HEAD))
 			if err != nil {
-				return err
+				return wrapDSError(err, Error_Bolt_Access_Failure)
 			}
 			_, err = bucket.CreateBucketIfNotExists(itob(VERSIONS))
+			if err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
 
 			return nil
 		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return &ListVersionedSet{self.db, self.dbkey, set[:]}, nil
@@ -88,14 +98,11 @@ func (self ListVersionedDatabase) RemoveSet(set [32]byte) error {
 
 	if has, _ := self.HasSet(set); has {
 
-		var result error
-		self.db.Update(func(tx *bolt.Tx) error {
+		return self.db.Update(func(tx *bolt.Tx) error {
 			bucket := tx.Bucket(self.dbkey)
-			result = bucket.DeleteBucket(set[:])
-			return nil
+			err := bucket.DeleteBucket(set[:])
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
-
-		return result
 	}
 
 	return nil
@@ -246,25 +253,31 @@ func (self *ListVersionedSet) HasVersions() bool {
 	return versions
 }
 
-func (self *ListVersionedSet) ResetHead() {
+func (self *ListVersionedSet) ResetHead() error {
 
 	listVersioneds := self.collectLists()
 	for _, list := range listVersioneds {
 		//if the list has a version we can reset, otherwise we need a full delete
 		//(to reset to not-available-state
 		if list.LatestVersion().IsValid() {
-			list.kvset.ResetHead()
+			if err := list.kvset.ResetHead(); err != nil {
+				return utils.StackError(err, "Unable to reset head in ds value set")
+			}
 		} else {
 			//make sure the set exists in the db with null valueVersioned
-			self.db.Update(func(tx *bolt.Tx) error {
+			err := self.db.Update(func(tx *bolt.Tx) error {
 
 				bucket := tx.Bucket(self.dbkey)
 				bucket = bucket.Bucket(self.setkey)
-				return bucket.DeleteBucket(list.getListKey())
-			})
-		}
 
+				return wrapDSError(bucket.DeleteBucket(list.getListKey()), Error_Bolt_Access_Failure)
+			})
+			if err != nil {
+				return err
+			}
+		}
 	}
+	return nil
 }
 
 func (self *ListVersionedSet) FixStateAsVersion() (VersionID, error) {
@@ -272,10 +285,10 @@ func (self *ListVersionedSet) FixStateAsVersion() (VersionID, error) {
 	//check if opertion is possible
 	cv, err := self.GetCurrentVersion()
 	if err != nil {
-		return VersionID(INVALID), err
+		return VersionID(INVALID), utils.StackError(err, "Unable to access curent version")
 	}
 	if !cv.IsHead() {
-		return VersionID(INVALID), fmt.Errorf("Unable to create version if HEAD is not checked out")
+		return VersionID(INVALID), NewDSError(Error_Operation_Invalid, "Unable to create version if HEAD is not checked out")
 	}
 
 	//collect all versions we need for the current version
@@ -285,14 +298,14 @@ func (self *ListVersionedSet) FixStateAsVersion() (VersionID, error) {
 		if has, _ := list.HasUpdates(); has {
 			v, err := list.kvset.FixStateAsVersion()
 			if err != nil {
-				return VersionID(INVALID), err
+				return VersionID(INVALID), utils.StackError(err, "Unable to fix state in ds value")
 			}
 			version[btos(list.getListKey())] = itos(uint64(v))
 
 		} else {
 			v, err := list.kvset.GetLatestVersion()
 			if err != nil {
-				return VersionID(INVALID), err
+				return VersionID(INVALID), utils.StackError(err, "Unable to access latest version in ds value")
 			}
 			version[btos(list.getListKey())] = itos(uint64(v))
 		}
@@ -312,11 +325,13 @@ func (self *ListVersionedSet) FixStateAsVersion() (VersionID, error) {
 		}
 		currentVersion, err = bucket.NextSequence()
 		if err != nil {
-			return nil
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		}
-		bucket.Put(itob(currentVersion), data)
-		return nil
+		return wrapDSError(bucket.Put(itob(currentVersion), data), Error_Bolt_Access_Failure)
 	})
+	if err != nil {
+		return VersionID(INVALID), err
+	}
 
 	return VersionID(currentVersion), nil
 }
@@ -331,7 +346,7 @@ func (self *ListVersionedSet) getVersionInfo(id VersionID) (map[string]string, e
 		}
 		data := bucket.Get(itob(uint64(id)))
 		if data == nil || len(data) == 0 {
-			return fmt.Errorf("Version does not exist")
+			return NewDSError(Error_Key_Not_Existant, "Version does not exist")
 		}
 		res, err := getInterface(data)
 		if err != nil {
@@ -339,15 +354,12 @@ func (self *ListVersionedSet) getVersionInfo(id VersionID) (map[string]string, e
 		}
 		reslistVersioned, ok := res.(*map[string]string)
 		if !ok {
-			return fmt.Errorf("Problem with parsing the saved data")
+			return NewDSError(Error_Invalid_Data, "Problem with parsing the saved data")
 		}
 		version = *reslistVersioned
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return version, nil
+	return version, err
 }
 
 func (self *ListVersionedSet) LoadVersion(id VersionID) error {
@@ -362,7 +374,7 @@ func (self *ListVersionedSet) LoadVersion(id VersionID) error {
 		var err error
 		version, err = self.getVersionInfo(id)
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to load version information")
 		}
 	}
 
@@ -371,33 +383,37 @@ func (self *ListVersionedSet) LoadVersion(id VersionID) error {
 	for _, list := range lists {
 
 		if id.IsHead() {
-			list.kvset.LoadVersion(id)
+			err := list.kvset.LoadVersion(id)
+			if err != nil {
+				return utils.StackError(err, "Unable to load version from ds value")
+			}
 
 		} else {
 			v, ok := version[btos(list.getListKey())]
 			if !ok {
-				return fmt.Errorf("Unable to load version information for %v", string(list.getListKey()))
+				return NewDSError(Error_Invalid_Data, fmt.Sprintf("Unable to load version information for %v", string(list.getListKey())))
 			}
-			list.kvset.LoadVersion(VersionID(stoi(v)))
+			if err := list.kvset.LoadVersion(VersionID(stoi(v))); err != nil {
+				return utils.StackError(err, "Unable to load version for ds value")
+			}
 		}
 	}
 
 	//write the current version
-	err := self.db.Update(func(tx *bolt.Tx) error {
+	return self.db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		bucket = bucket.Bucket(self.setkey)
 
-		return bucket.Put(itob(CURRENT), itob(uint64(id)))
+		err := bucket.Put(itob(CURRENT), itob(uint64(id)))
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
-
-	return err
 }
 
 func (self *ListVersionedSet) GetLatestVersion() (VersionID, error) {
 
+	var found bool = false
 	var version uint64 = 0
-	found := false
-	self.db.View(func(tx *bolt.Tx) error {
+	err := self.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, bkey := range [][]byte{self.setkey, itob(VERSIONS)} {
@@ -405,32 +421,31 @@ func (self *ListVersionedSet) GetLatestVersion() (VersionID, error) {
 		}
 		//look at each entry and get the largest version
 		bucket.ForEach(func(k, v []byte) error {
-			found = true
 			if btoi(k) > version {
+				found = true
 				version = btoi(k)
 			}
 			return nil
 		})
 		return nil
 	})
-
 	if !found {
-		return VersionID(INVALID), nil
+		return VersionID(INVALID), err
 	}
 
-	return VersionID(version), nil
+	return VersionID(version), err
 }
 
 func (self *ListVersionedSet) GetCurrentVersion() (VersionID, error) {
 
-	var version uint64
+	var version uint64 = INVALID
 	err := self.db.View(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket(self.dbkey)
 		bucket = bucket.Bucket(self.setkey)
 
 		val := bucket.Get(itob(CURRENT))
 		if val == nil {
-			return fmt.Errorf("No current version set")
+			return NewDSError(Error_Setup_Incorrectly, "No current version set")
 		}
 		version = btoi(val)
 		return nil
@@ -444,7 +459,7 @@ func (self *ListVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 	listVersioneds := self.collectLists()
 	version, err := self.getVersionInfo(ID)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to access version info for %v", ID)
 	}
 
 	for _, list := range listVersioneds {
@@ -453,12 +468,12 @@ func (self *ListVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 		ival := stoi(val)
 		err := list.kvset.RemoveVersionsUpTo(VersionID(ival))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to remove versions in ds value set upt to %v", ival)
 		}
 	}
 
 	//remove the versions from the relevant bucket
-	err = self.db.Update(func(tx *bolt.Tx) error {
+	return self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, sk := range [][]byte{self.setkey, itob(VERSIONS)} {
@@ -477,13 +492,13 @@ func (self *ListVersionedSet) RemoveVersionsUpTo(ID VersionID) error {
 			return nil
 		})
 		for _, k := range todelete {
-			bucket.Delete(k)
+			if err := bucket.Delete(k); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
 		}
 
 		return nil
 	})
-
-	return err
 }
 
 func (self *ListVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
@@ -491,7 +506,7 @@ func (self *ListVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 	listVersioneds := self.collectLists()
 	version, err := self.getVersionInfo(ID)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to get version info for %v", ID)
 	}
 
 	for _, list := range listVersioneds {
@@ -500,12 +515,12 @@ func (self *ListVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 		ival := stoi(val)
 		err := list.kvset.RemoveVersionsUpFrom(VersionID(ival))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to remove version %v from ds value set", ival)
 		}
 	}
 
 	//remove the versions from the relevant bucket
-	err = self.db.Update(func(tx *bolt.Tx) error {
+	return self.db.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.dbkey)
 		for _, sk := range [][]byte{self.setkey, itob(VERSIONS)} {
@@ -524,13 +539,13 @@ func (self *ListVersionedSet) RemoveVersionsUpFrom(ID VersionID) error {
 			return nil
 		})
 		for _, k := range todelete {
-			bucket.Delete(k)
+			if err := bucket.Delete(k); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
 		}
 
 		return nil
 	})
-
-	return err
 }
 
 /*
@@ -561,10 +576,10 @@ func (self *ListVersionedSet) GetOrCreateList(key []byte) (*ListVersioned, error
 
 		curr, err := self.GetCurrentVersion()
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to access current version")
 		}
 		if !curr.IsHead() {
-			return nil, fmt.Errorf("Key does not exist and cannot be created when version is loaded")
+			return nil, NewDSError(Error_Operation_Invalid, "Key does not exist and cannot be created when version is loaded")
 		}
 
 		//make sure the set exists in the db with null valueVersioned
@@ -575,12 +590,13 @@ func (self *ListVersionedSet) GetOrCreateList(key []byte) (*ListVersioned, error
 			bucket = bucket.Bucket(self.setkey)
 			newbucket, err := bucket.CreateBucketIfNotExists(key)
 			if err != nil {
-				return err
+				return wrapDSError(err, Error_Bolt_Access_Failure)
 			}
-			newbucket.Put(itob(CURRENT), itob(HEAD))
-			newbucket.CreateBucketIfNotExists(itob(VERSIONS))
-
-			return err
+			if err := newbucket.Put(itob(CURRENT), itob(HEAD)); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
+			_, err = newbucket.CreateBucketIfNotExists(itob(VERSIONS))
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		})
 
 		if err != nil {
@@ -618,23 +634,23 @@ func (self *ListVersioned) Add(value interface{}) (ListEntry, error) {
 		}
 		val, err := bucket.NextSequence()
 		if err != nil {
-			return err
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		}
 		id = val
 		return nil
 	})
 	kv, err := self.kvset.GetOrCreateValue(itob(id))
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to access or create value in ds value set")
 	}
-	return &listVersionedEntry{*kv}, kv.Write(value)
+	return &listVersionedEntry{*kv}, utils.StackOnError(kv.Write(value), "Unable to write ds value")
 }
 
 func (self *ListVersioned) GetEntries() ([]ListEntry, error) {
 
 	vals, err := self.kvset.getValues()
 	if err != nil {
-		return []ListEntry{}, err
+		return []ListEntry{}, utils.StackError(err, "Unable to get values from ds value set")
 	}
 
 	entries := make([]ListEntry, len(vals))
@@ -659,12 +675,14 @@ func (self *ListVersioned) LatestVersion() VersionID {
 
 func (self *ListVersioned) HasUpdates() (bool, error) {
 
-	return self.kvset.HasUpdates()
+	res, err := self.kvset.HasUpdates()
+	return res, utils.StackOnError(err, "Unable to query value set for updates")
 }
 
 func (self *ListVersioned) HasVersions() (bool, error) {
 
-	return self.kvset.HasVersions()
+	res, err := self.kvset.HasVersions()
+	return res, utils.StackOnError(err, "Unable to query value set for versions")
 }
 
 func (self *ListVersioned) getListKey() []byte {
@@ -680,11 +698,12 @@ type listVersionedEntry struct {
 }
 
 func (self *listVersionedEntry) Write(value interface{}) error {
-	return self.value.Write(value)
+	return utils.StackOnError(self.value.Write(value), "Unable to write ds value")
 }
 
 func (self *listVersionedEntry) Read() (interface{}, error) {
-	return self.value.Read()
+	res, err := self.value.Read()
+	return res, utils.StackOnError(err, "Unable to read ds value")
 }
 
 func (self *listVersionedEntry) IsValid() bool {
@@ -692,7 +711,7 @@ func (self *listVersionedEntry) IsValid() bool {
 }
 
 func (self *listVersionedEntry) Remove() error {
-	return self.value.remove()
+	return utils.StackOnError(self.value.remove(), "Unable to remove ds value")
 }
 
 func (self *listVersionedEntry) Id() uint64 {

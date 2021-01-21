@@ -4,7 +4,6 @@ transaction
 package datastore
 
 import (
-	"fmt"
 	"sync"
 
 	"github.com/boltdb/bolt"
@@ -21,44 +20,44 @@ func (self *boltWrapper) Begin() error {
 	self.mutex.Lock()
 
 	if self.tx != nil {
-		return fmt.Errorf("Transaction already open")
+		return NewDSError("transaction failure", "Transaction already open")
 	}
 
 	tx, err := self.db.Begin(true)
 	self.tx = tx
-	return err
+	return wrapDSError(err, "transaction failure")
 }
 
 func (self *boltWrapper) Commit() error {
 
 	if self.tx == nil {
-		return fmt.Errorf("No transaction open to commit")
+		return NewDSError("transaction failure", "No transaction open to commit")
 	}
 
 	err := self.tx.Commit()
 	self.tx = nil
 
 	self.mutex.Unlock()
-	return err
+	return wrapDSError(err, "transaction failure")
 }
 
 func (self *boltWrapper) Rollback() error {
 
 	if self.tx == nil {
-		return fmt.Errorf("No transaction open to rollback")
+		return NewDSError("transaction failure", "No transaction open to rollback")
 	}
 
 	err := self.tx.Rollback()
 	self.tx = nil
 
 	self.mutex.Unlock()
-	return err
+	return wrapDSError(err, "transaction failure")
 }
 
 func (self *boltWrapper) RollbackKeepOpen() error {
 
 	if self.tx == nil {
-		return fmt.Errorf("No transaction open to rollback")
+		return NewDSError("transaction failure", "No transaction open to rollback")
 	}
 
 	err := self.tx.Rollback()
@@ -69,7 +68,7 @@ func (self *boltWrapper) RollbackKeepOpen() error {
 	tx, err := self.db.Begin(true)
 	self.tx = tx
 
-	return err
+	return wrapDSError(err, "transaction failure")
 }
 
 func (self *boltWrapper) CanAccess() bool {
@@ -80,7 +79,7 @@ func (self *boltWrapper) CanAccess() bool {
 func (self *boltWrapper) Update(fn func(*bolt.Tx) error) error {
 
 	if self.tx == nil {
-		return fmt.Errorf("No transaction open, cannot update")
+		return NewDSError("transaction failure", "No transaction open, cannot update")
 	}
 	return fn(self.tx)
 }
@@ -88,7 +87,7 @@ func (self *boltWrapper) Update(fn func(*bolt.Tx) error) error {
 func (self *boltWrapper) View(fn func(*bolt.Tx) error) error {
 
 	if self.tx == nil {
-		return fmt.Errorf("No transaction open, cannot update")
+		return NewDSError("transaction failure", "No transaction open, cannot update")
 	}
 	return fn(self.tx)
 }
