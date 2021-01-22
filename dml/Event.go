@@ -97,7 +97,7 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 
 	enabled, err := self.Enabled(id)
 	if err != nil {
-		return utils.StackError(err, "Unable to emit as status query failed")
+		return utils.StackError(err, "Unable to query event status")
 	}
 
 	if !enabled {
@@ -108,64 +108,68 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 	for _, cb := range self.callbacks {
 		err := cb(id, args...)
 		if err != nil {
-			return err
+			return utils.StackError(err, "Go callback failed")
 		}
 	}
 
 	//call all runtime created callbacks
 	var cbs datastore.ListVersioned
 	cbs, err = listVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__event_"+self.name))
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB eventcallbacks")
+	}
 	entries, err := cbs.GetEntries()
-	if err == nil && len(entries) > 0 {
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB for runtime callbacks")
+	}
+	if len(entries) > 0 {
 
 		for _, entry := range entries {
 			var val interface{}
 			val, err = entry.Read()
 			if err != nil {
-				break
+				return utils.StackError(err, "Unable to access DB eventcallback")
 			}
 			cb, ok := val.(*EventObjectCallback)
 			if !ok {
-				break
+				return newInternalError(Error_Fatal, "Event callback stored with wrong type")
 			}
 
 			//get the object to call
 			var set dmlSet
 			set, err = self.owner.GetRuntime().getObjectSet(cb.Id)
 			if err != nil {
-				break
+				return utils.StackError(err, "Unable to get object %v", cb.Id)
 			}
 
 			if !set.obj.HasMethod(cb.Function) {
-				err = fmt.Errorf("Registerd callback %v not available in object %v", cb.Function, cb.Id.Name)
-				break
+				return newUserError(Error_Key_Not_Available, "Registerd callback %v not available in object %v", cb.Function, cb.Id.Name)
 			}
-			_, err = set.obj.GetMethod(cb.Function).Call(set.id, args...)
+			if _, err = set.obj.GetMethod(cb.Function).Call(set.id, args...); err != nil {
+				return utils.StackError(err, "Function %v failed", cb.Function)
+			}
 		}
-	}
-	if err != nil {
-		return err
 	}
 
 	//inform runtime about event
-	return self.owner.EventEmitted(id, self.name, args...)
+	return utils.StackOnError(self.owner.EventEmitted(id, self.name, args...), "Object function failed for event emit")
 }
 
 func (self *event) Enabled(id Identifier) (bool, error) {
 
 	value, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__enabled"))
 	if err != nil {
-		return false, utils.StackError(err, "Unable to access event status from DB")
+		return false, err
 	}
 
 	enabled, err := value.Read()
 	if err != nil {
-		return false, utils.StackError(err, "Unable to query event status from DB")
+		return false, utils.StackError(err, "Unable to read from DB")
 	}
 
 	result, ok := enabled.(bool)
 	if !ok {
-		return false, fmt.Errorf("Event status wrongly stored in DB")
+		return false, newInternalError(Error_Fatal, "Event status stored as wrong type")
 	}
 
 	return result, nil
@@ -175,12 +179,12 @@ func (self *event) Enable(id Identifier) error {
 
 	value, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__enabled"))
 	if err != nil {
-		return utils.StackError(err, "Unable to access event status from DB")
+		return err
 	}
 
 	err = value.Write(true)
 	if err != nil {
-		return utils.StackError(err, "Unable so write event status")
+		return utils.StackError(err, "Unable so write to DB")
 	}
 	return nil
 }
@@ -189,12 +193,12 @@ func (self *event) Disable(id Identifier) error {
 
 	value, err := valueVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__enabled"))
 	if err != nil {
-		return utils.StackError(err, "Unable to access event status from DB")
+		return err
 	}
 
 	err = value.Write(false)
 	if err != nil {
-		return utils.StackError(err, "Unable so write event status")
+		return utils.StackError(err, "Unable so write to DB")
 	}
 	return nil
 }
@@ -206,11 +210,11 @@ func (self *event) RegisterCallback(id Identifier, cbID Identifier, function str
 
 	cbs, err := listVersionedFromStore(self.owner.GetRuntime().datastore, id, []byte("__event_"+self.name))
 	if err != nil {
-		return utils.StackError(err, "Unable to register callback")
+		return err
 	}
 	_, err = cbs.Add(EventObjectCallback{cbID, function})
 	if err != nil {
-		return utils.StackError(err, "Unable to register callback")
+		return utils.StackError(err, "Unable to write to DB")
 	}
 
 	return nil
@@ -226,7 +230,14 @@ func (self *event) RegisterObjectJSCallback(cb func(goja.FunctionCall) goja.Valu
 		//goja panics as form of error reporting...
 		defer func() {
 			if e := recover(); e != nil {
-				err = fmt.Errorf("%v", e)
+				if er, ok := e.(error); ok {
+					ocpErr := wrapJSError(er, self.GetJSRuntime())
+					ocpErr.AddToStack(fmt.Sprintf("JavaScript callback for event %v failed in %v", self.name, id))
+					err = ocpErr
+
+				} else {
+					err = newInternalError(Error_Fatal, fmt.Sprintf("Unknown error occured during JavaScript callback of %v: %v", self.name, e), e)
+				}
 			}
 		}()
 
@@ -292,7 +303,7 @@ func (self *eventHandler) HasEvent(name string) bool {
 func (self *eventHandler) AddEvent(evt Event) error {
 
 	if self.HasEvent(evt.GetName()) {
-		return fmt.Errorf("Event already exists")
+		return newInternalError(Error_Operation_Invalid, "Event already exists")
 	}
 
 	self.events[evt.GetName()] = evt
@@ -325,7 +336,7 @@ func (self *eventHandler) SetupJSEvents(jsobj *goja.Object) error {
 			id := call.This.ToObject(evt.GetJSRuntime()).Get("identifier").Export()
 			identifier, ok := id.(Identifier)
 			if !ok {
-				panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
+				panic(evt.GetJSRuntime().ToValue(newInternalError(Error_Fatal, fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))))
 			}
 			return self.GetEvent(evt.GetName()).GetJSObject(identifier)
 		})

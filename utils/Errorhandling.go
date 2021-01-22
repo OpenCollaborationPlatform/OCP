@@ -8,10 +8,10 @@ import (
 
 type OCPErrorClass string
 
-var Internal = OCPErrorClass("Internal")       //Fatal internal errors
-var Connection = OCPErrorClass("Connection")   //Problems with any connection to the outside world
-var Application = OCPErrorClass("Application") //Problems that occure based on current application state
-var Type = OCPErrorClass("Type")
+var Internal = OCPErrorClass("internal")       //Fatal internal errors
+var Connection = OCPErrorClass("connection")   //Problems with any connection to the outside world
+var Application = OCPErrorClass("application") //Problems that occure based on current application state
+var Type = OCPErrorClass("type")
 
 //the default error used for all OCP related errors
 type OCPError interface {

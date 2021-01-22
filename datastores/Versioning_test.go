@@ -23,7 +23,8 @@ func TestVersioning(t *testing.T) {
 		defer store.Commit()
 
 		name := makeSetFromString("testset")
-		mngr := NewVersionManager(name, store)
+		mngr, err := NewVersionManager(name, store)
+		So(err, ShouldBeNil)
 
 		Convey("handling sets should behave normal", func() {
 

@@ -30,7 +30,7 @@ func IdentifierFromData(data []byte) (Identifier, error) {
 	var result Identifier
 	err := json.Unmarshal(data, &result)
 	if err != nil {
-		return Identifier{}, utils.StackError(err, "Unable to recreate Identifier from data")
+		return Identifier{}, wrapInternalError(err, Error_Fatal)
 	}
 	return result, nil
 }
@@ -39,11 +39,11 @@ func IdentifierFromEncoded(code string) (Identifier, error) {
 
 	parts := strings.Split(code, "_")
 	if len(parts) != 3 || parts[0] != "ocp" || parts[1] != "id" {
-		return Identifier{}, fmt.Errorf("Invalid ecoded identifier")
+		return Identifier{}, newInternalError(Error_Fatal, "Invalid ecoded identifier")
 	}
 	data, err := base58.Decode(parts[2])
 	if err != nil {
-		return Identifier{}, utils.StackError(err, "Unable to decode strig to Identifier data")
+		return Identifier{}, wrapInternalError(err, Error_Fatal)
 	}
 	return IdentifierFromData(data)
 }
@@ -51,7 +51,7 @@ func IdentifierFromEncoded(code string) (Identifier, error) {
 func identifierDecode(code string) (interface{}, error) {
 	data, err := base58.Decode(code)
 	if err != nil {
-		return Identifier{}, utils.StackError(err, "Unable to decode strig to Identifier data")
+		return Identifier{}, wrapInternalError(err, Error_Fatal)
 	}
 	return IdentifierFromData(data)
 }

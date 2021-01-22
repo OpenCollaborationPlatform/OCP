@@ -98,7 +98,7 @@ func NewDataType(val interface{}) (DataType, error) {
 	case string:
 		result = DataType{val.(string)}
 		if !result.IsValid() {
-			return DataType{}, fmt.Errorf("Provided string is not valid DataType")
+			return DataType{}, newUserError(Error_Type, "Provided string is not valid DataType")
 		}
 
 	case DataType:
@@ -110,7 +110,7 @@ func NewDataType(val interface{}) (DataType, error) {
 		if ast.Object != nil {
 			data, err := json.Marshal(ast.Object)
 			if err != nil {
-				return DataType{}, utils.StackError(err, "Unable to marshal AST type representation into DataType")
+				return DataType{}, wrapInternalError(err, Error_Fatal)
 			}
 			result = DataType{string(data)}
 
@@ -123,7 +123,7 @@ func NewDataType(val interface{}) (DataType, error) {
 		ast := val.(*astObject)
 		data, err := json.Marshal(ast)
 		if err != nil {
-			return DataType{}, utils.StackError(err, "Unable to marshal AST type representation into DataType")
+			return DataType{}, wrapInternalError(err, Error_Fatal)
 		}
 		result = DataType{string(data)}
 	}
@@ -135,7 +135,7 @@ func DataTypeDecode(code string) (interface{}, error) {
 
 	data, err := base58.Decode(code)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to decode string to DataType")
+		return nil, wrapInternalError(err, Error_Fatal)
 	}
 	return DataType{string(data)}, nil
 }
@@ -143,7 +143,7 @@ func DataTypeDecode(code string) (interface{}, error) {
 func MustNewDataType(val interface{}) DataType {
 	res, err := NewDataType(val)
 	if err != nil {
-		panic(err.Error())
+		return DataType{"var"}
 	}
 	return res
 }
@@ -181,38 +181,38 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 		if self.IsNone() || self.IsVar() {
 			return nil
 		}
-		return fmt.Errorf("wrong object type, got '%T' and expected 'nil'", val)
+		return newUserError(Error_Type, fmt.Sprintf("wrong object type, got '%T' and expected 'nil'", val))
 	}
 
 	//check if the type is correct
 	switch UnifyDataType(val).(type) {
 	case int64:
 		if !self.IsInt() && !self.IsFloat() && !self.IsVar() {
-			return fmt.Errorf(`wrong type, got 'int' and expected '%s'`, self.AsString())
+			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'int' and expected '%s'`, self.AsString()))
 		}
 	case float64:
 		if !self.IsFloat() && !self.IsVar() {
-			return fmt.Errorf(`wrong type, got 'float' and expected '%s'`, self.AsString())
+			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'float' and expected '%s'`, self.AsString()))
 		}
 	case string:
 		if !self.IsString() && !self.IsVar() {
-			return fmt.Errorf(`wrong type, got 'string' and expected '%s'`, self.AsString())
+			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'string' and expected '%s'`, self.AsString()))
 		}
 	case bool:
 		if !self.IsBool() && !self.IsVar() {
-			return fmt.Errorf(`wrong type, got 'bool' and expected '%s'`, self.AsString())
+			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'bool' and expected '%s'`, self.AsString()))
 		}
 	case DataType, *DataType:
 		if !self.IsType() && !self.IsVar() {
-			return fmt.Errorf(`wrong type, got 'type' and expected '%s'`, self.AsString())
+			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'type' and expected '%s'`, self.AsString()))
 		}
 	case utils.Cid, *utils.Cid:
 		if !self.IsRaw() && !self.IsVar() {
-			return fmt.Errorf(`wrong type, got 'raw' and expected '%s'`, self.AsString())
+			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'raw' and expected '%s'`, self.AsString()))
 		}
 	default:
 		if !self.IsVar() {
-			return fmt.Errorf("Unknown type: %T", val)
+			return newUserError(Error_Type, fmt.Sprintf("Unknown type: %T", val))
 		}
 	}
 
@@ -222,13 +222,13 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 func (self DataType) complexAsAst() (*astObject, error) {
 
 	if !self.IsComplex() {
-		return nil, fmt.Errorf("DataType is not complex, convertion into AST not possible")
+		return nil, newInternalError(Error_Operation_Invalid, "DataType is not complex, convertion into AST not possible")
 	}
 
 	var astObj *astObject
 	err := json.Unmarshal([]byte(self.Value), &astObj)
 	if err != nil {
-		return nil, utils.StackError(err, "Passed string is not a valid type desciption: unable to unmarshal")
+		return nil, wrapInternalError(err, Error_Fatal)
 	}
 	return astObj, nil
 }

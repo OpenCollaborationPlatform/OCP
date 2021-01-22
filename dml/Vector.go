@@ -90,7 +90,7 @@ func (self *vector) Get(id Identifier, idx int64) (interface{}, error) {
 
 	length, _ := self.Length(id)
 	if idx >= length || idx < 0 {
-		return nil, fmt.Errorf("Index out of bounds: %v", idx)
+		return nil, newUserError(Error_Key_Not_Available, "Index out of bounds: %v", idx)
 	}
 
 	//db access for entries
@@ -108,7 +108,7 @@ func (self *vector) Get(id Identifier, idx int64) (interface{}, error) {
 		if err == nil {
 			ident, ok := res.(*Identifier)
 			if !ok {
-				err = fmt.Errorf("Stored data not a object, as it should be")
+				err = newInternalError(Error_Fatal, "Stored data not a object, as it should be")
 			} else {
 				res, e := self.rntm.getObjectSet(*ident)
 				if e != nil {
@@ -158,7 +158,7 @@ func (self *vector) Set(id Identifier, idx int64, value interface{}) error {
 
 	length, _ := self.Length(id)
 	if idx >= length || idx < 0 {
-		return fmt.Errorf("Index out of bounds: %v", idx)
+		return newUserError(Error_Key_Not_Available, "Index out of bounds: %v", idx)
 	}
 
 	//check if the type of the value is correct
@@ -169,7 +169,7 @@ func (self *vector) Set(id Identifier, idx int64, value interface{}) error {
 	}
 
 	if dt.IsComplex() {
-		return fmt.Errorf("Compley datatypes cannot be set")
+		return newUserError(Error_Operation_Invalid, "Compley datatypes cannot be set")
 	}
 
 	//make sure to use unified types
@@ -209,7 +209,7 @@ func (self *vector) set(id Identifier, dt DataType, idx int64, value interface{}
 		err = dbEntries.Write(idx, value)
 	}
 
-	return err
+	return utils.StackOnError(err, "Unable to access DB")
 }
 
 //creates a new entry with a all new type, returns the index of the new one
@@ -219,11 +219,11 @@ func (self *vector) Append(id Identifier, value interface{}) (int64, error) {
 	dt := self.entryDataType(id)
 	err := dt.MustBeTypeOf(value)
 	if err != nil {
-		return -1, utils.StackError(err, "Unable to append vector entry")
+		return -1, utils.StackError(err, "Value is wrong type")
 	}
 
 	if dt.IsComplex() {
-		return 0, fmt.Errorf("Complex datatypes cannot be appended, use AppendNew")
+		return 0, newUserError(Error_Operation_Invalid, "Complex datatypes cannot be appended, use AppendNew")
 	}
 
 	//make sure to use unified types
@@ -276,7 +276,7 @@ func (self *vector) AppendNew(id Identifier) (interface{}, error) {
 		err = dbEntries.Write(length, result)
 	}
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to write new object to vector")
+		return nil, utils.StackError(err, "Unable to access DB")
 	}
 	//and increase length
 	_, err = self.changeLength(id, 1)
@@ -308,7 +308,7 @@ func (self *vector) Insert(id Identifier, idx int64, value interface{}) error {
 
 	length, _ := self.Length(id)
 	if idx >= length || idx < 0 {
-		return fmt.Errorf("Index out of bounds: %v", idx)
+		return newUserError(Error_Key_Not_Available, "Index out of bounds: %v", idx)
 	}
 
 	//make sure to use unified types
@@ -339,7 +339,7 @@ func (self *vector) InsertNew(id Identifier, idx int64) (interface{}, error) {
 
 	length, _ := self.Length(id)
 	if idx >= length || idx < 0 {
-		return nil, fmt.Errorf("Index out of bounds: %v", idx)
+		return nil, newUserError(Error_Key_Not_Available, "Index out of bounds: %v", idx)
 	}
 
 	//event handling
@@ -367,7 +367,7 @@ func (self *vector) Remove(id Identifier, idx int64) error {
 
 	length, _ := self.Length(id)
 	if idx >= length || idx < 0 {
-		return fmt.Errorf("Index out of bounds: %v", idx)
+		return newUserError(Error_Key_Not_Available, "Index out of bounds: %v", idx)
 	}
 
 	//event handling
@@ -446,7 +446,7 @@ func (self *vector) Swap(id Identifier, idx1 int64, idx2 int64) error {
 		return err
 	}
 	if idx1 >= length || idx2 >= length {
-		return fmt.Errorf("Both indices need to be within vector range")
+		return newUserError(Error_Key_Not_Available, "Both indices need to be within vector range")
 	}
 
 	//event handling
@@ -522,7 +522,7 @@ func (self *vector) Move(id Identifier, oldIdx int64, newIdx int64) error {
 		return err
 	}
 	if oldIdx >= length || newIdx >= length {
-		return fmt.Errorf("Both indices need to be within vector range")
+		return newUserError(Error_Key_Not_Available, "Both indices need to be within vector range")
 	}
 
 	//event handling
@@ -743,10 +743,14 @@ func (self *vector) GetSubobjectByName(id Identifier, name string, bhvr bool) (d
 		return set, nil
 	}
 
+	if !self.entryDataType(id).IsComplex() {
+		return dmlSet{}, newUserError(Error_Type, "Vector does not hold objects")
+	}
+
 	//let's see if it is a index
 	i, err := strconv.ParseInt(name, 10, 64)
 	if err != nil {
-		return dmlSet{}, fmt.Errorf("No such idx available")
+		return dmlSet{}, newUserError(Error_Key_Not_Available, "No such idx available")
 	}
 
 	res, err := self.Get(id, i)
@@ -756,7 +760,7 @@ func (self *vector) GetSubobjectByName(id Identifier, name string, bhvr bool) (d
 
 	result, ok := res.(dmlSet)
 	if !ok {
-		return dmlSet{}, fmt.Errorf("Index is %v not a object", name)
+		return dmlSet{}, newInternalError(Error_Fatal, "Index is %v not a object", name)
 	}
 
 	return result, nil

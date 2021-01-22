@@ -141,7 +141,7 @@ func (self *graph) dbToType(key interface{}, dt DataType) (interface{}, error) {
 
 		id, ok := key.(*Identifier)
 		if !ok {
-			return nil, fmt.Errorf("Invalid identifier stored")
+			return nil, newInternalError(Error_Fatal, "Complex datatype, but key is not identifier")
 		}
 		set, err := self.rntm.getObjectSet(*id)
 		if err != nil {
@@ -190,14 +190,14 @@ func (self *graph) Nodes(id Identifier) ([]interface{}, error) {
 
 	keys, err := dbNodes.GetKeys()
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to get keys from DB map")
 	}
 	result := make([]interface{}, len(keys))
 	for i, key := range keys {
 
 		typeVal, err := self.dbToType(key, self.nodeDataType())
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to get convert key data to type")
 		}
 
 		result[i] = typeVal
@@ -238,7 +238,7 @@ func (self *graph) AddNode(id Identifier, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	return dbNodes.Write(dbentry, struct{}{})
+	return utils.StackOnError(dbNodes.Write(dbentry, struct{}{}), "Unable to write to DB")
 }
 
 //creates a new entry with a all new type, returns the new node
@@ -252,7 +252,7 @@ func (self *graph) NewNode(id Identifier) (interface{}, error) {
 	if dt.IsComplex() {
 		set, err := self.rntm.constructObjectSet(dt, id)
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to append new object to graph: construction failed")
+			return nil, utils.StackError(err, "Construction of object failed")
 		}
 		result = set
 
@@ -279,7 +279,7 @@ func (self *graph) NewNode(id Identifier) (interface{}, error) {
 func (self *graph) RemoveNode(id Identifier, value interface{}) error {
 
 	if has, _ := self.HasNode(id, value); !has {
-		return fmt.Errorf("No such node available, cannot remove")
+		return newUserError(Error_Key_Not_Available, "No such node available, cannot remove")
 	}
 
 	//make sure to use unified types
@@ -295,7 +295,7 @@ func (self *graph) RemoveNode(id Identifier, value interface{}) error {
 	dbentry := self.typeToDB(value, dt)
 	err = dbNodes.Remove(dbentry)
 	if err != nil {
-		return utils.StackError(err, "unable to remove node from graph")
+		return utils.StackError(err, "Unable to remove from DB")
 	}
 
 	//remove all edges that connect to this node
@@ -305,19 +305,24 @@ func (self *graph) RemoveNode(id Identifier, value interface{}) error {
 	}
 	keys, err := dbEdges.GetKeys()
 	if err != nil {
-		return fmt.Errorf("Unable to access edges")
+		return utils.StackError(err, "Unable to get edge keys from DB")
 	}
 	for _, key := range keys {
 
 		//check if this is the edge
 		data, err := dbEdges.Read(key)
 		if err != nil {
-			return utils.StackError(err, "Unable to access edge, wrong type stored")
+			return utils.StackError(err, "Unable to read edge from DB")
 		}
-		edge := data.(*graphEdge)
+		edge, ok := data.(*graphEdge)
+		if !ok {
+			return newInternalError(Error_Fatal, "Edge stored as wrong datatype")
+		}
 
 		if edge.Source == value || edge.Target == value {
-			dbEdges.Remove(key)
+			if err := dbEdges.Remove(key); err != nil {
+				return utils.StackError(err, "Unable to remove edge from DB")
+			}
 		}
 	}
 
@@ -330,7 +335,7 @@ func (self *graph) AddEdge(id Identifier, source, target, value interface{}) err
 	dt := self.edgeDataType()
 	err := dt.MustBeTypeOf(value)
 	if err != nil {
-		return utils.StackError(err, "Cannot add node, has wrong type")
+		return utils.StackError(err, "Value has wrong type for edge")
 	}
 
 	//make sure to use unified types
@@ -341,19 +346,19 @@ func (self *graph) AddEdge(id Identifier, source, target, value interface{}) err
 	//check if we have the two nodes
 	hassource, err := self.HasNode(id, source)
 	if err != nil {
-		return utils.StackError(err, "Source node is of wrong type")
+		return utils.StackError(err, "Checking for source node failed")
 	}
 	hastarget, err := self.HasNode(id, target)
 	if err != nil {
-		return utils.StackError(err, "Target node is of wrong type")
+		return utils.StackError(err, "Checking for target node failed")
 	}
 	if !hassource || !hastarget {
-		return fmt.Errorf("Source and target nodes must be available, but are not")
+		return newUserError(Error_Key_Not_Available, "Source and target nodes must be available, but are not")
 	}
 
 	//check if edge already exists
 	if has, _ := self.HasEdgeBetween(id, source, target); has {
-		return fmt.Errorf("Edge does already exist")
+		return newUserError(Error_Operation_Invalid, "Edge does already exist")
 	}
 
 	//write
@@ -363,7 +368,7 @@ func (self *graph) AddEdge(id Identifier, source, target, value interface{}) err
 	}
 	dbentry := self.typeToDB(value, dt)
 	edge := graphEdge{source, target}
-	return dbEdges.Write(dbentry, edge)
+	return utils.StackOnError(dbEdges.Write(dbentry, edge), "Unable to write into DB")
 }
 
 //creates a new entry with a all new type, returns the new edge
@@ -372,14 +377,14 @@ func (self *graph) NewEdge(id Identifier, source, target interface{}) (interface
 	//check if we have the two nodes
 	hassource, err := self.HasNode(id, source)
 	if err != nil {
-		return nil, utils.StackError(err, "Source node is of wrong type")
+		return nil, utils.StackError(err, "Checking for source node failed")
 	}
 	hastarget, err := self.HasNode(id, target)
 	if err != nil {
-		return nil, utils.StackError(err, "Target node is of wrong type")
+		return nil, utils.StackError(err, "Checking for target node failed")
 	}
 	if !hassource || !hastarget {
-		return nil, fmt.Errorf("Source and target nodes must be available, but are not")
+		return nil, newUserError(Error_Key_Not_Available, "Source and target nodes must be available, but are not")
 	}
 
 	//make sure to use unified types
@@ -388,7 +393,7 @@ func (self *graph) NewEdge(id Identifier, source, target interface{}) (interface
 
 	//check if edge already exists
 	if has, _ := self.HasEdgeBetween(id, source, target); has {
-		return nil, fmt.Errorf("Edge does already exist")
+		return nil, newUserError(Error_Operation_Invalid, "Edge does already exist")
 	}
 
 	//create a new entry if possible
@@ -397,7 +402,7 @@ func (self *graph) NewEdge(id Identifier, source, target interface{}) (interface
 	if dt.IsComplex() {
 		set, err := self.rntm.constructObjectSet(dt, id)
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to append new object to graph: construction failed")
+			return nil, utils.StackError(err, "Construction of edge object failed")
 		}
 		result = set
 
@@ -448,7 +453,7 @@ func (self *graph) RemoveEdge(id Identifier, value interface{}) error {
 	}
 	dbentry := self.typeToDB(value, dt)
 	err = dbEdges.Remove(dbentry)
-	return err
+	return utils.StackOnError(err, "Unable to remove from DB")
 }
 
 func (self *graph) RemoveEdgeBetween(id Identifier, source, target interface{}) error {
@@ -456,14 +461,14 @@ func (self *graph) RemoveEdgeBetween(id Identifier, source, target interface{}) 
 	//check if we have the two nodes
 	hassource, err := self.HasNode(id, source)
 	if err != nil {
-		return utils.StackError(err, "Source node is of wrong type")
+		return utils.StackError(err, "Checking for source node failed")
 	}
 	hastarget, err := self.HasNode(id, target)
 	if err != nil {
-		return utils.StackError(err, "Target node is of wrong type")
+		return utils.StackError(err, "Checking for target node failed")
 	}
 	if !hassource || !hastarget {
-		return fmt.Errorf("Source and target nodes must be available, but are not")
+		return newUserError(Error_Key_Not_Available, "Source and target nodes must be available, but are not")
 	}
 
 	//make sure to use unified types
@@ -477,7 +482,7 @@ func (self *graph) RemoveEdgeBetween(id Identifier, source, target interface{}) 
 	}
 	keys, err := dbEdges.GetKeys()
 	if err != nil {
-		return utils.StackError(err, "Unable to remove edge")
+		return utils.StackError(err, "Unable to get edge keys from DB")
 	}
 
 	for _, key := range keys {
@@ -485,7 +490,7 @@ func (self *graph) RemoveEdgeBetween(id Identifier, source, target interface{}) 
 		//check if this is the edge to remove
 		data, err := dbEdges.Read(key)
 		if err != nil {
-			return utils.StackError(err, "Unable to access edge, wrong type stored")
+			return utils.StackError(err, "Unable to read edge from DB")
 		}
 		edge := data.(*graphEdge)
 
@@ -493,11 +498,11 @@ func (self *graph) RemoveEdgeBetween(id Identifier, source, target interface{}) 
 			(!self.isDirected() && (edge.Source == target && edge.Target == source)) {
 
 			//remove it!
-			return dbEdges.Remove(key)
+			return utils.StackOnError(dbEdges.Remove(key), "Umable to remove key from DB")
 		}
 	}
 
-	return fmt.Errorf("No edge between the two nodes, cannot remove")
+	return newUserError(Error_Operation_Invalid, "No edge between the two nodes, cannot remove")
 }
 
 func (self *graph) HasEdge(id Identifier, value interface{}) (bool, error) {
@@ -523,14 +528,14 @@ func (self *graph) HasEdgeBetween(id Identifier, source, target interface{}) (bo
 	//check if we have the two nodes
 	hassource, err := self.HasNode(id, source)
 	if err != nil {
-		return false, utils.StackError(err, "Source node is of wrong type")
+		return false, utils.StackError(err, "Checking for source node failed")
 	}
 	hastarget, err := self.HasNode(id, target)
 	if err != nil {
-		return false, utils.StackError(err, "Target node is of wrong type")
+		return false, utils.StackError(err, "Checking for target node failed")
 	}
 	if !hassource || !hastarget {
-		return false, fmt.Errorf("Source and target nodes must be available, but are not")
+		return false, newUserError(Error_Operation_Invalid, "Source and target nodes must be available, but are not")
 	}
 
 	//make sure to use unified types
@@ -544,7 +549,7 @@ func (self *graph) HasEdgeBetween(id Identifier, source, target interface{}) (bo
 	}
 	keys, err := dbEdges.GetKeys()
 	if err != nil {
-		return false, fmt.Errorf("Unable to access edges")
+		return false, utils.StackError(err, "Unable to access edge keys in DB")
 	}
 
 	for _, key := range keys {
@@ -552,9 +557,12 @@ func (self *graph) HasEdgeBetween(id Identifier, source, target interface{}) (bo
 		//check if this is the edge
 		data, err := dbEdges.Read(key)
 		if err != nil {
-			return false, utils.StackError(err, "Unable to access edge, wrong type stored")
+			return false, utils.StackError(err, "Unable to read edge from DB")
 		}
-		edge := data.(*graphEdge)
+		edge, ok := data.(*graphEdge)
+		if !ok {
+			return false, newInternalError(Error_Fatal, "Graph edge stored in wrong type")
+		}
 
 		if (edge.Source == source && edge.Target == target) ||
 			(!self.isDirected() && (edge.Source == target && edge.Target == source)) {
@@ -572,11 +580,11 @@ func (self *graph) Edge(id Identifier, source, target interface{}) (interface{},
 	ndt := self.nodeDataType()
 	err := ndt.MustBeTypeOf(source)
 	if err != nil {
-		return nil, utils.StackError(err, "Source node has wrong type")
+		return nil, utils.StackError(err, "Checking for target node failed")
 	}
 	err = ndt.MustBeTypeOf(target)
 	if err != nil {
-		return nil, utils.StackError(err, "Target node has wrong type")
+		return nil, utils.StackError(err, "Checking for target node failed")
 	}
 
 	//make sure to use unified types
@@ -590,7 +598,7 @@ func (self *graph) Edge(id Identifier, source, target interface{}) (interface{},
 	}
 	keys, err := dbEdges.GetKeys()
 	if err != nil {
-		return nil, fmt.Errorf("Unable to access edges")
+		return nil, utils.StackError(err, "Unable to access edge keys in DB")
 	}
 
 	for _, key := range keys {
@@ -598,7 +606,7 @@ func (self *graph) Edge(id Identifier, source, target interface{}) (interface{},
 		//check if this is the edge
 		data, err := dbEdges.Read(key)
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to access edge, wrong type stored")
+			return nil, utils.StackError(err, "Unable to read edge from DB")
 		}
 		edge := data.(*graphEdge)
 
@@ -609,7 +617,7 @@ func (self *graph) Edge(id Identifier, source, target interface{}) (interface{},
 		}
 	}
 
-	return nil, fmt.Errorf("No edge between nodes")
+	return nil, newUserError(Error_Operation_Invalid, "No edge between nodes")
 }
 
 //*****************************************************************************
@@ -622,10 +630,10 @@ func (self *graph) FromNode(id Identifier, node interface{}) ([]interface{}, err
 	//check if node exists
 	has, err := self.HasNode(id, node)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Checking for node failed")
 	}
 	if !has {
-		return nil, fmt.Errorf("Node does not exist")
+		return nil, newUserError(Error_Key_Not_Available, "Node does not exist")
 	}
 
 	//make sure to use unified types
@@ -653,10 +661,10 @@ func (self *graph) ToNode(id Identifier, node interface{}) ([]interface{}, error
 	//check if node exists
 	has, err := self.HasNode(id, node)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Checking for node failed")
 	}
 	if !has {
-		return nil, fmt.Errorf("Node does not exist: %v", node)
+		return nil, newUserError(Error_Key_Not_Available, "Node does not exist")
 	}
 
 	//make sure to use unified types
@@ -679,7 +687,7 @@ func (self *graph) ToNode(id Identifier, node interface{}) ([]interface{}, error
 func (self *graph) Sorted(id Identifier) ([]interface{}, error) {
 
 	if !self.isDirected() {
-		return nil, fmt.Errorf("This is only available for directed graphs")
+		return nil, newUserError(Error_Operation_Invalid, "Sorting is only available for directed graphs")
 	}
 
 	gg, _ := self.getGonumDirected(id)
@@ -752,10 +760,10 @@ func (self *graph) ReachableNodes(id Identifier, node interface{}) ([]interface{
 	//check if node exists
 	has, err := self.HasNode(id, node)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Checking for node failed")
 	}
 	if !has {
-		return nil, fmt.Errorf("Node does not exist")
+		return nil, newUserError(Error_Key_Not_Available, "Node does not exist")
 	}
 
 	//make sure to use unified types
@@ -792,7 +800,7 @@ func (self *graph) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 	//get default objects
 	res, err := self.DataImpl.GetSubobjects(id, bhvr)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Get Data Subobjects failed")
 	}
 
 	//handle nodes
@@ -839,6 +847,8 @@ func (self *graph) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 					res = append(res, set)
 				}
 			}
+		} else {
+			return nil, utils.StackError(err, "Unable to access edge keys in DB")
 		}
 	}
 

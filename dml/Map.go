@@ -67,7 +67,7 @@ func (self *mapImpl) dbToType(key interface{}, dt DataType) (interface{}, error)
 
 		id, ok := key.(*Identifier)
 		if !ok {
-			return nil, fmt.Errorf("complex db entry needs to be identifier")
+			return nil, newInternalError(Error_Fatal, "Complex datatype, but key is not identifier")
 		}
 		set, err := self.rntm.getObjectSet(*id)
 		if err != nil {
@@ -116,7 +116,7 @@ func (self *mapImpl) Length(id Identifier) (int64, error) {
 
 	keys, err := dbEntries.GetKeys()
 	if err != nil {
-		return -1, err
+		return -1, utils.StackError(err, "Unable to read keys from DB")
 	}
 	return int64(len(keys)), nil
 }
@@ -131,7 +131,7 @@ func (self *mapImpl) Keys(id Identifier) ([]interface{}, error) {
 	kdt := self.keyDataType(id)
 	keys, err := dbEntries.GetKeys()
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to read keys from DB")
 	}
 	result := make([]interface{}, len(keys))
 	for i, key := range keys {
@@ -179,14 +179,14 @@ func (self *mapImpl) Get(id Identifier, key interface{}) (interface{}, error) {
 	//check if key is availbale
 	dbkey := self.typeToDB(key, kdt)
 	if !dbEntries.HasKey(dbkey) {
-		return nil, fmt.Errorf("Key is not available in Map")
+		return nil, newUserError(Error_Key_Not_Available, "Key is not available in Map")
 	}
 
 	//check if the type of the value is correct
 	dt := self.valueDataType(id)
 	res, err := dbEntries.Read(dbkey)
 	if err != nil {
-		return nil, utils.StackError(err, "Cannot access db")
+		return nil, utils.StackError(err, "Failed to read entry in DB")
 	}
 
 	return self.dbToType(res, dt)
@@ -198,26 +198,26 @@ func (self *mapImpl) Set(id Identifier, key interface{}, value interface{}) erro
 	kdt := self.keyDataType(id)
 	err := kdt.MustBeTypeOf(key)
 	if err != nil {
-		return utils.StackError(err, "Cannot set map entry, key has wrong type")
+		return utils.StackError(err, "Key has wrong type")
 	}
 
 	//check if the type of the value is correct
 	dt := self.valueDataType(id)
 	err = dt.MustBeTypeOf(value)
 	if err != nil {
-		return utils.StackError(err, "Cannot set map entry, value has wrong type")
+		return utils.StackError(err, "Value has wrong type")
 	}
 
 	//check for complex, we do no set those (keep hirarchy)
 	if dt.IsComplex() {
-		return fmt.Errorf("Complex datatypes cannot be set, use New")
+		return newUserError(Error_Operation_Invalid, "Complex datatypes cannot be set, use New")
 
 	}
 
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit(id)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Abort operation due to event onBeforeChange error")
 	}
 
 	err = self.set(id, key, value)
@@ -246,17 +246,17 @@ func (self *mapImpl) set(id Identifier, key interface{}, value interface{}) erro
 
 			err := dbEntries.Write(dbkey, set.id)
 			if err != nil {
-				return utils.StackError(err, "Cannot set map entry")
+				return utils.StackError(err, "Unable to write entry into DB")
 			}
 
 		} else if ident, ok := value.(Identifier); ok {
 			err := dbEntries.Write(dbkey, ident)
 			if err != nil {
-				return utils.StackError(err, "Cannot set map entry")
+				return utils.StackError(err, "Unable to write entry into DB")
 			}
 
 		} else {
-			return fmt.Errorf("Complex types need a identifier or dmlSet for set function")
+			return newInternalError(Error_Fatal, "Complex types need a identifier or dmlSet for set function")
 		}
 
 	} else if dt.IsType() {
@@ -264,14 +264,14 @@ func (self *mapImpl) set(id Identifier, key interface{}, value interface{}) erro
 		val, _ := value.(DataType)
 		err := dbEntries.Write(dbkey, val.AsString())
 		if err != nil {
-			return utils.StackError(err, "Cannot set map entry")
+			return utils.StackError(err, "Unable to write entry into DB")
 		}
 
 	} else {
 		//plain types remain
 		err := dbEntries.Write(dbkey, value)
 		if err != nil {
-			return utils.StackError(err, "Cannot set map entry")
+			return utils.StackError(err, "Unable to write entry into DB")
 		}
 	}
 
@@ -285,18 +285,18 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 	kdt := self.keyDataType(id)
 	err := kdt.MustBeTypeOf(key)
 	if err != nil {
-		return nil, utils.StackError(err, "Cannot create new map value, key has wrong type")
+		return nil, utils.StackError(err, "Key has wrong type")
 	}
 
 	//if we already have it we cannot create new!
 	if has, _ := self.Has(id, key); has {
-		return nil, fmt.Errorf("Key exists already, cannot create new object")
+		return nil, newUserError(Error_Operation_Invalid, "Key already exists")
 	}
 
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit(id)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Abort operation due to event onBeforeChange error")
 	}
 
 	//create a new entry
@@ -305,7 +305,7 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 	if dt.IsComplex() {
 		set, err := self.rntm.constructObjectSet(dt, id)
 		if err != nil {
-			return nil, utils.StackError(err, "Unable to append new object to mapImpl: construction failed")
+			return nil, utils.StackError(err, "Construction of new object failed")
 		}
 		//build the object path and set it
 		path, err := self.GetObjectPath(id)
@@ -349,7 +349,7 @@ func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 	kdt := self.keyDataType(id)
 	err := kdt.MustBeTypeOf(key)
 	if err != nil {
-		return utils.StackError(err, "Cannot create new map value, key has wrong type")
+		return utils.StackError(err, "Key has wrong type")
 	}
 
 	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
@@ -360,19 +360,19 @@ func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 	//if we don't have it we cannot remove it!
 	dbkey := self.typeToDB(key, kdt)
 	if !dbEntries.HasKey(dbkey) {
-		return fmt.Errorf("Key does not exist (%v), cannot be removed", key)
+		return newUserError(Error_Key_Not_Available, "Key does not exist", key)
 	}
 
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit(id)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Abort operation due to event onBeforeChange error")
 	}
 
 	//delete the key
 	err = dbEntries.Remove(dbkey)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to remove entry from DB")
 	}
 
 	self.GetEvent("onChanged").Emit(id) //do not return error as setting was already successfull
@@ -402,7 +402,7 @@ func (self *mapImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 
 		keys, err := dbEntries.GetKeys()
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to access keys in DB")
 		}
 		for _, key := range keys {
 
@@ -423,7 +423,7 @@ func (self *mapImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 
 		keys, err := dbEntries.GetKeys()
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Unable to access keys in DB")
 		}
 		for _, key := range keys {
 
@@ -464,7 +464,7 @@ func (self *mapImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) (
 		key = self.typeToDB(name, dt)
 
 	default:
-		return dmlSet{}, fmt.Errorf("Map key type %v does no allow access with %v", dt.AsString(), name)
+		return dmlSet{}, newUserError(Error_Key_Not_Available, fmt.Sprintf("Map key type %v does no allow access with %v", dt.AsString(), name))
 	}
 
 	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
@@ -473,7 +473,7 @@ func (self *mapImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) (
 	}
 
 	if !dbEntries.HasKey(key) {
-		return dmlSet{}, fmt.Errorf("No such key available")
+		return dmlSet{}, newUserError(Error_Key_Not_Available, "No such key available")
 	}
 	val, err := dbEntries.Read(key)
 	if err != nil {
@@ -486,7 +486,7 @@ func (self *mapImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) (
 		return result.(dmlSet), nil
 	}
 
-	return dmlSet{}, fmt.Errorf("%v is not a subobject", name)
+	return dmlSet{}, newUserError(Error_Key_Not_Available, "No such key available", name)
 }
 
 func (self *mapImpl) GetValueByName(id Identifier, name string) (interface{}, error) {
@@ -506,7 +506,7 @@ func (self *mapImpl) GetValueByName(id Identifier, name string) (interface{}, er
 		key = self.typeToDB(name, dt)
 
 	default:
-		return nil, fmt.Errorf("Only int and string keys are accessible by name")
+		return nil, newUserError(Error_Key_Not_Available, "Only int and string keys are accessible by name")
 	}
 
 	res, err := self.Get(id, key)
@@ -536,7 +536,7 @@ func (self *mapImpl) SetObjectPath(id Identifier, path string) error {
 
 		keys, err := dbEntries.GetKeys()
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to read keys from DB")
 		}
 		for _, key := range keys {
 
@@ -552,7 +552,7 @@ func (self *mapImpl) SetObjectPath(id Identifier, path string) error {
 			//get the object and set the path
 			val, err := dbEntries.Read(key)
 			if err != nil {
-				return err
+				return utils.StackError(err, "Unable to read key from DB")
 			}
 			objId, ok := val.(*Identifier)
 			if ok {

@@ -6,6 +6,7 @@ import (
 	"reflect"
 
 	"github.com/dop251/goja"
+	"github.com/iancoleman/strcase"
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 )
@@ -16,6 +17,89 @@ var (
 
 func init() {
 	gob.Register(new(User))
+}
+
+/*Error handling*/
+
+const Error_Arguments_Wrong = "arguments_wrong"
+const Error_Key_Not_Available = "key_not_available"
+const Error_Setup_Invalid = "setup_invalid"
+const Error_Fatal = "fatal_problem"
+const Error_Operation_Invalid = "operation_invalid"
+const Error_Type = "type"
+const Error_Syntax = "syntax_error"
+const Error_Compiler = "compilation_failed"
+const Error_Filesystem = "filesystem_not_accessible"
+
+func newInternalError(reason, msg string, args ...interface{}) utils.OCPError {
+	err := utils.NewError(utils.Internal, "runtime", reason, args)
+	if msg != "" {
+		err.AddToStack(msg)
+	}
+	return err
+}
+
+func wrapInternalError(err error, reason string) error {
+	if err != nil {
+		return newInternalError(reason, err.Error())
+	}
+	return err
+}
+
+func newUserError(reason, msg string, args ...interface{}) utils.OCPError {
+	err := utils.NewError(utils.Application, "runtime", reason, args)
+	if msg != "" {
+		err.AddToStack(msg)
+	}
+	return err
+}
+
+func newSetupError(reason, msg string, args ...interface{}) utils.OCPError {
+	err := utils.NewError(utils.Application, "setup", reason, args)
+	if msg != "" {
+		err.AddToStack(msg)
+	}
+	return err
+}
+
+func wrapSetupError(err error, reason string) error {
+	if err != nil {
+		return newSetupError(reason, err.Error())
+	}
+	return err
+}
+
+//Extracts all standart JavaScript errors from goja error values
+func wrapJSError(err error, vm *goja.Runtime) utils.OCPError {
+
+	if err == nil {
+		return nil
+	}
+
+	var ocpErr utils.OCPError = nil
+	if ex, ok := err.(*goja.Exception); ok {
+
+		//first check if it is a JS object based on "Error"
+		if obj := ex.Value().ToObject(vm); obj != nil && obj.ClassName() == "Error" {
+			reason := obj.Get("name").Export().(string)
+			ocpErr = utils.NewError(utils.Application, "javascript", strcase.ToSnake(reason), ex.Value().Export())
+
+		} else {
+			ocpErr = utils.NewError(utils.Application, "javascript", "user_exception", ex.Value().Export())
+		}
+
+	} else if _, ok := err.(*goja.CompilerSyntaxError); ok {
+		ocpErr = utils.NewError(utils.Application, "javascript", "syntax_error")
+
+	} else if _, ok := err.(*goja.CompilerReferenceError); ok {
+		ocpErr = utils.NewError(utils.Application, "javascript", "reference_error")
+
+	} else {
+		ocpErr = utils.NewError(utils.Application, "unknown", "unknown_error")
+	}
+
+	ocpErr.AddToStack(err.Error())
+	return ocpErr
 }
 
 //little helper to combine a object (logic) and a Identifier (database access)

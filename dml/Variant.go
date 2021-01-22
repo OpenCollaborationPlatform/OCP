@@ -2,8 +2,6 @@
 package dml
 
 import (
-	"fmt"
-
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 )
@@ -46,7 +44,7 @@ func (self *variant) SetValue(id Identifier, value interface{}) error {
 	dt := self.getDataType(id)
 	err := dt.MustBeTypeOf(value)
 	if err != nil {
-		return utils.StackError(err, "Unable to set variant data")
+		return utils.StackError(err, "Value is invalid type")
 	}
 
 	//make sure to use unified types
@@ -55,7 +53,7 @@ func (self *variant) SetValue(id Identifier, value interface{}) error {
 	//event handling
 	err = self.GetEvent("onBeforeChange").Emit(id)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Event onBeforeChange failed")
 	}
 
 	var dbValue datastore.ValueVersioned
@@ -64,7 +62,7 @@ func (self *variant) SetValue(id Identifier, value interface{}) error {
 	if err == nil {
 		if dt.IsComplex() {
 
-			return fmt.Errorf("Unable to set value for complex datatypes")
+			return newUserError(Error_Operation_Invalid, "Unable to set value for complex datatypes")
 
 		} else if dt.IsType() {
 			val, _ := value.(DataType)
@@ -77,7 +75,7 @@ func (self *variant) SetValue(id Identifier, value interface{}) error {
 	}
 
 	if err != nil {
-		return utils.StackError(err, "Unable to write variant")
+		return utils.StackError(err, "Unable to write to DB")
 	}
 
 	self.GetEvent("onValueChanged").Emit(id)
@@ -91,7 +89,7 @@ func (self *variant) GetValue(id Identifier) (interface{}, error) {
 
 	dbValue, err := self.GetDBValueVersioned(id, variantKey)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to access DB for reading variant")
+		return nil, utils.StackError(err, "Unable to access DB")
 	}
 
 	//if no value was set before we just return the default values!
@@ -105,7 +103,7 @@ func (self *variant) GetValue(id Identifier) (interface{}, error) {
 		var err error
 		result, err = self.getStoredObject(id)
 		if err != nil {
-			return nil, utils.StackError(err, "Invalid object stored in variant")
+			return nil, utils.StackError(err, "Invalid object stored")
 		}
 
 	} else if dt.IsType() {
@@ -138,7 +136,7 @@ func (self *variant) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 	if dt.IsComplex() {
 		obj, err := self.getStoredObject(id)
 		if err != nil {
-			return nil, err
+			return nil, utils.StackError(err, "Invalid object stored")
 		}
 		return append(objs, obj), nil
 	}
@@ -157,7 +155,7 @@ func (self *variant) GetSubobjectByName(id Identifier, name string, bhvr bool) (
 	if dt.IsComplex() {
 		obj, err := self.getStoredObject(id)
 		if err != nil {
-			return dmlSet{}, err
+			return dmlSet{}, utils.StackError(err, "Invalid object stored")
 		}
 
 		if obj.id.Name == name {
@@ -165,7 +163,7 @@ func (self *variant) GetSubobjectByName(id Identifier, name string, bhvr bool) (
 		}
 	}
 
-	return dmlSet{}, fmt.Errorf("Unable to find object with given name")
+	return dmlSet{}, newUserError(Error_Key_Not_Available, "No child with name available")
 }
 
 func (self *variant) PropertyChanged(id Identifier, name string) error {
@@ -176,7 +174,7 @@ func (self *variant) PropertyChanged(id Identifier, name string) error {
 		//assumes old and new value have same datatype
 		dbValue, e := self.GetDBValueVersioned(id, variantKey)
 		if e != nil {
-			return utils.StackError(e, "Unable to access DB for reading variant")
+			return utils.StackError(e, "Unable to access DB")
 		}
 
 		dt := self.getDataType(id)
@@ -184,7 +182,7 @@ func (self *variant) PropertyChanged(id Identifier, name string) error {
 		if dt.IsComplex() {
 			set, err := self.rntm.constructObjectSet(dt, id)
 			if err != nil {
-				return utils.StackError(err, "Unable to setup variant object: construction failed")
+				return utils.StackError(err, "Construction of object failed")
 			}
 			err = dbValue.Write(set.id)
 
@@ -270,7 +268,7 @@ func (self *variant) getStoredObject(id Identifier) (dmlSet, error) {
 
 	dbValue, err := self.GetDBValueVersioned(id, variantKey)
 	if err != nil {
-		return dmlSet{}, utils.StackError(err, "Unable to access DB for reading variant")
+		return dmlSet{}, utils.StackError(err, "Unable to access DB")
 	}
 
 	res, err := dbValue.Read()
@@ -280,7 +278,7 @@ func (self *variant) getStoredObject(id Identifier) (dmlSet, error) {
 
 	storeID, ok := res.(*Identifier)
 	if !ok {
-		return dmlSet{}, fmt.Errorf("Stored identifier invalid")
+		return dmlSet{}, newInternalError(Error_Fatal, "Stored identifier invalid")
 	}
 
 	set, err := self.rntm.getObjectSet(*storeID)

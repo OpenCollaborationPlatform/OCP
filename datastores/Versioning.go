@@ -1,9 +1,9 @@
 package datastore
 
 import (
-	"fmt"
-	"github.com/ickby/CollaborationNode/utils"
 	"math"
+
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/boltdb/bolt"
 )
@@ -58,24 +58,24 @@ type VersionManager interface {
 	GetDatabaseSet(sType StorageType) (Set, error)
 }
 
-func NewVersionManager(key [32]byte, ds *Datastore) VersionManagerImp {
+func NewVersionManager(key [32]byte, ds *Datastore) (VersionManagerImp, error) {
 	mngr := VersionManagerImp{key, ds}
 
 	//make sure the default data layout is available
-	ds.boltdb.Update(func(tx *bolt.Tx) error {
+	err := ds.boltdb.Update(func(tx *bolt.Tx) error {
 
 		bucket, err := tx.CreateBucketIfNotExists([]byte("VersionManager"))
 		if err != nil {
-			return err
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		}
 		_, err = bucket.CreateBucketIfNotExists(key[:])
 		if err != nil {
-			return err
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		}
 		return nil
 	})
 
-	return mngr
+	return mngr, err
 }
 
 type VersionManagerImp struct {
@@ -94,7 +94,8 @@ bucket(SetKey) [
 */
 
 func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) (Set, error) {
-	return self.store.GetOrCreateSet(sType, true, self.key)
+	res, err := self.store.GetOrCreateSet(sType, true, self.key)
+	return res, utils.StackOnError(err, "Unable to access or create set")
 }
 
 //VerionedData interface
@@ -124,7 +125,7 @@ func (self *VersionManagerImp) HasUpdates() (bool, error) {
 	//if we have no version yet we have updates to allow to come back to default
 	ups, err := self.HasVersions()
 	if err != nil {
-		return false, utils.StackError(err, "Unable to check for versions and")
+		return false, utils.StackError(err, "Unable to check for versions")
 	}
 
 	updates := !ups
@@ -167,7 +168,7 @@ func (self *VersionManagerImp) ResetHead() error {
 	for _, set := range sets {
 		err := set.ResetHead()
 		if err != nil {
-			return utils.StackError(err, "Unable to reset head")
+			return utils.StackError(err, "Unable to reset head in set")
 		}
 	}
 	return nil
@@ -180,7 +181,7 @@ func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 	sets := self.collectSets()
 	for _, set := range sets {
 
-		if has, _ := set.HasUpdates(); has {
+		if has, err := set.HasUpdates(); has {
 
 			//we need to create and store a new version
 			v, err := set.FixStateAsVersion()
@@ -190,12 +191,15 @@ func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 			version[itos(uint64(set.GetType()))] = itos(uint64(v))
 
 		} else {
+			if err != nil {
+				return VersionID(INVALID), utils.StackError(err, "Unable to check for updates")
+			}
 
 			//having no updates means we are able to reuse the latest version
 			//and don't need to add a new one
 			v, err := set.GetLatestVersion()
 			if err != nil {
-				return v, err
+				return v, utils.StackError(err, "Unable to check for latest version")
 			}
 			version[itos(uint64(set.GetType()))] = itos(uint64(v))
 		}
@@ -214,11 +218,11 @@ func (self *VersionManagerImp) FixStateAsVersion() (VersionID, error) {
 		}
 		intid, err := bucket.NextSequence()
 		if err != nil {
-			return err
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		}
 		err = bucket.Put(itob(intid), data)
 		if err != nil {
-			return err
+			return wrapDSError(err, Error_Bolt_Access_Failure)
 		}
 		id = VersionID(intid)
 		return nil
@@ -237,7 +241,7 @@ func (self *VersionManagerImp) getVersionInfo(id VersionID) (map[string]string, 
 
 		data := bucket.Get(itob(uint64(id)))
 		if data == nil || len(data) == 0 {
-			return fmt.Errorf("Version does not exist")
+			return NewDSError(Error_Key_Not_Existant, "Version does not exist")
 		}
 		res, err := getInterface(data)
 		if err != nil {
@@ -245,7 +249,7 @@ func (self *VersionManagerImp) getVersionInfo(id VersionID) (map[string]string, 
 		}
 		resmap, ok := res.(*map[string]string)
 		if !ok {
-			return fmt.Errorf("Problem with parsing the saved data, type: %T", res)
+			return NewDSError(Error_Invalid_Data, "Problem with parsing the saved data, type: %T", res)
 		}
 		version = *resmap
 		return nil
@@ -268,7 +272,7 @@ func (self *VersionManagerImp) LoadVersion(id VersionID) error {
 		var err error
 		version, err = self.getVersionInfo(id)
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to access version info for %v", id)
 		}
 	}
 
@@ -278,32 +282,30 @@ func (self *VersionManagerImp) LoadVersion(id VersionID) error {
 		if id.IsHead() {
 			err := set.LoadVersion(id)
 			if err != nil {
-				return err
+				return utils.StackError(err, "Unable to load version %v in set", id)
 			}
 
 		} else {
 			data, ok := version[itos(uint64(set.GetType()))]
 			if !ok {
-				return fmt.Errorf("No version saved for the set")
+				return NewDSError(Error_Setup_Incorrectly, "No version saved for the set")
 			}
 			err := set.LoadVersion(VersionID(stoi(data)))
 			if err != nil {
-				return err
+				return utils.StackError(err, "Unable to load version %v in set", data)
 			}
 		}
 	}
 
 	//we write the current version
-	err := self.store.boltdb.Update(func(tx *bolt.Tx) error {
+	return self.store.boltdb.Update(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket([]byte("VersionManager"))
 		bucket = bucket.Bucket(self.key[:])
 
-		bucket.Put(itob(CURRENT), itob(uint64(id)))
-		return nil
+		err := bucket.Put(itob(CURRENT), itob(uint64(id)))
+		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
-
-	return err
 }
 
 func (self *VersionManagerImp) GetLatestVersion() (VersionID, error) {
@@ -330,7 +332,7 @@ func (self *VersionManagerImp) GetLatestVersion() (VersionID, error) {
 	})
 
 	if !found {
-		return VersionID(INVALID), fmt.Errorf("No versions saved yet")
+		return VersionID(INVALID), NewDSError(Error_Operation_Invalid, "No versions saved yet")
 	}
 
 	return VersionID(version), err
@@ -346,7 +348,7 @@ func (self *VersionManagerImp) GetCurrentVersion() (VersionID, error) {
 
 		data := bucket.Get(itob(CURRENT))
 		if data == nil {
-			return fmt.Errorf("Current version invalid: was never set")
+			return NewDSError(Error_Setup_Incorrectly, "Current version invalid: was never set")
 		}
 		current = btoi(data)
 		return nil
@@ -360,7 +362,7 @@ func (self *VersionManagerImp) RemoveVersionsUpTo(ID VersionID) error {
 	sets := self.collectSets()
 	version, err := self.getVersionInfo(ID)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to get versin info for %v", ID)
 	}
 
 	for _, set := range sets {
@@ -369,7 +371,7 @@ func (self *VersionManagerImp) RemoveVersionsUpTo(ID VersionID) error {
 		ival := stoi(val)
 		err := set.RemoveVersionsUpTo(VersionID(ival))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to remove versions in set up to %v", ival)
 		}
 	}
 
@@ -391,7 +393,9 @@ func (self *VersionManagerImp) RemoveVersionsUpTo(ID VersionID) error {
 			return nil
 		})
 		for _, k := range todelete {
-			bucket.Delete(k)
+			if err := bucket.Delete(k); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
 		}
 
 		return nil
@@ -405,7 +409,7 @@ func (self *VersionManagerImp) RemoveVersionsUpFrom(ID VersionID) error {
 	sets := self.collectSets()
 	version, err := self.getVersionInfo(ID)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to get version info for %v", ID)
 	}
 
 	for _, set := range sets {
@@ -414,7 +418,7 @@ func (self *VersionManagerImp) RemoveVersionsUpFrom(ID VersionID) error {
 		ival := stoi(val)
 		err := set.RemoveVersionsUpFrom(VersionID(ival))
 		if err != nil {
-			return err
+			return utils.StackError(err, "Unable to remove versions in set up from %v", ival)
 		}
 	}
 
@@ -436,9 +440,10 @@ func (self *VersionManagerImp) RemoveVersionsUpFrom(ID VersionID) error {
 			return nil
 		})
 		for _, k := range todelete {
-			bucket.Delete(k)
+			if err := bucket.Delete(k); err != nil {
+				return wrapDSError(err, Error_Bolt_Access_Failure)
+			}
 		}
-
 		return nil
 	})
 

@@ -1,14 +1,8 @@
 package dml
 
 import (
-	//	"bytes"
-	//	"fmt"
-
-	"github.com/ickby/CollaborationNode/utils"
-
 	"github.com/alecthomas/participle"
 	"github.com/dop251/goja"
-	//	uuid "github.com/satori/go.uuid"
 )
 
 func SetupGlobals(rntm *Runtime) {
@@ -18,32 +12,32 @@ func SetupGlobals(rntm *Runtime) {
 
 		//get the type description, which must be passed as argument
 		if len(call.Arguments) != 1 {
-			panic("Wrong arguments: Only type description must be passed")
+			panic(newUserError(Error_Arguments_Wrong, "Only type description must be passed"))
 		}
 		typeArg := call.Arguments[0].Export()
 		typestr, ok := typeArg.(string)
 		if !ok {
-			panic(rntm.jsvm.ToValue("A valid type description must be given as argument"))
+			panic(newUserError(Error_Arguments_Wrong, "A valid type description must be given as argument"))
 		}
 
 		var dt DataType
 		switch typestr {
-		case "int", "float", "string", "bool", "type", "object":
+		case "int", "float", "string", "bool", "type", "var", "raw", "none":
 			dt, _ = NewDataType(typestr)
 		default:
 			ast := &DML{}
 			parser, err := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
 			if err != nil {
-				panic(utils.StackError(err, "Unable to setup dml parser").Error())
+				panic(wrapInternalError(err, Error_Fatal))
 			}
 
 			err = parser.ParseString(typestr, ast)
 			if err != nil {
-				panic(utils.StackError(err, "Unable to parse dml code").Error())
+				panic(newUserError(Error_Syntax, err.Error()))
 			}
 			dt, err = NewDataType(ast.Object)
 			if err != nil {
-				panic(utils.StackError(err, "Unable to create DataType from DML code").Error())
+				panic(newUserError(Error_Syntax, err.Error()))
 			}
 		}
 
@@ -53,14 +47,14 @@ func SetupGlobals(rntm *Runtime) {
 	rntm.jsvm.Set("print", func(call goja.FunctionCall) goja.Value {
 
 		if len(call.Arguments) != 1 {
-			panic("Print takes only single string argument")
+			panic(newUserError(Error_Arguments_Wrong, "Print takes only single string argument"))
 		}
 
 		res := call.Arguments[0].Export()
 		str, ok := res.(string)
 
 		if !ok {
-			panic("Print takes only single string argument")
+			panic(newUserError(Error_Arguments_Wrong, "Print takes only single string argument"))
 		}
 
 		rntm.printMessage(str)

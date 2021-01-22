@@ -96,13 +96,13 @@ func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
 		return err
 	}
 	if ok, _ := dbValue.Exists(); !ok {
-		return fmt.Errorf("Invalid database entry")
+		return newInternalError(Error_Fatal, "Invalid database entry")
 	}
 
 	err = dbValue.Write(val)
 
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to write to DB")
 	}
 	return self.callback.PropertyChanged(id, self.name)
 }
@@ -163,7 +163,7 @@ func (self constProperty) IsConst() bool {
 
 func (self *constProperty) SetValue(id Identifier, val interface{}) error {
 
-	return fmt.Errorf("Const property cannot set value")
+	return newUserError(Error_Operation_Invalid, "Const property cannot set value")
 }
 
 func (self *constProperty) GetValue(id Identifier) interface{} {
@@ -211,7 +211,7 @@ type propertyHandler struct {
 func (self *propertyHandler) AddProperty(name string, dtype DataType, default_val interface{}, constprop bool) error {
 
 	if self.HasProperty(name) {
-		return fmt.Errorf("Property %s already exists", name)
+		return newInternalError(Error_Setup_Invalid, fmt.Sprintf("Property %s already exists", name))
 	}
 
 	//we add properties
@@ -279,7 +279,7 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 			id := call.This.ToObject(rntm.jsvm).Get("identifier").Export()
 			identifier, ok := id.(Identifier)
 			if !ok {
-				panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
+				panic(rntm.jsvm.ToValue(newInternalError(Error_Fatal, "Called object does not have identifier setup correctly: %v", id)))
 			}
 
 			//return ob object is different than POD
@@ -291,20 +291,20 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 
 			if len(call.Arguments) != 1 {
 				//panic becomes exception in JS
-				panic(rntm.jsvm.ToValue(fmt.Sprintf("Property setting requires exactly one argument")))
+				panic(rntm.jsvm.ToValue(newUserError(Error_Arguments_Wrong, "Property setting requires exactly one argument")))
 			}
 
 			//get the identifier of the object that accesses the property
 			id := call.This.ToObject(rntm.jsvm).Get("identifier").Export()
 			identifier, ok := id.(Identifier)
 			if !ok {
-				panic("Called object does not have identifier setup correctly")
+				panic(rntm.jsvm.ToValue(newInternalError(Error_Fatal, "Called object does not have identifier setup correctly")))
 			}
 
 			p := self.GetProperty(propname)
 			if p.IsConst() {
 				//panic becomes exception in JS
-				panic(rntm.jsvm.ToValue(fmt.Sprintf("Property %s is constant", propname)))
+				panic(rntm.jsvm.ToValue(newUserError(Error_Operation_Invalid, fmt.Sprintf("Property %s is constant", propname))))
 			}
 
 			//convert goja args to go ones
@@ -312,7 +312,7 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 			err := p.SetValue(identifier, args[0])
 			if err != nil {
 				//panic becomes exception in JS
-				panic(rntm.jsvm.ToValue(err.Error()))
+				panic(rntm.jsvm.ToValue(err))
 			}
 			return
 		})

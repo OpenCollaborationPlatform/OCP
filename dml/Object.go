@@ -1,8 +1,6 @@
 package dml
 
 import (
-	"fmt"
-
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -121,11 +119,11 @@ func (self *object) GetParentIdentifier(id Identifier) (Identifier, error) {
 
 	value, err := self.GetDBValue(id, parentKey)
 	if err != nil {
-		return Identifier{}, err
+		return Identifier{}, utils.StackError(err, "Unable to access DB value")
 	}
 	parent, err := value.Read()
 	if err != nil {
-		return Identifier{}, utils.StackError(err, "Unable to decode parent from DB")
+		return Identifier{}, utils.StackError(err, "Unable to read parent from DB")
 	}
 
 	return *parent.(*Identifier), nil
@@ -135,11 +133,11 @@ func (self *object) SetParentIdentifier(id Identifier, parent Identifier) error 
 
 	value, err := self.GetDBValue(id, parentKey)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to access DB value")
 	}
 	err = value.Write(parent)
 	if err != nil {
-		return utils.StackError(err, "Unable to decode parent into DB")
+		return utils.StackError(err, "Unable to write parent into DB")
 	}
 	return nil
 }
@@ -148,11 +146,11 @@ func (self *object) GetParent(id Identifier) (dmlSet, error) {
 
 	parent, err := self.GetParentIdentifier(id)
 	if err != nil {
-		return dmlSet{}, err
+		return dmlSet{}, utils.StackError(err, "Unable to get parent identifier")
 	}
 
 	if !parent.Valid() {
-		return dmlSet{}, fmt.Errorf("Object has no parent")
+		return dmlSet{}, newInternalError(Error_Operation_Invalid, "Object has no parent")
 	}
 
 	dt, err := self.GetDataType(parent)
@@ -162,7 +160,7 @@ func (self *object) GetParent(id Identifier) (dmlSet, error) {
 
 	obj, ok := self.rntm.objects[dt]
 	if !ok {
-		return dmlSet{}, fmt.Errorf("Parent is not setup correctly: no logic object available")
+		return dmlSet{}, newInternalError(Error_Setup_Invalid, "Parent is not setup correctly: no logic object available")
 	}
 
 	return dmlSet{obj: obj, id: parent}, nil
@@ -172,11 +170,11 @@ func (self *object) GetDataType(id Identifier) (DataType, error) {
 
 	value, err := self.GetDBValue(id, dtKey)
 	if err != nil {
-		return DataType{}, err
+		return DataType{}, utils.StackError(err, "Unable to access DB value")
 	}
 	dt, err := value.Read()
 	if err != nil {
-		return DataType{}, utils.StackError(err, "Unable to decode datatype from DB")
+		return DataType{}, utils.StackError(err, "Unable to read datatype from DB")
 	}
 
 	return *dt.(*DataType), nil
@@ -186,11 +184,11 @@ func (self *object) SetDataType(id Identifier, dt DataType) error {
 
 	value, err := self.GetDBValue(id, dtKey)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to access DB value")
 	}
 	err = value.Write(dt)
 	if err != nil {
-		return utils.StackError(err, "Unable to encode datatype into DB")
+		return utils.StackError(err, "Unable to write datatype into DB")
 	}
 
 	return nil
@@ -223,11 +221,11 @@ func (self *object) GetObjectPath(id Identifier) (string, error) {
 
 	value, err := self.GetDBValueVersioned(id, pathKey)
 	if err != nil {
-		return "", utils.StackError(err, "Unable to retreive path")
+		return "", utils.StackError(err, "Unable to access DB value")
 	}
 	path, err := value.Read()
 	if err != nil {
-		return "", utils.StackError(err, "Unable to retreive path")
+		return "", utils.StackError(err, "Unable to read from DB value")
 	}
 
 	return path.(string), nil
@@ -238,12 +236,12 @@ func (self *object) SetObjectPath(id Identifier, path string) error {
 
 	value, err := self.GetDBValueVersioned(id, pathKey)
 	if err != nil {
-		return utils.StackError(err, "Unable to retreive path DB")
+		return utils.StackError(err, "Unable to access DB value")
 	}
 
 	err = value.Write(path)
 	if err != nil {
-		return utils.StackError(err, "Unable to write path")
+		return utils.StackError(err, "Unable to write into DB value")
 	}
 
 	return nil
@@ -263,9 +261,9 @@ func (self *object) EventEmitted(id Identifier, name string, args ...interface{}
 
 	path, err := self.GetObjectPath(id)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to retreive object path")
 	}
-	return self.rntm.emitEvent(path, name, args...)
+	return utils.StackOnError(self.rntm.emitEvent(path, name, args...), "Event emittion failed")
 }
 
 func (self *object) GetRuntime() *Runtime {
@@ -274,58 +272,96 @@ func (self *object) GetRuntime() *Runtime {
 
 //Versioned Data Interface
 func (self *object) HasUpdates(id Identifier) (bool, error) {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.HasUpdates()
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return false, utils.StackError(err, "Unable to access DB version manager")
+	}
+	res, err := mngr.HasUpdates()
+	return res, utils.StackOnError(err, "Unable to query DB for updates")
 }
 
 func (self *object) HasVersions(id Identifier) (bool, error) {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.HasVersions()
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return false, utils.StackError(err, "Unable to access DB version manager")
+	}
+	res, err := mngr.HasVersions()
+	return res, utils.StackOnError(err, "Unable to query DB for versions")
 }
 
 func (self *object) ResetHead(id Identifier) error {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.ResetHead()
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB version manager")
+	}
+	return utils.StackOnError(mngr.ResetHead(), "Unable to reset head in DB")
 }
 
 func (self *object) FixStateAsVersion(id Identifier) (datastore.VersionID, error) {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.FixStateAsVersion()
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return datastore.VersionID(datastore.INVALID), utils.StackError(err, "Unable to access DB version manager")
+	}
+	res, err := mngr.FixStateAsVersion()
+	return res, utils.StackOnError(err, "Unable to fix state")
 }
 
 func (self *object) LoadVersion(id Identifier, vId datastore.VersionID) error {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.LoadVersion(vId)
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB version manager")
+	}
+	return utils.StackOnError(mngr.LoadVersion(vId), "Unable to load DB version")
 }
 
 func (self *object) GetLatestVersion(id Identifier) (datastore.VersionID, error) {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.GetLatestVersion()
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return datastore.VersionID(datastore.INVALID), utils.StackError(err, "Unable to access DB version manager")
+	}
+	res, err := mngr.GetLatestVersion()
+	return res, utils.StackOnError(err, "Unable to access latest version in DB")
 }
 
 func (self *object) GetCurrentVersion(id Identifier) (datastore.VersionID, error) {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.GetCurrentVersion()
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return datastore.VersionID(datastore.INVALID), utils.StackError(err, "Unable to access DB version manager")
+	}
+	res, err := mngr.GetCurrentVersion()
+	return res, utils.StackOnError(err, "Unable to access current version in DB")
 }
 
 func (self *object) RemoveVersionsUpTo(id Identifier, vId datastore.VersionID) error {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.RemoveVersionsUpTo(vId)
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB version manager")
+	}
+	return utils.StackOnError(mngr.RemoveVersionsUpTo(vId), "Unable to remove versions in DB")
 }
 
 func (self *object) RemoveVersionsUpFrom(id Identifier, vId datastore.VersionID) error {
-	mngr := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
-	return mngr.RemoveVersionsUpFrom(vId)
+	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
+	if err != nil {
+		return utils.StackError(err, "Unable to access DB version manager")
+	}
+	return utils.StackOnError(mngr.RemoveVersionsUpFrom(vId), "Unable to remove versions in DB")
 }
 
 func (self *object) InitializeDB(id Identifier) error {
 
 	//first all handlers
-	self.InitializeEventDB(id)
+	if err := self.InitializeEventDB(id); err != nil {
+		return err
+	}
 
 	//now our own DB entries
-	self.SetParentIdentifier(id, Identifier{})
-	self.SetDataType(id, DataType{})
+	if err := self.SetParentIdentifier(id, Identifier{}); err != nil {
+		return utils.StackError(err, "Unable to set parent identifier for %v", id)
+	}
+	if err := self.SetDataType(id, DataType{}); err != nil {
+		return utils.StackError(err, "Unable to set data type for %v", id)
+	}
 
 	return nil
 }
@@ -334,15 +370,15 @@ func (self *object) GetDBValue(id Identifier, key []byte) (datastore.Value, erro
 
 	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ValueType, false, id.Hash())
 	if err != nil {
-		return datastore.Value{}, utils.StackError(err, "Unable to load %s from database", id)
+		return datastore.Value{}, utils.StackError(err, "Unable to access %s in database", id)
 	}
 	vset, done := set.(*datastore.ValueSet)
 	if !done {
-		return datastore.Value{}, fmt.Errorf("Database access failed: wrong set returned")
+		return datastore.Value{}, newInternalError(Error_Fatal, "Database access failed: wrong set returned")
 	}
 	value, err := vset.GetOrCreateValue(key)
 	if err != nil {
-		return datastore.Value{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+		return datastore.Value{}, utils.StackError(err, "Unable to access or create %s in DB", string(key))
 	}
 	return *value, nil
 }
@@ -351,15 +387,15 @@ func (self *object) GetDBValueVersioned(id Identifier, key []byte) (datastore.Va
 
 	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ValueType, true, id.Hash())
 	if err != nil {
-		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
+		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to access or create %s in database", id)
 	}
 	vset, done := set.(*datastore.ValueVersionedSet)
 	if !done {
-		return datastore.ValueVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
+		return datastore.ValueVersioned{}, newInternalError(Error_Fatal, "Database access failed: wrong set returned")
 	}
 	value, err := vset.GetOrCreateValue(key)
 	if err != nil {
-		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+		return datastore.ValueVersioned{}, utils.StackError(err, "Unable to access or create %s in DB", string(key))
 	}
 	return *value, nil
 }
@@ -368,15 +404,15 @@ func (self *object) GetDBMap(id Identifier, key []byte) (datastore.Map, error) {
 
 	set, err := self.rntm.datastore.GetOrCreateSet(datastore.MapType, false, id.Hash())
 	if err != nil {
-		return datastore.Map{}, utils.StackError(err, "Unable to load %s from database", id)
+		return datastore.Map{}, utils.StackError(err, "Unable to access or create %s in database", id)
 	}
 	mset, done := set.(*datastore.MapSet)
 	if !done {
-		return datastore.Map{}, fmt.Errorf("Database access failed: wrong set returned")
+		return datastore.Map{}, newInternalError(Error_Fatal, "Database access failed: wrong set returned")
 	}
 	map_, err := mset.GetOrCreateMap(key)
 	if err != nil {
-		return datastore.Map{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+		return datastore.Map{}, utils.StackError(err, "Unable to access or create %s in DB", string(key))
 	}
 	return *map_, nil
 }
@@ -385,15 +421,15 @@ func (self *object) GetDBMapVersioned(id Identifier, key []byte) (datastore.MapV
 
 	set, err := self.rntm.datastore.GetOrCreateSet(datastore.MapType, true, id.Hash())
 	if err != nil {
-		return datastore.MapVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
+		return datastore.MapVersioned{}, utils.StackError(err, "Unable to access or create %s in database", id)
 	}
 	mset, done := set.(*datastore.MapVersionedSet)
 	if !done {
-		return datastore.MapVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
+		return datastore.MapVersioned{}, newInternalError(Error_Fatal, "Database access failed: wrong set returned")
 	}
 	map_, err := mset.GetOrCreateMap(key)
 	if err != nil {
-		return datastore.MapVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+		return datastore.MapVersioned{}, utils.StackError(err, "Unable to access or create %s in DB", string(key))
 	}
 	return *map_, nil
 }
@@ -402,15 +438,15 @@ func (self *object) GetDBList(id Identifier, key []byte) (datastore.List, error)
 
 	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, false, id.Hash())
 	if err != nil {
-		return datastore.List{}, utils.StackError(err, "Unable to load %s from database", id)
+		return datastore.List{}, utils.StackError(err, "Unable to access or create %s in database", id)
 	}
 	lset, done := set.(*datastore.ListSet)
 	if !done {
-		return datastore.List{}, fmt.Errorf("Database access failed: wrong set returned")
+		return datastore.List{}, newInternalError(Error_Fatal, "Database access failed: wrong set returned")
 	}
 	list, err := lset.GetOrCreateList(key)
 	if err != nil {
-		return datastore.List{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+		return datastore.List{}, utils.StackError(err, "Unable to access or create %s in DB", string(key))
 	}
 	return *list, nil
 }
@@ -419,15 +455,15 @@ func (self *object) GetDBListVersioned(id Identifier, key []byte) (datastore.Lis
 
 	set, err := self.rntm.datastore.GetOrCreateSet(datastore.ListType, true, id.Hash())
 	if err != nil {
-		return datastore.ListVersioned{}, utils.StackError(err, "Unable to load %s from database", id)
+		return datastore.ListVersioned{}, utils.StackError(err, "Unable to access or create %s in database", id)
 	}
 	lset, done := set.(*datastore.ListVersionedSet)
 	if !done {
-		return datastore.ListVersioned{}, fmt.Errorf("Database access failed: wrong set returned")
+		return datastore.ListVersioned{}, newInternalError(Error_Fatal, "Database access failed: wrong set returned")
 	}
 	list, err := lset.GetOrCreateList(key)
 	if err != nil {
-		return datastore.ListVersioned{}, utils.StackError(err, "Unable to read %s from DB", string(key))
+		return datastore.ListVersioned{}, utils.StackError(err, "Unable to access or create %s in DB", string(key))
 	}
 	return *list, nil
 }

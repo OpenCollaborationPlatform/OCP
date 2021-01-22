@@ -79,7 +79,7 @@ func (self *DataImpl) SetObjectPath(id Identifier, path string) error {
 
 	err := self.object.SetObjectPath(id, path)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to set own object path")
 	}
 
 	//we also need to update the path for all children. Note: Not subobjects,
@@ -87,7 +87,7 @@ func (self *DataImpl) SetObjectPath(id Identifier, path string) error {
 	//the concrete implementations
 	subs, err := self.GetChildIdentifiers(id)
 	if err != nil {
-		return utils.StackError(err, "Unable to access subobjects for path setting")
+		return utils.StackError(err, "Unable to access subobjects")
 	}
 	for _, sub := range subs {
 
@@ -99,7 +99,9 @@ func (self *DataImpl) SetObjectPath(id Identifier, path string) error {
 		} else {
 			fullpath = sub.Encode()
 		}
-		self.SetObjectPath(sub, fullpath)
+		if err := self.SetObjectPath(sub, fullpath); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -117,7 +119,7 @@ func (self *DataImpl) AddChildIdentifier(id Identifier, child Identifier) error 
 
 	list, err := self.GetDBList(id, childKey)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to access DB for %v", id)
 	}
 	_, err = list.Add(child)
 	if err != nil {
@@ -130,7 +132,7 @@ func (self *DataImpl) GetChildIdentifiers(id Identifier) ([]Identifier, error) {
 
 	list, err := self.GetDBList(id, childKey)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to access DB for %v", id)
 	}
 	entries, err := list.GetEntries()
 	if err != nil {
@@ -152,7 +154,7 @@ func (self *DataImpl) GetChildIdentifierByName(id Identifier, name string) (Iden
 
 	childs, err := self.GetChildIdentifiers(id)
 	if err != nil {
-		return Identifier{}, utils.StackError(err, "Unable to access child identifiers in DB")
+		return Identifier{}, utils.StackError(err, "Unable to access child identifiers in DB for %v", id)
 	}
 	for _, child := range childs {
 
@@ -160,14 +162,14 @@ func (self *DataImpl) GetChildIdentifierByName(id Identifier, name string) (Iden
 			return child, nil
 		}
 	}
-	return Identifier{}, fmt.Errorf("No such object available")
+	return Identifier{}, newUserError(Error_Key_Not_Available, "No such object available")
 }
 
 func (self *DataImpl) GetChildren(id Identifier) ([]dmlSet, error) {
 
 	childIDs, err := self.GetChildIdentifiers(id)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to access child identifiers in DB for %v", id)
 	}
 
 	result := make([]dmlSet, len(childIDs))
@@ -185,7 +187,7 @@ func (self *DataImpl) GetChildByName(id Identifier, name string) (dmlSet, error)
 
 	childID, err := self.GetChildIdentifierByName(id, name)
 	if err != nil {
-		return dmlSet{}, utils.StackError(err, "Unable to find child in object")
+		return dmlSet{}, utils.StackError(err, "Unable to find child %v in object %v", name, id)
 	}
 
 	childDT, err := self.GetDataType(childID)
@@ -203,7 +205,7 @@ func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) 
 	//add hirarchy
 	children, err := self.GetChildren(id)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to access children for %v", id)
 	}
 	result = append(result, children...)
 
@@ -237,23 +239,23 @@ func (self *DataImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) 
 		}
 	}
 
-	return dmlSet{}, fmt.Errorf("No such name known")
+	return dmlSet{}, newUserError(Error_Key_Not_Available, fmt.Sprintf("Child %v not available in %v", name, id))
 }
 
 func (self *DataImpl) GetValueByName(id Identifier, name string) (interface{}, error) {
-	return nil, fmt.Errorf("No value with name %s available", name)
+	return nil, newUserError(Error_Key_Not_Available, fmt.Sprintf("No value %v available in %v", name, id))
 }
 
 func (self *DataImpl) Created(id Identifier) error {
 
 	err := self.GetEvent("onCreated").Emit(id)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to emit event")
 	}
 
 	subs, err := self.GetSubobjects(id, false)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to access subobjects")
 	}
 	for _, dbSet := range subs {
 
@@ -265,7 +267,7 @@ func (self *DataImpl) Created(id Identifier) error {
 			}
 
 		} else {
-			return fmt.Errorf("Data subobject not accessed correctly")
+			return newInternalError(Error_Fatal, "Data subobject of wrong type")
 		}
 	}
 	return nil

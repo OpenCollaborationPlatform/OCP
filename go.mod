@@ -21,6 +21,7 @@ require (
 	github.com/hashicorp/go-uuid v1.0.1 // indirect
 	github.com/hashicorp/raft v1.1.1
 	github.com/hashicorp/raft-boltdb v0.0.0-20190605210249-ef2e128ed477
+	github.com/iancoleman/strcase v0.1.3
 	github.com/ipfs/go-bitswap v0.2.14
 	github.com/ipfs/go-block-format v0.0.2
 	github.com/ipfs/go-blockservice v0.1.1

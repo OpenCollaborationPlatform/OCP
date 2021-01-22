@@ -122,7 +122,7 @@ func (self *Runtime) ParseFolder(path string) error {
 	main := filepath.Join(path, "main.dml")
 	file, err := os.Open(main)
 	if err != nil {
-		return err
+		return wrapSetupError(err, Error_Filesystem)
 	}
 	defer file.Close()
 
@@ -139,7 +139,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 
 	//no double loading
 	if self.ready == true {
-		return fmt.Errorf("Runtime is already setup")
+		return newSetupError(Error_Operation_Invalid, "Runtime is already setup")
 	}
 
 	//we start with building the AST
@@ -151,7 +151,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 
 	err = parser.Parse(reader, ast)
 	if err != nil {
-		return utils.StackError(err, "Unable to parse dml code")
+		return wrapSetupError(err, Error_Compiler)
 	}
 
 	//first import everything needed
@@ -165,7 +165,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	//process the AST into usable objects
 	mainObj, err := self.buildObject(ast.Object, false)
 	if err != nil {
-		return utils.StackError(err, "Unable to parse dml code")
+		return utils.StackError(err, "Unable to process dml code")
 		//TODO clear the database entries...
 	}
 
@@ -173,7 +173,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
 		main, err := self.getMainObjectSet()
 		if err != nil {
-			panic(err.Error())
+			panic(self.jsvm.ToValue(err))
 		}
 		return main.obj.GetJSObject(main.id)
 	})
@@ -184,7 +184,7 @@ func (self *Runtime) Parse(reader io.Reader) error {
 	self.main = mainObj.GetObjectDataType()
 	self.ready = true
 
-	return err
+	return nil
 }
 
 //Setups the database according to the parsed DML file
@@ -194,7 +194,7 @@ func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
 	defer ds.Rollback() //rollback on error, otherwise we commit before
 
 	if !self.ready {
-		return fmt.Errorf("Runtime not setup")
+		return newSetupError(Error_Operation_Invalid, "Runtime not setup")
 	}
 
 	//all upcoming operations use this datastore
@@ -203,20 +203,19 @@ func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
 	//check if the data structure is setup, or if we need to do this
 	set, err := self.datastore.GetOrCreateSet(datastore.ValueType, false, internalKey)
 	if err != nil {
-		return utils.StackError(err, "Unable to access DB")
+		return utils.StackError(err, "Unable to access datastore")
 	}
 	vSet, _ := set.(*datastore.ValueSet)
 	isSetup := vSet.HasKey(mainIdKey)
 
 	if isSetup {
-		return fmt.Errorf("Datastore is already setup")
-
+		return newSetupError(Error_Operation_Invalid, "Datastore is already setup")
 	}
 
 	//nothing setup yet, lets do it
 	mainObj, ok := self.objects[self.main]
 	if !ok {
-		return fmt.Errorf("The runtime is not setup correctly")
+		return newSetupError(Error_Setup_Invalid, "The runtime is not setup correctly")
 	}
 	mainID, err := self.setupObject(mainObj, Identifier{})
 	if err != nil {
@@ -228,7 +227,7 @@ func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
 	}
 	err = value.Write(mainID)
 	if err != nil {
-		return utils.StackError(err, "Unable to access  database while setup")
+		return utils.StackError(err, "Unable to write into database while setup")
 	}
 
 	//store the DB type
@@ -258,7 +257,7 @@ func (self *Runtime) InitializeDatastore(ds *datastore.Datastore) error {
 		data.Created(mainID)
 
 	} else {
-		return fmt.Errorf("Main object is Behaviour, not Data")
+		return newSetupError(Error_Type, "Main object is Behaviour, not Data")
 	}
 
 	return ds.Commit()
@@ -281,7 +280,7 @@ func (self *Runtime) RegisterEventCallback(name string, fnc EventCallbackFunc) e
 
 	_, ok := self.eventCBs[name]
 	if ok {
-		return fmt.Errorf("Event callback '%v' already registered", name)
+		return newSetupError(Error_Operation_Invalid, "Event callback '%v' already registered", name)
 	}
 
 	self.eventCBs[name] = fnc
@@ -406,7 +405,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	mngr, ok := self.behaviours[path]
 	if ok {
 		if !mngr.HasMethod(accessor) {
-			return nil, fmt.Errorf("Manager %v does not have method %v", path[0], accessor)
+			return nil, newUserError(Error_Key_Not_Available, "Manager %v does not have method %v", path[0], accessor)
 		}
 		fnc := mngr.GetMethod(accessor)
 		result, e := fnc.Call(Identifier{}, args...)
@@ -483,7 +482,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	//was it handled? If not no change to db was done
 	if !handled {
 		self.datastore.Rollback()
-		return nil, fmt.Errorf("No accessor %v known in object %v", accessor, path)
+		return nil, newUserError(Error_Key_Not_Available, "No accessor %v known in object %v", accessor, path)
 	}
 
 	//did an error occure?
@@ -509,7 +508,7 @@ func (self *Runtime) checkDatastore(ds *datastore.Datastore) error {
 
 	set, err := ds.GetOrCreateSet(datastore.ValueType, false, internalKey)
 	if err != nil {
-		return utils.StackError(err, "Unable to access DB")
+		return err
 	}
 	vSet, _ := set.(*datastore.ValueSet)
 	dbDt, err := vSet.GetOrCreateValue(mainDtKey)
@@ -518,7 +517,7 @@ func (self *Runtime) checkDatastore(ds *datastore.Datastore) error {
 	}
 
 	if ok, err := dbDt.WasWrittenOnce(); !ok || err != nil {
-		return fmt.Errorf("Datastore is not initialized by runtime")
+		return newInternalError(Error_Setup_Invalid, "Datastore is not initialized by runtime")
 	}
 
 	result, err := dbDt.Read()
@@ -532,7 +531,7 @@ func (self *Runtime) checkDatastore(ds *datastore.Datastore) error {
 	}
 
 	if !dt.IsEqual(self.main) {
-		return fmt.Errorf("Datastore is initialized for different runtime")
+		return newInternalError(Error_Setup_Invalid, "Datastore is initialized for different runtime")
 	}
 
 	//everything ok!
@@ -542,28 +541,28 @@ func (self *Runtime) checkDatastore(ds *datastore.Datastore) error {
 func (self *Runtime) getMainObjectSet() (dmlSet, error) {
 
 	if !self.ready {
-		return dmlSet{}, fmt.Errorf("Runtime not setup correctly")
+		return dmlSet{}, newInternalError(Error_Setup_Invalid, "Runtime not setup correctly")
 	}
 
 	//check if the data structure is setup, or if we need to do this
 	set, err := self.datastore.GetOrCreateSet(datastore.ValueType, false, internalKey)
 	if err != nil {
-		return dmlSet{}, err
+		return dmlSet{}, utils.StackError(err, "Unable to access DB")
 	}
 	vSet, _ := set.(*datastore.ValueSet)
 	value, err := vSet.GetOrCreateValue(mainIdKey)
 	if err != nil {
-		return dmlSet{}, err
+		return dmlSet{}, utils.StackError(err, "Unable to access DB")
 	}
 
 	id, err := value.Read()
 	if err != nil {
-		return dmlSet{}, err
+		return dmlSet{}, utils.StackError(err, "Unable to access DB")
 	}
 
 	ident, ok := id.(*Identifier)
 	if !ok {
-		return dmlSet{}, fmt.Errorf("Stored data is not identifier, cannot access main objects")
+		return dmlSet{}, newInternalError(Error_Fatal, "Stored data is not identifier, cannot access main objects")
 	}
 
 	return self.getObjectSet(*ident)
@@ -575,7 +574,7 @@ func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
 
 	names := strings.Split(path, `.`)
 	if len(names) == 0 {
-		return dmlSet{}, fmt.Errorf("Not a valid path to object: no names found")
+		return dmlSet{}, newUserError(Error_Arguments_Wrong, "Not a valid path to object: no names found")
 	}
 
 	main, err := self.getMainObjectSet()
@@ -587,15 +586,15 @@ func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
 	if names[0] != main.id.Name {
 		id, err := IdentifierFromEncoded(names[0])
 		if err != nil {
-			return dmlSet{}, fmt.Errorf("First identifier in %v cannot be found", path)
+			return dmlSet{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
 		}
 		dt, err := main.obj.GetDataType(id)
 		if err != nil {
-			return dmlSet{}, fmt.Errorf("First identifier in %v cannot be found", path)
+			return dmlSet{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
 		}
 		dtObj, ok := self.objects[dt]
 		if !ok {
-			return dmlSet{}, fmt.Errorf("First identifier in %v cannot be found", path)
+			return dmlSet{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
 		}
 		dbSet = dmlSet{id: id, obj: dtObj}
 
@@ -664,7 +663,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	imppath := filepath.Join(self.importPath, astImp.File)
 	reader, err := os.Open(imppath)
 	if err != nil {
-		return utils.StackError(err, "Unable to read %v (%v)", astImp.File, imppath)
+		return wrapSetupError(err, Error_Filesystem)
 	}
 	defer reader.Close()
 
@@ -672,12 +671,12 @@ func (self *Runtime) importDML(astImp *astImport) error {
 	ast := &DML{}
 	parser, err := participle.Build(&DML{}, participle.Lexer(&dmlDefinition{}))
 	if err != nil {
-		return utils.StackError(err, "Unable to setup parser")
+		return wrapSetupError(err, Error_Compiler)
 	}
 
 	err = parser.Parse(reader, ast)
 	if err != nil {
-		return utils.StackError(err, "Unable to parse %v", astImp.File)
+		return wrapSetupError(err, Error_Compiler)
 	}
 
 	//first import everything needed
@@ -711,7 +710,7 @@ func (self *Runtime) importDML(astImp *astImport) error {
 func (self *Runtime) getOrCreateObject(dt DataType) (Object, error) {
 
 	if !dt.IsComplex() {
-		return nil, fmt.Errorf("DataType is not complex")
+		return nil, newInternalError(Error_Arguments_Wrong, "DataType is not complex")
 	}
 
 	obj, ok := self.objects[dt]
@@ -737,16 +736,16 @@ func (self *Runtime) getObjectSet(id Identifier) (dmlSet, error) {
 	//get any object from the map
 	obj, ok := self.objects[self.main]
 	if !ok {
-		return dmlSet{}, fmt.Errorf("Runtime seems bot to be setup correctly")
+		return dmlSet{}, newInternalError(Error_Setup_Invalid, "Runtime seems bot to be setup correctly")
 	}
 
 	dt, err := obj.GetDataType(id)
 	if err != nil {
-		return dmlSet{}, utils.StackError(err, "Unable to access DB for identifier")
+		return dmlSet{}, err
 	}
 	obj, err = self.getOrCreateObject(dt)
 	if err != nil {
-		return dmlSet{}, utils.StackError(err, "Unable to create or access object for identifier")
+		return dmlSet{}, err
 	}
 	return dmlSet{id: id, obj: obj}, nil
 }
@@ -799,7 +798,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 	//build the object!
 	creator, ok := self.creators[astObj.Identifier]
 	if !ok {
-		return nil, fmt.Errorf("No object type \"%s\" exists", astObj.Identifier)
+		return nil, newSetupError(Error_Key_Not_Available, "No object type \"%s\" exists", astObj.Identifier)
 	}
 
 	var err error
@@ -931,7 +930,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 		obj.GetJSPrototype().DefineAccessorProperty("children", getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 	} else if len(astObj.Objects) > 0 {
-		return nil, fmt.Errorf("Behaviours cannot have child objects")
+		return nil, newSetupError(Error_Type, "Behaviours cannot have child objects")
 	}
 
 	//with everything in place we are able to process the assignments
@@ -960,7 +959,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 			}
 
 		} else {
-			return nil, fmt.Errorf("Key of assignment is not a property or event")
+			return nil, newSetupError(Error_Key_Not_Available, "Key of assignment is not a property or event")
 		}
 	}
 
@@ -972,7 +971,7 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 	//get the infos we need for the ID
 	astObj, err := obj.GetObjectDataType().complexAsAst()
 	if err != nil {
-		return Identifier{}, utils.StackError(err, "Unable to setup object")
+		return Identifier{}, utils.StackError(err, "Invalid object datatype")
 	}
 	objType := astObj.Identifier
 	var objName string
@@ -1037,7 +1036,7 @@ func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 
 	//we really assign a property, lets go
 	if asgn.Function != nil {
-		return fmt.Errorf("A function cannot be assigned to a property")
+		return newSetupError(Error_Type, "A function cannot be assigned to a property")
 	}
 
 	var err error = nil
@@ -1058,7 +1057,7 @@ func (self *Runtime) assignProperty(asgn *astAssignment, prop Property) error {
 func (self *Runtime) assignEvent(asgn *astAssignment, evt Event) error {
 
 	if asgn.Function == nil {
-		return fmt.Errorf("Only function can be asigned to event")
+		return newSetupError(Error_Type, "Only function can be asigned to event")
 	}
 
 	//wrap it into something that can be processed by goja
@@ -1072,14 +1071,14 @@ func (self *Runtime) assignEvent(asgn *astAssignment, evt Event) error {
 	}
 	fnc, ok := val.Export().(func(goja.FunctionCall) goja.Value)
 	if !ok {
-		return fmt.Errorf("Must be function")
+		return newSetupError(Error_Type, "Assigned type is not function")
 	}
 	evt.RegisterObjectJSCallback(fnc)
 
 	//cleanup the global var we needed
 	_, err = self.jsvm.RunString("delete fnc")
 	if err != nil {
-		return err
+		return wrapSetupError(err, Error_Compiler)
 	}
 
 	return nil
@@ -1089,7 +1088,7 @@ func (self *Runtime) assignEvent(asgn *astAssignment, evt Event) error {
 func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 
 	if astFnc.Name == nil {
-		return nil, fmt.Errorf("Object method must have a name")
+		return nil, newSetupError(Error_Setup_Invalid, "Object method must have a name")
 	}
 
 	code := *astFnc.Name + "= function(" +
@@ -1098,13 +1097,13 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 
 	val, err := self.jsvm.RunString(code)
 	if err != nil {
-		return nil, err
+		return nil, wrapSetupError(err, Error_Compiler)
 	}
 
 	//cleanup the global var we needed
 	_, err = self.jsvm.RunString("delete " + *astFnc.Name)
 	if err != nil {
-		return nil, err
+		return nil, wrapSetupError(err, Error_Compiler)
 	}
 
 	return NewMethod(val.Export(), astFnc.Const == "const")
@@ -1126,18 +1125,18 @@ func (self *Runtime) buildEvent(astEvt *astEvent, parent Object) (Event, error) 
 			")" + astEvt.Default.Body)
 
 		if err != nil {
-			return nil, err
+			return nil, wrapSetupError(err, Error_Compiler)
 		}
 		fnc, ok := val.Export().(func(goja.FunctionCall) goja.Value)
 		if !ok {
-			return nil, fmt.Errorf("Must be function")
+			return nil, newSetupError(Error_Type, "Must be function")
 		}
 		evt.RegisterObjectJSCallback(fnc)
 
 		//cleanup the global var we needed
 		_, err = self.jsvm.RunString("delete fnc")
 		if err != nil {
-			return nil, err
+			return nil, wrapSetupError(err, Error_Compiler)
 		}
 	}
 
@@ -1148,7 +1147,7 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
 	//property can have only plain types
 	if astProp.Type.Object != nil {
-		return fmt.Errorf("object can only be of plain type")
+		return newSetupError(Error_Type, "object can only be of plain type")
 	}
 	dt := MustNewDataType(astProp.Type.Pod)
 
@@ -1159,7 +1158,7 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
 	if astProp.Default == nil {
 		if constprop {
-			return fmt.Errorf("Constant property needs to have a value assigned")
+			return newSetupError(Error_Setup_Invalid, "Constant property needs to have a value assigned")
 		}
 
 		err := obj.AddProperty(astProp.Key, dt, dt.GetDefaultValue(), constprop)
