@@ -1,8 +1,8 @@
 package document
 
 import (
-	"bytes"
-	"encoding/gob"
+	"fmt"
+	"reflect"
 
 	"github.com/ickby/CollaborationNode/utils"
 
@@ -10,32 +10,28 @@ import (
 	"github.com/ickby/CollaborationNode/datastores"
 	"github.com/ickby/CollaborationNode/dml"
 	"github.com/ickby/CollaborationNode/p2p"
+	"github.com/ugorji/go/codec"
 )
 
-func init() {
-	gob.Register(callOperation{})
-	gob.Register(jsOperation{})
-}
+//Using msgpack for encoding to ensure, that all arguments that are handble by wamp are handled by the operation.
+//This is poblematic with gob, as it needs to have many types registered, which is impossible to know for all
+//the datatypes applications throw at us
+var mh *codec.MsgpackHandle
 
-type Operation interface {
-	ApplyTo(*dml.Runtime, *datastore.Datastore) interface{}
-	ToData() ([]byte, error)
-	GetSession() (p2p.PeerID, wamp.ID)
+func init() {
+	mh = new(codec.MsgpackHandle)
+	mh.WriteExt = true
+	mh.MapType = reflect.TypeOf(map[string]interface{}(nil))
 }
 
 func operationFromData(data []byte) (Operation, error) {
 
-	var op Operation
-	buf := bytes.NewBuffer(data)
-	d := gob.NewDecoder(buf)
-	err := d.Decode(&op)
-	if err != nil {
-		return nil, err
-	}
-	return op, nil
+	var v Operation
+	err := codec.NewDecoderBytes(data, mh).Decode(&v)
+	return v, err
 }
 
-type callOperation struct {
+type Operation struct {
 	User      dml.User
 	Path      string
 	Arguments []interface{}
@@ -45,9 +41,25 @@ type callOperation struct {
 }
 
 func newCallOperation(user dml.User, path string, args []interface{}, node p2p.PeerID, session wamp.ID) Operation {
+	return Operation{user, path, args, node, session}
+}
+
+func newJsOperation(user dml.User, code string, node p2p.PeerID, session wamp.ID) Operation {
+	return Operation{user, "__js__", []interface{}{code}, node, session}
+}
+
+func (self Operation) ToData() ([]byte, error) {
+
+	var b []byte
+	return b, codec.NewEncoderBytes(&b, mh).Encode(self)
+}
+
+func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interface{} {
 
 	//convert all encoded arguments
-	for i, arg := range args {
+	args := make([]interface{}, len(self.Arguments))
+	copy(args, self.Arguments)
+	for i, arg := range self.Arguments {
 		if utils.Decoder.InterfaceIsEncoded(arg) {
 			val, err := utils.Decoder.DecodeInterface(arg)
 			if err == nil {
@@ -56,21 +68,22 @@ func newCallOperation(user dml.User, path string, args []interface{}, node p2p.P
 		}
 	}
 
-	return callOperation{user, path, args, node, session}
-}
+	var val interface{}
+	var err error
 
-func (self callOperation) ToData() ([]byte, error) {
+	if self.Path == "__js__" {
+		if len(args) != 1 {
+			err = fmt.Errorf("JS operation needs code as argument")
+		}
+		if code, ok := args[0].(string); ok {
+			val, err = rntm.RunJavaScript(ds, self.User, code)
+		} else {
+			err = fmt.Errorf("JS operation needs code as argument")
+		}
 
-	var b bytes.Buffer
-	e := gob.NewEncoder(&b)
-	var op Operation = self
-	err := e.Encode(&op)
-	return b.Bytes(), err
-}
-
-func (self callOperation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interface{} {
-
-	val, err := rntm.Call(ds, self.User, self.Path, self.Arguments...)
+	} else {
+		val, err = rntm.Call(ds, self.User, self.Path, args...)
+	}
 	if err != nil {
 		return err
 	}
@@ -83,47 +96,6 @@ func (self callOperation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) in
 	return val
 }
 
-func (self callOperation) GetSession() (p2p.PeerID, wamp.ID) {
-	return self.Node, self.Session
-}
-
-type jsOperation struct {
-	User dml.User
-	Code string
-
-	Node    p2p.PeerID
-	Session wamp.ID
-}
-
-func newJsOperation(user dml.User, code string, node p2p.PeerID, session wamp.ID) Operation {
-
-	return jsOperation{user, code, node, session}
-}
-
-func (self jsOperation) ToData() ([]byte, error) {
-
-	var b bytes.Buffer
-	e := gob.NewEncoder(&b)
-	var op Operation = self
-	err := e.Encode(&op)
-	return b.Bytes(), err
-}
-
-func (self jsOperation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interface{} {
-
-	val, err := rntm.RunJavaScript(ds, self.User, self.Code)
-	if err != nil {
-		return err
-	}
-
-	//check if it is a Encotable, if so we only return the encoded identifier!
-	if enc, ok := val.(utils.Encotable); ok {
-		val = enc.Encode()
-	}
-
-	return val
-}
-
-func (self jsOperation) GetSession() (p2p.PeerID, wamp.ID) {
+func (self Operation) GetSession() (p2p.PeerID, wamp.ID) {
 	return self.Node, self.Session
 }

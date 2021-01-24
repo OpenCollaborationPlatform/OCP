@@ -2,7 +2,6 @@ package document
 
 import (
 	"context"
-	"encoding/gob"
 	"fmt"
 	"strings"
 
@@ -12,13 +11,6 @@ import (
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
 )
-
-func init() {
-	//a few types that may be a valid wamp arguments
-	gob.Register(new([]interface{}))
-	gob.Register(new(map[string]interface{}))
-	gob.Register(new(map[int64]interface{}))
-}
 
 //Async datastructure which encapsulates synchronous DML runtime and a datastore.
 //It works operation based: All operations are carried out ordered

@@ -1,6 +1,8 @@
 package dml
 
 import (
+	"fmt"
+
 	"github.com/alecthomas/participle"
 	"github.com/dop251/goja"
 )
@@ -46,15 +48,9 @@ func SetupGlobals(rntm *Runtime) {
 
 	rntm.jsvm.Set("print", func(call goja.FunctionCall) goja.Value {
 
-		if len(call.Arguments) != 1 {
-			panic(newUserError(Error_Arguments_Wrong, "Print takes only single string argument"))
-		}
-
-		res := call.Arguments[0].Export()
-		str, ok := res.(string)
-
-		if !ok {
-			panic(newUserError(Error_Arguments_Wrong, "Print takes only single string argument"))
+		var str string
+		for _, arg := range call.Arguments {
+			str = str + fmt.Sprintf("%v", arg.Export())
 		}
 
 		rntm.printMessage(str)
