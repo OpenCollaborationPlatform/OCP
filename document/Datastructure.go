@@ -113,9 +113,16 @@ func (self Datastructure) createWampPublishFunction() dml.EventCallbackFunc {
 	return func(path string, args ...interface{}) {
 
 		//convert the arguments into wamp style
+		//this includes encoding all custom types
 		wampArgs := make(wamp.List, len(args))
 		for i, arg := range args {
-			wampArgs[i] = arg
+
+			if enc, ok := arg.(utils.Encotable); ok {
+				wampArgs[i] = enc.Encode()
+
+			} else {
+				wampArgs[i] = arg
+			}
 		}
 
 		//connvert the path into wamp style uri
@@ -132,7 +139,7 @@ func (self Datastructure) createWampPublishFunction() dml.EventCallbackFunc {
 		}
 
 		//publish!
-		self.client.Publish(uri, opts, args, kwargs)
+		self.client.Publish(uri, opts, wampArgs, kwargs)
 	}
 }
 
