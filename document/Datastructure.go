@@ -347,13 +347,13 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				// Read and send chunks of data
 				channel, err := self.swarm.Data.ReadChannel(ctx, id)
 				if err != nil {
+					//channel gets closed on error
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}
 				for data := range channel {
 					// Send a chunk of data.
 					err := self.client.SendProgress(ctx, wamp.List{data}, nil)
 					if err != nil {
-						close(channel)
 						return nxclient.InvokeResult{Err: wamp.ErrCanceled}
 					}
 				}
