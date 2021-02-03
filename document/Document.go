@@ -29,7 +29,7 @@ type Document struct {
 func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host, dml utils.Cid, id string, join bool) (Document, error) {
 
 	//lets create the folder for the document
-	path := filepath.Join(host.GetPath(), id)
+	path := filepath.Join(host.GetPath(), "Documents", id)
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
 		return Document{}, utils.StackError(err, "Unable to create folder for document")

@@ -111,7 +111,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 		conf:   newSwarmConfiguration(),
 		ctx:    swarmctx,
 		cancel: cancel,
-		path:   filepath.Join(host.path, string(id)),
+		path:   filepath.Join(host.path, "Documents", string(id)),
 	}
 
 	//ensure our folder exist
