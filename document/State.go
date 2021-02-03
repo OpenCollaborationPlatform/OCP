@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/datastores"
@@ -35,12 +36,16 @@ func (self *sessionInfo) IsSet() bool {
 	return self.Node != p2p.PeerID("") && self.Session != wamp.ID(0)
 }
 
-//shared dmlState data structure
+//Shared dmlState data structure
+//Note: The p2p replicated state ensures that the state is never accessed concurrently, hence
+//		does not need a lock. However, we also access the state from the datastructure
+//		directly, hence a lock is needed
 type dmlState struct {
 	//path which holds the datastores and dml files
 	path string
 
 	//runtime data
+	lock             *sync.Mutex
 	dml              *dml.Runtime
 	store            *datastore.Datastore
 	operationSession *sessionInfo
@@ -67,10 +72,13 @@ func newState(path string) (dmlState, error) {
 	//init DB
 	rntm.InitializeDatastore(store)
 
-	return dmlState{path, rntm, store, &sessionInfo{}}, nil
+	return dmlState{path, &sync.Mutex{}, rntm, store, &sessionInfo{}}, nil
 }
 
 func (self dmlState) Apply(data []byte) interface{} {
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	//get the operation from the log entry
 	op, err := operationFromData(data)
@@ -87,6 +95,9 @@ func (self dmlState) Apply(data []byte) interface{} {
 }
 
 func (self dmlState) Snapshot() ([]byte, error) {
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	//prepare the datastore for backup
 	err := self.store.PrepareFileBackup()
@@ -134,6 +145,9 @@ func (self dmlState) Snapshot() ([]byte, error) {
 }
 
 func (self dmlState) LoadSnapshot(data []byte) error {
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	//prepare the datastore for backup
 	err := self.store.PrepareFileBackup()
@@ -185,14 +199,23 @@ func (self dmlState) LoadSnapshot(data []byte) error {
 }
 
 func (self dmlState) GetOperationSession() *sessionInfo {
+	//not locking here, as this function is used for event publishing and hence during
+	//apply. This would deadlock
 	return self.operationSession
 }
 
 func (self dmlState) CanCallLocal(path string) (bool, error) {
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
 	return self.dml.IsConstant(self.store, path)
 }
 
 func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) (interface{}, error) {
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	//convert all encoded arguments
 	for i, arg := range args {
@@ -218,6 +241,9 @@ func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) 
 }
 
 func (self dmlState) Close() {
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	self.store.Close()
 }
