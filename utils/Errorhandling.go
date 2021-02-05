@@ -94,7 +94,8 @@ func StackError(err error, args ...interface{}) error {
 		err = ocperr
 
 	} else {
-		ocperr := NewError(Internal, "library", "external_error")
+		ocperr := NewError(Internal, "library", "failure")
+		ocperr.AddToStack(err.Error())
 		ocperr.AddToStack(msg)
 		err = ocperr
 	}

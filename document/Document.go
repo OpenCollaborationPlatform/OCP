@@ -94,6 +94,9 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.removePeer", doc.ID), doc.removePeer, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.listPeers", doc.ID), doc.listPeers, wamp.Dict{}))
 
+	options := wamp.SetOption(wamp.Dict{}, wamp.OptDiscloseCaller, true)
+	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.view", doc.ID), doc.view, options))
+
 	for _, err := range errS {
 		if err != nil {
 			ds.Close()
@@ -209,5 +212,35 @@ func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclie
 	return nxclient.InvokeResult{Args: wamp.List{resargs}}
 }
 
-//							Data Handling
+//							View Handling
 //******************************************************************************
+func (self Document) view(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	session := wamp.OptionID(inv.Details, "caller")
+
+	if len(inv.Arguments) == 0 {
+		//return if view is open or not
+		return nxclient.InvokeResult{Args: wamp.List{self.datastructure.HasView(session)}}
+
+	} else if len(inv.Arguments) > 1 {
+		return nxclient.InvokeResult{Args: wamp.List{"Single bool argument required: True for opening view, False for closing"}, Err: wamp.URI("ocp.error")}
+	}
+
+	arg, ok := wamp.AsBool(inv.Arguments[0])
+	if !ok {
+		return nxclient.InvokeResult{Args: wamp.List{"Bool argument required: True for opening view, False for closing"}, Err: wamp.URI("ocp.error")}
+	}
+
+	var err error
+	if arg {
+		err = self.datastructure.OpenView(session)
+
+	} else {
+		err = self.datastructure.CloseView(session)
+	}
+
+	if err != nil {
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+	}
+	return nxclient.InvokeResult{}
+}

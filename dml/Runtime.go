@@ -288,10 +288,14 @@ func (self *Runtime) RegisterEventCallback(name string, fnc EventCallbackFunc) e
 }
 
 //Function to register function to catch all runtime events
-func (self *Runtime) UnregisterEventCallback(name string) error {
+func (self *Runtime) UnregisterEventCallback(name string) (EventCallbackFunc, error) {
 
+	cb, ok := self.eventCBs[name]
+	if !ok {
+		return nil, newInternalError(Error_Operation_Invalid, "Callback not registered")
+	}
 	delete(self.eventCBs, name)
-	return nil
+	return cb, nil
 }
 
 // 						Accessing / executing Methods
@@ -329,8 +333,14 @@ func (self *Runtime) RunJavaScript(ds *datastore.Datastore, user User, code stri
 	return extractValue(val, self), err
 }
 
-func (self *Runtime) IsConstant(ds *datastore.Datastore, fullpath string) (bool, error) {
+//Check if the call isread only, hence does not change the data. True if:
+// - path is a const method
+// - path/args is reading a property
+// - path is a value in an object, e.g. it reading the value
+func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args ...interface{}) (bool, error) {
 
+	self.clearMessage()
+	self.datastore = ds
 	self.datastore.Begin()
 	defer self.datastore.Rollback()
 
@@ -338,7 +348,6 @@ func (self *Runtime) IsConstant(ds *datastore.Datastore, fullpath string) (bool,
 	if err := self.checkDatastore(ds); err != nil {
 		return false, err
 	}
-	self.datastore = ds
 
 	//get path and accessor
 	idx := strings.LastIndex(string(fullpath), ".")
@@ -363,13 +372,12 @@ func (self *Runtime) IsConstant(ds *datastore.Datastore, fullpath string) (bool,
 		return fnc.IsConst(), nil
 	}
 
-	//check if it is a property that could be const
+	//check if it is a property, and if we read or write
 	if dbSet.obj.HasProperty(accessor) {
-		prop := dbSet.obj.GetProperty(accessor)
-		return prop.IsConst(), nil
+		return len(args) == 0, nil
 	}
 
-	//events are always non-const
+	//events are not read only
 	if dbSet.obj.HasEvent(accessor) {
 		return false, nil
 	}
@@ -382,8 +390,18 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 
 	self.clearMessage()
 
+	//We check if this is readonly, and rollback the datastore if so instead of commit.
+	//it is important to use IsReadOnly function, as external users us this to determine
+	//if this call does not change the datastore, and act accordingly. If a error is in
+	//IsReadOnly and a call would change the store we gurantee here that this change is
+	//rolled back. This could happen if a user made a const method which is not really const...
+	constant, err := self.IsReadOnly(ds, fullpath, args...)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access database")
+	}
+
 	self.datastore = ds
-	err := self.datastore.Begin()
+	err = self.datastore.Begin()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access database")
 	}
@@ -431,7 +449,6 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	}
 
 	handled := false
-	constant := false
 	var result interface{} = nil
 	err = nil
 
@@ -441,10 +458,6 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 
 		result, err = fnc.Call(dbSet.id, args...)
 		handled = true
-
-		if fnc.IsConst() {
-			constant = true
-		}
 	}
 
 	//a property maybe?
@@ -455,8 +468,6 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 		if len(args) == 0 {
 			//read only
 			result = prop.GetValue(dbSet.id)
-			constant = true
-
 		} else {
 			err = prop.SetValue(dbSet.id, args[0])
 			result = args[0]
@@ -474,7 +485,6 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 		dat, ok := dbSet.obj.(Data)
 		if ok {
 			result, err = dat.GetValueByName(dbSet.id, accessor)
-			constant = true
 			handled = true
 		}
 	}

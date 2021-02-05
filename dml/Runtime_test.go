@@ -243,11 +243,11 @@ func TestDmlFile(t *testing.T) {
 
 		Convey("and const functions are recognized", func() {
 
-			c, err := rntm.IsConstant(store, "Document.readString")
+			c, err := rntm.IsReadOnly(store, "Document.readString")
 			So(err, ShouldBeNil)
 			So(c, ShouldBeTrue)
 
-			c, err = rntm.IsConstant(store, "Document.testFnc")
+			c, err = rntm.IsReadOnly(store, "Document.testFnc")
 			So(err, ShouldBeNil)
 			So(c, ShouldBeFalse)
 		})

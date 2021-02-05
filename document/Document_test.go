@@ -11,6 +11,7 @@ import (
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"
 
+	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -235,6 +236,173 @@ func TestDocumentTwoNodes(t *testing.T) {
 						So(err, ShouldBeNil)
 						So(len(res.Arguments), ShouldEqual, 1)
 						So(res.Arguments[0], ShouldEqual, 20)
+					})
+				})
+			})
+		})
+	})
+}
+
+type eventcatcher struct {
+	events []string
+}
+
+func (self *eventcatcher) subscribeEvent(cl *nxclient.Client, event string) {
+	cl.Subscribe(event, self.eventCallback, wamp.Dict{})
+}
+
+func (self *eventcatcher) eventCallback(event *wamp.Event) {
+	uri := wamp.OptionURI(event.Details, "procedure")
+	self.events = append(self.events, string(uri))
+}
+
+func TestDocumentViews(t *testing.T) {
+
+	//make temporary folder for the data
+	path, _ := ioutil.TempDir("", "document")
+	defer os.RemoveAll(path)
+
+	//setup the dml file to be accessbile for the document
+	dmlpath := filepath.Join(path, "Dml")
+	os.MkdirAll(dmlpath, os.ModePerm)
+	ioutil.WriteFile(filepath.Join(dmlpath, "main.dml"), []byte(dmlDocContent), os.ModePerm)
+
+	Convey("Setting up a document with data", t, func() {
+
+		//make a wamp router (and two  little test clients)
+		router, _ := connection.MakeTemporaryRouter()
+		client1, _ := router.GetLocalClient("testClient1")
+		client2, _ := router.GetLocalClient("testClient2")
+		client3, _ := router.GetLocalClient("testClient3")
+
+		//make a p2p host for communication (second one to mimic the network)
+		host, baseHost, _ := p2p.MakeTemporaryTwoHostNetwork(path)
+		defer baseHost.Stop(context.Background())
+		defer host.Stop(context.Background())
+
+		//setup the document handler
+		handler, err := NewDocumentHandler(router, host)
+		So(err, ShouldBeNil)
+		So(handler, ShouldNotBeNil)
+		defer handler.Close(context.Background())
+
+		ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+
+		res, err := client1.Call(ctx, "ocp.documents.create", wamp.Dict{}, wamp.List{dmlpath}, wamp.Dict{}, nil)
+		So(err, ShouldBeNil)
+		So(len(res.Arguments), ShouldNotBeNil)
+
+		docID, ok := res.Arguments[0].(string)
+		So(ok, ShouldBeTrue)
+
+		uri := "ocp.documents." + docID + ".content.Test.testI"
+		_, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{20}, wamp.Dict{}, nil)
+		So(err, ShouldBeNil)
+
+		Convey("Initial closing a view creates an error", func() {
+
+			uri := "ocp.documents." + docID + ".view"
+			open, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+			So(err, ShouldBeNil)
+			So(open.Arguments, ShouldHaveLength, 1)
+			So(open.Arguments[0], ShouldBeFalse)
+
+			_, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{false}, wamp.Dict{}, nil)
+			So(err, ShouldNotBeNil)
+		})
+
+		Convey("Creating a view is possible", func() {
+
+			uri := "ocp.documents." + docID + ".view"
+			_, err := client2.Call(ctx, uri, wamp.Dict{}, wamp.List{true}, wamp.Dict{}, nil)
+			So(err, ShouldBeNil)
+
+			open, err := client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+			So(err, ShouldBeNil)
+			So(open.Arguments, ShouldHaveLength, 1)
+			So(open.Arguments[0], ShouldBeTrue)
+
+			open, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+			So(err, ShouldBeNil)
+			So(open.Arguments, ShouldHaveLength, 1)
+			So(open.Arguments[0], ShouldBeFalse)
+
+			evt1 := &eventcatcher{make([]string, 0)}
+			evt1.subscribeEvent(client1, "ocp.documents."+docID+".content.Test.onPropertyChanged")
+			evt2 := &eventcatcher{make([]string, 0)}
+			evt2.subscribeEvent(client2, "ocp.documents."+docID+".content.Test.onPropertyChanged")
+			evt3 := &eventcatcher{make([]string, 0)}
+			evt3.subscribeEvent(client3, "ocp.documents."+docID+".content.Test.onPropertyChanged")
+
+			Convey("Editing from the view creating session is not possible", func() {
+
+				uri := "ocp.documents." + docID + ".content.Test.testI"
+				_, err := client2.Call(ctx, uri, wamp.Dict{}, wamp.List{10}, wamp.Dict{}, nil)
+				So(err, ShouldNotBeNil)
+
+				So(len(evt1.events), ShouldEqual, 0) //no event as it's the source of change
+				So(len(evt2.events), ShouldEqual, 0) //no event due to view
+				So(len(evt3.events), ShouldEqual, 0) //no event as error raised
+			})
+
+			Convey("Editing from the other sessions is possible", func() {
+
+				uri := "ocp.documents." + docID + ".content.Test.testI"
+				_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{30}, wamp.Dict{}, nil)
+				So(err, ShouldBeNil)
+
+				Convey("Only non view sessions receive the event", func() {
+
+					So(len(evt1.events), ShouldEqual, 0) //no event as it's the source of change
+					So(len(evt2.events), ShouldEqual, 0) //no event due to view
+					So(len(evt3.events), ShouldEqual, 1) //event
+				})
+
+				Convey("Reading from the view session returns value before the change", func() {
+
+					uri := "ocp.documents." + docID + ".content.Test.testI"
+					val, err := client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+					So(val.Arguments[0], ShouldEqual, 20)
+
+					val, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+					So(val.Arguments[0], ShouldEqual, 30)
+				})
+
+				Convey("Closing the view after change", func() {
+
+					uri := "ocp.documents." + docID + ".view"
+					_, err := client2.Call(ctx, uri, wamp.Dict{}, wamp.List{false}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+
+					open, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+					So(open.Arguments, ShouldHaveLength, 1)
+					So(open.Arguments[0], ShouldBeFalse)
+
+					open, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+					So(open.Arguments, ShouldHaveLength, 1)
+					So(open.Arguments[0], ShouldBeFalse)
+
+					Convey("applies all events that were issued while view was open to the relevant client", func() {
+
+						So(len(evt1.events), ShouldEqual, 0) //no event as it's the source of change
+						So(len(evt2.events), ShouldEqual, 1) //closed view, events are send
+						So(len(evt3.events), ShouldEqual, 1) //event
+					})
+
+					Convey("and allows to access the newest state", func() {
+
+						uri = "ocp.documents." + docID + ".content.Test.testI"
+						val, err := client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+						So(err, ShouldBeNil)
+						So(val.Arguments[0], ShouldEqual, 30)
+
+						val, err = client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+						So(err, ShouldBeNil)
+						So(val.Arguments[0], ShouldEqual, 30)
 					})
 				})
 			})

@@ -70,7 +70,7 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	options = wamp.SetOption(options, wamp.OptDiscloseCaller, true)
 
 	//register the event handler
-	rntm.RegisterEventCallback("events", self.createWampPublishFunction())
+	rntm.RegisterEventCallback("events", self.createWampPublishFunction(defaultEventOtions()))
 
 	//register the function handler
 	uri := self.prefix + "content"
@@ -105,10 +105,47 @@ func (self Datastructure) GetState() p2p.State {
 	return self.dmlState
 }
 
+func (self Datastructure) OpenView(session wamp.ID) error {
+	return self.dmlState.OpenView(session)
+}
+
+func (self Datastructure) CloseView(session wamp.ID) error {
+	return self.dmlState.CloseView(session, "events", self.createWampPublishFunction(whitelistEventOptions(session)))
+}
+
+func (self Datastructure) HasView(session wamp.ID) bool {
+	return self.dmlState.HasView(session)
+}
+
 //							helper functions
 //******************************************************************************
 
-func (self Datastructure) createWampPublishFunction() dml.EventCallbackFunc {
+type optFnc func(*Datastructure) wamp.Dict
+
+func defaultEventOtions() optFnc {
+	return func(ds *Datastructure) wamp.Dict {
+
+		//check if we should omit a session!
+		opts := make(wamp.Dict, 0)
+		exclude := ds.dmlState._sessionsWithView()
+		session := ds.dmlState._getOperationSession()
+		if session.IsSet() && session.Node == ds.swarm.GetHost().ID() {
+			exclude = append(exclude, session.Session)
+		}
+		opts["exclude"] = exclude
+		return opts
+	}
+}
+
+func whitelistEventOptions(whitelist wamp.ID) optFnc {
+	return func(ds *Datastructure) wamp.Dict {
+		opts := make(wamp.Dict, 0)
+		opts["eligible"] = wamp.List{whitelist}
+		return opts
+	}
+}
+
+func (self Datastructure) createWampPublishFunction(optionFnc optFnc) dml.EventCallbackFunc {
 
 	return func(path string, args ...interface{}) {
 
@@ -130,13 +167,7 @@ func (self Datastructure) createWampPublishFunction() dml.EventCallbackFunc {
 
 		//other arguments we do not need
 		kwargs := make(wamp.Dict, 0)
-		opts := make(wamp.Dict, 0)
-
-		//check if we should omit a session!
-		session := self.dmlState.GetOperationSession()
-		if session.IsSet() && session.Node == self.swarm.GetHost().ID() {
-			opts["exclude"] = []wamp.ID{session.Session}
-		}
+		opts := optionFnc(&self)
 
 		//publish!
 		self.client.Publish(uri, opts, wampArgs, kwargs)
@@ -184,16 +215,20 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 		path := procedure[(len(self.prefix) + 8):] // 8 content.
 
 		//check if we execute local or globally
-		local, err := self.dmlState.CanCallLocal(string(path))
+		local, err := self.dmlState.CanCallLocal(session, string(path), inv.Arguments...)
 		if err != nil {
 			return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 		}
 		if local {
-			res, err := self.dmlState.CallLocal(dml.User(auth), string(path), inv.Arguments...)
+			res, err := self.dmlState.CallLocal(session, dml.User(auth), string(path), inv.Arguments...)
 			if err != nil {
 				return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 			}
 			return nxclient.InvokeResult{Args: wamp.List{res}}
+		}
+
+		if self.dmlState.HasView(session) {
+			return nxclient.InvokeResult{Args: wamp.List{"View is open, cannot make change"}, Err: wamp.URI("ocp.error")}
 		}
 
 		//build and excecute the operation arguments
@@ -210,6 +245,10 @@ func (self Datastructure) createWampJSFunction() nxclient.InvocationHandler {
 
 		node := self.swarm.GetHost().ID()
 		session := wamp.OptionID(inv.Details, "caller")
+
+		if self.dmlState.HasView(session) {
+			return nxclient.InvokeResult{Args: wamp.List{"View is open, cannot make change"}, Err: wamp.URI("ocp.error")}
+		}
 
 		//get the user id
 		auth := wamp.OptionString(inv.Details, "caller_authid") //authid, for session id use "caller"
@@ -321,6 +360,11 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			switch procedure {
 
 			case "CidByBinary":
+
+				if self.dmlState.HasView(session) {
+					return nxclient.InvokeResult{Args: wamp.List{"View is open, cannot make change"}, Err: wamp.URI("ocp.error")}
+				}
+
 				//get the cid
 				cid, err := self.cidByBinary(ctx, inv)
 				if err != nil {
@@ -360,6 +404,11 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return nxclient.InvokeResult{}
 
 			case "CidByPath":
+
+				if self.dmlState.HasView(session) {
+					return nxclient.InvokeResult{Args: wamp.List{"View is open, cannot make change"}, Err: wamp.URI("ocp.error")}
+				}
+
 				if len(inv.Arguments) != 1 {
 					return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to file or directory"}, Err: wamp.URI("ocp.error")}
 				}
@@ -413,6 +462,11 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 
 			switch fnc {
 			case "SetByPath":
+
+				if self.dmlState.HasView(session) {
+					return nxclient.InvokeResult{Args: wamp.List{"View is open, cannot make change"}, Err: wamp.URI("ocp.error")}
+				}
+
 				if len(inv.Arguments) != 1 {
 					return nxclient.InvokeResult{Args: wamp.List{"Argument must be path to file or directory"}, Err: wamp.URI("ocp.error")}
 				}
@@ -461,6 +515,10 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return nxclient.InvokeResult{Args: wamp.List{filepath}}
 
 			case "SetByBinary":
+
+				if self.dmlState.HasView(session) {
+					return nxclient.InvokeResult{Args: wamp.List{"View is open, cannot make change"}, Err: wamp.URI("ocp.error")}
+				}
 
 				//get the cid
 				cid, err := self.cidByBinary(ctx, inv)

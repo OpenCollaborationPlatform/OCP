@@ -49,6 +49,7 @@ type dmlState struct {
 	dml              *dml.Runtime
 	store            *datastore.Datastore
 	operationSession *sessionInfo
+	views            *viewManager
 }
 
 func newState(path string) (dmlState, error) {
@@ -69,10 +70,17 @@ func newState(path string) (dmlState, error) {
 	if err != nil {
 		return dmlState{}, utils.StackError(err, "Unable to parse dml file")
 	}
-	//init DB
-	rntm.InitializeDatastore(store)
 
-	return dmlState{path, &sync.Mutex{}, rntm, store, &sessionInfo{}}, nil
+	//init DB
+	err = rntm.InitializeDatastore(store)
+	if err != nil {
+		return dmlState{}, utils.StackError(err, "Unable to initialize datastore for state")
+	}
+
+	//create the view manager
+	viewMngr := newViewManager(filepath.Join(path, "Views"))
+
+	return dmlState{path, &sync.Mutex{}, rntm, store, &sessionInfo{}, viewMngr}, nil
 }
 
 func (self dmlState) Apply(data []byte) interface{} {
@@ -89,6 +97,9 @@ func (self dmlState) Apply(data []byte) interface{} {
 	//ensure the correct session is set
 	self.operationSession.Set(op.GetSession())
 	defer self.operationSession.Unset()
+
+	//append to all available views
+	self.views.appendOperation(op)
 
 	//apply to runtime
 	return op.ApplyTo(self.dml, self.store)
@@ -198,21 +209,30 @@ func (self dmlState) LoadSnapshot(data []byte) error {
 	return nil
 }
 
-func (self dmlState) GetOperationSession() *sessionInfo {
+//Carefull: Not locking, do not use outside of Apply callbacks!
+func (self dmlState) _getOperationSession() *sessionInfo {
 	//not locking here, as this function is used for event publishing and hence during
 	//apply. This would deadlock
 	return self.operationSession
 }
 
-func (self dmlState) CanCallLocal(path string) (bool, error) {
+func (self dmlState) CanCallLocal(session wamp.ID, path string, args ...interface{}) (bool, error) {
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	return self.dml.IsConstant(self.store, path)
+	if self.views.hasView(session) {
+		view, err := self.views.getOrCreateView(session, self.store)
+		if err != nil {
+			return false, utils.StackError(err, "Unable to access opened view")
+		}
+		return self.dml.IsReadOnly(view.store, path, args...)
+	}
+
+	return self.dml.IsReadOnly(self.store, path, args...)
 }
 
-func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) (interface{}, error) {
+func (self dmlState) CallLocal(session wamp.ID, user dml.User, path string, args ...interface{}) (interface{}, error) {
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -227,7 +247,18 @@ func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) 
 		}
 	}
 
-	val, err := self.dml.Call(self.store, user, path, args...)
+	var val interface{}
+	var err error
+	if self.views.hasView(session) {
+		view, err := self.views.getOrCreateView(session, self.store)
+		if err != nil {
+			return false, utils.StackError(err, "Unable to access opened view")
+		}
+		val, err = self.dml.Call(view.store, user, path, args...)
+
+	} else {
+		val, err = self.dml.Call(self.store, user, path, args...)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -238,6 +269,61 @@ func (self dmlState) CallLocal(user dml.User, path string, args ...interface{}) 
 	}
 
 	return val, nil
+}
+
+func (self dmlState) HasView(session wamp.ID) bool {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	return self.views.hasView(session)
+}
+
+//Carefull: Not locking, do not use outside of Apply callbacks!
+func (self dmlState) _sessionsWithView() []wamp.ID {
+	//not locking here, as this function is used for event publishing and hence during
+	//apply. This would deadlock
+	return self.views.getSessionsWithView()
+}
+
+func (self dmlState) OpenView(session wamp.ID) error {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	_, err := self.views.getOrCreateView(session, self.store)
+	return err
+}
+
+func (self dmlState) CloseView(session wamp.ID, pauseEvent string, eventCB dml.EventCallbackFunc) error {
+
+	//We lock the state, hence noone else will  access the dml runtime and also not emit events.
+	//we therefore can remove the event handler and not miss any events
+
+	//TODO:  A few could be open long, and hence extreme amounts of events could need
+	//		 processing. As implemented now it blocks all state updates, which could
+	//		 be then a long block for everybdy in the document which is not nice.
+	//		 Better to release the lock after certain amount of events and reopen for the rest.
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	if pauseEvent != "" {
+		cb, err := self.dml.UnregisterEventCallback(pauseEvent)
+		defer self.dml.RegisterEventCallback(pauseEvent, cb)
+		if err != nil {
+			return utils.StackError(err, "Unable to pause event handling")
+		}
+	}
+
+	if eventCB != nil {
+		err := self.dml.RegisterEventCallback("tmp", eventCB)
+		defer self.dml.UnregisterEventCallback("tmp")
+		if err != nil {
+			return utils.StackError(err, "Unable to setup temporary event  handler")
+		}
+	}
+
+	//close the view, which emits all the events that occured after the view was created
+	return self.views.removeAndCloseView(session, self.dml)
 }
 
 func (self dmlState) Close() {

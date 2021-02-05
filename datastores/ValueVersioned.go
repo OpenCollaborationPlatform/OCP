@@ -1301,13 +1301,14 @@ func (self *ValueVersioned) HasUpdates() bool {
 
 //helper functions
 func itob(v uint64) []byte {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, v)
-	return b
+	buf := make([]byte, binary.MaxVarintLen64)
+	n := binary.PutUvarint(buf, v)
+	return buf[:n]
 }
 
 func btoi(b []byte) uint64 {
-	return binary.BigEndian.Uint64(b)
+	value, _ := binary.Uvarint(b)
+	return value
 }
 
 func btos(val []byte) string {

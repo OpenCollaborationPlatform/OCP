@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/ickby/CollaborationNode/dml"
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -102,6 +103,96 @@ func TestStateSnapshot(t *testing.T) {
 					So(i5, ShouldEqual, i1)
 				})
 			})
+		})
+	})
+}
+
+func TestStateView(t *testing.T) {
+
+	Convey("Setting up a new state", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "datastructure")
+		defer os.RemoveAll(path)
+
+		//copy the dml file in
+		dmlpath := filepath.Join(path, "Dml")
+		os.MkdirAll(dmlpath, os.ModePerm)
+		ioutil.WriteFile(filepath.Join(dmlpath, "main.dml"), []byte(dmlContent), os.ModePerm)
+
+		state, err := newState(path)
+		defer state.Close()
+		So(err, ShouldBeNil)
+		So(state, ShouldNotBeNil)
+
+		id1 := wamp.ID(1)
+		id2 := wamp.ID(2)
+
+		Convey("some data can be added.", func() {
+
+			_, err := state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testS = \"yeah\"")
+			So(err, ShouldBeNil)
+			_, err = state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testI = 25")
+			So(err, ShouldBeNil)
+
+			Convey("No view exist for any session by default", func() {
+				So(state.HasView(id1), ShouldBeFalse)
+				So(state.HasView(id2), ShouldBeFalse)
+			})
+
+			Convey("A view can be opened", func() {
+				err := state.OpenView(id1)
+				So(err, ShouldBeNil)
+
+				So(state.HasView(id1), ShouldBeTrue)
+				So(state.HasView(id2), ShouldBeFalse)
+
+				Convey("which creates the appropriate folder", func() {
+
+					path := state.views.views[id1].path
+					_, err := os.Stat(path)
+					So(err, ShouldBeNil)
+				})
+
+				Convey("and allows local access with view", func() {
+
+					_, err := state.CanCallLocal(id1, "Test.testI")
+					So(err, ShouldBeNil)
+					val, err := state.CallLocal(id1, "", "Test.testI")
+					So(err, ShouldBeNil)
+					So(val, ShouldEqual, 25)
+				})
+
+				Convey("Chaning the state does not change the View", func() {
+
+					_, err = state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testI = 10")
+					So(err, ShouldBeNil)
+
+					val, err := state.CallLocal(id2, "", "Test.testI")
+					So(err, ShouldBeNil)
+					So(val, ShouldEqual, 10)
+
+					val, err = state.CallLocal(id1, "", "Test.testI")
+					So(err, ShouldBeNil)
+					So(val, ShouldEqual, 25)
+				})
+
+				Convey("Closing the view works", func() {
+
+					err := state.CloseView(id1, "", nil)
+					So(err, ShouldBeNil)
+					So(state.HasView(id1), ShouldBeFalse)
+					So(state.HasView(id2), ShouldBeFalse)
+
+					Convey("and removes the folder", func() {
+						path := state.views.views[id1].path
+						_, err := os.Stat(path)
+						So(err, ShouldNotBeNil)
+						So(os.IsNotExist(err), ShouldBeTrue)
+					})
+				})
+			})
+
 		})
 	})
 }
