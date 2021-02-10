@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	logging "github.com/ipfs/go-log/v2"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -22,8 +21,6 @@ import (
 
 	"github.com/libp2p/go-libp2p-core/routing"
 )
-
-var log = logging.Logger("bootstrap")
 
 // BootstrapConfig specifies parameters used in an IpfsNode's network
 // bootstrapping process.
@@ -65,7 +62,7 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 
 		addrs := make([]peer.AddrInfo, 0)
 
-		nodes := viper.GetStringSlice("p2p.bootstrap.nodes")
+		nodes := viper.GetStringSlice("p2p.bootstrap")
 		for _, value := range nodes {
 			addr, err := ma.NewMultiaddr(value)
 			if err != nil {

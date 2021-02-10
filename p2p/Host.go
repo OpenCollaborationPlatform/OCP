@@ -15,6 +15,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"
+	logging "github.com/ipfs/go-log/v2"
 	libp2p "github.com/libp2p/go-libp2p"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -26,6 +27,8 @@ import (
 	uuid "github.com/satori/go.uuid"
 	"github.com/spf13/viper"
 )
+
+var log = logging.Logger("P2P")
 
 //RPC Api of the host
 type HostRPCApi struct {
@@ -182,6 +185,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		h.wamp.Register("ocp.p2p.peers", h._peers, wamp.Dict{})
 	}
 
+	log.Info("P2P host started")
 	return nil
 }
 
