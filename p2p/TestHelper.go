@@ -131,11 +131,7 @@ func randomHostWithoutDataSerivce() (*Host, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to setup distributed hash table")
 	}
-	conf := kaddht.BootstrapConfig{
-		Queries: 3,                // how many queries to run per period
-		Period:  5 * time.Minute,  // how often to run periodic bootstrap.
-		Timeout: 10 * time.Second} // how long to wait for a bootstrap query to run
-	host.dht.BootstrapWithConfig(kadctx, conf)
+	//host.dht.Bootstrap(kadctx)
 
 	return host, nil
 }

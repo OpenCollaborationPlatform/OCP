@@ -18,7 +18,7 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
-const raftBaseProtocol string = "/ocpraft/1.0.0/"
+const raftBaseProtocol string = "/ocp/raft/1.0.0/"
 
 // This provides a custom logger for the network transport
 // which intercepts messages and rewrites them to our own logger
@@ -30,19 +30,6 @@ var logLogger = log.New(&logForwarder{}, "", 0)
 // According to https://golang.org/pkg/log/#Logger.Output
 // it is called per line.
 func (fw *logForwarder) Write(p []byte) (n int, err error) {
-	/*	 t := strings.TrimSuffix(string(p), "\n")
-		 switch {
-		 case strings.Contains(t, "[DEBUG]"):
-		 	log.Println(strings.TrimPrefix(t, "[DEBUG] raft-net: "))
-		 case strings.Contains(t, "[WARN]"):
-		 	log.Println(strings.TrimPrefix(t, "[WARN]  raft-net: "))
-		 case strings.Contains(t, "[ERR]"):
-		 	log.Println(strings.TrimPrefix(t, "[ERR] raft-net: "))
-		 case strings.Contains(t, "[INFO]"):
-		 	log.Println(strings.TrimPrefix(t, "[INFO] raft-net: "))
-		 default:
-		 	log.Println(t)
-		 }*/
 	return len(p), nil
 }
 
@@ -95,7 +82,9 @@ func (sl *streamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (
 		sl.host.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.PermanentAddrTTL)
 	}
 
-	return gostream.Dial(sl.host, pid, sl.id)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return gostream.Dial(ctx, sl.host, pid, sl.id)
 }
 
 func (sl *streamLayer) Accept() (net.Conn, error) {
@@ -141,7 +130,7 @@ func NewLibp2pTransport(h host.Host, dht *kaddht.IpfsDHT, timeout time.Duration,
 	// streams.
 	cfg := &raft.NetworkTransportConfig{
 		ServerAddressProvider: provider,
-		Logger:                logLogger,
+		Logger:                nil,
 		Stream:                stream,
 		MaxPool:               0,
 		Timeout:               timeout,
