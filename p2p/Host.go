@@ -144,7 +144,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	}*/
 
 	//setup the dht (careful: the context does control lifetime of some internal dht things)
-	dhtOpts := []kaddht.Option{kaddht.Mode(kaddht.ModeServer)}
+	dhtOpts := []kaddht.Option{kaddht.Mode(kaddht.ModeServer), kaddht.ProtocolPrefix("/ocp")}
 	h.dht, err = kaddht.New(ctx, h.host, dhtOpts...)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup distributed hash table")

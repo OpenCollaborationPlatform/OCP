@@ -21,7 +21,6 @@ import (
 	"github.com/jbenet/goprocess/periodic"
 
 	"github.com/libp2p/go-libp2p-core/routing"
-	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
 var log = logging.Logger("bootstrap")
@@ -81,14 +80,6 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 			addrs = append(addrs, *info)
 		}
 
-		if viper.GetBool("p2p.bootstrap.defaults") {
-			for _, addr := range kaddht.DefaultBootstrapPeers {
-				info, err := peer.AddrInfoFromP2pAddr(addr)
-				if err == nil {
-					addrs = append(addrs, *info)
-				}
-			}
-		}
 		return addrs
 	}
 
