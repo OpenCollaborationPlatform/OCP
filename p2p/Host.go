@@ -17,7 +17,9 @@ import (
 	"github.com/gammazero/nexus/v3/wamp"
 	logging "github.com/ipfs/go-log/v2"
 	libp2p "github.com/libp2p/go-libp2p"
+	p2pevent "github.com/libp2p/go-libp2p-core/event"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
+	p2pnet "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
 	crypto "github.com/libp2p/go-libp2p-crypto"
@@ -70,6 +72,7 @@ type Host struct {
 	serviceCncl context.CancelFunc
 	dht         *kaddht.IpfsDHT
 	mdns        mdns.Service
+	subs        p2pevent.Subscription
 
 	//serivces the host provides
 	Rpc   *hostRpcService
@@ -77,8 +80,9 @@ type Host struct {
 	Event *hostEventService
 
 	//some internal data
-	path string
-	wamp *nxclient.Client
+	path         string
+	wamp         *nxclient.Client
+	reachability p2pnet.Reachability
 }
 
 //Host creates p2p host which manages all peer connections
@@ -89,7 +93,7 @@ func NewHost(router *connection.Router) *Host {
 		client, _ = router.GetLocalClient("p2p")
 	}
 
-	return &Host{swarms: make([]*Swarm, 0), wamp: client}
+	return &Host{swarms: make([]*Swarm, 0), wamp: client, reachability: p2pnet.ReachabilityUnknown}
 }
 
 // Starts the listening for connections and the bootstrap prozess
@@ -130,6 +134,8 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		libp2p.Identity(priv),
 		libp2p.ListenAddrStrings(addr),
 		libp2p.NATPortMap(),
+		libp2p.EnableNATService(),
+		libp2p.DisableRelay(),
 	)
 
 	if err != nil {
@@ -147,7 +153,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	}*/
 
 	//setup the dht (careful: the context does control lifetime of some internal dht things)
-	dhtOpts := []kaddht.Option{kaddht.Mode(kaddht.ModeServer), kaddht.ProtocolPrefix("/ocp")}
+	dhtOpts := []kaddht.Option{kaddht.ProtocolPrefix("/ocp")}
 	h.dht, err = kaddht.New(ctx, h.host, dhtOpts...)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup distributed hash table")
@@ -183,6 +189,32 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		h.wamp.Register("ocp.p2p.id", h._id, wamp.Dict{})
 		h.wamp.Register("ocp.p2p.addresses", h._addresses, wamp.Dict{})
 		h.wamp.Register("ocp.p2p.peers", h._peers, wamp.Dict{})
+		h.wamp.Register("ocp.p2p.reachability", h._reach, wamp.Dict{})
+	}
+
+	//and the wamp events
+	if h.wamp != nil {
+		sub, err := h.host.EventBus().Subscribe([]interface{}{new(p2pevent.EvtLocalReachabilityChanged),
+			new(p2pevent.EvtPeerConnectednessChanged)})
+		if err != nil {
+			return utils.StackError(err, "Unable to setup p2p events")
+		}
+		h.subs = sub
+
+		go func() {
+			for e := range h.subs.Out() {
+				switch e.(type) {
+
+				case p2pevent.EvtLocalReachabilityChanged:
+					h.reachability = e.(p2pevent.EvtLocalReachabilityChanged).Reachability
+					h.wamp.Publish("ocp.p2p.events.reachability", wamp.Dict{}, wamp.List{h.reachability.String()}, wamp.Dict{})
+
+				case p2pevent.EvtPeerConnectednessChanged:
+					conevt := e.(p2pevent.EvtPeerConnectednessChanged)
+					h.wamp.Publish("ocp.p2p.events.connection", wamp.Dict{}, wamp.List{conevt.Peer.Pretty(), conevt.Connectedness.String()}, wamp.Dict{})
+				}
+			}
+		}()
 	}
 
 	log.Info("P2P host started")
@@ -190,6 +222,9 @@ func (h *Host) Start(shouldBootstrap bool) error {
 }
 
 func (h *Host) Stop(ctx context.Context) error {
+
+	//stop events
+	h.subs.Close()
 
 	//stop bootstrapping
 	if h.bootstrapper != nil {
@@ -617,4 +652,13 @@ func (self *Host) _peers(ctx context.Context, inv *wamp.Invocation) nxclient.Inv
 	}
 
 	return nxclient.InvokeResult{Args: peers}
+}
+
+func (self *Host) _reach(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 0 {
+		return nxclient.InvokeResult{Args: wamp.List{"No arguments allowed for this function"}, Err: wamp.URI("ocp.error")}
+	}
+
+	return nxclient.InvokeResult{Args: wamp.List{self.reachability.String()}}
 }

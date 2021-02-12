@@ -5,18 +5,17 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"github.com/ickby/CollaborationNode/node"
-	"github.com/ickby/CollaborationNode/utils"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/ickby/CollaborationNode/node"
+	"github.com/ickby/CollaborationNode/utils"
+
 	"github.com/libp2p/go-libp2p-crypto"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-
-	"runtime/pprof"
 )
 
 //flag variables
@@ -87,17 +86,6 @@ var cmdStart = &cobra.Command{
 
 			//setup all online commands
 			initOnlineCommands()
-
-			//profiling
-			f, err := os.Create("cpu.profile")
-			if err != nil {
-				panic("could not create CPU profile")
-			}
-			defer f.Close() // error handling omitted for example
-			if err := pprof.StartCPUProfile(f); err != nil {
-				panic("could not start CPU profile")
-			}
-			defer pprof.StopCPUProfile()
 
 			//wait till someone wants to stop...
 			ocpNode.WaitForStop()
