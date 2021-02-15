@@ -29,8 +29,13 @@ var (
 		},
 		"log": map[string]interface{}{
 			"level": ConfigEntry{Default: "Info", Short: "l", Text: "Output level of log, always including the higher levels  (Error, Warning, Info, Debug)"},
-			"file":  ConfigEntry{Default: "", Short: "i", Text: "File path to log into instead of stdout"},
-			"json":  ConfigEntry{Default: "False", Short: "j", Text: "Log entries are output as json data, not as messages"},
+			"json":  ConfigEntry{Default: false, Short: "j", Text: "Log entries are output as json data, not as messages"},
+			"file": map[string]interface{}{
+				"enable":  ConfigEntry{Default: false, Short: "e", Text: "Enables logging to files in OCP dir logs folder"},
+				"size":    ConfigEntry{Default: 10, Text: "[Mb] Maximal file size of log file before creating backup"},
+				"backups": ConfigEntry{Default: 3, Text: "[Num] Maximal number of allowed backup files, deletes oldest if more required"},
+				"age":     ConfigEntry{Default: 10, Text: "[Days] Delete files when older than given time"},
+			},
 		},
 	}
 )
@@ -248,6 +253,8 @@ func AddConfigFlag(cmd *cobra.Command, accessor string) {
 		cmd.Flags().Float64P(name, config.Short, viper.GetFloat64(accessor), config.Text)
 	case []string:
 		cmd.Flags().StringSliceP(name, config.Short, viper.GetStringSlice(accessor), config.Text)
+	case bool:
+		cmd.Flags().BoolP(name, config.Short, viper.GetBool(accessor), config.Text)
 	default:
 		log.Fatalf("No flag can be created for config %s", accessor)
 	}

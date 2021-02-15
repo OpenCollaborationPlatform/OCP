@@ -4,9 +4,13 @@ package node
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+
+	"github.com/spf13/viper"
 
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/document"
@@ -15,6 +19,7 @@ import (
 	"github.com/ickby/CollaborationNode/utils"
 
 	hclog "github.com/hashicorp/go-hclog"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
@@ -38,17 +43,29 @@ type Node struct {
 
 func NewNode() *Node {
 
-	logger := hclog.New(&hclog.LoggerOptions{
-		Level: hclog.LevelFromString("INFO"),
-	})
-
 	return &Node{
 		quit:    make(chan string),
 		Version: OcpVersion,
-		logger:  logger}
+		logger:  nil}
 }
 
 func (self *Node) Start() error {
+
+	//setup logging system
+	var writer io.Writer = os.Stdout
+	if viper.GetBool("log.file.enable") {
+		writer = &lumberjack.Logger{
+			Filename:   filepath.Join(viper.GetString("directory"), "Logs", "ocp.log"),
+			MaxSize:    viper.GetInt("log.file.size"),    // megabytes
+			MaxBackups: viper.GetInt("log.sile.backups"), //num
+			MaxAge:     viper.GetInt("log.file.age"),     //days
+		}
+	}
+	self.logger = hclog.New(&hclog.LoggerOptions{
+		Level:      hclog.LevelFromString(viper.GetString("log.level")),
+		JSONFormat: viper.GetBool("log.json"),
+		Output:     writer,
+	})
 
 	self.logger.Info("Sartup OCP Node", "version", self.Version)
 

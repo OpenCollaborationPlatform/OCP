@@ -34,9 +34,9 @@ func init() {
 	utils.AddConfigFlag(cmdStart, "api.uri")
 	utils.AddConfigFlag(cmdStart, "p2p.uri")
 	utils.AddConfigFlag(cmdStart, "p2p.port")
-	utils.AddConfigFlag(cmdStart, "log.file")
 	utils.AddConfigFlag(cmdStart, "log.json")
 	utils.AddConfigFlag(cmdStart, "log.level")
+	utils.AddConfigFlag(cmdStart, "log.file.enable")
 }
 
 var cmdVersion = &cobra.Command{
