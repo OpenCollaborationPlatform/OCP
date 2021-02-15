@@ -29,7 +29,7 @@ require (
 	github.com/google/uuid v1.2.0
 	github.com/gopherjs/gopherjs v0.0.0-20210202160940-bed99a852dfe // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-hclog v0.15.0 // indirect
+	github.com/hashicorp/go-hclog v0.15.0
 	github.com/hashicorp/go-immutable-radix v1.3.0 // indirect
 	github.com/hashicorp/go-msgpack v1.1.5 // indirect
 	github.com/hashicorp/go-uuid v1.0.2 // indirect

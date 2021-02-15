@@ -28,8 +28,8 @@ var (
 			"bootstrap": ConfigEntry{Default: []string{"/ip4/167.99.243.88/tcp/7000/ipfs/QmfNQhSAmB9Yg3YtycRNquC2fv3WZyB3vixVQheG16GA7b"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification, next to the default ones"},
 		},
 		"log": map[string]interface{}{
-			"level": ConfigEntry{Default: "Info", Short: "v", Text: "Output level of log, always including the higher levels  (Error, Warning, Info, Debug)"},
-			"file":  ConfigEntry{Default: "", Short: "l", Text: "File path to log into instead of stdout"},
+			"level": ConfigEntry{Default: "Info", Short: "l", Text: "Output level of log, always including the higher levels  (Error, Warning, Info, Debug)"},
+			"file":  ConfigEntry{Default: "", Short: "i", Text: "File path to log into instead of stdout"},
 			"json":  ConfigEntry{Default: "False", Short: "j", Text: "Log entries are output as json data, not as messages"},
 		},
 	}

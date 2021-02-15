@@ -87,7 +87,6 @@ var cmdStart = &cobra.Command{
 			ocpNode = node.NewNode()
 			err := ocpNode.Start()
 			if err != nil {
-				fmt.Println(err.Error())
 				os.Exit(1) //exit with failure
 			}
 

@@ -15,6 +15,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"
+	hclog "github.com/hashicorp/go-hclog"
 	logging "github.com/ipfs/go-log/v2"
 	libp2p "github.com/libp2p/go-libp2p"
 	p2pevent "github.com/libp2p/go-libp2p-core/event"
@@ -81,12 +82,13 @@ type Host struct {
 
 	//some internal data
 	path         string
+	logger       hclog.Logger
 	wamp         *nxclient.Client
 	reachability p2pnet.Reachability
 }
 
 //Host creates p2p host which manages all peer connections
-func NewHost(router *connection.Router) *Host {
+func NewHost(router *connection.Router, logger hclog.Logger) *Host {
 
 	var client *nxclient.Client = nil
 	if router != nil {

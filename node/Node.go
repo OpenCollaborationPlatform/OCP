@@ -4,7 +4,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +13,8 @@ import (
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/user"
 	"github.com/ickby/CollaborationNode/utils"
+
+	hclog "github.com/hashicorp/go-hclog"
 )
 
 const (
@@ -31,79 +32,93 @@ type Node struct {
 	Users     *user.UserHandler         //handler for users
 
 	//misc
+	logger  hclog.Logger
 	Version string //Default setup version string
 }
 
 func NewNode() *Node {
 
+	logger := hclog.New(&hclog.LoggerOptions{
+		Level: hclog.LevelFromString("INFO"),
+	})
+
 	return &Node{
 		quit:    make(chan string),
-		Version: OcpVersion}
+		Version: OcpVersion,
+		logger:  logger}
 }
 
-func (n *Node) Start() error {
+func (self *Node) Start() error {
 
-	log.Printf("Sartup OCP Node %s\n", n.Version)
+	self.logger.Info("Sartup OCP Node", "version", self.Version)
 
 	//start up our local router
-	n.Router = connection.NewRouter()
-	err := n.Router.Start(n.quit)
+	self.Router = connection.NewRouter(self.logger.Named("API"))
+	err := self.Router.Start(self.quit)
 	if err != nil {
 		return err
 	}
 
 	//setup the p2p network
-	n.Host = p2p.NewHost(n.Router)
-	err = n.Host.Start(true)
+	self.Host = p2p.NewHost(self.Router, self.logger.Named("P2P"))
+	err = self.Host.Start(true)
 	if err != nil {
-		return utils.StackError(err, "Cannot startup Node")
+		err = utils.StackError(err, "Cannot startup p2p host")
+		self.logger.Error(err.Error())
+		return err
 	}
 
 	//load the document component
-	dh, err := document.NewDocumentHandler(n.Router, n.Host)
+	dh, err := document.NewDocumentHandler(self.Router, self.Host)
 	if err != nil {
-		return utils.StackError(err, "Unable to load document handler")
+		err = utils.StackError(err, "Unable to load document handler")
+		self.logger.Error(err.Error())
+		return err
 	}
-	n.Documents = dh
+	self.Documents = dh
 
 	//load the user component
-	uh, err := user.NewUserHandler(n.Router, n.Host)
+	uh, err := user.NewUserHandler(self.Router, self.Host)
 	if err != nil {
-		return utils.StackError(err, "Unable to load user handler")
+		err = utils.StackError(err, "Unable to load user handler")
+		self.logger.Error(err.Error())
+		return err
 	}
-	n.Users = uh
+	self.Users = uh
 
 	//make sure we get system signals
 	sigs := make(chan os.Signal)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		sig := <-sigs
-		n.quit <- fmt.Sprintf("received system signal \"%s\"", sig)
+		self.quit <- fmt.Sprintf("received system signal \"%s\"", sig)
 	}()
 
 	//save the pidfile
 	err = utils.WritePidPort()
 	if err != nil {
-		return utils.StackError(err, "Unable to write pid/port file")
+		err = utils.StackError(err, "Unable to write pid/port file")
+		self.logger.Error(err.Error())
+		return err
 	}
 
-	log.Println("OCP node ready")
+	self.logger.Info("Node ready")
 
 	return nil
 }
 
-func (n *Node) Stop(ctx context.Context, reason string) {
+func (self *Node) Stop(ctx context.Context, reason string) {
 
-	n.Users.Close()
-	n.Documents.Close(ctx)
-	n.Host.Stop(ctx)
-	n.Router.Stop()
+	self.Users.Close()
+	self.Documents.Close(ctx)
+	self.Host.Stop(ctx)
+	self.Router.Stop()
 	utils.ClearPidPort()
-	defer func() { n.quit <- reason }()
+	defer func() { self.quit <- reason }()
 }
 
-func (n *Node) WaitForStop() {
+func (self *Node) WaitForStop() {
 
-	reason := <-n.quit
-	log.Printf("Shuting down: %s", reason)
+	reason := <-self.quit
+	self.logger.Info("Shuting down", "reason", reason)
 }

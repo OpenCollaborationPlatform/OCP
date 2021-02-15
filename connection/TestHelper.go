@@ -2,12 +2,14 @@ package connection
 
 import (
 	"bytes"
+
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/spf13/viper"
 )
 
 func MakeTemporaryRouter() (*Router, error) {
 
-	r := NewRouter()
+	r := NewRouter(hclog.Default())
 	r.Start(make(chan string, 0))
 	return r, nil
 }

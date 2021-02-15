@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"time"
@@ -14,9 +13,10 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	nxrouter "github.com/gammazero/nexus/v3/router"
-
 	nxserialize "github.com/gammazero/nexus/v3/transport/serialize"
 	"github.com/gammazero/nexus/v3/wamp"
+
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/spf13/viper"
 )
 
@@ -24,14 +24,15 @@ type Router struct {
 	router nxrouter.Router
 	server *http.Server
 	closer io.Closer
+	logger hclog.Logger
 }
 
-func NewRouter() *Router {
+func NewRouter(logger hclog.Logger) *Router {
 
-	return &Router{}
+	return &Router{logger: logger}
 }
 
-func (ls *Router) Start(quit chan string) error {
+func (self *Router) Start(quit chan string) error {
 
 	routerConfig := &nxrouter.Config{
 		RealmConfigs: []*nxrouter.RealmConfig{
@@ -42,9 +43,11 @@ func (ls *Router) Start(quit chan string) error {
 			},
 		},
 	}
-	nxr, err := nxrouter.NewRouter(routerConfig, nil)
 
-	ls.router = nxr
+	stdLogger := self.logger.StandardLogger(&hclog.StandardLoggerOptions{InferLevels: true})
+	nxr, err := nxrouter.NewRouter(routerConfig, stdLogger)
+
+	self.router = nxr
 	wss := nxrouter.NewWebsocketServer(nxr)
 
 	//start connecting. We use our own listener to be sure that we really listen once this function returns
@@ -55,29 +58,29 @@ func (ls *Router) Start(quit chan string) error {
 	}
 
 	//now all requests will be handled, as the listener is up. Start serving it to the router
-	ls.server = &http.Server{Handler: wss}
-	go func() {
+	self.server = &http.Server{Handler: wss}
+	go func(logger hclog.Logger, server *http.Server, listener net.Listener) {
 		// always returns error. ErrServerClosed on graceful close
-		if err := ls.server.Serve(listener); err != http.ErrServerClosed {
-			// unexpected error. port in use?
-			log.Fatalf("Router shut down: %v", err)
+		if err := server.Serve(listener); err != http.ErrServerClosed {
+			// unexpected error
+			logger.Error("Unexpected shut down", "error", err)
 		}
-	}()
+	}(self.logger, self.server, listener)
 
-	log.Println("Local wamp server started")
+	self.logger.Info("Server started", "uri", viper.GetString("api.uri"), "port", viper.GetString("api.port"))
 
 	return nil
 }
 
-func (ls *Router) Stop() {
+func (self *Router) Stop() {
 
 	ctx, _ := context.WithTimeout(context.Background(), 2*time.Second)
-	ls.server.Shutdown(ctx)
-	ls.router.Close()
-	log.Println("Local wamp server has shut down")
+	self.server.Shutdown(ctx)
+	self.router.Close()
+	self.logger.Info("Local wamp server has shut down")
 }
 
-func (ls *Router) GetLocalClient(name string) (*nxclient.Client, error) {
+func (self *Router) GetLocalClient(name string) (*nxclient.Client, error) {
 
 	//connect the local client
 	authFunc := func(c *wamp.Challenge) (string, wamp.Dict) {
@@ -89,7 +92,7 @@ func (ls *Router) GetLocalClient(name string) (*nxclient.Client, error) {
 		AuthHandlers:  map[string]nxclient.AuthFunc{"ticket": authFunc},
 		Serialization: nxserialize.MSGPACK,
 	}
-	c, err := nxclient.ConnectLocal(ls.router, cfg)
+	c, err := nxclient.ConnectLocal(self.router, cfg)
 
 	if err != nil {
 		return nil, fmt.Errorf("Problem with local client: %s", err)

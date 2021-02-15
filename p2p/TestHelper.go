@@ -15,6 +15,7 @@ import (
 	blocks "github.com/ipfs/go-block-format"
 	//	ipfslog "github.com/ipfs/go-log"
 	//	ipfswriter "github.com/ipfs/go-log/writer"
+	hclog "github.com/hashicorp/go-hclog"
 	libp2p "github.com/libp2p/go-libp2p"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
@@ -103,7 +104,7 @@ func temporaryHost(dir string) (*Host, error) {
 	testport = testport + 1
 
 	//start the host
-	h := NewHost(nil)
+	h := NewHost(nil, hclog.Default())
 	err = h.Start(false)
 	if err != nil {
 		return nil, err
