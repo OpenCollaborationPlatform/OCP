@@ -22,6 +22,7 @@ type OCPError interface {
 	Reason() string
 	Arguments() []interface{}
 	Stack() []string
+	ErrorType() string
 
 	AddToStack(string)
 }
@@ -64,10 +65,17 @@ func (self *Error) AddToStack(val string) {
 	self.stack = append(self.stack, val)
 }
 
+func (self *Error) ErrorType() string {
+	return fmt.Sprintf("ocp.error.%v.%v.%v", string(self.class), self.source, self.reason)
+}
+
 func (self *Error) Error() string {
 
-	str := fmt.Sprintf("ocp.error.%v.%v.%v\n", string(self.class), self.source, self.reason)
-	str += strings.Join(self.stack, "\n")
+	str := self.ErrorType()
+	if len(self.stack) != 0 {
+		str += ": " + self.stack[0]
+	}
+
 	return str
 }
 

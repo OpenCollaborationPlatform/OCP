@@ -35,7 +35,7 @@ func WritePidPort() error {
 	}
 	defer file.Close() // in case we fail before the explicit close
 
-	_, err = fmt.Fprintf(file, "%d:%v", os.Getpid(), viper.GetInt("connection.port"))
+	_, err = fmt.Fprintf(file, "%d:%v", os.Getpid(), viper.GetInt("api.port"))
 	if err != nil {
 		return err
 	}

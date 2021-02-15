@@ -30,7 +30,13 @@ func init() {
 	cmdInit.Flags().BoolVarP(&force, "force", "f", false, "Reinitialize even if already initialized or used otherwise")
 	cmdStart.Flags().BoolVarP(&detach, "detach", "d", false, "Detach process and return from call")
 
-	utils.AddConfigFlag(cmdStart, "connection.port")
+	utils.AddConfigFlag(cmdStart, "api.port")
+	utils.AddConfigFlag(cmdStart, "api.uri")
+	utils.AddConfigFlag(cmdStart, "p2p.uri")
+	utils.AddConfigFlag(cmdStart, "p2p.port")
+	utils.AddConfigFlag(cmdStart, "log.file")
+	utils.AddConfigFlag(cmdStart, "log.json")
+	utils.AddConfigFlag(cmdStart, "log.level")
 }
 
 var cmdVersion = &cobra.Command{
@@ -72,6 +78,7 @@ var cmdStart = &cobra.Command{
 			err := cmd.Start()
 			if err != nil {
 				fmt.Printf("Error: %v\n", err)
+				os.Exit(1) //exit with failure
 			}
 
 		} else {
@@ -81,7 +88,7 @@ var cmdStart = &cobra.Command{
 			err := ocpNode.Start()
 			if err != nil {
 				fmt.Println(err.Error())
-				return
+				os.Exit(1) //exit with failure
 			}
 
 			//setup all online commands

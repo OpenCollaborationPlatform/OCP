@@ -4,9 +4,10 @@ package commands
 import (
 	"context"
 	"fmt"
-	"github.com/ickby/CollaborationNode/utils"
 	"sort"
 	"strings"
+
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -23,6 +24,7 @@ func readConf(args []string) string {
 	result := ""
 
 	var keys []string
+	var confhandler = viper.GetViper()
 	if len(args) == 0 {
 		result = fmt.Sprintf("Config file: %v\n", viper.ConfigFileUsed())
 		keys = viper.AllKeys()
@@ -37,7 +39,8 @@ func readConf(args []string) string {
 		entry := viper.Get(args[0])
 		switch entry.(type) {
 		case map[string]interface{}:
-			keys = viper.Sub(args[0]).AllKeys()
+			confhandler = viper.Sub(args[0])
+			keys = confhandler.AllKeys()
 		default:
 			result = fmt.Sprintf("%v", entry)
 			return result
@@ -74,12 +77,12 @@ func readConf(args []string) string {
 
 		//write the value
 		indent := strings.Repeat("   ", len(parts)-1)
-		result += fmt.Sprintf("%s%s: %v", indent, parts[len(parts)-1], viper.Get(key))
+		result += fmt.Sprintf("%s%s: %v", indent, parts[len(parts)-1], confhandler.Get(key))
 
 		conf, err := utils.GetConfigEntry(key)
 		if err == nil {
 			default_ := conf.Default
-			if default_ != nil && fmt.Sprintf("%v", viper.Get(key)) != fmt.Sprintf("%v", default_) {
+			if default_ != nil && fmt.Sprintf("%v", confhandler.Get(key)) != fmt.Sprintf("%v", default_) {
 				result += fmt.Sprintf(" (default: %v)", default_)
 			}
 		}

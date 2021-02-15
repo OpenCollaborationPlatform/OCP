@@ -48,7 +48,7 @@ func (ls *Router) Start(quit chan string) error {
 	wss := nxrouter.NewWebsocketServer(nxr)
 
 	//start connecting. We use our own listener to be sure that we really listen once this function returns
-	wsAddr := fmt.Sprintf("%v:%v", viper.GetString("connection.uri"), viper.GetInt("connection.port"))
+	wsAddr := fmt.Sprintf("%v:%v", viper.GetString("api.uri"), viper.GetInt("api.port"))
 	listener, err := net.Listen("tcp", wsAddr)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup router: Cannot listen on %v", wsAddr)

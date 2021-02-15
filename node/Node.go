@@ -47,11 +47,14 @@ func (n *Node) Start() error {
 
 	//start up our local router
 	n.Router = connection.NewRouter()
-	n.Router.Start(n.quit)
+	err := n.Router.Start(n.quit)
+	if err != nil {
+		return err
+	}
 
 	//setup the p2p network
 	n.Host = p2p.NewHost(n.Router)
-	err := n.Host.Start(true)
+	err = n.Host.Start(true)
 	if err != nil {
 		return utils.StackError(err, "Cannot startup Node")
 	}

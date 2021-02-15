@@ -18,14 +18,19 @@ import (
 
 var (
 	configEntries = map[string]interface{}{
-		"connection": map[string]interface{}{
+		"api": map[string]interface{}{
 			"uri":  ConfigEntry{Default: "localhost", Short: "u", Text: "The uri the node is listening on for client connections "},
 			"port": ConfigEntry{Default: 8000, Short: "p", Text: "The port on which the node listents for client connections"},
 		},
 		"p2p": map[string]interface{}{
-			"port":      ConfigEntry{Default: 7000, Short: "p", Text: "The port the node listens on for p2p connections from other nodes"},
-			"uri":       ConfigEntry{Default: "0.0.0.0", Short: "u", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
+			"port":      ConfigEntry{Default: 7000, Short: "o", Text: "The port the node listens on for p2p connections from other nodes"},
+			"uri":       ConfigEntry{Default: "0.0.0.0", Short: "r", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
 			"bootstrap": ConfigEntry{Default: []string{"/ip4/167.99.243.88/tcp/7000/ipfs/QmfNQhSAmB9Yg3YtycRNquC2fv3WZyB3vixVQheG16GA7b"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification, next to the default ones"},
+		},
+		"log": map[string]interface{}{
+			"level": ConfigEntry{Default: "Info", Short: "v", Text: "Output level of log, always including the higher levels  (Error, Warning, Info, Debug)"},
+			"file":  ConfigEntry{Default: "", Short: "l", Text: "File path to log into instead of stdout"},
+			"json":  ConfigEntry{Default: "False", Short: "j", Text: "Log entries are output as json data, not as messages"},
 		},
 	}
 )
@@ -183,7 +188,7 @@ func (self ConfigEntry) IsSlice() bool {
 
 func GetConfigEntry(keys ...string) (ConfigEntry, error) {
 
-	//could be viper access string like connection.port
+	//could be viper access string like api.port
 	if len(keys) == 1 {
 		return getConfigEntryByArray(strings.Split(keys[0], "."))
 	}
@@ -195,21 +200,22 @@ func getConfigEntryByArray(keys []string) (ConfigEntry, error) {
 
 	//iterate over all nested values
 	tmp := configEntries
-	for i, key := range keys {
+	for _, key := range keys {
 
 		val, ok := tmp[key]
 		if !ok {
 			return ConfigEntry{}, fmt.Errorf("Key %v does not exist in default config", key)
 		}
 
-		if i == (len(keys) - 1) {
-			//maybe its not a entry...
-			if !ok || val == nil {
-				return ConfigEntry{}, fmt.Errorf("Default config entry is empty, which is invalid")
-			}
+		switch val.(type) {
+
+		case ConfigEntry:
 			return val.(ConfigEntry), nil
+		case map[string]interface{}:
+			tmp = val.(map[string]interface{})
+		default:
+			return ConfigEntry{}, fmt.Errorf(fmt.Sprintf("Config system setup wrong for key %v", key))
 		}
-		tmp = tmp[key].(map[string]interface{})
 	}
 
 	log.Fatal("No such config entry exists")
@@ -226,8 +232,12 @@ func AddConfigFlag(cmd *cobra.Command, accessor string) {
 		return
 	}
 
+	//Name is full length accessor, but with capital first letter instead of points
 	keys := strings.Split(accessor, ".")
-	name := keys[len(keys)-1]
+	name := keys[0]
+	for i := 1; i < len(keys); i++ {
+		name = name + strings.Title(keys[i])
+	}
 
 	switch config.Default.(type) {
 	case int:
@@ -237,7 +247,7 @@ func AddConfigFlag(cmd *cobra.Command, accessor string) {
 	case float64:
 		cmd.Flags().Float64P(name, config.Short, viper.GetFloat64(accessor), config.Text)
 	case []string:
-		cmd.Flags().StringSlice(name, viper.GetStringSlice(accessor), config.Text)
+		cmd.Flags().StringSliceP(name, config.Short, viper.GetStringSlice(accessor), config.Text)
 	default:
 		log.Fatalf("No flag can be created for config %s", accessor)
 	}

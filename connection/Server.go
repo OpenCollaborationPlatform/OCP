@@ -42,6 +42,7 @@ type Server struct {
 	clients    []*Client
 	groups     map[string]*wampGroup
 	mutex      *sync.RWMutex
+	logger     log.Logger
 }
 
 func NewServer() *Server {
@@ -49,7 +50,8 @@ func NewServer() *Server {
 	return &Server{
 		mutex:   &sync.RWMutex{},
 		clients: make([]*Client, 0),
-		groups:  make(map[string]*wampGroup)}
+		groups:  make(map[string]*wampGroup),
+	}
 }
 
 func (s *Server) Start(quit chan string) error {
