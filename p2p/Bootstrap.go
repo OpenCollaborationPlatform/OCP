@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	hclog "github.com/hashicorp/go-hclog"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	"github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
@@ -46,16 +47,20 @@ type BootstrapConfig struct {
 	// for the bootstrap process to use. This makes it possible for clients
 	// to control the peers the process uses at any moment.
 	BootstrapPeers func() []peer.AddrInfo
+
+	// The logger used to log all bootstrap messages
+	Logger hclog.Logger
 }
 
 // DefaultBootstrapConfig specifies default sane parameters for bootstrapping.
 
-func GetDefaultBootstrapConfig() BootstrapConfig {
+func GetDefaultBootstrapConfig(log hclog.Logger) BootstrapConfig {
 
 	var DefaultBootstrapConfig = BootstrapConfig{
 		MinPeerThreshold:  4,
 		Period:            30 * time.Second,
 		ConnectionTimeout: (30 * time.Second) / 3, // Perod / 3
+		Logger:            log,
 	}
 
 	DefaultBootstrapConfig.BootstrapPeers = func() []peer.AddrInfo {
@@ -66,12 +71,12 @@ func GetDefaultBootstrapConfig() BootstrapConfig {
 		for _, value := range nodes {
 			addr, err := ma.NewMultiaddr(value)
 			if err != nil {
-				log.Errorf("Invalid bootstrap address provided: %v", value)
+				log.Error("Invalid bootstrap address provided", "address", value)
 				continue
 			}
 			info, err := peer.AddrInfoFromP2pAddr(addr)
 			if err != nil {
-				log.Errorf("Invalid bootstrap address provided: %v", value)
+				log.Error("Invalid bootstrap address provided", "address", value)
 				continue
 			}
 			addrs = append(addrs, *info)
@@ -95,18 +100,14 @@ func bootstrap(id peer.ID, host p2phost.Host, rt routing.Routing, cfg BootstrapC
 	if len(cfg.BootstrapPeers()) == 0 {
 		// We *need* to bootstrap but we have no bootstrap peers
 		// configured *at all*, inform the user.
-		log.Warning("no bootstrap nodes configured: go-ipfs may have difficulty connecting to the network")
+		cfg.Logger.Warn("no bootstrap nodes configured: go-ipfs may have difficulty connecting to the network")
 	}
 
 	// the periodic bootstrap function -- the connection supervisor
 	periodic := func(worker goprocess.Process) {
 		ctx := goprocessctx.OnClosingContext(worker)
 
-		if err := bootstrapRound(ctx, host, cfg); err != nil {
-			//	log.Event(ctx, "bootstrapError", id, loggables.Error(err))
-			log.Debugf("%s bootstrap error: %s", id, err)
-		}
-
+		bootstrapRound(ctx, host, cfg)
 		<-doneWithRound
 	}
 
@@ -132,7 +133,6 @@ func bootstrapRound(ctx context.Context, host p2phost.Host, cfg BootstrapConfig)
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.ConnectionTimeout)
 	defer cancel()
-	id := host.ID()
 
 	// get bootstrap peers from config. retrieving them here makes
 	// sure we remain observant of changes to client configuration.
@@ -140,8 +140,7 @@ func bootstrapRound(ctx context.Context, host p2phost.Host, cfg BootstrapConfig)
 	// determine how many bootstrap connections to open
 	connected := host.Network().Peers()
 	if len(connected) >= cfg.MinPeerThreshold {
-		log.Debugf("%s core bootstrap skipped -- connected to %d (> %d) nodes",
-			id, len(connected), cfg.MinPeerThreshold)
+		cfg.Logger.Debug("Connection round skipped", "connected", len(connected), "required", cfg.MinPeerThreshold)
 		return nil
 	}
 	numToDial := cfg.MinPeerThreshold - len(connected)
@@ -156,18 +155,18 @@ func bootstrapRound(ctx context.Context, host p2phost.Host, cfg BootstrapConfig)
 
 	// if connected to all bootstrap peer candidates, exit
 	if len(notConnected) < 1 {
-		log.Debugf("%s no more bootstrap peers to create %d connections", id, numToDial)
+		cfg.Logger.Debug("No more peers to create additional connections", "required", numToDial)
 		return fmt.Errorf("Not enough bootstrap peers")
 	}
 
 	// connect to a random susbset of bootstrap candidates
 	randSubset := randomSubsetOfPeers(notConnected, numToDial)
 
-	log.Debugf("%s bootstrapping to %d nodes: %s", id, numToDial, randSubset)
-	return bootstrapConnect(ctx, host, randSubset)
+	cfg.Logger.Debug("Tries to connect to nodes", "nodes", randSubset)
+	return bootstrapConnect(ctx, host, randSubset, cfg.Logger)
 }
 
-func bootstrapConnect(ctx context.Context, ph p2phost.Host, peers []peer.AddrInfo) error {
+func bootstrapConnect(ctx context.Context, ph p2phost.Host, peers []peer.AddrInfo, logger hclog.Logger) error {
 	if len(peers) < 1 {
 		return fmt.Errorf("Not enough bootstrap peers")
 	}
@@ -184,15 +183,14 @@ func bootstrapConnect(ctx context.Context, ph p2phost.Host, peers []peer.AddrInf
 		wg.Add(1)
 		go func(p peer.AddrInfo) {
 			defer wg.Done()
-			log.Debugf("%s bootstrapping to %s", ph.ID(), p.ID)
 
 			ph.Peerstore().AddAddrs(p.ID, p.Addrs, peerstore.PermanentAddrTTL)
 			if err := ph.Connect(ctx, p); err != nil {
-				log.Debugf("failed to bootstrap with %v: %s", p.ID, err)
+				logger.Debug("Failed to connect with", "peer", p.ID, "eeror", err)
 				errs <- err
 				return
 			}
-			log.Infof("bootstrapped with %v", p.ID)
+			logger.Info("Connected with node", "peer", p.ID)
 		}(p)
 	}
 	wg.Wait()

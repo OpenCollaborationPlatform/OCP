@@ -44,7 +44,7 @@ func (self *Router) Start(quit chan string) error {
 		},
 	}
 
-	stdLogger := self.logger.StandardLogger(&hclog.StandardLoggerOptions{InferLevels: true})
+	stdLogger := self.logger.StandardLogger(&hclog.StandardLoggerOptions{InferLevels: true, ForceLevel: hclog.LevelFromString("Warning")})
 	nxr, err := nxrouter.NewRouter(routerConfig, stdLogger)
 
 	self.router = nxr

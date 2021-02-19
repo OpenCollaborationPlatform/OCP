@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/utils"
@@ -16,7 +15,6 @@ import (
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"
 	hclog "github.com/hashicorp/go-hclog"
-	logging "github.com/ipfs/go-log/v2"
 	libp2p "github.com/libp2p/go-libp2p"
 	p2pevent "github.com/libp2p/go-libp2p-core/event"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
@@ -31,8 +29,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-var log = logging.Logger("P2P")
-
 //RPC Api of the host
 type HostRPCApi struct {
 	host *Host
@@ -44,6 +40,7 @@ func (self HostRPCApi) HasSwarm(ctx context.Context, id SwarmID, has *bool) erro
 	return nil
 }
 
+/*
 //little helper for mdns discovery
 type discoveryHandler struct {
 	ctx  context.Context
@@ -58,6 +55,7 @@ func (dh *discoveryHandler) HandlePeerFound(p peer.AddrInfo) {
 		log.Warningf("failed to connect to peer %s found by discovery: %s", p.ID, err)
 	}
 }
+*/
 
 type Host struct {
 	host       p2phost.Host
@@ -95,7 +93,11 @@ func NewHost(router *connection.Router, logger hclog.Logger) *Host {
 		client, _ = router.GetLocalClient("p2p")
 	}
 
-	return &Host{swarms: make([]*Swarm, 0), wamp: client, reachability: p2pnet.ReachabilityUnknown}
+	return &Host{swarms: make([]*Swarm, 0),
+		wamp:         client,
+		reachability: p2pnet.ReachabilityUnknown,
+		logger:       logger,
+	}
 }
 
 // Starts the listening for connections and the bootstrap prozess
@@ -107,21 +109,22 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	//load the keys
 	content, err := ioutil.ReadFile(filepath.Join(viper.GetString("directory"), "public"))
 	if err != nil {
-		log.Fatalf("Public key could not be read: %s\n", err)
+		err := utils.StackError(err, "Public key could not be read")
+		return err
 	}
 	pub, err := crypto.UnmarshalPublicKey(content)
 	if err != nil {
-		log.Fatalf("Private key is invalid: %s\n", err)
+		return utils.StackError(err, "Public key is invalid")
 	}
 	h.pubKey = pub
 
 	content, err = ioutil.ReadFile(filepath.Join(viper.GetString("directory"), "private"))
 	if err != nil {
-		log.Fatalf("Private key could not be read: %s\n", err)
+		return utils.StackError(err, "Priveta key could not be read")
 	}
 	priv, err := crypto.UnmarshalPrivateKey(content)
 	if err != nil {
-		log.Fatalf("Private key is invalid: %s\n", err)
+		return utils.StackError(err, "Private key is invalid")
 	}
 	h.privKey = priv
 
@@ -141,7 +144,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	)
 
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to setup P2P host")
 	}
 
 	//setup mdns discovery (careful: the context does control lifetime of some internal mdns things)
@@ -159,16 +162,6 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	h.dht, err = kaddht.New(ctx, h.host, dhtOpts...)
 	if err != nil {
 		return utils.StackError(err, "Unable to setup distributed hash table")
-	}
-
-	//bootstrap if required (means connect to online nodes)
-	conf := GetDefaultBootstrapConfig()
-	if !shouldBootstrap {
-		conf.BootstrapPeers = func() []peer.AddrInfo { return make([]peer.AddrInfo, 0) }
-	}
-	h.bootstrapper, err = bootstrap(h.ID(), h.host, h.dht, conf)
-	if err != nil {
-		return utils.StackError(err, "Unable to bootstrap p2p node")
 	}
 
 	//add the services
@@ -196,30 +189,48 @@ func (h *Host) Start(shouldBootstrap bool) error {
 
 	//and the wamp events
 	if h.wamp != nil {
-		sub, err := h.host.EventBus().Subscribe([]interface{}{new(p2pevent.EvtLocalReachabilityChanged),
-			new(p2pevent.EvtPeerConnectednessChanged)})
+		//sub, err := h.host.EventBus().Subscribe([]interface{}{new(p2pevent.EvtLocalReachabilityChanged),
+		//	new(p2pevent.EvtPeerConnectednessChanged)})
+		sub, err := h.host.EventBus().Subscribe(p2pevent.WildcardSubscription)
 		if err != nil {
 			return utils.StackError(err, "Unable to setup p2p events")
 		}
 		h.subs = sub
 
 		go func() {
+			h.logger.Debug("Startup event loop")
 			for e := range h.subs.Out() {
 				switch e.(type) {
 
 				case p2pevent.EvtLocalReachabilityChanged:
 					h.reachability = e.(p2pevent.EvtLocalReachabilityChanged).Reachability
-					h.wamp.Publish("ocp.p2p.events.reachability", wamp.Dict{}, wamp.List{h.reachability.String()}, wamp.Dict{})
+					h.logger.Debug("Reachability event received", "event", e)
+					h.wamp.Publish("ocp.p2p.reachabilityChanged", wamp.Dict{}, wamp.List{h.reachability.String()}, wamp.Dict{})
 
 				case p2pevent.EvtPeerConnectednessChanged:
+					h.logger.Debug("Peer conecctednedd event received", "event", e)
 					conevt := e.(p2pevent.EvtPeerConnectednessChanged)
-					h.wamp.Publish("ocp.p2p.events.connection", wamp.Dict{}, wamp.List{conevt.Peer.Pretty(), conevt.Connectedness.String()}, wamp.Dict{})
+					h.wamp.Publish("ocp.p2p.peerChanged", wamp.Dict{}, wamp.List{conevt.Peer.Pretty(), conevt.Connectedness.String()}, wamp.Dict{})
+
+				default:
+					h.logger.Warn("Received unhandled event", "event", e, "type", fmt.Sprintf("%T", e))
 				}
 			}
+			h.logger.Debug("Shutdown event loop")
 		}()
 	}
 
-	log.Info("P2P host started")
+	//bootstrap if required (means connect to online nodes)
+	conf := GetDefaultBootstrapConfig(h.logger.Named("Bootstrap"))
+	if !shouldBootstrap {
+		conf.BootstrapPeers = func() []peer.AddrInfo { return make([]peer.AddrInfo, 0) }
+	}
+	h.bootstrapper, err = bootstrap(h.ID(), h.host, h.dht, conf)
+	if err != nil {
+		return utils.StackError(err, "Unable to bootstrap p2p node")
+	}
+
+	h.logger.Info("Host started")
 	return nil
 }
 
@@ -365,6 +376,10 @@ func (h *Host) Keys() (crypto.PrivKey, crypto.PubKey) {
 
 func (h *Host) Routing() *kaddht.IpfsDHT {
 	return h.dht
+}
+
+func (h *Host) Reachability() string {
+	return h.reachability.String()
 }
 
 /*		Search and Find Handling
@@ -629,7 +644,7 @@ func (self *Host) _addresses(ctx context.Context, inv *wamp.Invocation) nxclient
 		return nxclient.InvokeResult{Args: wamp.List{"Argument must be boolean"}, Err: wamp.URI("ocp.error")}
 	}
 
-	addrs := make(wamp.List, 0)
+	addrs := make([]string, 0)
 	for _, addr := range self.OwnAddresses() {
 		result := addr.String()
 		if !short {
@@ -638,7 +653,7 @@ func (self *Host) _addresses(ctx context.Context, inv *wamp.Invocation) nxclient
 		addrs = append(addrs, result)
 	}
 
-	return nxclient.InvokeResult{Args: addrs}
+	return nxclient.InvokeResult{Args: wamp.List{addrs}}
 }
 
 func (self *Host) _peers(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
@@ -647,13 +662,13 @@ func (self *Host) _peers(ctx context.Context, inv *wamp.Invocation) nxclient.Inv
 		return nxclient.InvokeResult{Args: wamp.List{"No arguments allowed for this function"}, Err: wamp.URI("ocp.error")}
 	}
 
-	peers := make(wamp.List, len(self.Peers(true)))
+	peers := make([]string, len(self.Peers(true)))
 	for i, peer := range self.Peers(true) {
 
 		peers[i] = peer.Pretty()
 	}
 
-	return nxclient.InvokeResult{Args: peers}
+	return nxclient.InvokeResult{Args: wamp.List{peers}}
 }
 
 func (self *Host) _reach(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {

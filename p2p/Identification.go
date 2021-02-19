@@ -11,11 +11,13 @@ import (
 
 type PeerID = peer.ID
 
+var InvalidPeer = PeerID("")
+
 func PeerIDFromString(id string) (PeerID, error) {
 
 	peerid, err := peer.IDB58Decode(id)
 	if err != nil {
-		return PeerID(""), err
+		return InvalidPeer, err
 	}
 	return PeerID(peerid), nil
 }
@@ -25,19 +27,19 @@ func PeerIDFromPublicKey(pk crypto.PubKey) (PeerID, error) {
 	return PeerID(id), err
 }
 
-func PeerIDFromPublicKeyFile(file string) PeerID {
+func PeerIDFromPublicKeyFile(file string) (PeerID, error) {
 
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
-		log.Fatalf("Public key could not be read: %s\n", err)
+		return InvalidPeer, err
 	}
 	key, err := crypto.UnmarshalPublicKey(content)
 	if err != nil {
-		log.Fatalf("Public key is invalid: %s\n", err)
+		return InvalidPeer, err
 	}
 	id, _ := peer.IDFromPublicKey(key)
 
-	return PeerID(id)
+	return PeerID(id), nil
 }
 
 //A concurency safe store for peers

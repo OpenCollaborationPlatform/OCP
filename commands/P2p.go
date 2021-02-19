@@ -32,6 +32,7 @@ var cmdP2P = &cobra.Command{
 	Run: onlineCommand("p2p", func(ctx context.Context, args []string, flags map[string]interface{}) string {
 
 		result := fmt.Sprintf("PeerID: %v\n", ocpNode.Host.ID().Pretty())
+		result += fmt.Sprintf("Rechable: %v\n", ocpNode.Host.Reachability())
 		result += fmt.Sprintln("Own addresses:")
 		full := flags["full"].(bool)
 		for _, addr := range ocpNode.Host.OwnAddresses() {

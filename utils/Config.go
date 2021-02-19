@@ -32,7 +32,7 @@ var (
 			"json":  ConfigEntry{Default: false, Short: "j", Text: "Log entries are output as json data, not as messages"},
 			"file": map[string]interface{}{
 				"enable":  ConfigEntry{Default: false, Short: "e", Text: "Enables logging to files in OCP dir logs folder"},
-				"size":    ConfigEntry{Default: 10, Text: "[Mb] Maximal file size of log file before creating backup"},
+				"size":    ConfigEntry{Default: 5, Text: "[Mb] Maximal file size of log file before creating backup"},
 				"backups": ConfigEntry{Default: 3, Text: "[Num] Maximal number of allowed backup files, deletes oldest if more required"},
 				"age":     ConfigEntry{Default: 10, Text: "[Days] Delete files when older than given time"},
 			},

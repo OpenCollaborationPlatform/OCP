@@ -119,7 +119,7 @@ var cmdConfig = &cobra.Command{
 			onlineReadConf(cmd, args)
 
 		} else {
-			println(readConf(args))
+			fmt.Println(readConf(args))
 		}
 	},
 }
