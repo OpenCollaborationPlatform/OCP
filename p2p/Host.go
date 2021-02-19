@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/utils"
@@ -135,13 +136,20 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	ctx, cncl := context.WithCancel(context.Background())
 	h.serviceCtx = ctx
 	h.serviceCncl = cncl
-	h.host, err = libp2p.New(ctx,
+
+	hostOpts := []libp2p.Option{
 		libp2p.Identity(priv),
 		libp2p.ListenAddrStrings(addr),
 		libp2p.NATPortMap(),
-		libp2p.EnableNATService(),
-		libp2p.DisableRelay(),
-	)
+		libp2p.EnableAutoRelay(),
+	}
+	if viper.GetBool("p2p.natservice.enable") {
+		hostOpts = append(hostOpts, libp2p.EnableNATService())
+		limit := viper.GetInt("p2p.natservice.limit")
+		peerlimit := viper.GetInt("p2p.natservice.peerlimit")
+		hostOpts = append(hostOpts, libp2p.AutoNATServiceRateLimit(limit, peerlimit, 60*time.Second))
+	}
+	h.host, err = libp2p.New(ctx, hostOpts...)
 
 	if err != nil {
 		return utils.StackError(err, "Unable to setup P2P host")
