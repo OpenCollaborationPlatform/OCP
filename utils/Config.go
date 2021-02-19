@@ -25,11 +25,11 @@ var (
 		"p2p": map[string]interface{}{
 			"port":      ConfigEntry{Default: 7000, Short: "o", Text: "The port the node listens on for p2p connections from other nodes"},
 			"uri":       ConfigEntry{Default: "0.0.0.0", Short: "r", Text: "The adress the node listens on for p2p connections from other nodes (without port)"},
-			"bootstrap": ConfigEntry{Default: []string{"/ip4/167.99.243.88/tcp/7000/ipfs/QmfNQhSAmB9Yg3YtycRNquC2fv3WZyB3vixVQheG16GA7b"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification, next to the default ones"},
+			"bootstrap": ConfigEntry{Default: []string{"/ip4/167.99.243.88/tcp/7000/ipfs/QmaywtivdUKsEL7mg32dBFVHWh7q5qyXtCWUFvZpL2JT9d"}, Short: "b", Text: "The nodes to connect to at startup for adress indetification, next to the default ones"},
 			"natservice": map[string]interface{}{
 				"enable":    ConfigEntry{Default: false, Text: "Enables the autonat service. Use only if you are guranteed reachable, and not behind a NAT"},
-				"limit":     ConfigEntry{Default: 0, Text: "Limit the status queries per 60s. 0 disables the limit"},
-				"peerlimit": ConfigEntry{Default: 0, Text: "Limit the status queries from single peer per 60s. 0 disables the limit"},
+				"limit":     ConfigEntry{Default: 0, Text: "Limit the overall status queries per 60s. 0 disables the limit"},
+				"peerlimit": ConfigEntry{Default: 3, Text: "Limit the status queries from single peer per 60s. Disable not possible"},
 			},
 		},
 		"log": map[string]interface{}{

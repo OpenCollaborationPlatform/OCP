@@ -17,6 +17,7 @@ import (
 	"github.com/gammazero/nexus/v3/wamp"
 	hclog "github.com/hashicorp/go-hclog"
 	libp2p "github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-autonat"
 	p2pevent "github.com/libp2p/go-libp2p-core/event"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	p2pnet "github.com/libp2p/go-libp2p-core/network"
@@ -155,6 +156,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		libp2p.EnableAutoRelay(),
 	}
 	if viper.GetBool("p2p.natservice.enable") {
+		h.logger.Debug("Start up NatService")
 		hostOpts = append(hostOpts, libp2p.EnableNATService())
 		limit := viper.GetInt("p2p.natservice.limit")
 		peerlimit := viper.GetInt("p2p.natservice.peerlimit")
@@ -162,7 +164,6 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	}
 	h.host, err = libp2p.New(ctx, hostOpts...)
 	h.dht = dht
-
 	if err != nil {
 		return utils.StackError(err, "Unable to setup P2P host")
 	}
@@ -213,17 +214,20 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		go func() {
 			h.logger.Debug("Startup event loop")
 			for e := range h.subs.Out() {
-				switch e.(type) {
+				switch e := e.(type) {
 
 				case p2pevent.EvtLocalReachabilityChanged:
-					h.reachability = e.(p2pevent.EvtLocalReachabilityChanged).Reachability
+					h.reachability = e.Reachability
 					h.logger.Debug("Reachability event received", "event", e)
 					h.wamp.Publish("ocp.p2p.reachabilityChanged", wamp.Dict{}, wamp.List{h.reachability.String()}, wamp.Dict{})
 
 				case p2pevent.EvtPeerConnectednessChanged:
 					h.logger.Debug("Peer conecctednedd event received", "event", e)
-					conevt := e.(p2pevent.EvtPeerConnectednessChanged)
-					h.wamp.Publish("ocp.p2p.peerChanged", wamp.Dict{}, wamp.List{conevt.Peer.Pretty(), conevt.Connectedness.String()}, wamp.Dict{})
+					h.wamp.Publish("ocp.p2p.peerChanged", wamp.Dict{}, wamp.List{e.Peer.Pretty(), e.Connectedness.String()}, wamp.Dict{})
+
+				case p2pevent.EvtPeerIdentificationCompleted:
+					s, err := h.host.Peerstore().SupportsProtocols(e.Peer, autonat.AutoNATProto)
+					h.logger.Debug("Peer identification protocol support", "supports", s, "error", err)
 
 				default:
 					h.logger.Warn("Received unhandled event", "event", e, "type", fmt.Sprintf("%T", e))
