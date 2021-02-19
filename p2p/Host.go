@@ -22,6 +22,7 @@ import (
 	p2pnet "github.com/libp2p/go-libp2p-core/network"
 	"github.com/libp2p/go-libp2p-core/peer"
 	peerstore "github.com/libp2p/go-libp2p-core/peerstore"
+	p2prouting "github.com/libp2p/go-libp2p-core/routing"
 	crypto "github.com/libp2p/go-libp2p-crypto"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 	mdns "github.com/libp2p/go-libp2p/p2p/discovery"
@@ -137,10 +138,20 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	h.serviceCtx = ctx
 	h.serviceCncl = cncl
 
+	//dht creation function to allow passing relay as option
+	var dht *kaddht.IpfsDHT
+	newDHT := func(h p2phost.Host) (p2prouting.PeerRouting, error) {
+		var err error
+		dhtOpts := []kaddht.Option{kaddht.ProtocolPrefix("/ocp")}
+		dht, err = kaddht.New(ctx, h, dhtOpts...)
+		return dht, err
+	}
+
 	hostOpts := []libp2p.Option{
 		libp2p.Identity(priv),
 		libp2p.ListenAddrStrings(addr),
 		libp2p.NATPortMap(),
+		libp2p.Routing(newDHT),
 		libp2p.EnableAutoRelay(),
 	}
 	if viper.GetBool("p2p.natservice.enable") {
@@ -150,6 +161,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		hostOpts = append(hostOpts, libp2p.AutoNATServiceRateLimit(limit, peerlimit, 60*time.Second))
 	}
 	h.host, err = libp2p.New(ctx, hostOpts...)
+	h.dht = dht
 
 	if err != nil {
 		return utils.StackError(err, "Unable to setup P2P host")
@@ -164,13 +176,6 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	} else {
 		h.mdns.RegisterNotifee(&discoveryHandler{h.serviceCtx, h.host})
 	}*/
-
-	//setup the dht (careful: the context does control lifetime of some internal dht things)
-	dhtOpts := []kaddht.Option{kaddht.ProtocolPrefix("/ocp")}
-	h.dht, err = kaddht.New(ctx, h.host, dhtOpts...)
-	if err != nil {
-		return utils.StackError(err, "Unable to setup distributed hash table")
-	}
 
 	//add the services
 	h.Rpc = newRpcService(h)
