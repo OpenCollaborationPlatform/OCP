@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ickby/CollaborationNode/utils"
+
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -73,7 +75,7 @@ func TestBasicRPC(t *testing.T) {
 				So(res, ShouldEqual, 6)
 			})
 
-			Convey("but not on the other hot", func() {
+			Convey("but not on the other host", func() {
 
 				var res int
 				err := h1.Rpc.Call(h2.ID(), "Service", "Add", 3, &res)
@@ -106,6 +108,9 @@ func TestSwarmRPC(t *testing.T) {
 		Convey("Setting up a swarm without any peers", func() {
 
 			sw1, err := h1.CreateSwarm(context.Background(), NoStates())
+			if ocperr, ok := err.(utils.OCPError); ok {
+				fmt.Println(ocperr.ErrorWithStacktrace())
+			}
 			So(err, ShouldBeNil)
 			time.Sleep(50 * time.Millisecond)
 

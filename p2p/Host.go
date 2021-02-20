@@ -17,7 +17,6 @@ import (
 	"github.com/gammazero/nexus/v3/wamp"
 	hclog "github.com/hashicorp/go-hclog"
 	libp2p "github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p-autonat"
 	p2pevent "github.com/libp2p/go-libp2p-core/event"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	p2pnet "github.com/libp2p/go-libp2p-core/network"
@@ -143,7 +142,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 	var dht *kaddht.IpfsDHT
 	newDHT := func(h p2phost.Host) (p2prouting.PeerRouting, error) {
 		var err error
-		dhtOpts := []kaddht.Option{kaddht.ProtocolPrefix("/ocp")}
+		dhtOpts := []kaddht.Option{kaddht.ProtocolPrefix("/ocp"), kaddht.Mode(kaddht.ModeAutoServer)}
 		dht, err = kaddht.New(ctx, h, dhtOpts...)
 		return dht, err
 	}
@@ -203,9 +202,8 @@ func (h *Host) Start(shouldBootstrap bool) error {
 
 	//and the wamp events
 	if h.wamp != nil {
-		//sub, err := h.host.EventBus().Subscribe([]interface{}{new(p2pevent.EvtLocalReachabilityChanged),
-		//	new(p2pevent.EvtPeerConnectednessChanged)})
-		sub, err := h.host.EventBus().Subscribe(p2pevent.WildcardSubscription)
+		sub, err := h.host.EventBus().Subscribe([]interface{}{new(p2pevent.EvtLocalReachabilityChanged),
+			new(p2pevent.EvtLocalAddressesUpdated)})
 		if err != nil {
 			return utils.StackError(err, "Unable to setup p2p events")
 		}
@@ -218,16 +216,17 @@ func (h *Host) Start(shouldBootstrap bool) error {
 
 				case p2pevent.EvtLocalReachabilityChanged:
 					h.reachability = e.Reachability
-					h.logger.Debug("Reachability event received", "event", e)
+					h.logger.Info("Reachability changed", "value", e.Reachability)
 					h.wamp.Publish("ocp.p2p.reachabilityChanged", wamp.Dict{}, wamp.List{h.reachability.String()}, wamp.Dict{})
 
-				case p2pevent.EvtPeerConnectednessChanged:
-					h.logger.Debug("Peer conecctednedd event received", "event", e)
-					h.wamp.Publish("ocp.p2p.peerChanged", wamp.Dict{}, wamp.List{e.Peer.Pretty(), e.Connectedness.String()}, wamp.Dict{})
+				//case p2pevent.EvtPeerConnectednessChanged:
+				//this is never emited, we keep it here, maybe later libp2p implements it
+				//h.logger.Debug("Peer conectedness event received", "event", e)
+				//h.wamp.Publish("ocp.p2p.peerChanged", wamp.Dict{}, wamp.List{e.Peer.Pretty(), e.Connectedness.String()}, wamp.Dict{})
 
-				case p2pevent.EvtPeerIdentificationCompleted:
-					s, err := h.host.Peerstore().SupportsProtocols(e.Peer, autonat.AutoNATProto)
-					h.logger.Debug("Peer identification protocol support", "supports", s, "error", err)
+				case p2pevent.EvtLocalAddressesUpdated:
+					h.logger.Info("Local addresses changed", "current", e.Current, "removed", e.Removed)
+					h.wamp.Publish("ocp.p2p.addressesChanged", wamp.Dict{}, wamp.List{e.Current}, wamp.Dict{})
 
 				default:
 					h.logger.Warn("Received unhandled event", "event", e, "type", fmt.Sprintf("%T", e))
@@ -235,6 +234,23 @@ func (h *Host) Start(shouldBootstrap bool) error {
 			}
 			h.logger.Debug("Shutdown event loop")
 		}()
+
+		//for coneection add/change event we need to use the network notifee, as the event is not emited
+		confnc := func(n p2pnet.Network, c p2pnet.Conn) {
+			peer := c.RemotePeer().Pretty()
+			h.logger.Debug("Peer connected event", "peer", peer)
+			if peer[:2] == "Qm" {
+				h.wamp.Publish("ocp.p2p.peerConnected", wamp.Dict{}, wamp.List{peer}, wamp.Dict{})
+			}
+		}
+		disconfnc := func(n p2pnet.Network, c p2pnet.Conn) {
+			peer := c.RemotePeer().Pretty()
+			h.logger.Debug("Peer disconnected event", "peer", peer)
+			if peer[:2] == "Qm" {
+				h.wamp.Publish("ocp.p2p.peerDisconnected", wamp.Dict{}, wamp.List{peer}, wamp.Dict{})
+			}
+		}
+		h.host.Network().Notify(&p2pnet.NotifyBundle{ConnectedF: confnc, DisconnectedF: disconfnc})
 	}
 
 	//bootstrap if required (means connect to online nodes)
@@ -254,7 +270,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 func (h *Host) Stop(ctx context.Context) error {
 
 	//stop events
-	h.subs.Close()
+	//h.subs.Close() crahes in tests
 
 	//stop bootstrapping
 	if h.bootstrapper != nil {
@@ -679,10 +695,13 @@ func (self *Host) _peers(ctx context.Context, inv *wamp.Invocation) nxclient.Inv
 		return nxclient.InvokeResult{Args: wamp.List{"No arguments allowed for this function"}, Err: wamp.URI("ocp.error")}
 	}
 
-	peers := make([]string, len(self.Peers(true)))
-	for i, peer := range self.Peers(true) {
+	peers := make([]string, 0)
+	for _, peer := range self.Peers(true) {
 
-		peers[i] = peer.Pretty()
+		str := peer.Pretty()
+		if str[:2] == "Qm" {
+			peers = append(peers, str)
+		}
 	}
 
 	return nxclient.InvokeResult{Args: wamp.List{peers}}

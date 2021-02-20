@@ -3,10 +3,11 @@ package document
 import (
 	"context"
 	"fmt"
+	"sync"
+
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"
 	"github.com/ickby/CollaborationNode/utils"
-	"sync"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"
@@ -105,9 +106,8 @@ func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (D
 	defer self.mutex.Unlock()
 	self.documents = append(self.documents, doc)
 
-	//inform everyone about the new doc... p2p and locally!
+	//inform everyone about the new doc
 	self.client.Publish("ocp.documents.created", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
-	self.host.Event.Publish("ocp.documents.created", []byte(doc.ID))
 
 	return doc, nil
 }
@@ -170,9 +170,8 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	defer self.mutex.Unlock()
 	self.documents = append(self.documents, doc)
 
-	//inform everyone about the newly opened doc... p2p and locally!
+	//inform everyone about the newly opened doc
 	self.client.Publish("ocp.documents.opened", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
-	self.host.Event.Publish("ocp.documents.opened", []byte(doc.ID))
 
 	return nil
 }
@@ -207,10 +206,8 @@ func (self *DocumentHandler) CloseDocument(ctx context.Context, docID string) er
 			doc.Close(ctx)
 			self.documents = append(self.documents[:i], self.documents[i+1:]...)
 
-			//inform everyone about the closed doc... p2p and locally!
+			//inform everyone about the closed doc
 			self.client.Publish("ocp.documents.closed", wamp.Dict{}, wamp.List{docID}, wamp.Dict{})
-			self.host.Event.Publish("ocp.documents.closed", []byte(docID))
-
 			return nil
 		}
 	}

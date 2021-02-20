@@ -23,6 +23,7 @@ type OCPError interface {
 	Arguments() []interface{}
 	Stack() []string
 	ErrorType() string
+	ErrorWithStacktrace() string
 
 	AddToStack(string)
 }
@@ -74,6 +75,16 @@ func (self *Error) Error() string {
 	str := self.ErrorType()
 	if len(self.stack) != 0 {
 		str += ": " + self.stack[0]
+	}
+
+	return str
+}
+
+func (self *Error) ErrorWithStacktrace() string {
+
+	str := self.ErrorType() + "\n"
+	for _, value := range self.stack {
+		str += value + "\n"
 	}
 
 	return str
