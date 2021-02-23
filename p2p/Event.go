@@ -6,21 +6,33 @@ package p2p
 
 import (
 	"context"
+	"reflect"
 
 	"github.com/libp2p/go-libp2p-core/protocol"
 	"github.com/libp2p/go-libp2p-pubsub"
+	"github.com/ugorji/go/codec"
 )
 
 const (
 	eventProtocol = protocol.ID("/ocp/floodsub/1.0.0")
 )
 
+//Using msgpack for encoding to ensure, that all arguments that are handble by wamp are handled by the operation.
+//This is poblematic with gob, as it needs to have many types registered, which is impossible to know for all
+//the datatypes applications throw at us
+var mph *codec.MsgpackHandle
+
+func init() {
+	mph = new(codec.MsgpackHandle)
+	mph.WriteExt = true
+	mph.MapType = reflect.TypeOf(map[string]interface{}(nil))
+}
+
 //small custom wrapper for message to expose custom Event type
-//TODO: Expose User that created the event
 type Event struct {
-	Data   []byte
-	Source PeerID
-	Topic  string
+	Arguments []interface{}
+	Source    PeerID
+	Topic     string
 }
 
 //a small wrapper for subscription type
@@ -55,7 +67,13 @@ func (self Subscription) Next(ctx context.Context) (*Event, error) {
 }
 
 func (self Subscription) eventFromMessage(msg *pubsub.Message) *Event {
-	return &Event{msg.Data, PeerID(msg.GetFrom()), self.Topic()}
+
+	var arguments []interface{}
+	err := codec.NewDecoderBytes(msg.Data, mph).Decode(&arguments)
+	if err != nil {
+		arguments = make([]interface{}, 0)
+	}
+	return &Event{arguments, PeerID(msg.GetFrom()), self.Topic()}
 }
 
 //Cancels the subscription. Next will return with an error and no more events will
@@ -88,9 +106,14 @@ func (self *hostEventService) Subscribe(topic string) (Subscription, error) {
 	return Subscription{sub, nil}, err
 }
 
-func (self *hostEventService) Publish(topic string, data []byte) error {
+func (self *hostEventService) Publish(topic string, args ...interface{}) error {
 
-	//TODO: add signed user to the data
+	var data []byte
+	err := codec.NewEncoderBytes(&data, mph).Encode(args)
+	if err != nil {
+		return err
+	}
+
 	return self.service.Publish(topic, data)
 }
 
@@ -128,10 +151,19 @@ func (self *swarmEventService) Subscribe(topic string, required_auth AUTH_STATE)
 //Publish to a topic which requires a certain authorisation state. It must be the same state the listeners
 //have subscribed with. If it is ReadWrite than they will only receive it if they have stored us with
 //ReadWrite authorisation state.
-func (self *swarmEventService) Publish(topic string, data []byte) error {
+func (self *swarmEventService) Publish(topic string, args ...interface{}) error {
 
 	topic = self.swarm.ID.Pretty() + `.` + topic
+
+	var data []byte
+	err := codec.NewEncoderBytes(&data, mph).Encode(args)
+	if err != nil {
+		return err
+	}
+
 	return self.service.Publish(topic, data)
 }
 
-func (self *swarmEventService) Stop() {}
+func (self *swarmEventService) Stop() {
+
+}

@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"bytes"
 	"context"
 	"io/ioutil"
 	"os"
@@ -12,20 +11,20 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func asyncCatchEvents(sub Subscription, num *int, data *[][]byte, closed *bool) sync.Mutex {
+func asyncCatchEvents(sub Subscription, num *int, arguments *[][]interface{}, closed *bool) sync.Mutex {
 	mutex := sync.Mutex{}
 	*closed = false
 	go func() {
 		for {
 			//timeout must be higher than waiting in test functions
 			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
-			msg, err := sub.Next(ctx)
+			evt, err := sub.Next(ctx)
 			if err != nil {
 				break
 			}
 			mutex.Lock()
 			(*num)++
-			*data = append(*data, msg.Data)
+			*arguments = append(*arguments, evt.Arguments)
 			mutex.Unlock()
 		}
 		mutex.Lock()
@@ -63,19 +62,20 @@ func TestBasicEvent(t *testing.T) {
 			Convey("and must be publishable from the other host", func() {
 
 				num := 0
-				data := make([][]byte, 0)
+				data := make([][]interface{}, 0)
 				closed := false
 				asyncCatchEvents(sub, &num, &data, &closed)
 
-				h1.Event.Publish("testtopic", []byte("data"))
-				h2.Event.Publish("testtopic", []byte("data"))
+				h1.Event.Publish("testtopic", "data")
+				h2.Event.Publish("testtopic", 1, 2.2)
 				time.Sleep(100 * time.Millisecond)
 				sub.Cancel()
 				time.Sleep(100 * time.Millisecond)
 				So(closed, ShouldBeTrue)
 				So(num, ShouldEqual, 2)
-				So(bytes.Equal(data[0], []byte("data")), ShouldBeTrue)
-				So(bytes.Equal(data[1], []byte("data")), ShouldBeTrue)
+				So(data[0][0], ShouldEqual, "data")
+				So(data[1][0], ShouldEqual, 1)
+				So(data[1][1], ShouldAlmostEqual, 2.2)
 			})
 		})
 
@@ -90,19 +90,20 @@ func TestBasicEvent(t *testing.T) {
 			Convey("and must be publishable from the other host", func() {
 
 				num := 0
-				data := make([][]byte, 0)
+				data := make([][]interface{}, 0)
 				closed := false
 				asyncCatchEvents(sub, &num, &data, &closed)
 
-				h2.Event.Publish("testtopic", []byte("data"))
-				h2.Event.Publish("testtopic", []byte("data"))
+				h2.Event.Publish("testtopic", "data")
+				h2.Event.Publish("testtopic", 1, 2.2)
 				time.Sleep(100 * time.Millisecond)
 				sub.Cancel()
 				time.Sleep(100 * time.Millisecond)
 				So(closed, ShouldBeTrue)
 				So(num, ShouldEqual, 2)
-				So(bytes.Equal(data[0], []byte("data")), ShouldBeTrue)
-				So(bytes.Equal(data[1], []byte("data")), ShouldBeTrue)
+				So(data[0][0], ShouldEqual, "data")
+				So(data[1][0], ShouldEqual, 1)
+				So(data[1][1], ShouldAlmostEqual, 2.2)
 			})
 		})
 
@@ -141,12 +142,12 @@ func TestSwarmEvent(t *testing.T) {
 
 				Convey("as well as publishing without adding a peers to the swarm", func() {
 					num1 := 0
-					data1 := make([][]byte, 0)
+					data1 := make([][]interface{}, 0)
 					closed1 := false
 					m1 := asyncCatchEvents(sub1, &num1, &data1, &closed1)
 
-					h1.Event.Publish("testtopic", []byte("data"))
-					sw1.Event.Publish("testtopic", []byte("data"))
+					h1.Event.Publish("testtopic", "data")
+					sw1.Event.Publish("testtopic", 1)
 					time.Sleep(100 * time.Millisecond)
 
 					m1.Lock()
@@ -175,16 +176,16 @@ func TestSwarmEvent(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					num1 := 0
-					data1 := make([][]byte, 0)
+					data1 := make([][]interface{}, 0)
 					closed1 := false
 					m1 := asyncCatchEvents(sub1, &num1, &data1, &closed1)
 
 					num2 := 0
-					data2 := make([][]byte, 0)
+					data2 := make([][]interface{}, 0)
 					closed2 := false
 					m2 := asyncCatchEvents(sub2, &num2, &data2, &closed2)
 
-					sw1.Event.Publish("testtopic", []byte("data"))
+					sw1.Event.Publish("testtopic", "data")
 					time.Sleep(100 * time.Millisecond)
 
 					m1.Lock()
@@ -194,7 +195,7 @@ func TestSwarmEvent(t *testing.T) {
 					m1.Unlock()
 					m2.Unlock()
 
-					sw2.Event.Publish("testtopic", []byte("data"))
+					sw2.Event.Publish("testtopic", 1)
 					time.Sleep(100 * time.Millisecond)
 					sub1.Cancel()
 					sub2.Cancel()
@@ -220,11 +221,11 @@ func TestSwarmEvent(t *testing.T) {
 				Convey("and the peer itself shall be able to publish", func() {
 
 					num1 := 0
-					data1 := make([][]byte, 0)
+					data1 := make([][]interface{}, 0)
 					closed1 := false
 					m1 := asyncCatchEvents(sub1, &num1, &data1, &closed1)
 
-					sw1.Event.Publish("testtopic", []byte("data"))
+					sw1.Event.Publish("testtopic", "data")
 					time.Sleep(100 * time.Millisecond)
 
 					sub1.Cancel()
@@ -249,12 +250,12 @@ func TestSwarmEvent(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					num1 := 0
-					data1 := make([][]byte, 0)
+					data1 := make([][]interface{}, 0)
 					closed1 := false
 					asyncCatchEvents(sub1, &num1, &data1, &closed1)
 
 					num2 := 0
-					data2 := make([][]byte, 0)
+					data2 := make([][]interface{}, 0)
 					closed2 := false
 					asyncCatchEvents(sub2, &num2, &data2, &closed2)
 
@@ -284,12 +285,12 @@ func TestSwarmEvent(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					num1 := 0
-					data1 := make([][]byte, 0)
+					data1 := make([][]interface{}, 0)
 					closed1 := false
 					asyncCatchEvents(sub1, &num1, &data1, &closed1)
 
 					num2 := 0
-					data2 := make([][]byte, 0)
+					data2 := make([][]interface{}, 0)
 					closed2 := false
 					asyncCatchEvents(sub2, &num2, &data2, &closed2)
 
