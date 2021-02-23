@@ -575,7 +575,7 @@ func (h *Host) removeSwarm(id SwarmID) {
 	}
 }
 
-//remove swarm from list: only called from Swarm itself in Close()
+//Finds a peer active in current swarm
 func (h *Host) FindSwarmMember(ctx context.Context, id SwarmID) (PeerID, error) {
 
 	peerChan := h.findSwarmPeersAsync(ctx, id, 1)

@@ -36,6 +36,20 @@ func AuthStateFromString(state string) (AUTH_STATE, error) {
 	return AUTH_NONE, fmt.Errorf("Not valid auth state string")
 }
 
+func AuthStateToString(state AUTH_STATE) string {
+
+	switch state {
+
+	case AUTH_NONE:
+		return "None"
+	case AUTH_READWRITE:
+		return "Write"
+	case AUTH_READONLY:
+		return "Read"
+	}
+	return "None"
+}
+
 //a interface that allows to query the authorisation state of a peer
 //*****************************************************************
 type peerAuthorizer interface {

@@ -90,8 +90,9 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	errS := []error{}
 	//peer handling
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.addPeer", doc.ID), doc.addPeer, wamp.Dict{}))
-	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.setPeerAuth", doc.ID), doc.setPeerAuth, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.removePeer", doc.ID), doc.removePeer, wamp.Dict{}))
+	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.setPeerAuth", doc.ID), doc.setPeerAuth, wamp.Dict{}))
+	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.getPeerAuth", doc.ID), doc.getPeerAuth, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.listPeers", doc.ID), doc.listPeers, wamp.Dict{}))
 
 	options := wamp.SetOption(wamp.Dict{}, wamp.OptDiscloseCaller, true)
@@ -178,12 +179,23 @@ func (self Document) setPeerAuth(ctx context.Context, inv *wamp.Invocation) nxcl
 		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
-	err = self.swarm.AddPeer(ctx, pid, auth)
+	err = self.swarm.ChangePeer(ctx, pid, auth)
 	if err != nil {
 		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 	}
 
 	return nxclient.InvokeResult{}
+}
+
+func (self Document) getPeerAuth(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	pid, err := getPeer(inv.Arguments)
+	if err != nil {
+		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+	}
+
+	auth := self.swarm.PeerAuth(pid)
+	return nxclient.InvokeResult{Args: wamp.List{auth}}
 }
 
 func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
@@ -202,8 +214,47 @@ func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxcli
 }
 
 func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+	// returns all peers with possible sorting. Supported keyword args:
+	//   - "auth": 		only peers with that auth are returned. Valid args are "Read" and "Write"
+	//   - "joined": 	only peers currently joined in the document are returned. Valid args are booleans
+	//
+	// Note: both args can be combined
 
-	peers := self.swarm.GetPeers(p2p.AUTH_NONE)
+	var err error
+	var peers []p2p.PeerID
+
+	if joined, ok := inv.ArgumentsKw["joined"]; ok && joined.(bool) {
+
+		//get all joined peers in the shared states
+		peers, err = self.swarm.State.JoinedPeers()
+		if err != nil {
+			return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		}
+
+	} else {
+		// all peers
+		peers = self.swarm.GetPeers(p2p.AUTH_NONE)
+	}
+
+	//filter out the auth if required
+	if auth, ok := inv.ArgumentsKw["auth"]; ok {
+		authstate, err := p2p.AuthStateFromString(auth.(string))
+		if err != nil {
+			return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		}
+		if authstate == p2p.AUTH_NONE {
+			return nxclient.InvokeResult{Args: wamp.List{"None auth not supported. If all peers are wanted do not use auth keyword"}, Err: wamp.URI("ocp.error")}
+		}
+
+		result := make([]p2p.PeerID, 0)
+		for _, peer := range peers {
+			if self.swarm.PeerAuth(peer) == authstate {
+				result = append(result, peer)
+			}
+		}
+		peers = result
+	}
+
 	resargs := make([]string, len(peers))
 	for i, p := range peers {
 		resargs[i] = p.Pretty()

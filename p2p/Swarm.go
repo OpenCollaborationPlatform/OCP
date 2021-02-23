@@ -173,6 +173,8 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 				//we did not find any swarm member... return with error
 				return nil, fmt.Errorf("Did not find any swarm members before timeout")
 			}
+
+			//connect to all
 		}
 	}
 

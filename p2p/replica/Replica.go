@@ -218,7 +218,7 @@ func (self *Replica) ConnectPeer(ctx context.Context, pid peer.ID, writer bool) 
 		if writer {
 			future = self.rep.AddVoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
 		} else {
-			future = self.rep.AddVoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
+			future = self.rep.AddNonvoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
 		}
 		err := future.Error()
 		if err == nil {
@@ -361,6 +361,30 @@ func (self *Replica) PrintConf() {
 		}
 		fmt.Println(str)
 	}
+}
+
+func (self *Replica) JoinedPeers() ([]peer.ID, error) {
+
+	if self.rep == nil {
+		return nil, fmt.Errorf("Replica not startet up")
+	}
+
+	future := self.rep.GetConfiguration()
+	err := future.Error()
+	if err != nil {
+		return nil, fmt.Errorf("Error in configuration")
+	}
+
+	conf := future.Configuration()
+	result := make([]peer.ID, 0)
+	for _, server := range conf.Servers {
+		serverpid, err := peer.IDB58Decode(string(server.ID))
+		if err != nil {
+			continue
+		}
+		result = append(result, serverpid)
+	}
+	return result, nil
 }
 
 func durationFromContext(ctx context.Context) time.Duration {

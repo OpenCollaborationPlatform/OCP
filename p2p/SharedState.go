@@ -34,6 +34,7 @@ func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, re
 	return err
 }
 
+// Api callable by Read Only auth
 type ReplicaReadAPI struct {
 	rep  *replica.Replica
 	conf *SwarmConfiguration
@@ -184,6 +185,19 @@ func (self *sharedStateService) Close(ctx context.Context) {
 			self.swarm.Rpc.CallContext(ctx, leader, "ReplicaReadAPI", "Leave", self.swarm.host.ID(), &ret)
 		}
 	}
+}
+
+func (self *sharedStateService) JoinedPeers() ([]PeerID, error) {
+
+	peers, err := self.rep.JoinedPeers()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]PeerID, len(peers))
+	for i, p := range peers {
+		result[i] = PeerID(p)
+	}
+	return result, nil
 }
 
 func (self *sharedStateService) startup(bootstrap bool) error {
