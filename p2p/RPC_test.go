@@ -108,6 +108,7 @@ func TestSwarmRPC(t *testing.T) {
 		Convey("Setting up a swarm without any peers", func() {
 
 			sw1, err := h1.CreateSwarm(context.Background(), NoStates())
+			defer sw1.Close(context.Background())
 			if ocperr, ok := err.(utils.OCPError); ok {
 				fmt.Println(ocperr.ErrorWithStacktrace())
 			}

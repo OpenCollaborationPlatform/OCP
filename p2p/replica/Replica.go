@@ -18,13 +18,17 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
-//a interface that allows to query all available peers
-//****************************************************
-type PeerProvider interface {
-	HasPeer(peer.ID) bool
-	CanWrite(peer.ID) (bool, error)
-	GetReadPeers() []peer.ID
-	GetWritePeers() []peer.ID
+type Event_Type int
+
+const (
+	EVENT_ADDED Event_Type = iota
+	EVENT_REMOVED
+	EVENT_LEADER
+)
+
+type ReplicaPeerEvent struct {
+	Peer  peer.ID
+	Event Event_Type
 }
 
 type Replica struct {
@@ -32,6 +36,9 @@ type Replica struct {
 	dht   *kaddht.IpfsDHT
 	state *multiState
 	rep   *raft.Raft
+	obs   *raft.Observer
+	obsCh chan raft.Observation
+	evtCh chan ReplicaPeerEvent
 	logs  raft.LogStore
 	confs raft.StableStore
 	snaps raft.SnapshotStore
@@ -65,7 +72,8 @@ func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT
 	//setup the state
 	state := newMultiState()
 
-	return &Replica{host, dht, state, nil, logStore, stableStore, snapshots, name}, nil
+	return &Replica{host, dht, state, nil, nil, nil, nil,
+		logStore, stableStore, snapshots, name}, nil
 }
 
 //starts the replica and waits to get added by the leader
@@ -93,6 +101,13 @@ func (self *Replica) Join() error {
 	if err != nil {
 		return utils.StackError(err, "Unable to initialize replica")
 	}
+
+	//setup the default observers
+	self.evtCh = make(chan ReplicaPeerEvent, 10)
+	self.obsCh = make(chan raft.Observation, 10)
+	self.obs = raft.NewObserver(self.obsCh, true, nil)
+	ra.RegisterObserver(self.obs)
+	go self.observationLoop()
 
 	self.rep = ra
 	return nil
@@ -129,10 +144,22 @@ func (self *Replica) IsRunning() bool {
 	return self.rep.State() != raft.Shutdown
 }
 
-//warning: only close after removing from the cluster!
+//warning: only close after removing ourself from the cluster!
 func (self *Replica) Close(ctx context.Context) error {
 
 	if self.rep != nil {
+
+		//close the stores after shutdown
+		defer func() {
+			store, _ := self.logs.(*raftbolt.BoltStore)
+			store.Close()
+			self.rep = nil
+		}()
+
+		//remove the observers
+		self.rep.DeregisterObserver(self.obs)
+		close(self.obsCh)
+		close(self.evtCh)
 
 		//We shut down automatically when we get removed from conf (due to default conf option)
 		//all this function does is to wait till we are shutdown to make sure we are
@@ -161,17 +188,25 @@ func (self *Replica) Close(ctx context.Context) error {
 			case <-ctx.Done():
 				//We need to force the shutdown!
 				self.rep.Shutdown()
-				return fmt.Errorf("Needed to force shutdown: timeout")
 			}
 		}
 	}
 
-	store, ok := self.logs.(*raftbolt.BoltStore)
-	if !ok {
-		return fmt.Errorf("Cannot close replica store")
-	}
-	store.Close()
+	return nil
+}
 
+//shutdown the cluster. Only use when we are the last peer! otherwise remove
+//ourself from the cluster and call close!
+func (self *Replica) Shutdown(ctx context.Context) error {
+
+	if self.IsRunning() {
+		shut := self.rep.Shutdown()
+		err := shut.Error()
+		if err != nil {
+			return err
+		}
+		return self.Close(ctx)
+	}
 	return nil
 }
 
@@ -215,11 +250,20 @@ func (self *Replica) ConnectPeer(ctx context.Context, pid peer.ID, writer bool) 
 	//run till success or cancelation
 	for {
 		var future raft.IndexFuture
-		if writer {
-			future = self.rep.AddVoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
-		} else {
-			future = self.rep.AddNonvoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
-		}
+
+		//currently we do not use nonvoter. Reason: If read only would be a non voter
+		//than the shared state replication would rely on ReadWrite peers only. As we expect
+		//small amount of nodes sharing a state this would lead to problems, as easily only
+		//non voters could remain. That seems counter intuitive for the user.
+		// - read peers cannot add commands, as they are not allowed to use ReplicaApi
+		// - A maliscious READ node coud reprogram the code and add faulty commands when it the leader
+		// - A real public sharing would benefit from non voter
+		//if writer {
+		future = self.rep.AddVoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
+		//} else {
+		//	future = self.rep.AddNonvoter(raft.ServerID(peerDec), raft.ServerAddress(peerDec), 0, duration)
+		//}
+
 		err := future.Error()
 		if err == nil {
 			return nil
@@ -363,7 +407,7 @@ func (self *Replica) PrintConf() {
 	}
 }
 
-func (self *Replica) JoinedPeers() ([]peer.ID, error) {
+func (self *Replica) ConnectedPeers() ([]peer.ID, error) {
 
 	if self.rep == nil {
 		return nil, fmt.Errorf("Replica not startet up")
@@ -385,6 +429,38 @@ func (self *Replica) JoinedPeers() ([]peer.ID, error) {
 		result = append(result, serverpid)
 	}
 	return result, nil
+}
+
+func (self *Replica) EventChannel() chan ReplicaPeerEvent {
+	return self.evtCh
+}
+
+func (self *Replica) observationLoop() {
+
+	//stops when obsCh is closed
+	for obs := range self.obsCh {
+
+		switch obs := obs.Data.(type) {
+
+		case raft.LeaderObservation:
+			pid, err := peer.IDB58Decode(string(obs.Leader))
+			if err != nil {
+				continue
+			}
+			self.evtCh <- ReplicaPeerEvent{pid, EVENT_LEADER}
+
+		case raft.PeerObservation:
+			pid, err := peer.IDB58Decode(string(obs.Peer.Address))
+			if err != nil {
+				continue
+			}
+			evtType := EVENT_ADDED
+			if obs.Removed {
+				evtType = EVENT_REMOVED
+			}
+			self.evtCh <- ReplicaPeerEvent{pid, evtType}
+		}
+	}
 }
 
 func durationFromContext(ctx context.Context) time.Duration {

@@ -55,6 +55,8 @@ func TestBasicEvent(t *testing.T) {
 		Convey("Subscribing to a topic after connecting works", func() {
 
 			h2.Connect(context.Background(), h1.ID())
+			So(h1.Event.RegisterTopic("testtopic"), ShouldBeNil)
+			So(h2.Event.RegisterTopic("testtopic"), ShouldBeNil)
 			sub, err := h1.Event.Subscribe("testtopic")
 			So(err, ShouldBeNil)
 			So(sub.sub, ShouldNotBeNil)
@@ -81,6 +83,8 @@ func TestBasicEvent(t *testing.T) {
 
 		Convey("as well as subscribing to a topic before connecting", func() {
 
+			So(h1.Event.RegisterTopic("testtopic"), ShouldBeNil)
+			So(h2.Event.RegisterTopic("testtopic"), ShouldBeNil)
 			sub, err := h1.Event.Subscribe("testtopic")
 			So(err, ShouldBeNil)
 			So(sub.sub, ShouldNotBeNil)
@@ -132,12 +136,14 @@ func TestSwarmEvent(t *testing.T) {
 		Convey("Creating a swarm on the first host", func() {
 
 			sw1, err := h1.CreateSwarm(context.Background(), NoStates())
+			defer sw1.Close(context.Background())
 			So(err, ShouldBeNil)
+			So(sw1.Event.RegisterTopic("testtopic", AUTH_READONLY), ShouldBeNil)
 			time.Sleep(50 * time.Millisecond)
 
 			Convey("Registering with ReadOnly requirement should work", func() {
 
-				sub1, err := sw1.Event.Subscribe("testtopic", AUTH_READONLY)
+				sub1, err := sw1.Event.Subscribe("testtopic")
 				So(err, ShouldBeNil)
 
 				Convey("as well as publishing without adding a peers to the swarm", func() {
@@ -146,8 +152,8 @@ func TestSwarmEvent(t *testing.T) {
 					closed1 := false
 					m1 := asyncCatchEvents(sub1, &num1, &data1, &closed1)
 
-					h1.Event.Publish("testtopic", "data")
-					sw1.Event.Publish("testtopic", 1)
+					So(h1.Event.Publish("testtopic", "data"), ShouldNotBeNil)
+					So(sw1.Event.Publish("testtopic", 1), ShouldBeNil)
 					time.Sleep(100 * time.Millisecond)
 
 					m1.Lock()
@@ -169,10 +175,11 @@ func TestSwarmEvent(t *testing.T) {
 					err := sw1.AddPeer(ctx, h2.ID(), AUTH_READONLY)
 					So(err, ShouldBeNil)
 					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+					So(sw2.Event.RegisterTopic("testtopic", AUTH_READONLY), ShouldBeNil)
 					So(err, ShouldBeNil)
 					time.Sleep(50 * time.Millisecond)
 
-					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READONLY)
+					sub2, err := sw2.Event.Subscribe("testtopic")
 					So(err, ShouldBeNil)
 
 					num1 := 0
@@ -215,7 +222,8 @@ func TestSwarmEvent(t *testing.T) {
 
 			Convey("Registering with ReadWrite requirement should work", func() {
 
-				sub1, err := sw1.Event.Subscribe("testtopic", AUTH_READWRITE)
+				So(sw1.Event.RegisterTopic("RWtesttopic", AUTH_READWRITE), ShouldBeNil)
+				sub1, err := sw1.Event.Subscribe("RWtesttopic")
 				So(err, ShouldBeNil)
 
 				Convey("and the peer itself shall be able to publish", func() {
@@ -225,7 +233,7 @@ func TestSwarmEvent(t *testing.T) {
 					closed1 := false
 					m1 := asyncCatchEvents(sub1, &num1, &data1, &closed1)
 
-					sw1.Event.Publish("testtopic", "data")
+					sw1.Event.Publish("RWtesttopic", "data")
 					time.Sleep(100 * time.Millisecond)
 
 					sub1.Cancel()
@@ -244,9 +252,10 @@ func TestSwarmEvent(t *testing.T) {
 					So(err, ShouldBeNil)
 					sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 					So(err, ShouldBeNil)
+					So(sw2.Event.RegisterTopic("RWtesttopic", AUTH_READWRITE), ShouldBeNil)
 					time.Sleep(50 * time.Millisecond)
 
-					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READWRITE)
+					sub2, err := sw2.Event.Subscribe("RWtesttopic")
 					So(err, ShouldBeNil)
 
 					num1 := 0
@@ -259,8 +268,8 @@ func TestSwarmEvent(t *testing.T) {
 					closed2 := false
 					asyncCatchEvents(sub2, &num2, &data2, &closed2)
 
-					sw1.Event.Publish("testtopic", []byte("data"))
-					sw2.Event.Publish("testtopic", []byte("data"))
+					sw1.Event.Publish("RWtesttopic", []byte("data"))
+					sw2.Event.Publish("RWtesttopic", []byte("data"))
 					time.Sleep(100 * time.Millisecond)
 					sub1.Cancel()
 					sub2.Cancel()
@@ -281,7 +290,8 @@ func TestSwarmEvent(t *testing.T) {
 					So(err, ShouldBeNil)
 					time.Sleep(50 * time.Millisecond)
 
-					sub2, err := sw2.Event.Subscribe("testtopic", AUTH_READWRITE)
+					So(sw2.Event.RegisterTopic("RWtesttopic", AUTH_READWRITE), ShouldBeNil)
+					sub2, err := sw2.Event.Subscribe("RWtesttopic")
 					So(err, ShouldBeNil)
 
 					num1 := 0
@@ -294,8 +304,8 @@ func TestSwarmEvent(t *testing.T) {
 					closed2 := false
 					asyncCatchEvents(sub2, &num2, &data2, &closed2)
 
-					sw1.Event.Publish("testtopic", []byte("data"))
-					sw2.Event.Publish("testtopic", []byte("data"))
+					sw1.Event.Publish("RWtesttopic", []byte("data"))
+					sw2.Event.Publish("RWtesttopic", []byte("data"))
 					time.Sleep(100 * time.Millisecond)
 					sub1.Cancel()
 					sub2.Cancel()

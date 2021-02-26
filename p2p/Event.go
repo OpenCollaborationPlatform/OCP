@@ -6,10 +6,13 @@ package p2p
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"github.com/libp2p/go-libp2p-core/protocol"
+	peer "github.com/libp2p/go-libp2p-peer"
 	"github.com/libp2p/go-libp2p-pubsub"
+	pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/ugorji/go/codec"
 )
 
@@ -86,27 +89,63 @@ func (self Subscription) Topic() string {
 	return self.sub.Topic()
 }
 
+//Filters subscriptions based on P2P authorisation
+type SubscriptionFilter struct {
+	authorisation *authorizer
+	id            PeerID
+}
+
+// CanSubscribe returns true if the topic is of interest and we can subscribe to it
+func (self SubscriptionFilter) CanSubscribe(topic string) bool {
+	//we allow to subscribe to everything
+	return true
+}
+
+// we filter every subscription that is not authorized
+func (self SubscriptionFilter) FilterIncomingSubscriptions(sender peer.ID, subopts []*pb.RPC_SubOpts) ([]*pb.RPC_SubOpts, error) {
+
+	peer := PeerID(sender)
+	result := make([]*pb.RPC_SubOpts, 0)
+	for _, subopt := range subopts {
+		if self.authorisation.peerIsAuthorized(*subopt.Topicid, peer) {
+			result = append(result, subopt)
+		}
+	}
+	return result, nil
+}
+
 func newHostEventService(host *Host) (*hostEventService, error) {
 
+	auth := newAuthorizer()
+	//TODO: make filter work with swarm events
+	//filter := SubscriptionFilter{auth, host.ID()}
 	ctx, cncl := context.WithCancel(context.Background())
-	ps, err := pubsub.NewFloodsubWithProtocols(ctx, host.host, []protocol.ID{eventProtocol}, pubsub.WithMessageSigning(true))
+	ps, err := pubsub.NewGossipSub(ctx, host.host, pubsub.WithMessageSigning(true) /*, pubsub.WithSubscriptionFilter(filter)*/)
 
-	return &hostEventService{ps, cncl}, err
+	return &hostEventService{ps, cncl, auth}, err
 }
 
 type hostEventService struct {
 	service *pubsub.PubSub
 	cancel  context.CancelFunc
+	auth    *authorizer
 }
 
 func (self *hostEventService) Subscribe(topic string) (Subscription, error) {
 
-	//TODO: add validator that checks user signature
+	if !self.auth.isKnown(topic) {
+		return Subscription{}, fmt.Errorf("Topic was not registered")
+	}
+
 	sub, err := self.service.Subscribe(topic)
 	return Subscription{sub, nil}, err
 }
 
 func (self *hostEventService) Publish(topic string, args ...interface{}) error {
+
+	if !self.auth.isKnown(topic) {
+		return fmt.Errorf("Topic was not registered")
+	}
 
 	var data []byte
 	err := codec.NewEncoderBytes(&data, mph).Encode(args)
@@ -115,6 +154,10 @@ func (self *hostEventService) Publish(topic string, args ...interface{}) error {
 	}
 
 	return self.service.Publish(topic, data)
+}
+
+func (self *hostEventService) RegisterTopic(topic string) error {
+	return self.auth.addAuth(topic, AUTH_NONE, nil)
 }
 
 func (self *hostEventService) Stop() {
@@ -124,28 +167,30 @@ func (self *hostEventService) Stop() {
 type swarmEventService struct {
 	service *pubsub.PubSub
 	swarm   *Swarm
+	auth    *authorizer
 }
 
 func newSwarmEventService(swarm *Swarm) *swarmEventService {
 
 	hostservice := swarm.host.Event
-	return &swarmEventService{hostservice.service, swarm}
+	auth := hostservice.auth
+	return &swarmEventService{hostservice.service, swarm, auth}
 }
 
 //Subscribe to a topic which requires a certain authorisation state
 // - ReadOnly:  The topic is publishable by ReadOnly peers, hence everyone can publish on it
 // - ReadWrite: The topic is only publishable by ReadWrite peers, hence publishing is only allowed by them
-func (self *swarmEventService) Subscribe(topic string, required_auth AUTH_STATE) (Subscription, error) {
+func (self *swarmEventService) Subscribe(topic string) (Subscription, error) {
 
 	topic = self.swarm.ID.Pretty() + `.` + topic
+
+	if !self.auth.isKnown(topic) {
+		return Subscription{}, fmt.Errorf("Topic was not registered")
+	}
+
 	sub, err := self.service.Subscribe(topic)
 
-	//we have one authorizer per topic, as one can subscripe multiple times to a topic, and each time
-	//theoretical with a different authorisation requriement
-	auth := newAuthorizer()
-	auth.addAuth(topic, required_auth, self.swarm)
-
-	return Subscription{sub, auth}, err
+	return Subscription{sub, self.auth}, err
 }
 
 //Publish to a topic which requires a certain authorisation state. It must be the same state the listeners
@@ -154,6 +199,10 @@ func (self *swarmEventService) Subscribe(topic string, required_auth AUTH_STATE)
 func (self *swarmEventService) Publish(topic string, args ...interface{}) error {
 
 	topic = self.swarm.ID.Pretty() + `.` + topic
+
+	if !self.auth.isKnown(topic) {
+		return fmt.Errorf("Topic was not registered")
+	}
 
 	var data []byte
 	err := codec.NewEncoderBytes(&data, mph).Encode(args)
@@ -164,6 +213,12 @@ func (self *swarmEventService) Publish(topic string, args ...interface{}) error 
 	return self.service.Publish(topic, data)
 }
 
-func (self *swarmEventService) Stop() {
+func (self *swarmEventService) RegisterTopic(topic string, required_auth AUTH_STATE) error {
 
+	topic = self.swarm.ID.Pretty() + `.` + topic
+	return self.auth.addAuth(topic, required_auth, self.swarm)
+}
+
+func (self *swarmEventService) Stop() {
+	//TODO: remove swarm from auth
 }

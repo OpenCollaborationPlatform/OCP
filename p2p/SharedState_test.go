@@ -67,6 +67,7 @@ func TestSingleNodeSharedState(t *testing.T) {
 		//create the swarm rigth away so that they get the correct directory to us
 		st1 := &testState{0}
 		sw1, err := h1.CreateSwarm(context.Background(), SwarmStates(st1))
+		defer sw1.Close(context.Background())
 		So(err, ShouldBeNil)
 		So(sw1, ShouldNotBeNil)
 		time.Sleep(50 * time.Millisecond)
@@ -107,6 +108,7 @@ func TestBasicSharedState(t *testing.T) {
 
 		st1 := &testState{0}
 		sw1, err := h1.CreateSwarm(context.Background(), SwarmStates(st1))
+		defer sw1.Close(context.Background())
 		So(err, ShouldBeNil)
 		time.Sleep(50 * time.Millisecond)
 
@@ -121,7 +123,7 @@ func TestBasicSharedState(t *testing.T) {
 
 		Convey("Adding the new to the initial swarm", func() {
 
-			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
 			err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
 			So(err, ShouldBeNil)
 			So(sw1.HasPeer(h1.ID()), ShouldBeTrue)
@@ -205,6 +207,7 @@ func TestConnectionStrategy(t *testing.T) {
 
 			st2 := &testState{0}
 			sw2, err := h2.CreateSwarm(context.Background(), SwarmStates(st2))
+			defer sw2.Close(context.Background())
 			So(err, ShouldBeNil)
 			So(sw2, ShouldNotBeNil)
 			time.Sleep(50 * time.Millisecond)

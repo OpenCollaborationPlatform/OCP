@@ -168,10 +168,14 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 
 func (self *sharedStateService) Close(ctx context.Context) {
 
+	if !self.IsRunning() {
+		return
+	}
+
 	//if we are connecteed we need to change that: remove our self from the cluster
 	//if we are the last peer in the cluster we simply shut down
 	isLast, err := self.rep.IsLastPeer(self.swarm.host.ID())
-	if self.IsRunning() && !isLast && err == nil {
+	if !isLast && err == nil {
 
 		//fetch leader and call him to leave
 		leader, err := self.rep.GetLeader(ctx)
@@ -183,13 +187,16 @@ func (self *sharedStateService) Close(ctx context.Context) {
 
 			var ret interface{}
 			self.swarm.Rpc.CallContext(ctx, leader, "ReplicaReadAPI", "Leave", self.swarm.host.ID(), &ret)
+			self.rep.Close(ctx)
 		}
+	} else {
+		self.rep.Shutdown(ctx)
 	}
 }
 
-func (self *sharedStateService) JoinedPeers() ([]PeerID, error) {
+func (self *sharedStateService) ActivePeers() ([]PeerID, error) {
 
-	peers, err := self.rep.JoinedPeers()
+	peers, err := self.rep.ConnectedPeers()
 	if err != nil {
 		return nil, err
 	}
@@ -215,6 +222,9 @@ func (self *sharedStateService) startup(bootstrap bool) error {
 			return utils.StackError(err, "Unable to join replica")
 		}
 	}
+
+	//replica event handling
+	go self.eventLoop(self.rep.EventChannel())
 
 	//setup API
 	self.api = ReplicaAPI{self.rep}
@@ -272,4 +282,18 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 	//call the leader to let us join
 	var auth AUTH_STATE
 	return self.swarm.Rpc.CallContext(callctx, leader, "ReplicaReadAPI", "Join", self.swarm.host.ID(), &auth)
+}
+
+func (self *sharedStateService) eventLoop(channel chan replica.ReplicaPeerEvent) {
+
+	//read events and do something useful with it!
+	for evt := range channel {
+
+		if evt.Event == replica.EVENT_ADDED {
+			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer, true)
+
+		} else if evt.Event == replica.EVENT_REMOVED {
+			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer, false)
+		}
+	}
 }

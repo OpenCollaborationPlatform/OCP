@@ -2,6 +2,7 @@ package connection
 
 import (
 	"bytes"
+	"io/ioutil"
 
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/spf13/viper"
@@ -9,7 +10,12 @@ import (
 
 func MakeTemporaryRouter() (*Router, error) {
 
-	r := NewRouter(hclog.Default())
+	//a logger to discard all logs (to not disturb print output)
+	testLogger := hclog.New(&hclog.LoggerOptions{
+		Output: ioutil.Discard,
+	})
+
+	r := NewRouter(testLogger)
 	r.Start(make(chan string, 0))
 	return r, nil
 }

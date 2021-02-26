@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"
@@ -16,9 +17,12 @@ import (
 
 type Document struct {
 
-	//wamp connection
+	//internals
 	client *nxclient.Client //the client with which this doc is represented on the router
 	swarm  *p2p.Swarm
+	subs   []p2p.Subscription
+	docCtx context.Context
+	ctxCnl context.CancelFunc
 
 	//DML
 	cid           utils.Cid
@@ -78,16 +82,25 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	ds.Start(swarm)
 
 	//build the document
+	docCtx, ctxCnl := context.WithCancel(context.Background())
 	doc := Document{
 		client:        client,
 		swarm:         swarm,
 		datastructure: ds,
 		ID:            id,
 		cid:           dml,
+		docCtx:        docCtx,
+		ctxCnl:        ctxCnl,
 	}
 
-	//register all docclient user functions
 	errS := []error{}
+
+	//connect to all P2P events
+	errS = append(errS, doc.handleEvent("peerAdded"))
+	errS = append(errS, doc.handleEvent("peerRemoved"))
+	errS = append(errS, doc.handleEvent("peerAuthChanged"))
+	errS = append(errS, doc.handleEvent("state.peerActivityChanged"))
+
 	//peer handling
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.addPeer", doc.ID), doc.addPeer, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.removePeer", doc.ID), doc.removePeer, wamp.Dict{}))
@@ -111,9 +124,44 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 }
 
 func (self Document) Close(ctx context.Context) {
+
+	self.ctxCnl()
+	for _, sub := range self.subs {
+		sub.Cancel()
+	}
+
 	self.datastructure.Close()
 	self.client.Close()
 	self.swarm.Close(ctx)
+}
+
+func (self Document) handleEvent(topic string) error {
+
+	sub, err := self.swarm.Event.Subscribe(topic)
+	if err != nil {
+		return err
+	}
+
+	self.subs = append(self.subs, sub)
+
+	go func(sub p2p.Subscription, client *nxclient.Client, id string) {
+		for {
+			evt, err := sub.Next(self.docCtx)
+			if err != nil {
+				//subscription canceld, return
+				return
+			}
+			topics := strings.Split(evt.Topic, ".")
+			uri := fmt.Sprintf("ocp.documents.%s.%s", id, topics[len(topics)-1])
+			args := make(wamp.List, len(evt.Arguments))
+			for i, argument := range evt.Arguments {
+				args[i] = argument
+			}
+			client.Publish(uri, wamp.Dict{}, args, wamp.Dict{})
+		}
+	}(sub, self.client, self.ID)
+
+	return nil
 }
 
 //							Peer Handling
@@ -226,7 +274,7 @@ func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclie
 	if joined, ok := inv.ArgumentsKw["joined"]; ok && joined.(bool) {
 
 		//get all joined peers in the shared states
-		peers, err = self.swarm.State.JoinedPeers()
+		peers, err = self.swarm.State.ActivePeers()
 		if err != nil {
 			return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 		}

@@ -14,7 +14,6 @@ import (
 
 	blocks "github.com/ipfs/go-block-format"
 	//ipfslog "github.com/ipfs/go-log"
-
 	//	ipfswriter "github.com/ipfs/go-log/writer"
 	hclog "github.com/hashicorp/go-hclog"
 	libp2p "github.com/libp2p/go-libp2p"
@@ -34,7 +33,7 @@ func init() {
 	//	ipfswriter.Configure(ipfswriter.Output(ioutil.Discard)) // ipfslog "github.com/ipfs/go-log/writer"#
 	//	ipfswriter.LevelInfo()
 	//	ipfslog.GetSubsystems() //just to not need to remove import
-	//ipfslog.SetDebugLogging()
+	//ipfslog.SetLogLevel("pubsub", "Debug")
 
 }
 
@@ -99,13 +98,18 @@ func temporaryHost(dir string) (*Host, error) {
 		return nil, fmt.Errorf("Could not create private key file: %s\n", err)
 	}
 
+	//a logger to discard all logs (to not disturb print output)
+	testLogger := hclog.New(&hclog.LoggerOptions{
+		Output: ioutil.Discard,
+	})
+
 	//setup the correct url and port for the node
 	viper.Set("p2p.uri", "127.0.0.1")
 	viper.Set("p2p.port", testport)
 	testport = testport + 1
 
 	//start the host
-	h := NewHost(nil, hclog.Default())
+	h := NewHost(nil, testLogger)
 	err = h.Start(false)
 	if err != nil {
 		return nil, err
@@ -125,7 +129,12 @@ func randomHostWithoutDataSerivce() (*Host, error) {
 		return nil, err
 	}
 
-	host := &Host{host: p2phost, swarms: make([]*Swarm, 0)}
+	//a logger to discard all logs (to not disturb print output)
+	testLogger := hclog.New(&hclog.LoggerOptions{
+		Output: ioutil.Discard,
+	})
+
+	host := &Host{host: p2phost, swarms: make([]*Swarm, 0), logger: testLogger}
 	host.Rpc = newRpcService(host)
 
 	kadctx, _ := context.WithTimeout(context.Background(), 30*time.Second)

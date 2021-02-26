@@ -79,6 +79,11 @@ func newAuthorizer() *authorizer {
 	return &authorizer{peerAuth: make(map[string]peerAuthorizer), authReq: make(map[string]AUTH_STATE)}
 }
 
+func (self *authorizer) isKnown(name string) bool {
+	_, ok := self.peerAuth[name]
+	return ok
+}
+
 func (self *authorizer) addAuth(name string, auth_requirement AUTH_STATE, auther peerAuthorizer) error {
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -103,7 +108,7 @@ func (self *authorizer) getPeerAuth(name string) (peerAuthorizer, error) {
 	defer self.lock.RUnlock()
 
 	auther, ok := self.peerAuth[name]
-	if !ok {
+	if !ok || auther == nil {
 		return nil, fmt.Errorf("No peer authorizer available for this service")
 	}
 
@@ -132,15 +137,20 @@ func (self *authorizer) peerIsAuthorized(name string, peer PeerID) bool {
 		return false
 	}
 
-	//get the authstate of the peer
+	//if everybody is allowed we are finished!
+	if req == AUTH_NONE {
+		return true
+	}
+
+	//Need to check in detail. Get the authstate of the peer
 	auth, ok := self.peerAuth[name]
-	if !ok {
+	if !ok || auth == nil {
 		return false
 	}
 	authstate := auth.PeerAuth(peer)
 
 	if req == AUTH_READONLY {
-		//everyone is allowed, but the peer has to exist at least
+		//all registered peers are allowed
 		return authstate == AUTH_READONLY || authstate == AUTH_READWRITE
 
 	} else if req == AUTH_READWRITE {

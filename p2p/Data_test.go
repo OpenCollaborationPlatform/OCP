@@ -480,6 +480,7 @@ func TestSwarmDataService(t *testing.T) {
 
 		//setup swarms
 		sw1, err := h1.CreateSwarm(context.Background(), NoStates())
+		defer sw1.Close(context.Background())
 		So(err, ShouldBeNil)
 		sw1.AddPeer(context.Background(), h2.ID(), AUTH_READWRITE)
 		sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))

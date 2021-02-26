@@ -16,6 +16,19 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
+type eventcatcher struct {
+	events []string
+}
+
+func (self *eventcatcher) subscribeEvent(cl *nxclient.Client, event string) {
+	cl.Subscribe(event, self.eventCallback, wamp.Dict{})
+}
+
+func (self *eventcatcher) eventCallback(event *wamp.Event) {
+	uri := wamp.OptionURI(event.Details, "procedure")
+	self.events = append(self.events, string(uri))
+}
+
 const (
 	dmlDocContent = ` Data {
 				.name: "Test"
@@ -84,9 +97,13 @@ func TestDocumentSingleNode(t *testing.T) {
 
 		Convey("creating a document is possible", func() {
 
+			evtC := &eventcatcher{make([]string, 0)}
+			evtC.subscribeEvent(client, "ocp.documents.created")
+
 			res, err := client.Call(ctx, "ocp.documents.create", wamp.Dict{}, wamp.List{dmlpath}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
-			So(len(res.Arguments), ShouldNotBeNil)
+			So(res.Arguments, ShouldHaveLength, 1)
+			So(evtC.events, ShouldHaveLength, 1)
 
 			docID, ok := res.Arguments[0].(string)
 			So(ok, ShouldBeTrue)
@@ -142,28 +159,33 @@ func TestDocumentTwoNodes(t *testing.T) {
 		client2, _ := router2.GetLocalClient("testClient")
 
 		//make two p2p host for communication
-		host1, host2, _ := p2p.MakeTemporaryTwoHostNetwork(path)
+		host1, host2, err := p2p.MakeTemporaryTwoHostNetwork(path)
 		defer host1.Stop(context.Background())
 		defer host2.Stop(context.Background())
+		So(err, ShouldBeNil)
 
 		//setup the document handlers
+		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+
 		handler1, err := NewDocumentHandler(router1, host1)
 		So(err, ShouldBeNil)
 		So(handler1, ShouldNotBeNil)
-		defer handler1.Close(context.Background())
+		defer handler1.Close(ctx)
 
 		handler2, err := NewDocumentHandler(router2, host2)
 		So(err, ShouldBeNil)
 		So(handler2, ShouldNotBeNil)
-		defer handler2.Close(context.Background())
-
-		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+		defer handler2.Close(ctx)
 
 		Convey("creating a document is possible on host 1", func() {
 
+			evtC := &eventcatcher{make([]string, 0)}
+			evtC.subscribeEvent(client1, "ocp.documents.created")
+
 			res, err := client1.Call(ctx, "ocp.documents.create", wamp.Dict{}, wamp.List{dmlpath}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
-			So(len(res.Arguments), ShouldNotBeNil)
+			So(res.Arguments, ShouldHaveLength, 1)
+			So(evtC.events, ShouldHaveLength, 1)
 
 			docID, ok := res.Arguments[0].(string)
 			So(ok, ShouldBeTrue)
@@ -173,15 +195,24 @@ func TestDocumentTwoNodes(t *testing.T) {
 
 			Convey("but is not joinable by host2 directly to due missing authorisation", func() {
 
+				evtC2 := &eventcatcher{make([]string, 0)}
+				evtC2.subscribeEvent(client1, "ocp.documents.opened")
+
 				_, err := client2.Call(ctx, "ocp.documents.open", wamp.Dict{}, wamp.List{docID}, wamp.Dict{}, nil)
 				So(err, ShouldNotBeNil)
+				So(evtC2.events, ShouldHaveLength, 0)
 			})
 
 			Convey("Adding the second host as peer to the document", func() {
 
+				evtC2 := &eventcatcher{make([]string, 0)}
+				evtC2.subscribeEvent(client1, "ocp.documents."+docID+".peerAdded")
+
 				uri := "ocp.documents." + docID + ".addPeer"
 				_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{host2.ID().Pretty(), "write"}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
+				time.Sleep(50 * time.Millisecond)
+				So(evtC2.events, ShouldHaveLength, 1)
 
 				uri = "ocp.documents." + docID + ".listPeers"
 				res, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
@@ -194,8 +225,17 @@ func TestDocumentTwoNodes(t *testing.T) {
 
 				Convey("makes the document joinable by host2", func() {
 
+					evtC3 := &eventcatcher{make([]string, 0)}
+					evtC3.subscribeEvent(client2, "ocp.documents.opened")
+
+					evtC4 := &eventcatcher{make([]string, 0)}
+					evtC4.subscribeEvent(client1, "ocp.documents."+docID+".peerActivityChanged")
+
 					_, err := client2.Call(ctx, "ocp.documents.open", wamp.Dict{}, wamp.List{docID}, wamp.Dict{}, nil)
 					So(err, ShouldBeNil)
+					time.Sleep(50 * time.Millisecond)
+					So(evtC3.events, ShouldHaveLength, 1)
+					So(evtC4.events, ShouldHaveLength, 1)
 
 					Convey("which adds it to its document list", func() {
 						res, err := client2.Call(ctx, "ocp.documents.list", wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
@@ -241,19 +281,6 @@ func TestDocumentTwoNodes(t *testing.T) {
 			})
 		})
 	})
-}
-
-type eventcatcher struct {
-	events []string
-}
-
-func (self *eventcatcher) subscribeEvent(cl *nxclient.Client, event string) {
-	cl.Subscribe(event, self.eventCallback, wamp.Dict{})
-}
-
-func (self *eventcatcher) eventCallback(event *wamp.Event) {
-	uri := wamp.OptionURI(event.Details, "procedure")
-	self.events = append(self.events, string(uri))
 }
 
 func TestDocumentViews(t *testing.T) {

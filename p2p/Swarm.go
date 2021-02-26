@@ -120,7 +120,13 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 	//build the services
 	var err error = nil
 	swarm.Rpc = newSwarmRpcService(swarm)
+
 	swarm.Event = newSwarmEventService(swarm)
+	swarm.Event.RegisterTopic("peerAdded", AUTH_READWRITE)
+	swarm.Event.RegisterTopic("peerRemoved", AUTH_READWRITE)
+	swarm.Event.RegisterTopic("peerAuthChanged", AUTH_READWRITE)
+	swarm.Event.RegisterTopic("state.peerActivityChanged", AUTH_READWRITE)
+
 	swarm.State, err = newSharedStateService(swarm)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create shared state service")
@@ -221,6 +227,11 @@ func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error
 	}
 
 	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
+
+	if err == nil {
+		s.Event.Publish("peerAdded", pid, state)
+	}
+
 	return err
 }
 
@@ -238,6 +249,11 @@ func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
 	}
 
 	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
+
+	if err == nil {
+		s.Event.Publish("peerRemoved", peer)
+	}
+
 	return err
 }
 
@@ -245,6 +261,14 @@ func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) er
 
 	if !s.State.IsRunning() {
 		return fmt.Errorf("Swarm not fully setup: cannot add peer")
+	}
+
+	if !s.HasPeer(peer) {
+		return fmt.Errorf("Peer is not in swarm, cannot change auth")
+	}
+
+	if s.PeerAuth(peer) == auth {
+		return nil
 	}
 
 	//build the operation
@@ -255,6 +279,11 @@ func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) er
 	}
 
 	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
+
+	if err == nil {
+		s.Event.Publish("peerAuthChanged", peer, auth)
+	}
+
 	return err
 }
 
