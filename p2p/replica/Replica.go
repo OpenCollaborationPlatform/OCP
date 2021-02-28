@@ -50,7 +50,7 @@ func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT
 	// Create the snapshot store. This allows the Raft to truncate the log.
 	snapshots, err := raft.NewFileSnapshotStore(path, 3, os.Stderr)
 	if err != nil {
-		return nil, fmt.Errorf("file snapshot store: %s", err)
+		return nil, wrapInternalError(err, Error_Setup)
 	}
 
 	// Create the log store and stable store.
@@ -64,7 +64,7 @@ func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT
 	}
 	boltDB, err := raftbolt.New(opts)
 	if err != nil {
-		return nil, fmt.Errorf("new bolt store: %s", err)
+		return nil, wrapInternalError(err, Error_Setup)
 	}
 	logStore := raft.LogStore(boltDB)
 	stableStore := raft.StableStore(boltDB)
@@ -81,13 +81,13 @@ func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT
 func (self *Replica) Join() error {
 
 	if self.rep != nil {
-		return fmt.Errorf("Replica already initialized")
+		return newInternalError(Error_Setup, "Replica already initialized")
 	}
 
 	// Create LibP2P transports Raft
 	transport, err := NewLibp2pTransport(self.host, self.dht, 2*time.Second, self.name)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to create transport")
 	}
 
 	//build up the config
@@ -99,7 +99,7 @@ func (self *Replica) Join() error {
 	// Instantiate the Raft systems.
 	ra, err := raft.NewRaft(config, self.state, self.logs, self.confs, self.snaps, transport)
 	if err != nil {
-		return utils.StackError(err, "Unable to initialize replica")
+		return wrapInternalError(err, Error_Setup)
 	}
 
 	//setup the default observers
@@ -119,7 +119,7 @@ func (self *Replica) Bootstrap() error {
 	//build the raft instance
 	err := self.Join()
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to create basic replica")
 	}
 	peerDec := peer.IDB58Encode(self.host.ID())
 	serverconf := raft.Configuration{
@@ -132,7 +132,7 @@ func (self *Replica) Bootstrap() error {
 		},
 	}
 	future := self.rep.BootstrapCluster(serverconf)
-	return future.Error()
+	return wrapConnectionError(future.Error(), Error_Setup)
 }
 
 func (self *Replica) IsRunning() bool {
@@ -203,7 +203,7 @@ func (self *Replica) Shutdown(ctx context.Context) error {
 		shut := self.rep.Shutdown()
 		err := shut.Error()
 		if err != nil {
-			return err
+			return wrapInternalError(err, Error_Process)
 		}
 		return self.Close(ctx)
 	}
@@ -226,18 +226,19 @@ func (self *Replica) GetLeader(ctx context.Context) (peer.ID, error) {
 				switch obs.Data.(type) {
 				case raft.RaftState:
 					if self.rep.Leader() != "" {
-						return peer.IDB58Decode(string(self.rep.Leader()))
+						p, err := peer.IDB58Decode(string(self.rep.Leader()))
+						return p, wrapInternalError(err, Error_Invalid_Data)
 					}
 				}
 			case <-ctx.Done():
-				return peer.ID(""), fmt.Errorf("Timed out while waiting for leader")
+				return peer.ID(""), newConnectionError(Error_Process, "Timed out while waiting for leader")
 			}
 		}
 	}
 
 	pid, err := peer.IDB58Decode(string(leader))
 	if err != nil {
-		return pid, err
+		return pid, wrapInternalError(err, Error_Invalid_Data)
 	}
 	return pid, nil
 }
@@ -269,18 +270,18 @@ func (self *Replica) ConnectPeer(ctx context.Context, pid peer.ID, writer bool) 
 			return nil
 		}
 		if err != raft.ErrEnqueueTimeout {
-			return err
+			return wrapInternalError(err, Error_Process)
 		}
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("Timeout while adding peer")
+			return newConnectionError(Error_Process, "Timeout while adding peer")
 		default:
 			break
 		}
 	}
 
-	return fmt.Errorf("Something bad happend")
+	return newConnectionError(Error_Process, "Something bad happend")
 }
 
 func (self *Replica) DisconnectPeer(ctx context.Context, pid peer.ID) error {
@@ -296,18 +297,18 @@ func (self *Replica) DisconnectPeer(ctx context.Context, pid peer.ID) error {
 			return nil
 		}
 		if err != raft.ErrEnqueueTimeout {
-			return err
+			return wrapInternalError(err, Error_Process)
 		}
 
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("Timeout while adding peer")
+			return newConnectionError(Error_Process, "Timeout while adding peer")
 		default:
 			break
 		}
 	}
 
-	return fmt.Errorf("Something bad happend")
+	return newConnectionError(Error_Process, "Something bad happend")
 }
 
 func (self *Replica) IsLastPeer(pid peer.ID) (bool, error) {
@@ -315,7 +316,7 @@ func (self *Replica) IsLastPeer(pid peer.ID) (bool, error) {
 	future := self.rep.GetConfiguration()
 	err := future.Error()
 	if err != nil {
-		return false, utils.StackError(err, "Unable to query peer configuration")
+		return false, wrapInternalError(err, Error_Process)
 	}
 
 	conf := future.Configuration()
@@ -327,7 +328,7 @@ func (self *Replica) IsLastPeer(pid peer.ID) (bool, error) {
 	server := conf.Servers[0].ID
 	serverpid, err := peer.IDB58Decode(string(server))
 	if err != nil {
-		return false, utils.StackError(err, "Unable to access running peers")
+		return false, wrapInternalError(err, Error_Invalid_Data)
 	}
 
 	return pid == serverpid, nil
@@ -346,7 +347,7 @@ func (self *Replica) AddCommand(ctx context.Context, op Operation) (interface{},
 		future := self.rep.Apply(op.ToBytes(), duration)
 		err := future.Error()
 		if err != nil && err != raft.ErrEnqueueTimeout {
-			return nil, err
+			return nil, wrapInternalError(err, Error_Process)
 		}
 
 		select {
@@ -354,19 +355,19 @@ func (self *Replica) AddCommand(ctx context.Context, op Operation) (interface{},
 			return future.Response(), nil
 
 		case <-ctx.Done():
-			return nil, fmt.Errorf("Timeout on command processing")
+			return nil, newConnectionError(Error_Process, "Timeout on command processing")
 		default:
 			break
 		}
 	}
 
-	return nil, fmt.Errorf("Something bad happend")
+	return nil, newConnectionError(Error_Process, "Something bad happend")
 }
 
 func (self *Replica) AddState(name string, state State) error {
 
 	if self.rep != nil {
-		return fmt.Errorf("Replica already initialized, cannot add state")
+		return newInternalError(Error_Setup, "Replica already initialized, cannot add state")
 	}
 
 	return self.state.Add(name, state)
@@ -410,13 +411,13 @@ func (self *Replica) PrintConf() {
 func (self *Replica) ConnectedPeers() ([]peer.ID, error) {
 
 	if self.rep == nil {
-		return nil, fmt.Errorf("Replica not startet up")
+		return nil, newInternalError(Error_Setup, "Replica not startet up")
 	}
 
 	future := self.rep.GetConfiguration()
 	err := future.Error()
 	if err != nil {
-		return nil, fmt.Errorf("Error in configuration")
+		return nil, wrapInternalError(err, Error_Process)
 	}
 
 	conf := future.Configuration()

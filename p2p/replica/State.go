@@ -28,7 +28,7 @@ func operationFromBytes(data []byte) (Operation, error) {
 	var op Operation
 	b := bytes.NewBuffer(data)
 	err := gob.NewDecoder(b).Decode(&op)
-	return op, err
+	return op, wrapInternalError(err, Error_Invalid_Data)
 }
 
 func (self Operation) ToBytes() []byte {
@@ -67,7 +67,7 @@ func (self *multiState) Add(name string, state State) error {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 	if _, has := self.states[name]; has {
-		return fmt.Errorf("State already exists, cannot set")
+		return newInternalError(Error_Operation_Invalid, "State already exists, cannot set")
 	}
 	self.states[name] = state
 	return nil
@@ -109,25 +109,24 @@ func (self *multiState) Snapshot() (raft.FSMSnapshot, error) {
 	defer self.mutex.RUnlock()
 
 	snap := make(map[string][]byte, 0)
-	fullerr := fmt.Errorf("")
+	fullerr := newInternalError(Error_Process, "Unable to create snapshot")
 	for name, state := range self.states {
 		var err error = nil
 		snap[name], err = state.Snapshot()
 		if err != nil {
-			fullerr = utils.StackError(fullerr, err.Error())
+			fullerr = utils.StackError(fullerr, err.Error()).(utils.OCPError)
 		}
 	}
 
 	b := new(bytes.Buffer)
 	err := gob.NewEncoder(b).Encode(snap)
 	if err != nil {
-		return nil, err
+		return nil, wrapInternalError(err, Error_Invalid_Data)
 	}
-	if fullerr.Error() != "" {
+	if len(fullerr.Stack()) > 1 {
 		return multiStateSnapshot{}, fullerr
 	}
 	return multiStateSnapshot{b.Bytes()}, nil
-
 }
 
 func (self *multiState) Restore(reader io.ReadCloser) error {
@@ -142,18 +141,18 @@ func (self *multiState) Restore(reader io.ReadCloser) error {
 	err := gob.NewDecoder(b).Decode(&snap)
 
 	if err != nil {
-		utils.StackError(err, "Unable to load snapshot")
+		return wrapInternalError(err, Error_Invalid_Data)
 	}
 
-	fullerr := fmt.Errorf("")
+	fullerr := newInternalError(Error_Process, "Unable to create snapshot")
 	for name, state := range self.states {
 		err := state.LoadSnapshot(snap[name])
 		if err != nil {
-			fullerr = utils.StackError(fullerr, err.Error())
+			fullerr = utils.StackError(fullerr, err.Error()).(utils.OCPError)
 		}
 	}
 
-	if fullerr.Error() != "" {
+	if len(fullerr.Stack()) > 1 {
 		return fullerr
 	}
 	return nil
@@ -165,8 +164,8 @@ type multiStateSnapshot struct {
 }
 
 func (self multiStateSnapshot) Persist(sink raft.SnapshotSink) error {
-	sink.Write(self.data)
-	return nil
+	_, err := sink.Write(self.data)
+	return wrapInternalError(err, Error_Process)
 }
 
 func (self multiStateSnapshot) Release() {}

@@ -2,8 +2,6 @@ package replica
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log"
 	"net"
 	"time"
@@ -47,7 +45,7 @@ func newStreamLayer(h host.Host, dht *kaddht.IpfsDHT, name string) (*streamLayer
 	protocol := protocol.ID(raftBaseProtocol + name)
 	listener, err := gostream.Listen(h, protocol)
 	if err != nil {
-		return nil, err
+		return nil, wrapConnectionError(err, Error_Setup)
 	}
 
 	return &streamLayer{
@@ -60,12 +58,12 @@ func newStreamLayer(h host.Host, dht *kaddht.IpfsDHT, name string) (*streamLayer
 
 func (sl *streamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (net.Conn, error) {
 	if sl.host == nil {
-		return nil, errors.New("streamLayer not initialized")
+		return nil, newInternalError(Error_Setup, "StreamLayer not initialized")
 	}
 
 	pid, err := peer.IDB58Decode(string(address))
 	if err != nil {
-		return nil, err
+		return nil, wrapInternalError(err, Error_Invalid_Data)
 	}
 
 	//check if we know the peer, or find it otherwise
@@ -74,21 +72,23 @@ func (sl *streamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (
 		ctx, _ := context.WithTimeout(context.Background(), timeout)
 		info, err := sl.dht.FindPeer(ctx, pid)
 		if err != nil {
-			return nil, err
+			return nil, wrapConnectionError(err, Error_Unavailable)
 		}
 		if info.ID == "" || len(info.Addrs) == 0 {
-			return nil, fmt.Errorf("Peer not found, no connection possible")
+			return nil, newConnectionError(Error_Unavailable, "Peer not found, no connection possible")
 		}
 		sl.host.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.PermanentAddrTTL)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return gostream.Dial(ctx, sl.host, pid, sl.id)
+	c, err := gostream.Dial(ctx, sl.host, pid, sl.id)
+	return c, wrapConnectionError(err, Error_Process)
 }
 
 func (sl *streamLayer) Accept() (net.Conn, error) {
-	return sl.l.Accept()
+	c, err := sl.l.Accept()
+	return c, wrapConnectionError(err, Error_Process)
 }
 
 func (sl *streamLayer) Addr() net.Addr {
@@ -107,7 +107,7 @@ type addrProvider struct {
 func (ap *addrProvider) ServerAddr(id raft.ServerID) (raft.ServerAddress, error) {
 	_, err := peer.IDB58Decode(string(id))
 	if err != nil {
-		return "", fmt.Errorf("bad peer ID: %s", id)
+		return "", newInternalError(Error_Operation_Invalid, "Bad peer ID", "id", id)
 	}
 
 	return raft.ServerAddress(id), nil
@@ -117,7 +117,7 @@ func NewLibp2pTransport(h host.Host, dht *kaddht.IpfsDHT, timeout time.Duration,
 	provider := &addrProvider{h}
 	stream, err := newStreamLayer(h, dht, name)
 	if err != nil {
-		return nil, err
+		return nil, wrapConnectionError(err, Error_Setup)
 	}
 
 	// This is a configuration for raft.NetworkTransport

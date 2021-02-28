@@ -331,7 +331,7 @@ func (h *Host) Connect(ctx context.Context, peer PeerID) error {
 		var err error
 		info, err = h.dht.FindPeer(ctx, peer)
 		if err != nil {
-			return wrapConnectionError(err, Error_Process)
+			return wrapConnectionError(err, Error_Unavailable)
 		}
 	}
 	err := h.host.Connect(ctx, info)
