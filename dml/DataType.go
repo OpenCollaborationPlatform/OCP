@@ -135,7 +135,7 @@ func DataTypeDecode(code string) (interface{}, error) {
 
 	data, err := base58.Decode(code)
 	if err != nil {
-		return nil, wrapInternalError(err, Error_Fatal)
+		return nil, wrapInternalError(err, Error_Fatal).(utils.OCPError)
 	}
 	return DataType{string(data)}, nil
 }

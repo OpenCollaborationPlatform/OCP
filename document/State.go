@@ -68,7 +68,7 @@ func newState(path string) (dmlState, error) {
 	dmlpath := filepath.Join(path, "Dml")
 	err = rntm.ParseFolder(dmlpath)
 	if err != nil {
-		return dmlState{}, utils.StackError(err, "Unable to parse dml file")
+		return dmlState{}, wrapInternalError(err, Error_Filesytem)
 	}
 
 	//init DB
@@ -124,7 +124,7 @@ func (self dmlState) Snapshot() ([]byte, error) {
 
 	files, err := ioutil.ReadDir(self.store.Path())
 	if err != nil {
-		return data, utils.StackError(err, "Unable to open datastore directory for snapshotting")
+		return data, wrapInternalError(err, Error_Filesytem)
 	}
 
 	for _, file := range files {
@@ -132,24 +132,24 @@ func (self dmlState) Snapshot() ([]byte, error) {
 			path := filepath.Join(self.store.Path(), file.Name())
 			dat, err := ioutil.ReadFile(path)
 			if err != nil {
-				return data, utils.StackError(err, "Unable to open file in datastore directory")
+				return data, wrapInternalError(err, Error_Filesytem)
 			}
 
 			// Add some files to the archive.
 			f, err := writer.Create(file.Name())
 			if err != nil {
-				return data, utils.StackError(err, "Unable to create file in zip archive")
+				return data, wrapInternalError(err, Error_Invalid_Data)
 			}
 			_, err = f.Write(dat)
 			if err != nil {
-				return data, utils.StackError(err, "Unable to add file data to zip archive")
+				return data, wrapInternalError(err, Error_Invalid_Data)
 			}
 		}
 	}
 
 	err = writer.Close()
 	if err != nil {
-		return data, utils.StackError(err, "Unable to close zip writer for data generation")
+		return data, wrapInternalError(err, Error_Invalid_Data)
 	}
 
 	return buf.Bytes(), nil
@@ -170,14 +170,14 @@ func (self dmlState) LoadSnapshot(data []byte) error {
 	//clear the datastore directory
 	files, err := ioutil.ReadDir(self.store.Path())
 	if err != nil {
-		return utils.StackError(err, "Unable to open datastore directory for snapshot restore")
+		return wrapInternalError(err, Error_Filesytem)
 	}
 
 	for _, file := range files {
 		path := filepath.Join(self.store.Path(), file.Name())
 		err := os.Remove(path)
 		if err != nil {
-			return utils.StackError(err, "Unable to delete old datastore files")
+			return wrapInternalError(err, Error_Filesytem)
 		}
 	}
 
@@ -185,23 +185,23 @@ func (self dmlState) LoadSnapshot(data []byte) error {
 	buf := bytes.NewReader(data)
 	reader, err := zip.NewReader(buf, int64(len(data)))
 	if err != nil {
-		return utils.StackError(err, "Unable to load zip archive from snapshot data")
+		return wrapInternalError(err, Error_Invalid_Data)
 	}
 
 	for _, f := range reader.File {
 
 		rc, err := f.Open()
 		if err != nil {
-			return utils.StackError(err, "Unable to read file in zip archive for snapshot restore")
+			return wrapInternalError(err, Error_Invalid_Data)
 		}
 		path := filepath.Join(self.store.Path(), f.Name)
 		file, err := os.Create(path)
 		if err != nil {
-			return utils.StackError(err, "Unable to create file in datastore for snapshot loading")
+			return wrapInternalError(err, Error_Filesytem)
 		}
 		_, err = io.Copy(file, rc)
 		if err != nil {
-			return utils.StackError(err, "Unable to store snapshot data in datastore file")
+			return wrapInternalError(err, Error_Filesytem)
 		}
 		rc.Close()
 	}

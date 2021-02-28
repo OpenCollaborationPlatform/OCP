@@ -1,7 +1,6 @@
 package document
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/ickby/CollaborationNode/utils"
@@ -28,7 +27,7 @@ func operationFromData(data []byte) (Operation, error) {
 
 	var v Operation
 	err := codec.NewDecoderBytes(data, mh).Decode(&v)
-	return v, err
+	return v, wrapInternalError(err, Error_Invalid_Data)
 }
 
 type Operation struct {
@@ -51,7 +50,8 @@ func newJsOperation(user dml.User, code string, node p2p.PeerID, session wamp.ID
 func (self Operation) ToData() ([]byte, error) {
 
 	var b []byte
-	return b, codec.NewEncoderBytes(&b, mh).Encode(self)
+	err := codec.NewEncoderBytes(&b, mh).Encode(self)
+	return b, wrapInternalError(err, Error_Invalid_Data)
 }
 
 func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interface{} {
@@ -62,9 +62,10 @@ func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interf
 	for i, arg := range self.Arguments {
 		if utils.Decoder.InterfaceIsEncoded(arg) {
 			val, err := utils.Decoder.DecodeInterface(arg)
-			if err == nil {
-				args[i] = val
+			if err != nil {
+				return utils.StackError(err, "Unable to decode argument")
 			}
+			args[i] = val
 		}
 	}
 
@@ -73,12 +74,13 @@ func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interf
 
 	if self.Path == "__js__" {
 		if len(args) != 1 {
-			err = fmt.Errorf("JS operation needs code as argument")
-		}
-		if code, ok := args[0].(string); ok {
+			err = newInternalError(Error_Arguments, "JS operation needs code as argument")
+
+		} else if code, ok := args[0].(string); ok {
 			val, err = rntm.RunJavaScript(ds, self.User, code)
+
 		} else {
-			err = fmt.Errorf("JS operation needs code as argument")
+			err = newInternalError(Error_Arguments, "JS operation needs code as argument")
 		}
 
 	} else {

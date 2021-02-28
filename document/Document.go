@@ -36,7 +36,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	path := filepath.Join(host.GetPath(), "Documents", id)
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
-		return Document{}, utils.StackError(err, "Unable to create folder for document")
+		return Document{}, wrapInternalError(err, Error_Filesytem)
 	}
 
 	//add the dml file
@@ -116,7 +116,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 			ds.Close()
 			client.Close()
 			os.RemoveAll(path)
-			return Document{}, err
+			return Document{}, utils.StackError(err, "Document setup failed")
 		}
 	}
 
@@ -139,7 +139,7 @@ func (self Document) handleEvent(topic string) error {
 
 	sub, err := self.swarm.Event.Subscribe(topic)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to subscribe document event")
 	}
 
 	self.subs = append(self.subs, sub)
@@ -170,22 +170,22 @@ func (self Document) handleEvent(topic string) error {
 func getPeer(args wamp.List) (p2p.PeerID, error) {
 	//get the peer to add and the wanted AUTH state
 	if len(args) < 1 {
-		return p2p.PeerID(""), fmt.Errorf("First Argument must be peer id")
+		return p2p.PeerID(""), newUserError(Error_Arguments, "First Argument must be peer id")
 	}
 	peer, ok := args[0].(string)
 	if !ok {
-		return p2p.PeerID(""), fmt.Errorf("First Argument must be peer id")
+		return p2p.PeerID(""), newUserError(Error_Arguments, "First Argument must be peer id")
 	}
 	pid, err := p2p.PeerIDFromString(peer)
 	if err != nil {
-		return p2p.PeerID(""), fmt.Errorf("Invalid peer id provided")
+		return p2p.PeerID(""), newUserError(Error_Arguments, "Invalid peer id provided")
 	}
 	return pid, nil
 }
 func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
 
 	if len(args) != 2 {
-		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Arguments must be peer id and auth state")
+		return p2p.PeerID(""), p2p.AUTH_NONE, newUserError(Error_Arguments, "Arguments must be peer id and auth state")
 	}
 
 	pid, err := getPeer(args)
@@ -195,11 +195,11 @@ func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
 
 	auth, ok := args[1].(string)
 	if !ok {
-		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Second Argument must be auth state (read, write or none)")
+		return p2p.PeerID(""), p2p.AUTH_NONE, newUserError(Error_Arguments, "Second Argument must be auth state (read, write or none)")
 	}
 	pidauth, err := p2p.AuthStateFromString(auth)
 	if err != nil {
-		return p2p.PeerID(""), p2p.AUTH_NONE, fmt.Errorf("Invalid auth state provided (muste be read, write or none)")
+		return p2p.PeerID(""), p2p.AUTH_NONE, newUserError(Error_Arguments, "Invalid auth state provided (muste be read, write or none)")
 	}
 
 	return pid, pidauth, nil
@@ -209,12 +209,12 @@ func (self Document) addPeer(ctx context.Context, inv *wamp.Invocation) nxclient
 
 	pid, auth, err := getPeerAuthData(inv.Arguments)
 	if err != nil {
-		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return utils.ErrorToWampResult(err)
 	}
 
 	err = self.swarm.AddPeer(ctx, pid, auth)
 	if err != nil {
-		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return utils.ErrorToWampResult(err)
 	}
 
 	return nxclient.InvokeResult{}
@@ -224,12 +224,12 @@ func (self Document) setPeerAuth(ctx context.Context, inv *wamp.Invocation) nxcl
 
 	pid, auth, err := getPeerAuthData(inv.Arguments)
 	if err != nil {
-		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return utils.ErrorToWampResult(err)
 	}
 
 	err = self.swarm.ChangePeer(ctx, pid, auth)
 	if err != nil {
-		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return utils.ErrorToWampResult(err)
 	}
 
 	return nxclient.InvokeResult{}
@@ -239,7 +239,7 @@ func (self Document) getPeerAuth(ctx context.Context, inv *wamp.Invocation) nxcl
 
 	pid, err := getPeer(inv.Arguments)
 	if err != nil {
-		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return utils.ErrorToWampResult(err)
 	}
 
 	auth := self.swarm.PeerAuth(pid)
@@ -250,12 +250,12 @@ func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxcli
 
 	pid, err := getPeer(inv.Arguments)
 	if err != nil {
-		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return utils.ErrorToWampResult(err)
 	}
 
 	err = self.swarm.RemovePeer(ctx, pid)
 	if err != nil {
-		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return utils.ErrorToWampResult(err)
 	}
 
 	return nxclient.InvokeResult{}
@@ -276,7 +276,7 @@ func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclie
 		//get all joined peers in the shared states
 		peers, err = self.swarm.State.ActivePeers()
 		if err != nil {
-			return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+			return utils.ErrorToWampResult(err)
 		}
 
 	} else {
@@ -288,10 +288,11 @@ func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclie
 	if auth, ok := inv.ArgumentsKw["auth"]; ok {
 		authstate, err := p2p.AuthStateFromString(auth.(string))
 		if err != nil {
-			return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+			return utils.ErrorToWampResult(err)
 		}
 		if authstate == p2p.AUTH_NONE {
-			return nxclient.InvokeResult{Args: wamp.List{"None auth not supported. If all peers are wanted do not use auth keyword"}, Err: wamp.URI("ocp.error")}
+			err := newUserError(Error_Operation_Invalid, "None auth not supported. If all peers are wanted do not use auth keyword")
+			return utils.ErrorToWampResult(err)
 		}
 
 		result := make([]p2p.PeerID, 0)
@@ -322,12 +323,14 @@ func (self Document) view(ctx context.Context, inv *wamp.Invocation) nxclient.In
 		return nxclient.InvokeResult{Args: wamp.List{self.datastructure.HasView(session)}}
 
 	} else if len(inv.Arguments) > 1 {
-		return nxclient.InvokeResult{Args: wamp.List{"Single bool argument required: True for opening view, False for closing"}, Err: wamp.URI("ocp.error")}
+		err := newUserError(Error_Arguments, "Single bool argument required (or none): True for opening view, False for closing")
+		return utils.ErrorToWampResult(err)
 	}
 
 	arg, ok := wamp.AsBool(inv.Arguments[0])
 	if !ok {
-		return nxclient.InvokeResult{Args: wamp.List{"Bool argument required: True for opening view, False for closing"}, Err: wamp.URI("ocp.error")}
+		err := newUserError(Error_Arguments, "Single bool argument required (or none): True for opening view, False for closing")
+		return utils.ErrorToWampResult(err)
 	}
 
 	var err error
@@ -339,7 +342,7 @@ func (self Document) view(ctx context.Context, inv *wamp.Invocation) nxclient.In
 	}
 
 	if err != nil {
-		return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
+		return utils.ErrorToWampResult(err)
 	}
 	return nxclient.InvokeResult{}
 }

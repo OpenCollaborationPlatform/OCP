@@ -3,7 +3,6 @@ package utils
 //condent identifier
 import (
 	"encoding/gob"
-	"fmt"
 	"strings"
 
 	cid "github.com/ipfs/go-cid"
@@ -23,15 +22,21 @@ type Cid struct {
 func CidDecode(code string) (Cid, error) {
 	parts := strings.Split(code, "_")
 	if len(parts) != 3 || parts[0] != "ocp" || parts[1] != "cid" {
-		return CidUndef, fmt.Errorf("Invalid ecoded cid")
+		return CidUndef, NewError(Internal, "utils", "Invalid ecoded cid")
 	}
 	id, err := cid.Decode(parts[2])
-	return Cid{id}, err
+	if err != nil {
+		return CidUndef, NewError(Internal, "utils", err.Error())
+	}
+	return Cid{id}, nil
 }
 
 func cidDecode(code string) (interface{}, error) {
 	id, err := cid.Decode(code)
-	return Cid{id}, err
+	if err != nil {
+		return CidUndef, NewError(Internal, "utils", err.Error())
+	}
+	return Cid{id}, nil
 }
 
 func (self Cid) Encode() string {

@@ -2,7 +2,6 @@ package document
 
 import (
 	"encoding/binary"
-	"errors"
 	"strings"
 	"time"
 
@@ -55,7 +54,7 @@ func newView(path string, captureDS *datastore.Datastore) (view, error) {
 	viewPath := filepath.Join(path, id)
 	err := os.MkdirAll(viewPath, os.ModePerm)
 	if err != nil {
-		return view{}, utils.StackError(err, "Unable to create path for Views folder")
+		return view{}, wrapInternalError(err, Error_Filesytem)
 	}
 
 	//make a copy of the datastore
@@ -68,7 +67,7 @@ func newView(path string, captureDS *datastore.Datastore) (view, error) {
 	dsPath := filepath.Join(viewPath, "Datastore")
 	err = os.MkdirAll(dsPath, os.ModePerm)
 	if err != nil {
-		return view{}, utils.StackError(err, "Unable to create path for views Datastore folder")
+		return view{}, wrapInternalError(err, Error_Filesytem)
 	}
 	err = filepath.Walk(captureDS.Path(), func(path string, info os.FileInfo, err error) error {
 		var relPath string = strings.Replace(path, captureDS.Path(), "", 1)
@@ -76,7 +75,8 @@ func newView(path string, captureDS *datastore.Datastore) (view, error) {
 			return nil
 		}
 		if info.IsDir() {
-			return os.MkdirAll(filepath.Join(dsPath, relPath), os.ModePerm)
+			err := os.MkdirAll(filepath.Join(dsPath, relPath), os.ModePerm)
+			return wrapInternalError(err, Error_Filesytem)
 		} else {
 			return copyFileContents(path, filepath.Join(dsPath, relPath))
 		}
@@ -97,15 +97,15 @@ func newView(path string, captureDS *datastore.Datastore) (view, error) {
 	olPath := filepath.Join(viewPath, "oplog.db")
 	db, err := bolt.Open(olPath, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return view{}, utils.StackError(err, "Unable to create Operation Log")
+		return view{}, wrapInternalError(err, Error_Setup)
 	}
-	db.Update(func(tx *bolt.Tx) error {
+	err = db.Update(func(tx *bolt.Tx) error {
 
 		_, err := tx.CreateBucketIfNotExists(operationKey)
 		return err
 	})
 
-	return view{ds, db, viewPath}, nil
+	return view{ds, db, viewPath}, wrapInternalError(err, Error_Process)
 }
 
 func (self view) appendOperation(op Operation) error {
@@ -116,7 +116,7 @@ func (self view) appendOperation(op Operation) error {
 		bucket := tx.Bucket(operationKey)
 		id, err := bucket.NextSequence()
 		if err != nil {
-			return utils.StackError(err, "Cannot get operation id from DB")
+			return wrapInternalError(err, Error_Process)
 		}
 
 		data, err := op.ToData()
@@ -124,7 +124,7 @@ func (self view) appendOperation(op Operation) error {
 			return err
 		}
 
-		return bucket.Put(itob(id), data)
+		return wrapInternalError(bucket.Put(itob(id), data), Error_Process)
 	})
 }
 
@@ -158,7 +158,8 @@ func (self view) close(rntm *dml.Runtime) error {
 	}
 
 	//remove the folder!
-	return os.RemoveAll(self.path)
+	err = os.RemoveAll(self.path)
+	return wrapInternalError(err, Error_Filesytem)
 }
 
 func (self view) getStore() *datastore.Datastore {
@@ -207,7 +208,7 @@ func (self *viewManager) removeAndCloseView(id wamp.ID, rntm *dml.Runtime) error
 
 	v, ok := self.views[id]
 	if !ok {
-		return errors.New("No view available for ID")
+		return newUserError(Error_Operation_Invalid, "No view available for ID")
 	}
 	delete(self.views, id)
 	return v.close(rntm)
@@ -233,27 +234,24 @@ func (self *viewManager) appendOperation(op Operation) {
 // by dst. The file will be created if it does not already exist. If the
 // destination file exists, all it's contents will be replaced by the contents
 // of the source file.
-func copyFileContents(src, dst string) (err error) {
+func copyFileContents(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
-		return
+		return wrapInternalError(err, Error_Filesytem)
 	}
 	defer in.Close()
 	out, err := os.Create(dst)
 	if err != nil {
-		return
+		return wrapInternalError(err, Error_Filesytem)
 	}
 	defer func() {
-		cerr := out.Close()
-		if err == nil {
-			err = cerr
-		}
+		out.Close()
 	}()
 	if _, err = io.Copy(out, in); err != nil {
-		return
+		return wrapInternalError(err, Error_Filesytem)
 	}
 	err = out.Sync()
-	return
+	return wrapInternalError(err, Error_Filesytem)
 }
 
 //helper functions  for uint to byte and return transformation

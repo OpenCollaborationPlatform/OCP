@@ -45,13 +45,14 @@ func IdentifierFromEncoded(code string) (Identifier, error) {
 	if err != nil {
 		return Identifier{}, wrapInternalError(err, Error_Fatal)
 	}
+
 	return IdentifierFromData(data)
 }
 
 func identifierDecode(code string) (interface{}, error) {
 	data, err := base58.Decode(code)
 	if err != nil {
-		return Identifier{}, wrapInternalError(err, Error_Fatal)
+		return Identifier{}, wrapInternalError(err, Error_Fatal).(utils.OCPError)
 	}
 	return IdentifierFromData(data)
 }
