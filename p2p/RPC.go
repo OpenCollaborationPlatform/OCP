@@ -16,9 +16,9 @@ var protocolID = protocol.ID("ocp/rpc")
 //The hostRpcService exposes the RpcService interface by combining the client and server type
 //of gorpc
 type hostRpcService struct {
-	*gorpc.Client
-	server    *gorpc.Server //cannot expose directly as Call is ambiguous
-	authorize *authorizer   //share authorizer struct
+	client    *gorpc.Client //the server we use to issue rpc calls
+	server    *gorpc.Server //the server handling all RPC registration/messaging
+	authorize *authorizer   //shared authorizer struct
 }
 
 //setup a new RpcService on the host and starts it
@@ -44,7 +44,47 @@ func (self *hostRpcService) Register(rcvr interface{}) error {
 	//we allow absolutely everyone to call the services that are registered at the host
 	self.authorize.addAuth(name, AUTH_READONLY, &constantPeerAuth{AUTH_READONLY})
 
-	return self.server.RegisterName(name, rcvr)
+	err := self.server.RegisterName(name, rcvr)
+	err = wrapConnectionError(err, Error_Process)
+	return err
+}
+
+func (self *hostRpcService) Call(dest PeerID, svcName, svcMethod string, args, reply interface{}) error {
+	err := self.client.Call(dest, svcName, svcMethod, args, reply)
+	err = wrapConnectionError(err, Error_Process)
+	return err
+}
+
+func (self *hostRpcService) CallContext(ctx context.Context, dest PeerID, svcName, svcMethod string, args, reply interface{}) error {
+	err := self.client.CallContext(ctx, dest, svcName, svcMethod, args, reply)
+	err = wrapConnectionError(err, Error_Process)
+	return err
+}
+
+func (self *hostRpcService) Go(dest PeerID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
+	err := self.client.Go(dest, svcName, svcMethod, args, reply, done)
+	err = wrapConnectionError(err, Error_Process)
+	return err
+}
+
+func (self *hostRpcService) GoContext(ctx context.Context, dest PeerID, svcName, svcMethod string, args, reply interface{}, done chan *gorpc.Call) error {
+	err := self.client.GoContext(ctx, dest, svcName, svcMethod, args, reply, done)
+	err = wrapConnectionError(err, Error_Process)
+	return err
+}
+
+func (self *hostRpcService) MultiCall(ctxs []context.Context, dests []PeerID, svcName, svcMethod string, args interface{}, replies []interface{}) []error {
+	err := self.client.MultiCall(ctxs, dests, svcName, svcMethod, args, replies)
+	for i, e := range err {
+		err[i] = wrapConnectionError(e, Error_Process)
+	}
+	return err
+}
+
+func (self *hostRpcService) MultiGo(ctxs []context.Context, dests []PeerID, svcName, svcMethod string, args interface{}, replies []interface{}, dones []chan *gorpc.Call) error {
+	err := self.client.MultiGo(ctxs, dests, svcName, svcMethod, args, replies, dones)
+	err = wrapConnectionError(err, Error_Process)
+	return err
 }
 
 func (self *hostRpcService) Close() {}

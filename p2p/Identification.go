@@ -17,25 +17,25 @@ func PeerIDFromString(id string) (PeerID, error) {
 
 	peerid, err := peer.IDB58Decode(id)
 	if err != nil {
-		return InvalidPeer, err
+		return InvalidPeer, wrapInternalError(err, Error_Invalid_Data)
 	}
 	return PeerID(peerid), nil
 }
 
 func PeerIDFromPublicKey(pk crypto.PubKey) (PeerID, error) {
 	id, err := peer.IDFromPublicKey(pk)
-	return PeerID(id), err
+	return PeerID(id), wrapInternalError(err, Error_Invalid_Data)
 }
 
 func PeerIDFromPublicKeyFile(file string) (PeerID, error) {
 
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
-		return InvalidPeer, err
+		return InvalidPeer, wrapInternalError(err, Error_Invalid_Data)
 	}
 	key, err := crypto.UnmarshalPublicKey(content)
 	if err != nil {
-		return InvalidPeer, err
+		return InvalidPeer, wrapInternalError(err, Error_Invalid_Data)
 	}
 	id, _ := peer.IDFromPublicKey(key)
 

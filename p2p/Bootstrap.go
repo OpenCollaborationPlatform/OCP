@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math/rand"
 	"sync"
@@ -120,7 +119,7 @@ func bootstrap(id peer.ID, host p2phost.Host, rt routing.Routing, cfg BootstrapC
 		ctx := goprocessctx.OnClosingContext(proc)
 		if err := rt.Bootstrap(ctx); err != nil {
 			proc.Close()
-			return nil, err
+			return nil, wrapInternalError(err, Error_Setup)
 		}
 	}
 
@@ -156,7 +155,7 @@ func bootstrapRound(ctx context.Context, host p2phost.Host, cfg BootstrapConfig)
 	// if connected to all bootstrap peer candidates, exit
 	if len(notConnected) < 1 {
 		cfg.Logger.Debug("No more peers to create additional connections", "required", numToDial)
-		return fmt.Errorf("Not enough bootstrap peers")
+		return newConnectionError(Error_Setup, "Not enough bootstrap peers")
 	}
 
 	// connect to a random susbset of bootstrap candidates
@@ -168,7 +167,7 @@ func bootstrapRound(ctx context.Context, host p2phost.Host, cfg BootstrapConfig)
 
 func bootstrapConnect(ctx context.Context, ph p2phost.Host, peers []peer.AddrInfo, logger hclog.Logger) error {
 	if len(peers) < 1 {
-		return fmt.Errorf("Not enough bootstrap peers")
+		return newConnectionError(Error_Process, "Not enough bootstrap peers")
 	}
 
 	errs := make(chan error, len(peers))
@@ -206,7 +205,7 @@ func bootstrapConnect(ctx context.Context, ph p2phost.Host, peers []peer.AddrInf
 		}
 	}
 	if count == len(peers) {
-		return fmt.Errorf("failed to bootstrap. %s", err)
+		return newInternalError(Error_Process, "failed to bootstrap. %s", err)
 	}
 	return nil
 }

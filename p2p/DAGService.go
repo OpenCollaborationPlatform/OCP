@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"fmt"
+
 	"github.com/ickby/CollaborationNode/utils"
 
 	blocks "github.com/ipfs/go-block-format"
@@ -50,7 +51,7 @@ type OwnerAwareBlockService struct {
 }
 
 func (self *OwnerAwareBlockService) Close() error {
-	return self.blocksvc.Close()
+	return utils.StackOnError(self.blocksvc.Close(), "Unable to close internal blockservice")
 }
 
 // GetBlock gets the requested block.
@@ -62,10 +63,14 @@ func (self *OwnerAwareBlockService) GetBlock(ctx context.Context, c cid.Cid) (bl
 	key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", c.String(), self.owner))
 	err := self.datastore.Put(key, []byte(self.owner))
 	if err != nil {
-		return nil, err
+		return nil, wrapInternalError(err, Error_Data)
 	}
 
-	return self.blocksvc.GetBlock(ctx, c)
+	blck, err := self.blocksvc.GetBlock(ctx, c)
+	if err != nil {
+		return nil, wrapConnectionError(err, Error_Data)
+	}
+	return blck, nil
 }
 
 // GetBlocks does a batch request for the given cids, returning blocks as
@@ -116,11 +121,15 @@ func (self *OwnerAwareBlockService) AddBlock(o blocks.Block) error {
 	err := self.datastore.Put(key, []byte(self.owner))
 
 	if err != nil {
-		return err
+		return wrapInternalError(err, Error_Data)
 	}
 
 	//add to block service
-	return self.blocksvc.AddBlock(o)
+	err = self.blocksvc.AddBlock(o)
+	if err != nil {
+		return wrapConnectionError(err, Error_Data)
+	}
+	return nil
 }
 
 // AddBlocks adds a slice of blocks at the same time using batching
@@ -129,14 +138,14 @@ func (self *OwnerAwareBlockService) AddBlocks(bs []blocks.Block) error {
 
 	txn, err := self.datastore.NewTransaction(false)
 	if err != nil {
-		return err
+		return wrapInternalError(err, Error_Data)
 	}
 
 	for _, o := range bs {
 		key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", o.Cid().String(), self.owner))
 		if err := txn.Put(key, []byte(self.owner)); err != nil {
 			txn.Discard()
-			return err
+			return wrapInternalError(err, Error_Data)
 		}
 	}
 	txn.Commit()
@@ -144,7 +153,7 @@ func (self *OwnerAwareBlockService) AddBlocks(bs []blocks.Block) error {
 	for _, o := range bs {
 		err := self.blocksvc.AddBlock(o) //cannot use add blocks as bader ds does not check transaction size
 		if err != nil {
-			return err
+			return wrapConnectionError(err, Error_Data)
 		}
 	}
 
@@ -157,21 +166,24 @@ func (self *OwnerAwareBlockService) DeleteBlock(c cid.Cid) error {
 	key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", c.String(), self.owner))
 	err := self.datastore.Delete(key)
 	if err != nil {
-		return err
+		return wrapInternalError(err, Error_Data)
 	}
 
 	//check if there is a owner left, delete otherwise
 	q := query.Query{Prefix: fmt.Sprintf("/Owners/%v", c.String()), Limit: 1}
 	qr, err := self.datastore.Query(q)
 	if err != nil {
-		return err
+		return wrapInternalError(err, Error_Data)
 	}
 	es, err := qr.Rest()
 	if err != nil {
-		return err
+		return wrapInternalError(err, Error_Data)
 	}
 	if len(es) == 0 {
-		return self.blocksvc.DeleteBlock(c)
+		err = self.blocksvc.DeleteBlock(c)
+		if err != nil {
+			return wrapConnectionError(err, Error_Data)
+		}
 	}
 
 	return nil
@@ -202,12 +214,15 @@ func (self OwnerAwareRouting) Provide(ctx context.Context, id cid.Cid, announce 
 	key := datastore.NewKey(fmt.Sprintf("/Owners/%v/global", id.String()))
 	isGlobal, err := self.owner.Has(key)
 	if err != nil {
-		return utils.StackError(err, "Unable to query ownership of block during Provied")
+		return wrapInternalError(err, Error_Data)
 	}
 
 	//if global we announce it in the dht
 	if isGlobal {
-		return self.host.dht.Provide(ctx, id, announce)
+		err = self.host.dht.Provide(ctx, id, announce)
+		if err != nil {
+			return wrapConnectionError(err, Error_Data)
+		}
 	}
 
 	return nil
@@ -221,7 +236,7 @@ func (self OwnerAwareRouting) FindProvidersAsync(ctx context.Context, id cid.Cid
 	if err != nil {
 		res := make(chan peerstore.PeerInfo, 0)
 		close(res)
-		return res
+		return nil
 	}
 
 	owners := make([]string, 0)

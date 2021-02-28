@@ -302,7 +302,9 @@ func (h *Host) Stop(ctx context.Context) error {
 	}
 	h.dht.Close()
 
-	return h.host.Close()
+	err := h.host.Close()
+	err = wrapInternalError(err, Error_Process)
+	return err
 }
 
 func (h *Host) GetPath() string {
@@ -329,14 +331,18 @@ func (h *Host) Connect(ctx context.Context, peer PeerID) error {
 		var err error
 		info, err = h.dht.FindPeer(ctx, peer)
 		if err != nil {
-			return utils.StackError(err, "Unable to find adress of peer, cannot connect")
+			return wrapConnectionError(err, Error_Process)
 		}
 	}
-	return h.host.Connect(ctx, info)
+	err := h.host.Connect(ctx, info)
+	err = wrapConnectionError(err, Error_Process)
+	return err
 }
 
 func (h *Host) CloseConnection(peer PeerID) error {
-	return h.host.Network().ClosePeer(peer)
+	err := h.host.Network().ClosePeer(peer)
+	err = wrapConnectionError(err, Error_Process)
+	return err
 }
 
 func (h *Host) IsConnected(peer PeerID) bool {
@@ -387,7 +393,7 @@ func (h *Host) Addresses(peer PeerID) ([]ma.Multiaddr, error) {
 	proto := ma.ProtocolWithCode(ma.P_IPFS).Name
 	p2paddr, err := ma.NewMultiaddr("/" + proto + "/" + peer.Pretty())
 	if err != nil {
-		return nil, err
+		return nil, wrapInternalError(err, Error_Arguments)
 	}
 
 	pi := h.host.Peerstore().PeerInfo(peer)
@@ -422,10 +428,12 @@ func (h *Host) Reachability() string {
 func (h *Host) Provide(ctx context.Context, cid utils.Cid) error {
 
 	if len(h.host.Network().Conns()) == 0 {
-		return fmt.Errorf("Cannot provide, no connected peers")
+		return newConnectionError(Error_Operation_Invalid, "Cannot provide, no connected peers")
 	}
 
-	return h.dht.Provide(ctx, cid.P2P(), true)
+	err := h.dht.Provide(ctx, cid.P2P(), true)
+	err = wrapConnectionError(err, Error_Process)
+	return err
 }
 
 //find peers that provide the given cid. The returned slice can have less than num
@@ -527,7 +535,7 @@ func (h *Host) CreateSwarmWithID(ctx context.Context, id SwarmID, states []State
 
 	swarm, err := newSwarm(ctx, h, id, states, true, NoPeers())
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to create swarm")
+		return nil, utils.StackError(err, "Unable to setup new swarm")
 	}
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
@@ -542,7 +550,7 @@ func (h *Host) JoinSwarm(ctx context.Context, id SwarmID, states []State, knownP
 
 	swarm, err := newSwarm(ctx, h, id, states, false, knownPeers)
 	if err != nil {
-		return swarm, err
+		return swarm, utils.StackError(err, "Unable to setup new swarm")
 	}
 	if swarm != nil {
 		h.swarms = append(h.swarms, swarm)
@@ -559,7 +567,7 @@ func (h *Host) GetSwarm(id SwarmID) (*Swarm, error) {
 			return swarm, nil
 		}
 	}
-	return nil, fmt.Errorf("No such swarm exists")
+	return nil, newInternalError(Error_Operation_Invalid, "No such swarm exists", "swarm", id)
 }
 
 //remove swarm from list: only called from Swarm itself in Close()
@@ -590,7 +598,7 @@ func (h *Host) FindSwarmMember(ctx context.Context, id SwarmID) (PeerID, error) 
 
 	case <-ctx.Done():
 		//we did not find any swarm member... return with error
-		return PeerID(""), fmt.Errorf("Did not find any swarm members before timeout")
+		return PeerID(""), newConnectionError(Error_Process, "Did not find any swarm members before timeout", "swarm", id)
 	}
 }
 
@@ -660,7 +668,8 @@ func (self *Host) findSwarmPeersAsync(ctx context.Context, id SwarmID, num int) 
 func (self *Host) _id(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	if len(inv.Arguments) != 0 {
-		return nxclient.InvokeResult{Args: wamp.List{"No arguments allowed for this function"}, Err: wamp.URI("ocp.error")}
+		err := newUserError(Error_Arguments, "No arguments allowed for this function")
+		return utils.ErrorToWampResult(err)
 	}
 
 	return nxclient.InvokeResult{Args: wamp.List{self.ID().Pretty()}}
@@ -669,12 +678,14 @@ func (self *Host) _id(ctx context.Context, inv *wamp.Invocation) nxclient.Invoke
 func (self *Host) _addresses(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	if len(inv.Arguments) != 1 {
-		return nxclient.InvokeResult{Args: wamp.List{"Argument required: shortened adresses true/false"}, Err: wamp.URI("ocp.error")}
+		err := newUserError(Error_Arguments, "Argument required: shortened adresses true/false")
+		return utils.ErrorToWampResult(err)
 	}
 
 	short, ok := inv.Arguments[0].(bool)
 	if !ok {
-		return nxclient.InvokeResult{Args: wamp.List{"Argument must be boolean"}, Err: wamp.URI("ocp.error")}
+		err := newUserError(Error_Arguments, "Argument must be boolean")
+		return utils.ErrorToWampResult(err)
 	}
 
 	addrs := make([]string, 0)
@@ -692,7 +703,8 @@ func (self *Host) _addresses(ctx context.Context, inv *wamp.Invocation) nxclient
 func (self *Host) _peers(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	if len(inv.Arguments) != 0 {
-		return nxclient.InvokeResult{Args: wamp.List{"No arguments allowed for this function"}, Err: wamp.URI("ocp.error")}
+		err := newUserError(Error_Arguments, "No arguments allowed for this function")
+		return utils.ErrorToWampResult(err)
 	}
 
 	peers := make([]string, 0)
@@ -710,7 +722,8 @@ func (self *Host) _peers(ctx context.Context, inv *wamp.Invocation) nxclient.Inv
 func (self *Host) _reach(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	if len(inv.Arguments) != 0 {
-		return nxclient.InvokeResult{Args: wamp.List{"No arguments allowed for this function"}, Err: wamp.URI("ocp.error")}
+		err := newUserError(Error_Arguments, "No arguments allowed for this function")
+		return utils.ErrorToWampResult(err)
 	}
 
 	return nxclient.InvokeResult{Args: wamp.List{self.reachability.String()}}

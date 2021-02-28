@@ -3,7 +3,6 @@ package p2p
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -115,10 +114,13 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 	}
 
 	//ensure our folder exist
-	os.MkdirAll(swarm.GetPath(), os.ModePerm)
+	err := os.MkdirAll(swarm.GetPath(), os.ModePerm)
+	if err != nil {
+		return nil, newInternalError(Error_Operation_Invalid, "cannot create swarm folder", "error", err.Error())
+	}
 
 	//build the services
-	var err error = nil
+	err = nil
 	swarm.Rpc = newSwarmRpcService(swarm)
 
 	swarm.Event = newSwarmEventService(swarm)
@@ -166,7 +168,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 			case peer, more := <-peerChan:
 				if !more {
 					//we are not able to find any peers... that is bad!
-					return nil, fmt.Errorf("Unable to find peers to join swarm")
+					return nil, newConnectionError(Error_Process, "Unable to find peers to join swarm")
 				}
 				err := swarm.State.connect(ctx, []PeerID{peer})
 				if err != nil {
@@ -177,7 +179,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 
 			case <-ctx.Done():
 				//we did not find any swarm member... return with error
-				return nil, fmt.Errorf("Did not find any swarm members before timeout")
+				return nil, newConnectionError(Error_Process, "Did not find any swarm members before timeout")
 			}
 
 			//connect to all
@@ -187,7 +189,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 	//make our self known!
 	err = host.dht.Provide(ctx, id.Cid(), true)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to announce swarm")
+		return nil, wrapConnectionError(err, Error_Process)
 	}
 
 	//and make sure we stay known!
@@ -216,7 +218,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error {
 
 	if !s.State.IsRunning() {
-		return fmt.Errorf("Swarm not fully setup: cannot add peer")
+		return newInternalError(Error_Setup, "Swarm not fully setup: cannot add peer")
 	}
 
 	//build the operation
@@ -232,13 +234,13 @@ func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error
 		s.Event.Publish("peerAdded", pid, state)
 	}
 
-	return err
+	return utils.StackOnError(err, "Unable to add conf update command to state")
 }
 
 func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
 
 	if !s.State.IsRunning() {
-		return fmt.Errorf("Swarm not fully setup: cannot remove peer")
+		return newInternalError(Error_Setup, "Swarm not fully setup: cannot remove peer")
 	}
 
 	//build the operation
@@ -254,17 +256,17 @@ func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
 		s.Event.Publish("peerRemoved", peer)
 	}
 
-	return err
+	return utils.StackOnError(err, "Unable to add conf update command to state")
 }
 
 func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) error {
 
 	if !s.State.IsRunning() {
-		return fmt.Errorf("Swarm not fully setup: cannot add peer")
+		return newInternalError(Error_Setup, "Swarm not fully setup: cannot remove peer")
 	}
 
 	if !s.HasPeer(peer) {
-		return fmt.Errorf("Peer is not in swarm, cannot change auth")
+		return newUserError(Error_Operation_Invalid, "Peer is not in swarm, cannot change auth")
 	}
 
 	if s.PeerAuth(peer) == auth {
@@ -284,7 +286,7 @@ func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) er
 		s.Event.Publish("peerAuthChanged", peer, auth)
 	}
 
-	return err
+	return utils.StackOnError(err, "Unable to add conf update command to state")
 }
 
 func (s *Swarm) HasPeer(peer PeerID) bool {

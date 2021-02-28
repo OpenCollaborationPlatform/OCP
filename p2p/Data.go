@@ -52,16 +52,16 @@ func (self *dagHelper) Add(ctx context.Context, path string) (utils.Cid, error) 
 	stat, _ := os.Stat(path)
 	file, err := files.NewSerialFile(path, false, stat)
 	if err != nil {
-		return utils.Cid{}, err
+		return utils.Cid{}, wrapInternalError(err, Error_Data)
 	}
 	adder, err := NewAdder(ctx, self.dag)
 	if err != nil {
-		return utils.Cid{}, err
+		return utils.Cid{}, utils.StackError(err, "Unable to create file adder")
 	}
 
 	node, err := adder.Add(file)
 	if err != nil {
-		return utils.Cid{}, err
+		return utils.Cid{}, utils.StackError(err, "Unable to add file to DAG")
 	}
 
 	//return
@@ -74,12 +74,12 @@ func (self *dagHelper) AddData(ctx context.Context, data []byte) (utils.Cid, err
 
 	adder, err := NewAdder(ctx, self.dag)
 	if err != nil {
-		return utils.Cid{}, err
+		return utils.Cid{}, utils.StackError(err, "Unable to create data adder")
 	}
 
 	node, err := adder.Add(file)
 	if err != nil {
-		return utils.Cid{}, err
+		return utils.Cid{}, utils.StackError(err, "Unable to add data to DAG")
 	}
 
 	//return
@@ -90,19 +90,27 @@ func (self *dagHelper) AddAsync(path string) (utils.Cid, error) {
 
 	//we don't do any network operation...
 	ctx, _ := context.WithTimeout(context.Background(), 1*time.Hour)
-	return self.Add(ctx, path)
+	c, err := self.Add(ctx, path)
+	if err != nil {
+		return utils.CidUndef, wrapConnectionError(err, Error_Data)
+	}
+	return c, nil
 }
 
 func (self *dagHelper) Drop(ctx context.Context, id utils.Cid) error {
 
-	return self.dag.Remove(ctx, id.P2P())
+	err := self.dag.Remove(ctx, id.P2P())
+	if err != nil {
+		return wrapConnectionError(err, Error_Data)
+	}
+	return nil
 }
 
 func (self *dagHelper) Fetch(ctx context.Context, id utils.Cid) error {
 
 	resnode, err := self.dag.Get(ctx, id.P2P())
 	if err != nil {
-		return err
+		return wrapConnectionError(err, Error_Data)
 	}
 
 	//make sure we have the whole dag fetched by visiting it
@@ -112,7 +120,7 @@ func (self *dagHelper) Fetch(ctx context.Context, id utils.Cid) error {
 
 	//End Of Dag is default error when iteration has finished
 	if err != ipld.EndOfDag {
-		return err
+		return wrapConnectionError(err, Error_Data)
 	}
 	return nil
 }
@@ -130,11 +138,11 @@ func (self *dagHelper) Get(ctx context.Context, id utils.Cid) (io.Reader, error)
 
 	resnode, err := self.dag.Get(ctx, id.P2P())
 	if err != nil {
-		return nil, err
+		return nil, wrapConnectionError(err, Error_Data)
 	}
 	filenode, err := unixfile.NewUnixfsFile(ctx, self.dag, resnode)
 	if err != nil {
-		return nil, err
+		return nil, wrapInternalError(err, Error_Data)
 	}
 	return files.ToFile(filenode), nil
 }
@@ -144,17 +152,17 @@ func (self *dagHelper) Write(ctx context.Context, id utils.Cid, path string) (st
 
 	resnode, err := self.dag.Get(ctx, id.P2P())
 	if err != nil {
-		return "", err
+		return "", wrapConnectionError(err, Error_Data)
 	}
 	resfile, err := unixfile.NewUnixfsFile(ctx, self.dag, resnode)
 	if err != nil {
-		return "", err
+		return "", wrapInternalError(err, Error_Data)
 	}
 
-	if err != nil {
-		return "", err
-	}
 	err = files.WriteTo(resfile, path)
+	if err != nil {
+		err = wrapInternalError(err, Error_Data)
+	}
 	return path, err
 
 }
@@ -163,7 +171,7 @@ func (self *dagHelper) ReadChannel(ctx context.Context, id utils.Cid) (chan []by
 
 	reader, err := self.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to get cid")
 	}
 
 	result := make(chan []byte, 0)
@@ -218,14 +226,14 @@ func NewDataService(host *Host) (DataService, error) {
 	//create the stores (blocks and owners)
 	dstore, err := ds.NewDatastore(path, &ds.DefaultOptions)
 	if err != nil {
-		return nil, err
+		return nil, wrapInternalError(err, Error_Data)
 	}
 	bstore := blockDS.NewBlockstore(dstore)
 
 	//create bitswap and default global DAG service
 	routing, err := NewOwnerAwareRouting(host, dstore)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to create routing service")
 	}
 	network := bsnetwork.NewFromIpfsHost(host.host, routing)
 	bitswap := bs.New(host.serviceCtx, network, bstore).(*bs.Bitswap)
@@ -309,6 +317,9 @@ func (self dataStateCommand) toByte() ([]byte, error) {
 
 	buf := new(bytes.Buffer)
 	err := gob.NewEncoder(buf).Encode(self)
+	if err != nil {
+		err = wrapInternalError(err, Error_Invalid_Data)
+	}
 	return buf.Bytes(), err
 }
 
@@ -317,6 +328,9 @@ func dataStateCommandFromByte(data []byte) (dataStateCommand, error) {
 	cmd := dataStateCommand{}
 	buf := bytes.NewBuffer(data)
 	err := gob.NewDecoder(buf).Decode(&cmd)
+	if err != nil {
+		err = wrapInternalError(err, Error_Invalid_Data)
+	}
 	return cmd, err
 }
 
@@ -347,7 +361,7 @@ func (self *dataState) Apply(data []byte) interface{} {
 
 	cmd, err := dataStateCommandFromByte(data)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to load command from data")
 	}
 
 	if cmd.Remove {
@@ -378,7 +392,7 @@ func (self *dataState) Snapshot() ([]byte, error) {
 	buf := new(bytes.Buffer)
 	err := gob.NewEncoder(buf).Encode(&self.files)
 	if err != nil {
-		return nil, err
+		return nil, wrapInternalError(err, Error_Invalid_Data)
 	}
 	return buf.Bytes(), nil
 }
@@ -393,12 +407,12 @@ func (self *dataState) LoadSnapshot(snap []byte) error {
 	var list []utils.Cid
 	err := gob.NewEncoder(buf).Encode(&list)
 	if err != nil {
-		return err
+		return wrapInternalError(err, Error_Invalid_Data)
 	}
 
 	txn, err := self.service.owner.NewTransaction(false)
 	if err != nil {
-		return err
+		return utils.StackError(err, "Unable to open transaction")
 	}
 
 	//drop ownership of all old files (blocks are handled by garbage collect)
@@ -465,7 +479,7 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (utils.Cid, 
 	//add the file
 	filecid, err := self.dag.Add(ctx, path)
 	if err != nil {
-		return utils.CidUndef, err
+		return utils.CidUndef, utils.StackError(err, "Unable to add path to dag")
 	}
 
 	//store in shared state
@@ -487,7 +501,7 @@ func (self *swarmDataService) AddData(ctx context.Context, data []byte) (utils.C
 
 	filecid, err := self.dag.AddData(ctx, data)
 	if err != nil {
-		return utils.CidUndef, err
+		return utils.CidUndef, utils.StackError(err, "Unable to add data to dag")
 	}
 
 	//store in shared state
@@ -510,7 +524,7 @@ func (self *swarmDataService) AddAsync(path string) (utils.Cid, error) {
 	//add the file
 	filecid, err := self.dag.AddAsync(path)
 	if err != nil {
-		return utils.CidUndef, err
+		return utils.CidUndef, utils.StackError(err, "Unable to add data to dag")
 	}
 
 	go func() {
@@ -543,18 +557,22 @@ func (self *swarmDataService) Fetch(ctx context.Context, id utils.Cid) error {
 
 	//check if we have the file, if not fetching makes no sense in swarm context
 	if !self.state.HasFile(id) {
-		return fmt.Errorf("The file is not part of swarm, cannot be fetched")
+		return newUserError(Error_Operation_Invalid, "The file is not part of swarm, cannot be fetched")
 	}
 	//even if we have it in the state list, we fetch it anyway to make sure all blocks are received after the fetch call
 	//(we could be in fetching phase)
-	return self.dag.Fetch(ctx, id)
+	err := self.dag.Fetch(ctx, id)
+	if err != nil {
+		return wrapConnectionError(err, Error_Data)
+	}
+	return nil
 }
 
 func (self *swarmDataService) FetchAsync(id utils.Cid) error {
 
 	//check if we have the file, if not fetching makes no sense in swarm context
 	if !self.state.HasFile(id) {
-		return fmt.Errorf("The file is not part of swarm, cannot be fetched")
+		return newUserError(Error_Operation_Invalid, "The file is not part of swarm, cannot be fetched")
 	}
 
 	//we don't need to start a fetch, as it is to be expected that after this call the data may not be fully fetched yet
@@ -566,7 +584,7 @@ func (self *swarmDataService) Get(ctx context.Context, id utils.Cid) (io.Reader,
 
 	reader, err := self.dag.Get(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to get cid from dag")
 	}
 
 	//check if it is in the state already, if not we need to add
@@ -576,7 +594,7 @@ func (self *swarmDataService) Get(ctx context.Context, id utils.Cid) (io.Reader,
 		self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	}
 
-	return reader, err
+	return reader, nil
 }
 
 func (self *swarmDataService) Write(ctx context.Context, id utils.Cid, path string) (string, error) {
@@ -584,7 +602,7 @@ func (self *swarmDataService) Write(ctx context.Context, id utils.Cid, path stri
 	//see if we can get the data
 	path, err := self.dag.Write(ctx, id, path)
 	if err != nil {
-		return "", err
+		return "", utils.StackError(err, "Unable to write cid from dag")
 	}
 
 	//check if it is in the state already, if not we need to add
@@ -601,7 +619,7 @@ func (self *swarmDataService) ReadChannel(ctx context.Context, id utils.Cid) (ch
 
 	c, err := self.dag.ReadChannel(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to read cid from daf")
 	}
 
 	//check if it is in the state already, if not we need to add

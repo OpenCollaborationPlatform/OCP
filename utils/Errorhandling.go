@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+
+	nxclient "github.com/gammazero/nexus/v3/client"
+	wamp "github.com/gammazero/nexus/v3/wamp"
 )
 
 type OCPErrorClass string
@@ -11,7 +14,7 @@ type OCPErrorClass string
 var Internal = OCPErrorClass("internal")       //Fatal internal errors
 var Connection = OCPErrorClass("connection")   //Problems with any connection to the outside world
 var Application = OCPErrorClass("application") //Problems that occure based on current application state
-var Type = OCPErrorClass("type")
+var Type = OCPErrorClass("type")               //Type errors
 
 //the default error used for all OCP related errors
 type OCPError interface {
@@ -128,4 +131,20 @@ func StackOnError(err error, args ...interface{}) error {
 		return StackError(err, args...)
 	}
 	return nil
+}
+
+func ErrorToWampResult(err error) nxclient.InvokeResult {
+
+	if err == nil {
+		return nxclient.InvokeResult{}
+	}
+
+	if ocperr, ok := err.(OCPError); ok {
+		if len(ocperr.Stack()) > 0 {
+			return nxclient.InvokeResult{Args: wamp.List{ocperr.Stack()[0]}, Err: wamp.URI(ocperr.ErrorType())}
+		} else {
+			return nxclient.InvokeResult{Err: wamp.URI(ocperr.ErrorType())}
+		}
+	}
+	return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error.internal.library.failure")}
 }

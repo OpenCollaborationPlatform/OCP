@@ -6,8 +6,9 @@ package p2p
 
 import (
 	"context"
-	"fmt"
 	"reflect"
+
+	"github.com/ickby/CollaborationNode/utils"
 
 	"github.com/libp2p/go-libp2p-core/protocol"
 	peer "github.com/libp2p/go-libp2p-peer"
@@ -53,30 +54,29 @@ func (self Subscription) Next(ctx context.Context) (*Event, error) {
 		//get the message
 		msg, err := self.sub.Next(ctx)
 		if err != nil {
-			return nil, err
+			return nil, wrapInternalError(err, Error_Process)
 		}
 
 		//check if the authorisation of the caller checks out
 		if self.authorisation == nil {
 			// no authorisation required, return event!
-			return self.eventFromMessage(msg), nil
+			return self.eventFromMessage(msg)
 
 		} else if self.authorisation.peerIsAuthorized(self.sub.Topic(), PeerID(msg.GetFrom())) {
 			//the event publisher is allowed to post this event
-			return self.eventFromMessage(msg), nil
+			return self.eventFromMessage(msg)
 		}
 		//the posted message is not allowed to reach us. lets go on with waiting for a massage.
 	}
 }
 
-func (self Subscription) eventFromMessage(msg *pubsub.Message) *Event {
+func (self Subscription) eventFromMessage(msg *pubsub.Message) (*Event, error) {
 
 	var arguments []interface{}
 	err := codec.NewDecoderBytes(msg.Data, mph).Decode(&arguments)
-	if err != nil {
-		arguments = make([]interface{}, 0)
-	}
-	return &Event{arguments, PeerID(msg.GetFrom()), self.Topic()}
+	err = wrapInternalError(err, Error_Invalid_Data)
+
+	return &Event{arguments, PeerID(msg.GetFrom()), self.Topic()}, err
 }
 
 //Cancels the subscription. Next will return with an error and no more events will
@@ -121,6 +121,9 @@ func newHostEventService(host *Host) (*hostEventService, error) {
 	//filter := SubscriptionFilter{auth, host.ID()}
 	ctx, cncl := context.WithCancel(context.Background())
 	ps, err := pubsub.NewGossipSub(ctx, host.host, pubsub.WithMessageSigning(true) /*, pubsub.WithSubscriptionFilter(filter)*/)
+	if err != nil {
+		err = wrapInternalError(err, Error_Setup)
+	}
 
 	return &hostEventService{ps, cncl, auth}, err
 }
@@ -134,30 +137,35 @@ type hostEventService struct {
 func (self *hostEventService) Subscribe(topic string) (Subscription, error) {
 
 	if !self.auth.isKnown(topic) {
-		return Subscription{}, fmt.Errorf("Topic was not registered")
+		return Subscription{}, newInternalError(Error_Operation_Invalid, "Topic was not registered")
 	}
 
 	sub, err := self.service.Subscribe(topic)
+	err = wrapConnectionError(err, Error_Process)
+
 	return Subscription{sub, nil}, err
 }
 
 func (self *hostEventService) Publish(topic string, args ...interface{}) error {
 
 	if !self.auth.isKnown(topic) {
-		return fmt.Errorf("Topic was not registered")
+		return newInternalError(Error_Operation_Invalid, "Topic was not registered")
 	}
 
 	var data []byte
 	err := codec.NewEncoderBytes(&data, mph).Encode(args)
 	if err != nil {
-		return err
+		return wrapInternalError(err, Error_Invalid_Data)
 	}
 
-	return self.service.Publish(topic, data)
+	err = self.service.Publish(topic, data)
+	err = wrapConnectionError(err, Error_Process)
+
+	return err
 }
 
 func (self *hostEventService) RegisterTopic(topic string) error {
-	return self.auth.addAuth(topic, AUTH_NONE, nil)
+	return utils.StackOnError(self.auth.addAuth(topic, AUTH_NONE, nil), "Unable  to add to authrisation handler")
 }
 
 func (self *hostEventService) Stop() {
@@ -185,10 +193,11 @@ func (self *swarmEventService) Subscribe(topic string) (Subscription, error) {
 	topic = self.swarm.ID.Pretty() + `.` + topic
 
 	if !self.auth.isKnown(topic) {
-		return Subscription{}, fmt.Errorf("Topic was not registered")
+		return Subscription{}, newInternalError(Error_Operation_Invalid, "Topic was not registered")
 	}
 
 	sub, err := self.service.Subscribe(topic)
+	err = wrapConnectionError(err, Error_Process)
 
 	return Subscription{sub, self.auth}, err
 }
@@ -201,22 +210,25 @@ func (self *swarmEventService) Publish(topic string, args ...interface{}) error 
 	topic = self.swarm.ID.Pretty() + `.` + topic
 
 	if !self.auth.isKnown(topic) {
-		return fmt.Errorf("Topic was not registered")
+		return newInternalError(Error_Operation_Invalid, "Topic was not registered")
 	}
 
 	var data []byte
 	err := codec.NewEncoderBytes(&data, mph).Encode(args)
 	if err != nil {
-		return err
+		return wrapInternalError(err, Error_Invalid_Data)
 	}
 
-	return self.service.Publish(topic, data)
+	err = self.service.Publish(topic, data)
+	err = wrapConnectionError(err, Error_Process)
+
+	return err
 }
 
 func (self *swarmEventService) RegisterTopic(topic string, required_auth AUTH_STATE) error {
 
 	topic = self.swarm.ID.Pretty() + `.` + topic
-	return self.auth.addAuth(topic, required_auth, self.swarm)
+	return utils.StackOnError(self.auth.addAuth(topic, required_auth, self.swarm), "Unable to add to authorizer")
 }
 
 func (self *swarmEventService) Stop() {

@@ -31,7 +31,7 @@ func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, re
 
 	value, err := self.rep.AddCommand(ctx, op)
 	*ret = value
-	return err
+	return utils.StackOnError(err, "Unable to add command to replica")
 }
 
 // Api callable by Read Only auth
@@ -43,12 +43,12 @@ type ReplicaReadAPI struct {
 func (self *ReplicaReadAPI) GetLeader(ctx context.Context, inp struct{}, ret *peer.ID) error {
 
 	if !self.rep.IsRunning() {
-		return fmt.Errorf("Node not running: can't be the leader")
+		return newInternalError(Error_Setup, "Node not running: can't get the leader")
 	}
 
 	value, err := self.rep.GetLeader(ctx)
 	*ret = value
-	return err
+	return utils.StackOnError(err, "Unable to get leader from replica")
 }
 
 //join is ReadAPI as also read only peers need to call it for themself. If joining is allowed will be
@@ -56,31 +56,31 @@ func (self *ReplicaReadAPI) GetLeader(ctx context.Context, inp struct{}, ret *pe
 func (self *ReplicaReadAPI) Join(ctx context.Context, peer PeerID, ret *AUTH_STATE) error {
 
 	if !self.rep.IsRunning() {
-		return fmt.Errorf("Node not running: can't be the leader")
+		return newInternalError(Error_Setup, "Node not running: can't be the leader")
 	}
 
 	if !self.conf.HasPeer(peer) {
 		*ret = AUTH_NONE
-		return fmt.Errorf("Peer is not allowed to join the state sharing")
+		return newConnectionError(Error_Authorisation, "Peer is not allowed to join the state sharing")
 	}
 	auth := self.conf.PeerAuth(peer)
 	err := self.rep.ConnectPeer(ctx, peer, auth == AUTH_READWRITE)
 	*ret = auth
-	return err
+	return utils.StackOnError(err, "Unable to connect peer to replica")
 }
 
 //leav is ReadAPI as also read only peers need to call it for themself.
 func (self *ReplicaReadAPI) Leave(ctx context.Context, peer PeerID, ret *struct{}) error {
 
 	if !self.rep.IsRunning() {
-		return fmt.Errorf("Node not running: can't be the leader")
+		return newInternalError(Error_Setup, "Node not running: can't be the leader")
 	}
 
 	if !self.conf.HasPeer(peer) {
-		return fmt.Errorf("Peer is not part of the state sharing: can't leave")
+		return newConnectionError(Error_Authorisation, "Peer is not part of the state sharing: can't leave")
 	}
 	err := self.rep.DisconnectPeer(ctx, peer)
-	return err
+	return utils.StackOnError(err, "Unable to disconnect peer from replica")
 }
 
 /******************************************************************************
@@ -122,13 +122,13 @@ func (self *sharedStateService) share(state replica.State) error {
 	}
 
 	//add to replica
-	return self.rep.AddState(name, state)
+	return utils.StackOnError(self.rep.AddState(name, state), "Unable to add state to replica")
 }
 
 func (self *sharedStateService) AddCommand(ctx context.Context, state string, cmd []byte) (interface{}, error) {
 
 	if !self.IsRunning() {
-		return nil, fmt.Errorf("Not running: cannot add command")
+		return nil, newInternalError(Error_Setup, "Not running: cannot add command")
 	}
 
 	//build the operation
@@ -157,13 +157,13 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 			if err != nil {
 				return nil, utils.StackError(err, "Timout, no futher try on add command")
 			}
-			return nil, fmt.Errorf("Add command timed out")
+			return nil, newConnectionError(Error_Process, "Command timed out")
 		default:
 			//if we are here the leader could not be called, but context is not expired. let's wait a bit before trying again
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	return nil, fmt.Errorf("Not able to add command: failed")
+	return nil, newConnectionError(Error_Process, "Not able to add command")
 }
 
 func (self *sharedStateService) Close(ctx context.Context) {
@@ -198,7 +198,7 @@ func (self *sharedStateService) ActivePeers() ([]PeerID, error) {
 
 	peers, err := self.rep.ConnectedPeers()
 	if err != nil {
-		return nil, err
+		return nil, utils.StackError(err, "Unable to query replica connected peers")
 	}
 	result := make([]PeerID, len(peers))
 	for i, p := range peers {
@@ -269,19 +269,21 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 			if err != nil {
 				return utils.StackError(err, "Unable to inquery leader (asking peer %v)", peer)
 			}
-			return fmt.Errorf("Connect timed out: unable to find leader")
+			return newConnectionError(Error_Process, "Connect timed out: unable to find leader")
 		default:
 			break
 		}
 	}
 
 	if err != nil {
-		return utils.StackError(err, "Unable to find leader of swarm")
+		return newConnectionError(Error_Process, "Unable to find leader of swarm", "error", err.Error())
 	}
 
 	//call the leader to let us join
 	var auth AUTH_STATE
-	return self.swarm.Rpc.CallContext(callctx, leader, "ReplicaReadAPI", "Join", self.swarm.host.ID(), &auth)
+	err = self.swarm.Rpc.CallContext(callctx, leader, "ReplicaReadAPI", "Join", self.swarm.host.ID(), &auth)
+	err = utils.StackOnError(err, "Unable to call leader with join rpc")
+	return err
 }
 
 func (self *sharedStateService) eventLoop(channel chan replica.ReplicaPeerEvent) {

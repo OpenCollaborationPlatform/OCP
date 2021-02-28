@@ -28,7 +28,7 @@ func swarmConfOpFromBytes(data []byte) (SwarmConfOp, error) {
 	var op SwarmConfOp
 	b := bytes.NewBuffer(data)
 	err := gob.NewDecoder(b).Decode(&op)
-	return op, err
+	return op, wrapInternalError(err, Error_Invalid_Data)
 }
 
 //this is a replica state
@@ -71,7 +71,7 @@ func (self *SwarmConfiguration) Snapshot() ([]byte, error) {
 	b := new(bytes.Buffer)
 	err := gob.NewEncoder(b).Encode(self)
 	if err != nil {
-		return make([]byte, 0), err
+		return make([]byte, 0), wrapInternalError(err, Error_Invalid_Data)
 	}
 	return b.Bytes(), nil
 }
@@ -84,7 +84,7 @@ func (self *SwarmConfiguration) LoadSnapshot(data []byte) error {
 
 	b := bytes.NewBuffer(data)
 	err := gob.NewDecoder(b).Decode(&self)
-	return err
+	return wrapInternalError(err, Error_Invalid_Data)
 }
 
 //Custom functions

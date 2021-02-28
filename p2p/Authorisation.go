@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 )
@@ -31,9 +30,9 @@ func AuthStateFromString(state string) (AUTH_STATE, error) {
 	case "none", "auth_none":
 		return AUTH_NONE, nil
 	default:
-		return AUTH_NONE, fmt.Errorf("Not valid auth state string")
+		return AUTH_NONE, newUserError(Error_Arguments, "Invalid auth state string", "auth", state)
 	}
-	return AUTH_NONE, fmt.Errorf("Not valid auth state string")
+	return AUTH_NONE, newUserError("Invalid auth state string", "auth", state)
 }
 
 func AuthStateToString(state AUTH_STATE) string {
@@ -89,12 +88,12 @@ func (self *authorizer) addAuth(name string, auth_requirement AUTH_STATE, auther
 	defer self.lock.Unlock()
 	_, has := self.peerAuth[name]
 	if has {
-		return fmt.Errorf("Authorizer for service already available, cannot override")
+		return newInternalError(Error_Setup, "Authorizer for service already available, cannot override", "name", name)
 	}
 
 	_, has = self.authReq[name]
 	if has {
-		return fmt.Errorf("Authorisation requirement for service already set, cannot override")
+		return newInternalError(Error_Setup, "Authorisation requirement for service already set, cannot override", "name", name)
 	}
 	self.peerAuth[name] = auther
 	self.authReq[name] = auth_requirement
@@ -109,7 +108,7 @@ func (self *authorizer) getPeerAuth(name string) (peerAuthorizer, error) {
 
 	auther, ok := self.peerAuth[name]
 	if !ok || auther == nil {
-		return nil, fmt.Errorf("No peer authorizer available for this service")
+		return nil, newInternalError(Error_Authorisation, "No peer authorizer available for this service", "name", name)
 	}
 
 	return auther, nil
@@ -121,7 +120,7 @@ func (self *authorizer) getRequirement(name string) (AUTH_STATE, error) {
 
 	req, ok := self.authReq[name]
 	if !ok {
-		return AUTH_NONE, fmt.Errorf("No such service registered")
+		return AUTH_NONE, newInternalError(Error_Authorisation, "No such service registered", "name", name)
 	}
 	return req, nil
 }
