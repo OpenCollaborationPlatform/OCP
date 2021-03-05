@@ -15,6 +15,7 @@ var Internal = OCPErrorClass("internal")       //Fatal internal errors
 var Connection = OCPErrorClass("connection")   //Problems with any connection to the outside world
 var Application = OCPErrorClass("application") //Problems that occure based on current application state
 var Type = OCPErrorClass("type")               //Type errors
+var User = OCPErrorClass("user")               //Problems that occure based on user input
 
 //the default error used for all OCP related errors
 type OCPError interface {

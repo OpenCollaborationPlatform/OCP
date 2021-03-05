@@ -1,4 +1,4 @@
-package document
+package p2p
 
 import (
 	"github.com/ickby/CollaborationNode/utils"
@@ -6,15 +6,17 @@ import (
 
 /*Error handling*/
 
+const Error_Authorisation = "authorisation_invalid" // error due to wrong authorisation
+const Error_Unavailable = "node_unavailable"        // error due to not being able to reach node
 const Error_Arguments = "arguments_wrong"           // arguments are invalid (e.g. wrong number, wrong type)
 const Error_Operation_Invalid = "operation_invalid" // User operation not possible with current application state
 const Error_Process = "process_failed"              // For all kind of proccesses or operations
 const Error_Invalid_Data = "data_invalid"           // For all kind of wrong data errors
 const Error_Setup = "setup_invalid"                 // The datastructures are not setup correctly
-const Error_Filesytem = "filesystem"                // Problems with filesystem
+const Error_Data = "data_share_failed"              // For all kind of internal proccesses
 
 func newInternalError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Internal, "documents", reason, args)
+	err := utils.NewError(utils.Internal, "p2p", reason, args)
 	if msg != "" {
 		err.AddToStack(msg)
 	}
@@ -33,7 +35,7 @@ func wrapInternalError(err error, reason string, args ...interface{}) error {
 }
 
 func newConnectionError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Connection, "documents", reason, args)
+	err := utils.NewError(utils.Connection, "p2p", reason, args)
 	if msg != "" {
 		err.AddToStack(msg)
 	}
@@ -53,7 +55,7 @@ func wrapConnectionError(err error, reason string, args ...interface{}) error {
 
 func newUserError(reason, msg string, args ...interface{}) utils.OCPError {
 
-	err := utils.NewError(utils.User, "documents", reason, args)
+	err := utils.NewError(utils.User, "p2p", reason, args)
 	if msg != "" {
 		err.AddToStack(msg)
 	}
