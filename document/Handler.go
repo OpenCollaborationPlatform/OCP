@@ -52,6 +52,7 @@ func (self DocumentAPI) Invite(ctx context.Context, docId string, ret *bool) err
 	}
 
 	//a new one! add it to our list
+	self.handler.logger.Debug("Received invitation", "document", docId)
 	self.handler.invitations = append(self.handler.invitations, docId)
 
 	//let clients know
@@ -70,6 +71,7 @@ func (self DocumentAPI) Uninvite(ctx context.Context, docId string, ret *bool) e
 	*ret = true
 	for i, id := range self.handler.invitations {
 		if id == docId {
+			self.handler.logger.Debug("Received uninvitation", "document", docId)
 			self.handler.invitations = append(self.handler.invitations[:i], self.handler.invitations[i+1:]...)
 
 			//let clients know

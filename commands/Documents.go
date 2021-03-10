@@ -32,7 +32,7 @@ var cmdDocuments = &cobra.Command{
 			result += doc + "\n"
 		}
 
-		result += "\nInvited for documents:"
+		result += "\nInvited for documents:\n"
 		for _, doc := range ocpNode.Documents.Invitations() {
 			result += doc + "\n"
 		}

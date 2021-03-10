@@ -252,7 +252,10 @@ func (self Document) addPeer(ctx context.Context, inv *wamp.Invocation) nxclient
 		err := self.swarm.GetHost().Connect(self.docCtx, pid, false)
 		if err == nil {
 			var ret bool
-			self.swarm.GetHost().Rpc.CallContext(self.docCtx, pid, "DocumentAPI", "Invite", self.ID, &ret)
+			err := self.swarm.GetHost().Rpc.CallContext(self.docCtx, pid, "DocumentAPI", "Invite", self.ID, &ret)
+			if err != nil {
+				self.logger.Debug("Document invite failed", "peer", pid.Pretty())
+			}
 		}
 	}()
 
@@ -302,7 +305,10 @@ func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxcli
 		err := self.swarm.GetHost().Connect(self.docCtx, pid, false)
 		if err == nil {
 			var ret bool
-			self.swarm.GetHost().Rpc.CallContext(self.docCtx, pid, "DocumentAPI", "Uninvite", self.ID, &ret)
+			err = self.swarm.GetHost().Rpc.CallContext(self.docCtx, pid, "DocumentAPI", "Uninvite", self.ID, &ret)
+			if err != nil {
+				self.logger.Debug("Document uninvite failed", "peer", pid.Pretty())
+			}
 		}
 	}()
 

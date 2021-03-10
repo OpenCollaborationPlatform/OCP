@@ -90,7 +90,7 @@ var cmdP2PConnect = &cobra.Command{
 		}
 
 		ocpNode.Host.SetMultipleAdress(info.ID, info.Addrs)
-		if err := ocpNode.Host.Connect(ctx, info.ID); err != nil {
+		if err := ocpNode.Host.Connect(ctx, info.ID, false); err != nil {
 			return err.Error()
 		}
 
