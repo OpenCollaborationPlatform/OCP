@@ -27,8 +27,13 @@ var cmdDocuments = &cobra.Command{
 
 		docs := ocpNode.Documents.ListDocuments()
 
-		result := fmt.Sprintln("Currently open documents")
+		result := fmt.Sprintln("Currently open documents:")
 		for _, doc := range docs {
+			result += doc + "\n"
+		}
+
+		result += "\nInvited for documents:"
+		for _, doc := range ocpNode.Documents.Invitations() {
 			result += doc + "\n"
 		}
 

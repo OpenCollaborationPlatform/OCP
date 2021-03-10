@@ -13,8 +13,18 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"
+	hclog "github.com/hashicorp/go-hclog"
 	. "github.com/smartystreets/goconvey/convey"
 )
+
+//logger to discard all output
+var testLogger hclog.Logger
+
+func init() {
+	testLogger = hclog.New(&hclog.LoggerOptions{
+		Output: ioutil.Discard,
+	})
+}
 
 type eventcatcher struct {
 	events []string
@@ -79,7 +89,7 @@ func TestDocumentSingleNode(t *testing.T) {
 		defer host.Stop(context.Background())
 
 		//setup the document handler
-		handler, err := NewDocumentHandler(router, host)
+		handler, err := NewDocumentHandler(router, host, testLogger)
 		So(err, ShouldBeNil)
 		So(handler, ShouldNotBeNil)
 		defer handler.Close(context.Background())
@@ -167,12 +177,12 @@ func TestDocumentTwoNodes(t *testing.T) {
 		//setup the document handlers
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
-		handler1, err := NewDocumentHandler(router1, host1)
+		handler1, err := NewDocumentHandler(router1, host1, testLogger)
 		So(err, ShouldBeNil)
 		So(handler1, ShouldNotBeNil)
 		defer handler1.Close(ctx)
 
-		handler2, err := NewDocumentHandler(router2, host2)
+		handler2, err := NewDocumentHandler(router2, host2, testLogger)
 		So(err, ShouldBeNil)
 		So(handler2, ShouldNotBeNil)
 		defer handler2.Close(ctx)
@@ -208,11 +218,15 @@ func TestDocumentTwoNodes(t *testing.T) {
 				evtC2 := &eventcatcher{make([]string, 0)}
 				evtC2.subscribeEvent(client1, "ocp.documents."+docID+".peerAdded")
 
+				evtC21 := &eventcatcher{make([]string, 0)}
+				evtC21.subscribeEvent(client2, "ocp.documents.invited")
+
 				uri := "ocp.documents." + docID + ".addPeer"
 				_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{host2.ID().Pretty(), "write"}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 				So(evtC2.events, ShouldHaveLength, 1)
+				So(evtC21.events, ShouldHaveLength, 1)
 
 				uri = "ocp.documents." + docID + ".listPeers"
 				res, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
@@ -222,6 +236,12 @@ func TestDocumentTwoNodes(t *testing.T) {
 				So(len(peers), ShouldEqual, 2)
 				So(peers, ShouldContain, host1.ID().Pretty())
 				So(peers, ShouldContain, host2.ID().Pretty())
+
+				uri = "ocp.documents.invitations"
+				res, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+				So(err, ShouldBeNil)
+				So(res.Arguments, ShouldHaveLength, 1)
+				So(res.Arguments[0], ShouldResemble, []string{docID})
 
 				Convey("makes the document joinable by host2", func() {
 
@@ -278,6 +298,34 @@ func TestDocumentTwoNodes(t *testing.T) {
 						So(res.Arguments[0], ShouldEqual, 20)
 					})
 				})
+
+				Convey("Removing the peer does uninvite him too", func() {
+
+					uri := "ocp.documents." + docID + ".removePeer"
+					_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{host2.ID().Pretty()}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+					So(evtC21.events, ShouldHaveLength, 2)
+
+					uri = "ocp.documents.invitations"
+					res, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+					So(res.Arguments, ShouldHaveLength, 1)
+					So(res.Arguments[0], ShouldResemble, []string{})
+				})
+
+				Convey("Closing the doc as last peer should uninvite the other one", func() {
+
+					uri := "ocp.documents.close"
+					_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{docID}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+					So(evtC21.events, ShouldHaveLength, 2)
+
+					uri = "ocp.documents.invitations"
+					res, err = client2.Call(ctx, uri, wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
+					So(err, ShouldBeNil)
+					So(res.Arguments, ShouldHaveLength, 1)
+					So(res.Arguments[0], ShouldResemble, []string{})
+				})
 			})
 		})
 	})
@@ -308,7 +356,7 @@ func TestDocumentViews(t *testing.T) {
 		defer host.Stop(context.Background())
 
 		//setup the document handler
-		handler, err := NewDocumentHandler(router, host)
+		handler, err := NewDocumentHandler(router, host, testLogger)
 		So(err, ShouldBeNil)
 		So(handler, ShouldNotBeNil)
 		defer handler.Close(context.Background())

@@ -3,6 +3,7 @@ package document
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"
@@ -19,6 +20,7 @@ type DocumentAPI struct {
 	handler *DocumentHandler
 }
 
+//Allows to query the DML cid for a document ID
 func (self DocumentAPI) DocumentDML(ctx context.Context, val string, ret *utils.Cid) error {
 
 	//find the correct document
@@ -34,6 +36,51 @@ func (self DocumentAPI) DocumentDML(ctx context.Context, val string, ret *utils.
 	return newUserError(Error_Operation_Invalid, "No document with given ID available")
 }
 
+//Allows to send an invitation to us for a document ID
+func (self DocumentAPI) Invite(ctx context.Context, docId string, ret *bool) error {
+
+	//find the correct document
+	self.handler.mutex.Lock()
+	defer self.handler.mutex.Unlock()
+
+	//check if we have this invitation already
+	*ret = true
+	for _, id := range self.handler.invitations {
+		if id == docId {
+			return nil
+		}
+	}
+
+	//a new one! add it to our list
+	self.handler.invitations = append(self.handler.invitations, docId)
+
+	//let clients know
+	self.handler.client.Publish("ocp.documents.invited", wamp.Dict{}, wamp.List{docId, true}, wamp.Dict{})
+	return nil
+}
+
+//Allows to send an invitation to us for a document ID
+func (self DocumentAPI) Uninvite(ctx context.Context, docId string, ret *bool) error {
+
+	//find the correct document
+	self.handler.mutex.Lock()
+	defer self.handler.mutex.Unlock()
+
+	//check if we have this invitation already
+	*ret = true
+	for i, id := range self.handler.invitations {
+		if id == docId {
+			self.handler.invitations = append(self.handler.invitations[:i], self.handler.invitations[i+1:]...)
+
+			//let clients know
+			self.handler.client.Publish("ocp.documents.invited", wamp.Dict{}, wamp.List{docId, false}, wamp.Dict{})
+			return nil
+		}
+	}
+
+	return nil
+}
+
 type DocumentHandler struct {
 
 	//connection handling
@@ -42,9 +89,11 @@ type DocumentHandler struct {
 	host   *p2p.Host
 
 	//document handling
-	documents []Document
-	mutex     *sync.RWMutex
-	logger    hclog.Logger
+	documents   []Document
+	invitations []string
+	mutex       *sync.RWMutex
+	inviteSub   p2p.Subscription
+	logger      hclog.Logger
 }
 
 func NewDocumentHandler(router *connection.Router, host *p2p.Host, logger hclog.Logger) (*DocumentHandler, error) {
@@ -55,13 +104,25 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host, logger hclog.
 		return nil, utils.StackError(err, "Could not setup document handler")
 	}
 
+	//watch out for relevant events
+	err = host.Event.RegisterTopic("Documents.InvitationRequest")
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to register invite event topic")
+	}
+	inviteSub, err := host.Event.Subscribe("Documents.InvitationRequest")
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to subscribe to invitation events")
+	}
+
 	dh := &DocumentHandler{
-		client:    client,
-		router:    router,
-		host:      host,
-		documents: make([]Document, 0),
-		mutex:     mutex,
-		logger:    logger,
+		client:      client,
+		router:      router,
+		host:        host,
+		documents:   make([]Document, 0),
+		invitations: make([]string, 0),
+		mutex:       mutex,
+		logger:      logger,
+		inviteSub:   inviteSub,
 	}
 
 	//here we create all general document related RPCs and Topic
@@ -69,17 +130,29 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host, logger hclog.
 	client.Register("ocp.documents.open", dh.openDoc, wamp.Dict{})
 	client.Register("ocp.documents.list", dh.listDocs, wamp.Dict{})
 	client.Register("ocp.documents.close", dh.closeDoc, wamp.Dict{})
+	client.Register("ocp.documents.invitations", dh.invitedDocs, wamp.Dict{})
+	client.Register("ocp.documents.updateInvitations", dh.searchInvitations, wamp.Dict{})
 
 	//register the RPC api
 	err = host.Rpc.Register(DocumentAPI{dh})
 	err = utils.StackOnError(err, "Unable to register DocumentAPI")
+
+	//start handling invitations
+	go dh.handleInvitationRequest(inviteSub)
+	go func() {
+		time.Sleep(1 * time.Second)
+		host.Event.Publish("Documents.InvitationRequest")
+	}()
 
 	return dh, err
 }
 
 func (self *DocumentHandler) Close(ctx context.Context) {
 
-	//go over all documents nd close them!
+	//no more invites
+	self.inviteSub.Cancel()
+
+	//go over all documents and close them!
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
 
@@ -88,6 +161,7 @@ func (self *DocumentHandler) Close(ctx context.Context) {
 	}
 
 	self.documents = make([]Document, 0)
+	self.invitations = make([]string, 0)
 }
 
 func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (Document, error) {
@@ -142,7 +216,7 @@ func (self *DocumentHandler) createDoc(ctx context.Context, inv *wamp.Invocation
 
 func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) error {
 
-	//check if already open /unlocka afterwards to not lock during potenially long
+	//check if already open /unlock afterwards to not lock during potenially long
 	//swarm operation)
 	self.mutex.RLock()
 	for _, doc := range self.documents {
@@ -273,4 +347,96 @@ func (self *DocumentHandler) listDocs(ctx context.Context, inv *wamp.Invocation)
 	}
 
 	return nxclient.InvokeResult{Args: wamp.List{res}}
+}
+
+func (self *DocumentHandler) Invitations() []string {
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	res := make([]string, len(self.invitations))
+	for i, doc := range self.invitations {
+		res[i] = doc
+	}
+
+	return res
+}
+
+func (self *DocumentHandler) invitedDocs(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 0 {
+		err := newUserError(Error_Arguments, "No arguments supportet")
+		return utils.ErrorToWampResult(err)
+	}
+
+	self.mutex.RLock()
+	defer self.mutex.RUnlock()
+
+	res := make([]string, len(self.invitations))
+	for i, doc := range self.invitations {
+		res[i] = doc
+	}
+
+	return nxclient.InvokeResult{Args: wamp.List{res}}
+}
+
+func (self *DocumentHandler) searchInvitations(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	//uninvite all currently known
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
+	for _, invitation := range self.invitations {
+		self.client.Publish("ocp.documents.invited", wamp.Dict{}, wamp.List{invitation, false}, wamp.Dict{})
+	}
+	self.invitations = make([]string, 0)
+
+	//request invitations
+	err := self.host.Event.Publish("Documents.InvitationRequest")
+	if err != nil {
+		return utils.ErrorToWampResult(err)
+	}
+	return nxclient.InvokeResult{}
+}
+
+func (self *DocumentHandler) handleInvitationRequest(sub p2p.Subscription) {
+
+	for {
+		evt, err := sub.Next(context.Background())
+		if err != nil {
+			// subscription closed
+			return
+		}
+
+		//we do not invite ourself
+		if evt.Source == self.host.ID() {
+			continue
+		}
+
+		self.logger.Debug("Invitation request received", "peer", evt.Source)
+
+		//check if we have a document with the source as peer
+		self.mutex.RLock()
+
+		invite := make([]string, 0)
+		for _, doc := range self.documents {
+			peers := doc.swarm.GetPeers(p2p.AUTH_NONE)
+			for _, peer := range peers {
+				if peer == evt.Source {
+					invite = append(invite, doc.ID)
+					break
+				}
+			}
+		}
+
+		//send out the invites!
+		for _, invite := range self.invitations {
+			var ret bool
+			err := self.host.Rpc.Call(evt.Source, "DocumentAPI", "Invite", invite, &ret)
+			if err != nil {
+				self.logger.Debug("Could not invite peer", "peer", evt.Source, "doc", invite)
+			}
+		}
+		self.mutex.RUnlock()
+	}
 }

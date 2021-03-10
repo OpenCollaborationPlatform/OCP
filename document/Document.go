@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ickby/CollaborationNode/connection"
 	"github.com/ickby/CollaborationNode/p2p"
@@ -128,6 +129,16 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 
 func (self Document) Close(ctx context.Context) {
 
+	//get the needed info bevore the shutdown
+	peers := self.swarm.GetPeers(p2p.AUTH_NONE)
+	for i, peer := range peers {
+		if peer == self.swarm.GetHost().ID() {
+			peers = append(peers[:i], peers[i+1:]...)
+			break
+		}
+	}
+	active, err := self.swarm.State.ActivePeers()
+
 	self.ctxCnl()
 	for _, sub := range self.subs {
 		sub.Cancel()
@@ -136,6 +147,25 @@ func (self Document) Close(ctx context.Context) {
 	self.datastructure.Close()
 	self.client.Close()
 	self.swarm.Close(ctx)
+
+	//uninvite all peers if required
+	if err == nil && len(active) == 1 {
+		//we've been the last active peer. The swarm is now fully unavailable, the
+		//document dead.
+		if len(peers) == 0 {
+			//we have been the only peer in document
+			return
+		}
+		//multiple peers
+		toCtx := make([]context.Context, len(peers))
+		ret := make([]bool, len(peers), len(peers))
+		replies := make([]interface{}, len(peers))
+		for i, _ := range peers {
+			toCtx[i], _ = context.WithTimeout(ctx, 3*time.Second)
+			replies[i] = &ret[i]
+		}
+		self.swarm.GetHost().Rpc.MultiCall(toCtx, peers, "DocumentAPI", "Uninvite", nil, replies)
+	}
 }
 
 func (self Document) handleEvent(topic string) error {
@@ -221,6 +251,11 @@ func (self Document) addPeer(ctx context.Context, inv *wamp.Invocation) nxclient
 		return utils.ErrorToWampResult(err)
 	}
 
+	//invite the peer! (no error handling, could be offline and is still ok)
+	var ret bool
+	toCtx, _ := context.WithTimeout(ctx, 3*time.Second)
+	self.swarm.GetHost().Rpc.CallContext(toCtx, pid, "DocumentAPI", "Invite", self.ID, &ret)
+
 	return nxclient.InvokeResult{}
 }
 
@@ -261,6 +296,11 @@ func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxcli
 	if err != nil {
 		return utils.ErrorToWampResult(err)
 	}
+
+	//uninvite the peer! (no error handling, could be offline and is still ok)
+	var ret bool
+	toCtx, _ := context.WithTimeout(ctx, 3*time.Second)
+	self.swarm.GetHost().Rpc.CallContext(toCtx, pid, "DocumentAPI", "Uninvite", self.ID, &ret)
 
 	return nxclient.InvokeResult{}
 }
