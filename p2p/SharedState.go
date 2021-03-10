@@ -143,7 +143,7 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 			return nil, utils.StackError(err, "Unable to get leader for state")
 		}
 
-		err = self.swarm.host.EnsureConnection(ctx, PeerID(leader))
+		err = self.swarm.connect(ctx, PeerID(leader))
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to connect to leader")
 		}
@@ -182,7 +182,7 @@ func (self *sharedStateService) Close(ctx context.Context) {
 		//fetch leader and call him to leave
 		leader, err := self.rep.GetLeader(ctx)
 		if err == nil {
-			err = self.swarm.host.EnsureConnection(ctx, PeerID(leader))
+			err = self.swarm.connect(ctx, PeerID(leader))
 			if err != nil {
 				self.logger.Error("Unable to connect to leader on leave, hard shutdown")
 				self.rep.Shutdown(ctx)
@@ -263,7 +263,7 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 	var leader peer.ID
 	for _, peer := range peers {
 
-		err = self.swarm.host.EnsureConnection(callctx, peer)
+		err = self.swarm.connect(callctx, peer)
 		if err != nil {
 			continue
 		}
@@ -299,10 +299,12 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 func (self *sharedStateService) eventLoop(channel chan replica.ReplicaPeerEvent) {
 
 	//read events and do something useful with it!
+	ctx, cncl := context.WithCancel(context.Background())
 	for evt := range channel {
 
 		if evt.Event == replica.EVENT_ADDED {
 			self.logger.Debug("Replica peers changed", "peer", evt.Peer.Pretty(), "action", "added")
+			go self.swarm.connect(ctx, evt.Peer)
 			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer.Pretty(), true)
 
 		} else if evt.Event == replica.EVENT_REMOVED {
@@ -310,4 +312,6 @@ func (self *sharedStateService) eventLoop(channel chan replica.ReplicaPeerEvent)
 			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer.Pretty(), false)
 		}
 	}
+	//cancel all still running connect calls
+	cncl()
 }

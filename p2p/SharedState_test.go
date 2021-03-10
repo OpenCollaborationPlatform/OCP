@@ -60,7 +60,7 @@ func TestSingleNodeSharedState(t *testing.T) {
 	defer h1.Stop(ctx)
 
 	h1.SetMultipleAdress(h0.ID(), h0.OwnAddresses())
-	h1.Connect(context.Background(), h0.ID())
+	h1.Connect(context.Background(), h0.ID(), false)
 
 	Convey("Creating swarms and sharing services shall be possible", t, func() {
 
@@ -104,7 +104,7 @@ func TestBasicSharedState(t *testing.T) {
 		defer h2.Stop(context.Background())
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-		h1.Connect(context.Background(), h2.ID())
+		h1.Connect(context.Background(), h2.ID(), false)
 
 		st1 := &testState{0}
 		sw1, err := h1.CreateSwarm(context.Background(), SwarmStates(st1))
@@ -200,8 +200,8 @@ func TestConnectionStrategy(t *testing.T) {
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h3.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
-		h2.Connect(context.Background(), h1.ID())
-		h3.Connect(context.Background(), h1.ID())
+		h2.Connect(context.Background(), h1.ID(), false)
+		h3.Connect(context.Background(), h1.ID(), false)
 
 		Convey("Creating a swarm on host 2 (with host 3 as peer)", func() {
 
@@ -243,7 +243,7 @@ func TestConnectionStrategy(t *testing.T) {
 					h4, _ := temporaryHost(path)
 					defer h4.Stop(closeCtx)
 					h4.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
-					h4.Connect(closeCtx, h1.ID())
+					h4.Connect(closeCtx, h1.ID(), false)
 
 					ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
 					st4 := &testState{0}

@@ -54,7 +54,7 @@ func MakeTemporaryTwoHostNetwork(path string) (*Host, *Host, error) {
 
 	host1.SetMultipleAdress(host2.ID(), host2.OwnAddresses())
 	host2.SetMultipleAdress(host1.ID(), host1.OwnAddresses())
-	host1.Connect(context.Background(), host2.ID())
+	host1.Connect(context.Background(), host2.ID(), false)
 
 	return host1, host2, nil
 }

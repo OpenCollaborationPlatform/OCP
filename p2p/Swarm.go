@@ -329,6 +329,27 @@ func (self *Swarm) PeerAuth(peer PeerID) AUTH_STATE {
 /* General functions
  ******************  */
 
+//Tries to connect to given peer. It keeps it open as long as the swarm exists
+//(afterwards may be closed when too many connections are open)
+func (self *Swarm) connect(ctx context.Context, peer PeerID) error {
+
+	err := self.host.Connect(ctx, peer, false)
+	if err == nil {
+		self.host.host.ConnManager().Protect(peer, string(self.ID))
+	}
+
+	return err
+}
+
+//Allows the connection to be closed when the host seems fit
+func (self *Swarm) closeConnection(peer PeerID) error {
+
+	if self.host.host.ConnManager().IsProtected(peer, string(self.ID)) {
+		self.host.host.ConnManager().Unprotect(peer, string(self.ID))
+	}
+	return nil
+}
+
 func (self *Swarm) GetPath() string {
 	return self.path
 }
@@ -344,6 +365,11 @@ func (s *Swarm) Close(ctx context.Context) {
 	s.cancel()
 
 	s.host.removeSwarm(s.ID)
+
+	//unprotect all peers
+	for _, peer := range s.host.host.Peerstore().PeersWithAddrs() {
+		s.host.host.ConnManager().Unprotect(peer, string(s.ID))
+	}
 }
 
 func (s *Swarm) GetHost() *Host {

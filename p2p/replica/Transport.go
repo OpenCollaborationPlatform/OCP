@@ -38,6 +38,7 @@ type streamLayer struct {
 	dht  *kaddht.IpfsDHT
 	l    net.Listener
 	id   protocol.ID
+	name string
 }
 
 func newStreamLayer(h host.Host, dht *kaddht.IpfsDHT, name string) (*streamLayer, error) {
@@ -53,6 +54,7 @@ func newStreamLayer(h host.Host, dht *kaddht.IpfsDHT, name string) (*streamLayer
 		dht:  dht,
 		l:    listener,
 		id:   protocol,
+		name: name,
 	}, nil
 }
 
@@ -83,6 +85,7 @@ func (sl *streamLayer) Dial(address raft.ServerAddress, timeout time.Duration) (
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	c, err := gostream.Dial(ctx, sl.host, pid, sl.id)
+	sl.host.ConnManager().Protect(pid, sl.name)
 	return c, wrapConnectionError(err, Error_Process)
 }
 

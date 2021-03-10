@@ -103,7 +103,7 @@ func TestSwarmRPC(t *testing.T) {
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-		h1.Connect(context.Background(), h2.ID())
+		h1.Connect(context.Background(), h2.ID(), true)
 
 		Convey("Setting up a swarm without any peers", func() {
 

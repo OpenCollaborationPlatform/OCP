@@ -54,7 +54,7 @@ func TestBasicEvent(t *testing.T) {
 
 		Convey("Subscribing to a topic after connecting works", func() {
 
-			h2.Connect(context.Background(), h1.ID())
+			h2.Connect(context.Background(), h1.ID(), true)
 			So(h1.Event.RegisterTopic("testtopic"), ShouldBeNil)
 			So(h2.Event.RegisterTopic("testtopic"), ShouldBeNil)
 			sub, err := h1.Event.Subscribe("testtopic")
@@ -88,7 +88,7 @@ func TestBasicEvent(t *testing.T) {
 			sub, err := h1.Event.Subscribe("testtopic")
 			So(err, ShouldBeNil)
 			So(sub.sub, ShouldNotBeNil)
-			h2.Connect(context.Background(), h1.ID())
+			h2.Connect(context.Background(), h1.ID(), true)
 			time.Sleep(100 * time.Millisecond)
 
 			Convey("and must be publishable from the other host", func() {
@@ -131,7 +131,7 @@ func TestSwarmEvent(t *testing.T) {
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-		h2.Connect(context.Background(), h1.ID())
+		h2.Connect(context.Background(), h1.ID(), true)
 
 		Convey("Creating a swarm on the first host", func() {
 

@@ -323,43 +323,53 @@ func (self *Host) SetMultipleAdress(peer PeerID, addrs []ma.Multiaddr) error {
 	return nil
 }
 
-func (h *Host) Connect(ctx context.Context, peer PeerID) error {
-
-	info := h.host.Peerstore().PeerInfo(peer)
-	if len(info.Addrs) == 0 {
-		//go find it!
-		var err error
-		info, err = h.dht.FindPeer(ctx, peer)
-		if err != nil {
-			return wrapConnectionError(err, Error_Unavailable)
-		}
-	}
-	err := h.host.Connect(ctx, info)
-	err = wrapConnectionError(err, Error_Process)
-	return err
-}
-
-func (h *Host) CloseConnection(peer PeerID) error {
-	err := h.host.Network().ClosePeer(peer)
-	err = wrapConnectionError(err, Error_Process)
-	return err
-}
-
-func (h *Host) IsConnected(peer PeerID) bool {
-
-	return len(h.host.Network().ConnsToPeer(peer)) > 0
-}
-
-func (h *Host) EnsureConnection(ctx context.Context, peer PeerID) error {
+//Tries to connect to given peer. If keep_open is true the connection stays
+//always open, otherwise it could be closed later in case too many connections are open
+func (h *Host) Connect(ctx context.Context, peer PeerID, keep_open bool) error {
 
 	if peer == h.ID() {
 		return nil
 	}
 
-	if h.IsConnected(peer) {
-		return nil
+	var err error = nil
+	if !h.IsConnected(peer) {
+
+		info := h.host.Peerstore().PeerInfo(peer)
+		if len(info.Addrs) == 0 {
+			//go find it!
+			var err error
+			info, err = h.dht.FindPeer(ctx, peer)
+			if err != nil {
+				return wrapConnectionError(err, Error_Unavailable)
+			}
+		}
+		err = h.host.Connect(ctx, info)
 	}
-	return h.Connect(ctx, peer)
+	if err == nil && keep_open {
+		h.host.ConnManager().Protect(peer, "host")
+	}
+
+	return wrapConnectionError(err, Error_Process)
+}
+
+//Closes the connection to given peer. If force is true, it will be closed. Otherwise
+//it stays open and the host is free to close it later in case of too many open
+//connections
+func (h *Host) CloseConnection(peer PeerID, force bool) error {
+
+	if h.host.ConnManager().IsProtected(peer, "host") {
+		h.host.ConnManager().Unprotect(peer, "host")
+	}
+	var err error = nil
+	if force {
+		err = h.host.Network().ClosePeer(peer)
+	}
+	return wrapConnectionError(err, Error_Process)
+}
+
+func (h *Host) IsConnected(peer PeerID) bool {
+
+	return len(h.host.Network().ConnsToPeer(peer)) > 0
 }
 
 //returns all known peers
@@ -450,7 +460,7 @@ func (h *Host) FindProviders(ctx context.Context, cid utils.Cid, num int) ([]Pee
 				return result, nil
 			}
 			h.SetMultipleAdress(PeerID(info.ID), info.Addrs)
-			h.EnsureConnection(ctx, PeerID(info.ID))
+			h.Connect(ctx, PeerID(info.ID), false)
 			result = append(result, PeerID(info.ID))
 
 		case <-ctx.Done():
@@ -482,7 +492,7 @@ func (h *Host) FindProvidersAsync(ctx context.Context, cid utils.Cid, num int) (
 				if info.ID.Validate() == nil && len(info.Addrs) != 0 && info.ID != h.ID() {
 
 					h.SetMultipleAdress(PeerID(info.ID), info.Addrs)
-					h.EnsureConnection(ctx, PeerID(info.ID))
+					h.Connect(ctx, PeerID(info.ID), false)
 
 					//found a peer! return it
 					ret <- PeerID(info.ID)
@@ -627,7 +637,7 @@ func (self *Host) findSwarmPeersAsync(ctx context.Context, id SwarmID, num int) 
 				if info.ID.Validate() == nil && len(info.Addrs) != 0 && info.ID != self.ID() {
 
 					self.SetMultipleAdress(PeerID(info.ID), info.Addrs)
-					self.EnsureConnection(ctx, PeerID(info.ID))
+					self.Connect(ctx, PeerID(info.ID), false)
 
 					//check host api!
 					var has bool
