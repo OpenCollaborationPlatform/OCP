@@ -155,7 +155,7 @@ func (h *Host) Start(shouldBootstrap bool) error {
 		libp2p.EnableAutoRelay(),
 	}
 	if viper.GetBool("p2p.natservice.enable") {
-		h.logger.Debug("Start up NatService")
+		h.logger.Info("Start up NatService")
 		hostOpts = append(hostOpts, libp2p.EnableNATService())
 		limit := viper.GetInt("p2p.natservice.limit")
 		peerlimit := viper.GetInt("p2p.natservice.peerlimit")
@@ -533,7 +533,7 @@ func (h *Host) CreateSwarmWithID(ctx context.Context, id SwarmID, states []State
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
 
-	swarm, err := newSwarm(ctx, h, id, states, true, NoPeers())
+	swarm, err := newSwarm(ctx, h, id, states, true, NoPeers(), h.logger.Named("Swarm"))
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to setup new swarm")
 	}
@@ -548,7 +548,7 @@ func (h *Host) JoinSwarm(ctx context.Context, id SwarmID, states []State, knownP
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
 
-	swarm, err := newSwarm(ctx, h, id, states, false, knownPeers)
+	swarm, err := newSwarm(ctx, h, id, states, false, knownPeers, h.logger.Named("Swarm"))
 	if err != nil {
 		return swarm, utils.StackError(err, "Unable to setup new swarm")
 	}

@@ -10,6 +10,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"
+	hclog "github.com/hashicorp/go-hclog"
 	uuid "github.com/satori/go.uuid"
 )
 
@@ -43,9 +44,10 @@ type DocumentHandler struct {
 	//document handling
 	documents []Document
 	mutex     *sync.RWMutex
+	logger    hclog.Logger
 }
 
-func NewDocumentHandler(router *connection.Router, host *p2p.Host) (*DocumentHandler, error) {
+func NewDocumentHandler(router *connection.Router, host *p2p.Host, logger hclog.Logger) (*DocumentHandler, error) {
 
 	mutex := &sync.RWMutex{}
 	client, err := router.GetLocalClient("document")
@@ -59,6 +61,7 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host) (*DocumentHan
 		host:      host,
 		documents: make([]Document, 0),
 		mutex:     mutex,
+		logger:    logger,
 	}
 
 	//here we create all general document related RPCs and Topic
@@ -97,7 +100,7 @@ func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (D
 
 	//create the document
 	id := uuid.NewV4().String()
-	doc, err := NewDocument(ctx, self.router, self.host, cid, id, false)
+	doc, err := NewDocument(ctx, self.router, self.host, cid, id, false, self.logger.Named("Document"))
 	if err != nil {
 		return Document{}, utils.StackError(err, "Unable to create document")
 	}
@@ -164,7 +167,7 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	}
 
 	//create the document by joining it
-	doc, err := NewDocument(ctx, self.router, self.host, cid, docID, true)
+	doc, err := NewDocument(ctx, self.router, self.host, cid, docID, true, self.logger.Named("Document"))
 	if err != nil {
 		return utils.StackError(err, "Unable to create new document")
 	}

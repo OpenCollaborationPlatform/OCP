@@ -86,7 +86,7 @@ func (self *Node) Start() error {
 	}
 
 	//load the document component
-	dh, err := document.NewDocumentHandler(self.Router, self.Host)
+	dh, err := document.NewDocumentHandler(self.Router, self.Host, self.logger.Named("DocHandler"))
 	if err != nil {
 		err = utils.StackError(err, "Unable to load document handler")
 		self.logger.Error(err.Error())

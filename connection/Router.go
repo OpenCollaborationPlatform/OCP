@@ -44,7 +44,7 @@ func (self *Router) Start(quit chan string) error {
 		},
 	}
 
-	stdLogger := self.logger.StandardLogger(&hclog.StandardLoggerOptions{ForceLevel: hclog.Debug})
+	stdLogger := self.logger.StandardLogger(&hclog.StandardLoggerOptions{ForceLevel: hclog.Trace})
 	nxr, err := nxrouter.NewRouter(routerConfig, stdLogger)
 
 	self.router = nxr

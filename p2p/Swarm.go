@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/ickby/CollaborationNode/utils"
 	cid "github.com/ipfs/go-cid"
 	mh "github.com/multiformats/go-multihash"
@@ -49,6 +50,7 @@ type Swarm struct {
 	conf   SwarmConfiguration
 	ctx    context.Context
 	cancel context.CancelFunc
+	logger hclog.Logger
 
 	//some internal data
 	path string
@@ -99,7 +101,7 @@ func NoPeers() []PeerID {
 //states:		All states that shall be shared by the swarm
 //bootstrap:		True if this is a new swarm and should be startup, false if we join an existing swarm
 //knownPeers:	A list of known peers that are in the swarm (only relevant if bootstrap=false)
-func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, bootstrap bool, knownPeers []PeerID) (*Swarm, error) {
+func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, bootstrap bool, knownPeers []PeerID, logger hclog.Logger) (*Swarm, error) {
 
 	//the context to use for all goroutines
 	swarmctx, cancel := context.WithCancel(context.Background())
@@ -111,6 +113,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 		ctx:    swarmctx,
 		cancel: cancel,
 		path:   filepath.Join(host.path, "Documents", string(id)),
+		logger: logger,
 	}
 
 	//ensure our folder exist
@@ -231,7 +234,9 @@ func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error
 	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
 
 	if err == nil {
-		s.Event.Publish("peerAdded", pid, state)
+		s.Event.Publish("peerAdded", pid.Pretty(), AuthStateToString(state))
+	} else {
+		s.logger.Debug("Adding peer failed", "peer", pid, "auth", state, "error", err)
 	}
 
 	return utils.StackOnError(err, "Unable to add conf update command to state")
@@ -241,6 +246,10 @@ func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
 
 	if !s.State.IsRunning() {
 		return newInternalError(Error_Setup, "Swarm not fully setup: cannot remove peer")
+	}
+
+	if peer == s.host.ID() {
+		return newUserError(Error_Operation_Invalid, "Cannot remove yourself")
 	}
 
 	//build the operation
@@ -253,7 +262,9 @@ func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
 	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
 
 	if err == nil {
-		s.Event.Publish("peerRemoved", peer)
+		s.Event.Publish("peerRemoved", peer.Pretty())
+	} else {
+		s.logger.Debug("Removing peer failed", "peer", peer, "error", err)
 	}
 
 	return utils.StackOnError(err, "Unable to add conf update command to state")
@@ -265,11 +276,16 @@ func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) er
 		return newInternalError(Error_Setup, "Swarm not fully setup: cannot remove peer")
 	}
 
+	if peer == s.host.ID() {
+		return newUserError(Error_Operation_Invalid, "Cannot change your own authorisation")
+	}
+
 	if !s.HasPeer(peer) {
 		return newUserError(Error_Operation_Invalid, "Peer is not in swarm, cannot change auth")
 	}
 
 	if s.PeerAuth(peer) == auth {
+		s.logger.Debug("Changing peer not needed, already has auth", "peer", peer, "auth", auth)
 		return nil
 	}
 
@@ -283,7 +299,13 @@ func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) er
 	_, err := s.State.AddCommand(ctx, "SwarmConfiguration", op.ToBytes())
 
 	if err == nil {
-		s.Event.Publish("peerAuthChanged", peer, auth)
+		s.logger.Debug("Changing peer worked", "peer", peer.Pretty(), "auth", AuthStateToString(auth))
+		err := s.Event.Publish("peerAuthChanged", peer.Pretty(), AuthStateToString(auth))
+		if err != nil {
+			s.logger.Error("Publishing changed auth event failed", "peer", peer.Pretty(), "auth", AuthStateToString(auth), "error", err)
+		}
+	} else {
+		s.logger.Debug("Changing peer failed", "peer", peer, "auth", auth, "error", err)
 	}
 
 	return utils.StackOnError(err, "Unable to add conf update command to state")
@@ -313,9 +335,12 @@ func (self *Swarm) GetPath() string {
 
 func (s *Swarm) Close(ctx context.Context) {
 
-	s.Event.Stop()
-	s.Data.Close()
+	//clear the datafolder (make sure this always happen, even on timeout)
+	defer os.RemoveAll(s.GetPath())
+
 	s.State.Close(ctx)
+	s.Data.Close()
+	s.Event.Stop()
 	s.cancel()
 
 	s.host.removeSwarm(s.ID)

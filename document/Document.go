@@ -13,6 +13,7 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"
+	hclog "github.com/hashicorp/go-hclog"
 )
 
 type Document struct {
@@ -28,9 +29,10 @@ type Document struct {
 	cid           utils.Cid
 	datastructure Datastructure
 	ID            string
+	logger        hclog.Logger
 }
 
-func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host, dml utils.Cid, id string, join bool) (Document, error) {
+func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host, dml utils.Cid, id string, join bool, logger hclog.Logger) (Document, error) {
 
 	//lets create the folder for the document
 	path := filepath.Join(host.GetPath(), "Documents", id)
@@ -91,6 +93,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 		cid:           dml,
 		docCtx:        docCtx,
 		ctxCnl:        ctxCnl,
+		logger:        logger,
 	}
 
 	errS := []error{}
@@ -157,6 +160,7 @@ func (self Document) handleEvent(topic string) error {
 			for i, argument := range evt.Arguments {
 				args[i] = argument
 			}
+			self.logger.Debug("Emit event", "uri", uri, "arguments", args)
 			client.Publish(uri, wamp.Dict{}, args, wamp.Dict{})
 		}
 	}(sub, self.client, self.ID)

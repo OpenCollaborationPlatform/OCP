@@ -10,6 +10,7 @@ import (
 
 	"github.com/ickby/CollaborationNode/utils"
 
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p-core/protocol"
 	peer "github.com/libp2p/go-libp2p-peer"
 	"github.com/libp2p/go-libp2p-pubsub"
@@ -44,6 +45,7 @@ type Event struct {
 type Subscription struct {
 	sub           *pubsub.Subscription
 	authorisation *authorizer
+	logger        hclog.Logger
 }
 
 //blocks till a event arrives, the context is canceled or the subscription itself
@@ -65,6 +67,8 @@ func (self Subscription) Next(ctx context.Context) (*Event, error) {
 		} else if self.authorisation.peerIsAuthorized(self.sub.Topic(), PeerID(msg.GetFrom())) {
 			//the event publisher is allowed to post this event
 			return self.eventFromMessage(msg)
+		} else {
+			self.logger.Debug("Received event from unauthorized peer", "topic", self.sub.Topic(), "peer", PeerID(msg.GetFrom()).Pretty())
 		}
 		//the posted message is not allowed to reach us. lets go on with waiting for a massage.
 	}
@@ -125,13 +129,14 @@ func newHostEventService(host *Host) (*hostEventService, error) {
 		err = wrapInternalError(err, Error_Setup)
 	}
 
-	return &hostEventService{ps, cncl, auth}, err
+	return &hostEventService{ps, cncl, auth, host.logger.Named("Event")}, err
 }
 
 type hostEventService struct {
 	service *pubsub.PubSub
 	cancel  context.CancelFunc
 	auth    *authorizer
+	logger  hclog.Logger
 }
 
 func (self *hostEventService) Subscribe(topic string) (Subscription, error) {
@@ -143,7 +148,7 @@ func (self *hostEventService) Subscribe(topic string) (Subscription, error) {
 	sub, err := self.service.Subscribe(topic)
 	err = wrapConnectionError(err, Error_Process)
 
-	return Subscription{sub, nil}, err
+	return Subscription{sub, nil, self.logger}, err
 }
 
 func (self *hostEventService) Publish(topic string, args ...interface{}) error {
@@ -176,13 +181,14 @@ type swarmEventService struct {
 	service *pubsub.PubSub
 	swarm   *Swarm
 	auth    *authorizer
+	logger  hclog.Logger
 }
 
 func newSwarmEventService(swarm *Swarm) *swarmEventService {
 
 	hostservice := swarm.host.Event
 	auth := hostservice.auth
-	return &swarmEventService{hostservice.service, swarm, auth}
+	return &swarmEventService{hostservice.service, swarm, auth, swarm.logger.Named("Event")}
 }
 
 //Subscribe to a topic which requires a certain authorisation state
@@ -199,7 +205,7 @@ func (self *swarmEventService) Subscribe(topic string) (Subscription, error) {
 	sub, err := self.service.Subscribe(topic)
 	err = wrapConnectionError(err, Error_Process)
 
-	return Subscription{sub, self.auth}, err
+	return Subscription{sub, self.auth, self.logger}, err
 }
 
 //Publish to a topic which requires a certain authorisation state. It must be the same state the listeners

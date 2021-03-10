@@ -6,6 +6,7 @@ import (
 
 	"github.com/ickby/CollaborationNode/utils"
 
+	hclog "github.com/hashicorp/go-hclog"
 	gorpc "github.com/libp2p/go-libp2p-gorpc"
 	peer "github.com/libp2p/go-libp2p-peer"
 	protocol "github.com/libp2p/go-libp2p-protocol"
@@ -19,21 +20,25 @@ type hostRpcService struct {
 	client    *gorpc.Client //the server we use to issue rpc calls
 	server    *gorpc.Server //the server handling all RPC registration/messaging
 	authorize *authorizer   //shared authorizer struct
+	logger    hclog.Logger
 }
 
 //setup a new RpcService on the host and starts it
 func newRpcService(host *Host) *hostRpcService {
 
 	//build the authorisation function
+	logger := host.logger.Named("RPC")
 	auther := newAuthorizer()
 	fnc := func(pid peer.ID, service string, function string) bool {
-		return auther.peerIsAuthorized(service, PeerID(pid))
+		auth := auther.peerIsAuthorized(service, PeerID(pid))
+		logger.Debug("Authorisation checked", "peer", pid.Pretty(), "service", service, "function", function, "result", auth)
+		return auth
 	}
 
 	server := gorpc.NewServer(host.host, protocolID, gorpc.WithAuthorizeFunc(fnc))
 	client := gorpc.NewClientWithServer(host.host, protocolID, server)
 
-	return &hostRpcService{client, server, auther}
+	return &hostRpcService{client, server, auther, logger}
 }
 
 func (self *hostRpcService) Register(rcvr interface{}) error {

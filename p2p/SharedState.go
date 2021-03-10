@@ -10,6 +10,7 @@ import (
 	"github.com/ickby/CollaborationNode/p2p/replica"
 	"github.com/ickby/CollaborationNode/utils"
 
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p-core/peer"
 )
 
@@ -88,10 +89,11 @@ func (self *ReplicaReadAPI) Leave(ctx context.Context, peer PeerID, ret *struct{
 *******************************************************************************/
 
 type sharedStateService struct {
-	swarm *Swarm
-	rep   *replica.Replica
-	api   ReplicaAPI
-	rApi  ReplicaReadAPI
+	swarm  *Swarm
+	rep    *replica.Replica
+	api    ReplicaAPI
+	rApi   ReplicaReadAPI
+	logger hclog.Logger
 }
 
 func newSharedStateService(swarm *Swarm) (*sharedStateService, error) {
@@ -103,7 +105,7 @@ func newSharedStateService(swarm *Swarm) (*sharedStateService, error) {
 		return nil, utils.StackError(err, "Unable to create replica")
 	}
 
-	return &sharedStateService{swarm, rep, ReplicaAPI{}, ReplicaReadAPI{}}, nil
+	return &sharedStateService{swarm, rep, ReplicaAPI{}, ReplicaReadAPI{}, swarm.logger.Named("State")}, nil
 }
 
 func (self *sharedStateService) IsRunning() bool {
@@ -182,14 +184,22 @@ func (self *sharedStateService) Close(ctx context.Context) {
 		if err == nil {
 			err = self.swarm.host.EnsureConnection(ctx, PeerID(leader))
 			if err != nil {
+				self.logger.Error("Unable to connect to leader on leave, hard shutdown")
+				self.rep.Shutdown(ctx)
 				return
 			}
 
 			var ret interface{}
-			self.swarm.Rpc.CallContext(ctx, leader, "ReplicaReadAPI", "Leave", self.swarm.host.ID(), &ret)
+			err := self.swarm.Rpc.CallContext(ctx, leader, "ReplicaReadAPI", "Leave", self.swarm.host.ID(), &ret)
+			if err != nil {
+				self.logger.Error("Leaving replication failed", "error", err)
+			} else {
+				self.logger.Debug("Left replication")
+			}
 			self.rep.Close(ctx)
 		}
 	} else {
+		self.logger.Debug("Leaving as last peer, hard shutdown")
 		self.rep.Shutdown(ctx)
 	}
 }
@@ -292,10 +302,12 @@ func (self *sharedStateService) eventLoop(channel chan replica.ReplicaPeerEvent)
 	for evt := range channel {
 
 		if evt.Event == replica.EVENT_ADDED {
-			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer, true)
+			self.logger.Debug("Replica peers changed", "peer", evt.Peer.Pretty(), "action", "added")
+			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer.Pretty(), true)
 
 		} else if evt.Event == replica.EVENT_REMOVED {
-			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer, false)
+			self.logger.Debug("Replica peers changed", "peer", evt.Peer.Pretty(), "action", "removed")
+			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer.Pretty(), false)
 		}
 	}
 }
