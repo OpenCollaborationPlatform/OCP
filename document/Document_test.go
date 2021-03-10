@@ -224,7 +224,7 @@ func TestDocumentTwoNodes(t *testing.T) {
 				uri := "ocp.documents." + docID + ".addPeer"
 				_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{host2.ID().Pretty(), "write"}, wamp.Dict{}, nil)
 				So(err, ShouldBeNil)
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(50 * time.Millisecond)
 				So(evtC2.events, ShouldHaveLength, 1)
 				So(evtC21.events, ShouldHaveLength, 1)
 
@@ -304,6 +304,7 @@ func TestDocumentTwoNodes(t *testing.T) {
 					uri := "ocp.documents." + docID + ".removePeer"
 					_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{host2.ID().Pretty()}, wamp.Dict{}, nil)
 					So(err, ShouldBeNil)
+					time.Sleep(100 * time.Millisecond)
 					So(evtC21.events, ShouldHaveLength, 2)
 
 					uri = "ocp.documents.invitations"
@@ -318,6 +319,7 @@ func TestDocumentTwoNodes(t *testing.T) {
 					uri := "ocp.documents.close"
 					_, err := client1.Call(ctx, uri, wamp.Dict{}, wamp.List{docID}, wamp.Dict{}, nil)
 					So(err, ShouldBeNil)
+					time.Sleep(100 * time.Millisecond)
 					So(evtC21.events, ShouldHaveLength, 2)
 
 					uri = "ocp.documents.invitations"

@@ -83,7 +83,7 @@ func TestDatastructure(t *testing.T) {
 		defer host.Stop(context.Background())
 		baseHost.SetMultipleAdress(host.ID(), host.OwnAddresses())
 		host.SetMultipleAdress(baseHost.ID(), baseHost.OwnAddresses())
-		host.Connect(context.Background(), baseHost.ID())
+		host.Connect(context.Background(), baseHost.ID(), false)
 
 		//and for the swarm!
 		id := uuid.NewV4().String()
@@ -275,7 +275,7 @@ func TestDatastructureData(t *testing.T) {
 		defer host.Stop(context.Background())
 		baseHost.SetMultipleAdress(host.ID(), host.OwnAddresses())
 		host.SetMultipleAdress(baseHost.ID(), baseHost.OwnAddresses())
-		host.Connect(context.Background(), baseHost.ID())
+		host.Connect(context.Background(), baseHost.ID(), false)
 
 		//and for the swarm!
 		id := uuid.NewV4().String()
