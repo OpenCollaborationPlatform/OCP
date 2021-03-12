@@ -94,21 +94,22 @@ func TestSwarmRPC(t *testing.T) {
 
 	Convey("Setting up two random hosts with swarms,", t, func() {
 
+		ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
 		h1, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h1.Stop(context.Background())
+		defer h1.Stop(ctx)
 		h2, err := temporaryHost(path)
 		So(err, ShouldBeNil)
-		defer h2.Stop(context.Background())
+		defer h2.Stop(ctx)
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-		h1.Connect(context.Background(), h2.ID(), true)
+		h1.Connect(ctx, h2.ID(), true)
 
 		Convey("Setting up a swarm without any peers", func() {
 
-			sw1, err := h1.CreateSwarm(context.Background(), NoStates())
-			defer sw1.Close(context.Background())
+			sw1, err := h1.CreateSwarm(ctx, NoStates())
+			defer sw1.Close(ctx)
 			if ocperr, ok := err.(utils.OCPError); ok {
 				fmt.Println(ocperr.ErrorWithStacktrace())
 			}

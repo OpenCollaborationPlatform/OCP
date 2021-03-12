@@ -136,8 +136,10 @@ func TestSwarmEvent(t *testing.T) {
 		Convey("Creating a swarm on the first host", func() {
 
 			sw1, err := h1.CreateSwarm(context.Background(), NoStates())
-			defer sw1.Close(context.Background())
 			So(err, ShouldBeNil)
+			So(sw1, ShouldNotBeNil)
+			defer sw1.Close(context.Background())
+
 			So(sw1.Event.RegisterTopic("testtopic", AUTH_READONLY), ShouldBeNil)
 			time.Sleep(50 * time.Millisecond)
 

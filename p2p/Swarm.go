@@ -114,6 +114,10 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 		cancel: cancel,
 		path:   filepath.Join(host.path, "Documents", string(id)),
 		logger: logger,
+		Event:  nil,
+		State:  nil,
+		Data:   nil,
+		Rpc:    nil,
 	}
 
 	//ensure our folder exist
@@ -356,20 +360,32 @@ func (self *Swarm) GetPath() string {
 
 func (s *Swarm) Close(ctx context.Context) {
 
+	if !s.State.IsRunning() {
+		return
+	}
+
 	//clear the datafolder (make sure this always happen, even on timeout)
-	defer os.RemoveAll(s.GetPath())
+	path := s.GetPath()
+	defer os.RemoveAll(path)
 
-	s.State.Close(ctx)
-	s.Data.Close()
-	s.Event.Stop()
+	if s.State != nil {
+		s.State.Close(ctx)
+	}
+	if s.Data != nil {
+		s.Data.Close()
+	}
+	if s.Event != nil {
+		s.Event.Stop()
+	}
 	s.cancel()
-
-	s.host.removeSwarm(s.ID)
 
 	//unprotect all peers
 	for _, peer := range s.host.host.Peerstore().PeersWithAddrs() {
 		s.host.host.ConnManager().Unprotect(peer, string(s.ID))
 	}
+
+	s.host.removeSwarm(s.ID)
+	s.logger.Debug("Swarm closed successfully")
 }
 
 func (s *Swarm) GetHost() *Host {

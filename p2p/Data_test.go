@@ -46,7 +46,7 @@ func TestBitswap(t *testing.T) {
 
 		Convey("Setting up Bitswaps for two random hosts,", func() {
 
-			ctx := context.Background()
+			ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
 
 			h1, err := randomHostWithoutDataSerivce()
 			So(err, ShouldBeNil)
@@ -56,7 +56,7 @@ func TestBitswap(t *testing.T) {
 			bitswap1 := bs.New(ctx, network1, bstore1)
 
 			defer bitswap1.Close()
-			defer h1.Stop(context.Background())
+			defer h1.Stop(ctx)
 
 			h2, err := randomHostWithoutDataSerivce()
 			So(err, ShouldBeNil)
@@ -65,11 +65,11 @@ func TestBitswap(t *testing.T) {
 			network2 := bsnetwork.NewFromIpfsHost(h2.host, routing2)
 			bitswap2 := bs.New(ctx, network2, bstore2)
 			defer bitswap2.Close()
-			defer h2.Stop(context.Background())
+			defer h2.Stop(ctx)
 
 			h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 			h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-			h1.Connect(context.Background(), h2.ID(), false)
+			h1.Connect(ctx, h2.ID(), false)
 
 			Convey("Adding/retreiving blocks shall be possible", func() {
 
@@ -77,7 +77,7 @@ func TestBitswap(t *testing.T) {
 
 				err = bitswap1.HasBlock(block)
 				So(err, ShouldBeNil)
-				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+				ctx, _ := context.WithTimeout(ctx, 3*time.Second)
 
 				//get block from other host
 				retblock, err := bitswap2.GetBlock(ctx, block.Cid())
@@ -101,15 +101,16 @@ func TestDataService(t *testing.T) {
 		defer os.RemoveAll(path) //ake sure empty bitswaps are created each run
 
 		//Setup the hosts
+		ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
 		h1, _ := temporaryHost(path)
-		defer h1.Stop(context.Background())
+		defer h1.Stop(ctx)
 
 		h2, _ := temporaryHost(path)
-		defer h2.Stop(context.Background())
+		defer h2.Stop(ctx)
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-		h1.Connect(context.Background(), h2.ID(), true)
+		h1.Connect(ctx, h2.ID(), true)
 
 		Convey("Adding small data to one host should be possible", func() {
 
@@ -378,7 +379,7 @@ func TestDataStreaming(t *testing.T) {
 
 			data := RepeatableData(10)
 
-			ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 			id, err := h1.Data.AddData(ctx, data)
 			So(err, ShouldBeNil)
 
@@ -468,23 +469,25 @@ func TestSwarmDataService(t *testing.T) {
 		defer os.RemoveAll(path) //ake sure empty bitswaps are created each run
 
 		//Setup the hosts
+		ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
 		h1, _ := temporaryHost(path)
-		defer h1.Stop(context.Background())
+		defer h1.Stop(ctx)
 
 		h2, _ := temporaryHost(path)
-		defer h1.Stop(context.Background())
+		defer h2.Stop(ctx)
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-		h1.Connect(context.Background(), h2.ID(), true)
+		h1.Connect(ctx, h2.ID(), true)
 
 		//setup swarms
-		sw1, err := h1.CreateSwarm(context.Background(), NoStates())
-		defer sw1.Close(context.Background())
+		sw1, err := h1.CreateSwarm(ctx, NoStates())
 		So(err, ShouldBeNil)
-		sw1.AddPeer(context.Background(), h2.ID(), AUTH_READWRITE)
-		sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, NoStates(), SwarmPeers(h1.ID()))
+		defer sw1.Close(ctx)
+		sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
+		sw2, err := h2.JoinSwarm(ctx, sw1.ID, NoStates(), SwarmPeers(h1.ID()))
 		So(err, ShouldBeNil)
+		defer sw2.Close(ctx)
 
 		Convey("Adding small data to one host swarm should be possible", func() {
 
@@ -493,7 +496,7 @@ func TestSwarmDataService(t *testing.T) {
 			testfilepath := filepath.Join(path, "testfile")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
-			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, _ := context.WithTimeout(ctx, 10*time.Second)
 			res, err := sw1.Data.Add(ctx, testfilepath)
 			So(err, ShouldBeNil)
 			time.Sleep(150 * time.Millisecond)
@@ -540,7 +543,7 @@ func TestSwarmDataService(t *testing.T) {
 				time.Sleep(100 * time.Millisecond)
 
 				Convey("it is not accessible in any host", func() {
-					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+					ctx, _ := context.WithTimeout(ctx, 1*time.Second)
 					err := sw1.Data.Fetch(ctx, res)
 					So(err, ShouldNotBeNil)
 					err = sw2.Data.Fetch(ctx, res)
@@ -559,7 +562,7 @@ func TestSwarmDataService(t *testing.T) {
 
 			Convey("Adding data to one swarm should be possible", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+				ctx, _ := context.WithTimeout(ctx, 3*time.Second)
 				res, err := sw1.Data.Add(ctx, testfilepath)
 				So(err, ShouldBeNil)
 				time.Sleep(100 * time.Millisecond)
@@ -575,12 +578,12 @@ func TestSwarmDataService(t *testing.T) {
 
 				Convey("and retreiving from the other shall be possible too.", func() {
 
-					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+					ctx, _ := context.WithTimeout(ctx, 3*time.Second)
 					reader, err := sw2.Data.Get(ctx, res)
 					So(err, ShouldBeNil)
 					io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
 
-					ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
+					ctx, _ = context.WithTimeout(ctx, 3*time.Second)
 					reader, err = sw2.Data.Get(ctx, res)
 					So(err, ShouldBeNil)
 
@@ -597,7 +600,7 @@ func TestSwarmDataService(t *testing.T) {
 						time.Sleep(100 * time.Millisecond)
 
 						Convey("it is not accessible in any host", func() {
-							ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
+							ctx, _ := context.WithTimeout(ctx, 1*time.Second)
 							err := sw1.Data.Fetch(ctx, res)
 							So(err, ShouldNotBeNil)
 							err = sw2.Data.Fetch(ctx, res)
@@ -637,7 +640,7 @@ func TestSwarmDataService(t *testing.T) {
 
 			Convey("Adding a directory with files only should work", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+				ctx, _ := context.WithTimeout(ctx, 5*time.Second)
 				res2, err := sw1.Data.Add(ctx, dirpath2)
 				So(err, ShouldBeNil)
 				time.Sleep(100 * time.Millisecond)

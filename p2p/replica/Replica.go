@@ -95,6 +95,7 @@ func (self *Replica) Join() error {
 	config.LocalID = raft.ServerID(self.host.ID().Pretty())
 	config.LogOutput = ioutil.Discard
 	config.Logger = nil
+	config.ShutdownOnRemove = true
 
 	// Instantiate the Raft systems.
 	ra, err := raft.NewRaft(config, self.state, self.logs, self.confs, self.snaps, transport)
@@ -144,50 +145,74 @@ func (self *Replica) IsRunning() bool {
 	return self.rep.State() != raft.Shutdown
 }
 
+func (self *Replica) cleanup() {
+
+	//remove the observers
+	self.rep.DeregisterObserver(self.obs)
+	close(self.obsCh) //evtCh is closed when eventLoop closes
+
+	//close the stores
+	store, _ := self.logs.(*raftbolt.BoltStore)
+	store.Close()
+	self.rep = nil
+}
+
 //warning: only close after removing ourself from the cluster!
 func (self *Replica) Close(ctx context.Context) error {
 
+	//Shutdown idea:
+	//1. remove from large cluster so that we are a single peer cluster (user responsibility)
+	//2. remove ourself from the one peer cluster (happens in this function)
+	//3. wait till automatic shutdown occured
+
 	if self.rep != nil {
 
-		//close the stores after shutdown
-		defer func() {
-			store, _ := self.logs.(*raftbolt.BoltStore)
-			store.Close()
-			self.rep = nil
-		}()
-
-		//remove the observers
-		self.rep.DeregisterObserver(self.obs)
-		close(self.obsCh)
-		close(self.evtCh)
+		//internal states cleanup
+		defer self.cleanup()
 
 		//We shut down automatically when we get removed from conf (due to default conf option)
 		//all this function does is to wait till we are shutdown to make sure we are
 		//stil lavailable for the remove conf change
-
 		obsCh := make(chan raft.Observation, 1)
 		observer := raft.NewObserver(obsCh, false, nil)
 		self.rep.RegisterObserver(observer)
+		defer close(obsCh)
 		defer self.rep.DeregisterObserver(observer)
+
+		//remove ourself as last peer!
+		peerDec := peer.IDB58Encode(self.host.ID())
+		rem := self.rep.RemovePeer(raft.ServerAddress(peerDec))
+		err := rem.Error()
+		if err != nil {
+			//failed, need hard shutdown
+			shut := self.rep.Shutdown()
+			return shut.Error()
+		}
 
 		//check after register observer just to make sure we do not miss a change
 		if self.rep.State() == raft.Shutdown {
 			return nil
 		}
 
+		fmt.Printf("\nwait for shutdown while being %v: %v\n", self.rep.State().String(), self.host.ID().Pretty())
 		for {
 			select {
 			case obs := <-obsCh:
-				switch obs.Data.(type) {
+				switch state := obs.Data.(type) {
 				case raft.RaftState:
-					state := obs.Data.(raft.RaftState)
+					fmt.Printf("\nState changed: %v\n", state.String())
 					if state == raft.Shutdown {
 						return nil
 					}
 				}
 			case <-ctx.Done():
+				fmt.Printf("timeout\n")
 				//We need to force the shutdown!
-				self.rep.Shutdown()
+				shut := self.rep.Shutdown()
+				err := shut.Error()
+				if err != nil {
+					return wrapInternalError(err, Error_Process)
+				}
 			}
 		}
 	}
@@ -200,36 +225,43 @@ func (self *Replica) Close(ctx context.Context) error {
 func (self *Replica) Shutdown(ctx context.Context) error {
 
 	if self.IsRunning() {
+
+		//internal states cleanup
+		defer self.cleanup()
+
 		shut := self.rep.Shutdown()
 		err := shut.Error()
 		if err != nil {
 			return wrapInternalError(err, Error_Process)
 		}
-		return self.Close(ctx)
 	}
 	return nil
 }
 
 func (self *Replica) GetLeader(ctx context.Context) (peer.ID, error) {
 
+	obsCh := make(chan raft.Observation, 1)
+	observer := raft.NewObserver(obsCh, false, nil)
+	self.rep.RegisterObserver(observer)
+	defer close(obsCh)
+	defer self.rep.DeregisterObserver(observer)
+
 	leader := self.rep.Leader()
 	if leader == "" {
-
-		obsCh := make(chan raft.Observation, 1)
-		observer := raft.NewObserver(obsCh, false, nil)
-		self.rep.RegisterObserver(observer)
-		defer self.rep.DeregisterObserver(observer)
-
 		for {
 			select {
 			case obs := <-obsCh:
-				switch obs.Data.(type) {
-				case raft.RaftState:
-					if self.rep.Leader() != "" {
-						p, err := peer.IDB58Decode(string(self.rep.Leader()))
-						return p, wrapInternalError(err, Error_Invalid_Data)
+				switch o := obs.Data.(type) {
+				case raft.LeaderObservation:
+					pid, err := peer.IDB58Decode(string(o.Leader))
+					if err != nil {
+						return peer.ID(""), wrapInternalError(err, Error_Invalid_Data)
 					}
+					return pid, nil
+				default:
+					continue
 				}
+
 			case <-ctx.Done():
 				return peer.ID(""), newConnectionError(Error_Process, "Timed out while waiting for leader")
 			}
@@ -311,6 +343,39 @@ func (self *Replica) DisconnectPeer(ctx context.Context, pid peer.ID) error {
 	return newConnectionError(Error_Process, "Something bad happend")
 }
 
+func (self *Replica) TransferLeadership(ctx context.Context) (peer.ID, error) {
+
+	obsCh := make(chan raft.Observation, 1)
+	observer := raft.NewObserver(obsCh, false, nil)
+	self.rep.RegisterObserver(observer)
+	defer close(obsCh)
+	defer self.rep.DeregisterObserver(observer)
+
+	transfer := self.rep.LeadershipTransfer()
+	err := transfer.Error()
+	if err != nil {
+		return peer.ID(""), newInternalError(Error_Process, "Unable to transfer leadership before removing self as leader")
+	}
+	//wait for new leader
+	for {
+		select {
+		case obs := <-obsCh:
+			switch o := obs.Data.(type) {
+			case raft.LeaderObservation:
+				pid, err := peer.IDB58Decode(string(o.Leader))
+				if err != nil {
+					continue
+				}
+				return pid, err
+			default:
+				continue
+			}
+		case <-ctx.Done():
+			return peer.ID(""), newConnectionError(Error_Process, "Timeout while leadership transfer")
+		}
+	}
+}
+
 func (self *Replica) IsLastPeer(pid peer.ID) (bool, error) {
 
 	future := self.rep.GetConfiguration()
@@ -334,34 +399,46 @@ func (self *Replica) IsLastPeer(pid peer.ID) (bool, error) {
 	return pid == serverpid, nil
 }
 
-func (self *Replica) AddCommand(ctx context.Context, op Operation) (interface{}, error) {
+func (self *Replica) CreateResultChannel(opID string) (chan interface{}, error) {
+
+	//track application of op
+	return self.state.CreateResultChan(opID)
+}
+
+func (self *Replica) CloseResultChan(opID string) {
+
+	//track application of op
+	self.state.CloseResultChan(opID)
+}
+
+func (self *Replica) AddCommand(ctx context.Context, op Operation) error {
 
 	duration := durationFromContext(ctx)
 
-	//track application of op
-	doneC := make(chan struct{}, 1)
-	self.state.SetDoneChan(op.OpID, doneC)
-
-	//run till success or cancelation
-	for {
+	//rerun the op till ctx closes, max 3 retries (to not stall forever)
+	for i := 0; i < 3; i++ {
 		future := self.rep.Apply(op.ToBytes(), duration)
 		err := future.Error()
-		if err != nil && err != raft.ErrEnqueueTimeout {
-			return nil, wrapInternalError(err, Error_Process)
+		//no error means success
+		if err == nil {
+			return nil
+		}
+		//error other than timeout is not recoverable
+		if err != raft.ErrEnqueueTimeout {
+			return wrapInternalError(err, Error_Process)
 		}
 
+		//in case the context has no timeout raft used the default one. This could
+		//mean we are here without context being canceled yet... check for that
 		select {
-		case <-doneC:
-			return future.Response(), nil
-
 		case <-ctx.Done():
-			return nil, newConnectionError(Error_Process, "Timeout on command processing")
+			return newConnectionError(Error_Process, "Command processing canceled")
 		default:
 			break
 		}
 	}
 
-	return nil, newConnectionError(Error_Process, "Something bad happend")
+	return newConnectionError(Error_Process, "Unable to reach majority of nodes")
 }
 
 func (self *Replica) AddState(name string, state State) error {
@@ -462,6 +539,7 @@ func (self *Replica) observationLoop() {
 			self.evtCh <- ReplicaPeerEvent{pid, evtType}
 		}
 	}
+	close(self.evtCh)
 }
 
 func durationFromContext(ctx context.Context) time.Duration {

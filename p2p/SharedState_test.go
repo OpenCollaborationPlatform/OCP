@@ -97,6 +97,8 @@ func TestBasicSharedState(t *testing.T) {
 
 	Convey("Setup swarms on two different hosts,", t, func() {
 
+		ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
+
 		h1, _ := temporaryHost(path)
 		defer h1.Stop(context.Background())
 
@@ -108,7 +110,6 @@ func TestBasicSharedState(t *testing.T) {
 
 		st1 := &testState{0}
 		sw1, err := h1.CreateSwarm(context.Background(), SwarmStates(st1))
-		defer sw1.Close(context.Background())
 		So(err, ShouldBeNil)
 		time.Sleep(50 * time.Millisecond)
 
@@ -119,11 +120,12 @@ func TestBasicSharedState(t *testing.T) {
 			sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
 			So(err, ShouldNotBeNil)
 			So(sw2, ShouldBeNil)
+
+			sw1.Close(ctx)
 		})
 
 		Convey("Adding the new to the initial swarm", func() {
 
-			ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
 			err := sw1.AddPeer(ctx, h2.ID(), AUTH_READWRITE)
 			So(err, ShouldBeNil)
 			So(sw1.HasPeer(h1.ID()), ShouldBeTrue)
@@ -131,7 +133,7 @@ func TestBasicSharedState(t *testing.T) {
 
 			Convey("Joining of the new swarm should work", func() {
 
-				sw2, err := h2.JoinSwarm(context.Background(), sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
+				sw2, err := h2.JoinSwarm(ctx, sw1.ID, SwarmStates(st2), SwarmPeers(h1.ID()))
 				time.Sleep(500 * time.Millisecond) //wait till replication finished
 				So(err, ShouldBeNil)
 				So(sw2.HasPeer(h1.ID()), ShouldBeTrue)
@@ -151,6 +153,9 @@ func TestBasicSharedState(t *testing.T) {
 
 						So(st1.value, ShouldEqual, 2)
 						So(st2.value, ShouldEqual, 2)
+
+						sw1.Close(ctx)
+						sw2.Close(ctx)
 					})
 				})
 
@@ -162,6 +167,7 @@ func TestBasicSharedState(t *testing.T) {
 
 						_, err := sw2.State.AddCommand(ctx, "testState", toByte(1))
 						So(err, ShouldBeNil)
+						sw2.Close(ctx)
 					})
 				})
 
@@ -173,6 +179,7 @@ func TestBasicSharedState(t *testing.T) {
 
 						_, err := sw1.State.AddCommand(ctx, "testState", toByte(1))
 						So(err, ShouldBeNil)
+						sw1.Close(ctx)
 					})
 				})
 			})
@@ -207,9 +214,9 @@ func TestConnectionStrategy(t *testing.T) {
 
 			st2 := &testState{0}
 			sw2, err := h2.CreateSwarm(context.Background(), SwarmStates(st2))
-			defer sw2.Close(context.Background())
 			So(err, ShouldBeNil)
 			So(sw2, ShouldNotBeNil)
+			defer sw2.Close(context.Background())
 			time.Sleep(50 * time.Millisecond)
 
 			err = sw2.AddPeer(closeCtx, h3.ID(), AUTH_READWRITE)

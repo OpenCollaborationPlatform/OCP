@@ -3,7 +3,6 @@ package replica
 import (
 	"bytes"
 	"encoding/gob"
-	"fmt"
 	"io"
 	"sync"
 
@@ -49,16 +48,16 @@ type State interface {
 
 //implements the raft FSM interface
 type multiState struct {
-	states   map[string]State
-	doneChan map[string]chan struct{}
-	mutex    sync.RWMutex
+	states     map[string]State
+	resultChan map[string]chan interface{}
+	mutex      sync.RWMutex
 }
 
 func newMultiState() *multiState {
 	return &multiState{
-		states:   make(map[string]State, 0),
-		doneChan: make(map[string]chan struct{}, 0),
-		mutex:    sync.RWMutex{},
+		states:     make(map[string]State, 0),
+		resultChan: make(map[string]chan interface{}, 0),
+		mutex:      sync.RWMutex{},
 	}
 }
 
@@ -73,17 +72,36 @@ func (self *multiState) Add(name string, state State) error {
 	return nil
 }
 
-func (self *multiState) SetDoneChan(opid string, c chan struct{}) {
+func (self *multiState) CreateResultChan(opid string) (chan interface{}, error) {
 	self.mutex.Lock()
 	defer self.mutex.Unlock()
-	self.doneChan[opid] = c
+
+	_, ok := self.resultChan[opid]
+	if ok {
+		return nil, newInternalError(Error_Operation_Invalid, "Operation ID has already registered channel")
+	}
+
+	c := make(chan interface{}, 1)
+	self.resultChan[opid] = c
+	return c, nil
+}
+
+func (self *multiState) CloseResultChan(opid string) {
+	self.mutex.Lock()
+	defer self.mutex.Unlock()
+
+	c, ok := self.resultChan[opid]
+	if ok {
+		close(c)
+		delete(self.resultChan, opid)
+	}
 }
 
 func (self *multiState) Apply(log *raft.Log) interface{} {
 
 	op, err := operationFromBytes(log.Data)
 	if err != nil {
-		return fmt.Errorf("Unable to decode command")
+		return newInternalError(Error_Invalid_Data, "Unable to decode command")
 	}
 
 	self.mutex.Lock()
@@ -91,16 +109,18 @@ func (self *multiState) Apply(log *raft.Log) interface{} {
 
 	_, has := self.states[op.State]
 	if !has {
-		return fmt.Errorf("No such state known, cannot apply")
+		return newInternalError(Error_Invalid_Data, "No such state known, cannot apply", "state", op.State)
 	}
 	result := self.states[op.State].Apply(op.Op)
 
-	c, ok := self.doneChan[op.OpID]
+	//also return in case its an error, as this is a valid command result
+	c, ok := self.resultChan[op.OpID]
 	if ok {
-		c <- struct{}{}
-		delete(self.doneChan, op.OpID)
+		c <- result
+		close(c) //buffered channel, the reader will receive the result
+		delete(self.resultChan, op.OpID)
 	}
-	return result
+	return nil
 }
 
 func (self *multiState) Snapshot() (raft.FSMSnapshot, error) {

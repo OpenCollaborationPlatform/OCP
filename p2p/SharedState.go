@@ -24,14 +24,14 @@ type ReplicaAPI struct {
 	rep *replica.Replica
 }
 
-func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, ret *interface{}) error {
+func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, ret *bool) error {
 
 	if !self.rep.IsRunning() {
 		return fmt.Errorf("Node not running: can't be the leader")
 	}
 
-	value, err := self.rep.AddCommand(ctx, op)
-	*ret = value
+	err := self.rep.AddCommand(ctx, op)
+	*ret = (err == nil)
 	return utils.StackOnError(err, "Unable to add command to replica")
 }
 
@@ -136,35 +136,38 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 	//build the operation
 	op := replica.NewOperation(state, cmd)
 
-	//fetch leader and call
-	for {
-		leader, err := self.rep.GetLeader(ctx)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to get leader for state")
-		}
+	//we use a default timeout to prevent stalling in case replica is in a deadlock
+	cmdCtx, _ := context.WithTimeout(ctx, 5*time.Second)
 
-		err = self.swarm.connect(ctx, PeerID(leader))
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to connect to leader")
-		}
-
-		var ret interface{}
-		err = self.swarm.Rpc.CallContext(ctx, leader, "ReplicaAPI", "AddCommand", op, &ret)
-		if err == nil {
-			return ret, nil
-		}
-
-		select {
-		case <-ctx.Done():
-			if err != nil {
-				return nil, utils.StackError(err, "Timout, no futher try on add command")
-			}
-			return nil, newConnectionError(Error_Process, "Command timed out")
-		default:
-			//if we are here the leader could not be called, but context is not expired. let's wait a bit before trying again
-			time.Sleep(100 * time.Millisecond)
-		}
+	leader, err := self.rep.GetLeader(cmdCtx)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to get leader for state")
 	}
+
+	err = self.swarm.connect(cmdCtx, PeerID(leader))
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to connect to leader")
+	}
+
+	resultC, err := self.rep.CreateResultChannel(op.OpID)
+	if err != nil {
+		return nil, newInternalError(Error_Setup, "Unable to receive result due to operation doubling")
+	}
+
+	var ret interface{}
+	err = self.swarm.Rpc.CallContext(cmdCtx, leader, "ReplicaAPI", "AddCommand", op, &ret)
+	if err != nil {
+		return nil, err
+	}
+
+	select {
+	case result := <-resultC:
+		return result, nil
+
+	case <-cmdCtx.Done():
+		return nil, newConnectionError(Error_Process, "Command timed out")
+	}
+
 	return nil, newConnectionError(Error_Process, "Not able to add command")
 }
 
@@ -175,16 +178,29 @@ func (self *sharedStateService) Close(ctx context.Context) {
 	}
 
 	//if we are connecteed we need to change that: remove our self from the cluster
-	//if we are the last peer in the cluster we simply shut down
 	isLast, err := self.rep.IsLastPeer(self.swarm.host.ID())
 	if !isLast && err == nil {
+		self.logger.Debug("Leaving replica with multiple active nodes")
 
 		//fetch leader and call him to leave
 		leader, err := self.rep.GetLeader(ctx)
-		if err == nil {
+		if err == nil && leader != PeerID("") {
+
+			//if we are leader we transfer leadership first
+			if leader == self.swarm.host.ID() {
+				self.logger.Debug("Leaving as leader, try to transfer leadership first")
+				leader, err = self.rep.TransferLeadership(ctx)
+				if err != nil {
+					self.logger.Warn("Leadership transfer before leave failed, hard shutdown", "error", err)
+					self.rep.Shutdown(ctx)
+					return
+				}
+			}
+
+			//call leader to remove us!
 			err = self.swarm.connect(ctx, PeerID(leader))
 			if err != nil {
-				self.logger.Error("Unable to connect to leader on leave, hard shutdown")
+				self.logger.Warn("Unable to connect to leader on leave, hard shutdown", "leader", leader.Pretty())
 				self.rep.Shutdown(ctx)
 				return
 			}
@@ -192,16 +208,17 @@ func (self *sharedStateService) Close(ctx context.Context) {
 			var ret interface{}
 			err := self.swarm.Rpc.CallContext(ctx, leader, "ReplicaReadAPI", "Leave", self.swarm.host.ID(), &ret)
 			if err != nil {
-				self.logger.Error("Leaving replication failed", "error", err)
+				self.logger.Warn("Leaving replication failed, hard shutdown", "leader", leader, "error", err)
+				self.rep.Shutdown(ctx)
+				return
 			} else {
-				self.logger.Debug("Left replication")
+				self.logger.Debug("Successfully left replication")
 			}
-			self.rep.Close(ctx)
 		}
-	} else {
-		self.logger.Debug("Leaving as last peer, hard shutdown")
-		self.rep.Shutdown(ctx)
 	}
+
+	self.logger.Debug("Close replica")
+	self.rep.Close(ctx)
 }
 
 func (self *sharedStateService) ActivePeers() ([]PeerID, error) {
@@ -310,6 +327,9 @@ func (self *sharedStateService) eventLoop(channel chan replica.ReplicaPeerEvent)
 		} else if evt.Event == replica.EVENT_REMOVED {
 			self.logger.Debug("Replica peers changed", "peer", evt.Peer.Pretty(), "action", "removed")
 			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer.Pretty(), false)
+
+		} else if evt.Event == replica.EVENT_LEADER {
+			self.logger.Debug("New Replica leader", "peer", evt.Peer.Pretty())
 		}
 	}
 	//cancel all still running connect calls

@@ -278,9 +278,15 @@ func (h *Host) Stop(ctx context.Context) error {
 	}
 
 	//stop swarms
+	wait := sync.WaitGroup{}
 	for _, swarm := range h.Swarms() {
-		swarm.Close(ctx)
+		wait.Add(1)
+		go func() {
+			swarm.Close(ctx)
+			wait.Done()
+		}()
 	}
+	wait.Wait()
 
 	//stop services
 	if h.Event != nil {

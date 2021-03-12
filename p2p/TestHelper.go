@@ -100,7 +100,8 @@ func temporaryHost(dir string) (*Host, error) {
 
 	//a logger to discard all logs (to not disturb print output)
 	testLogger := hclog.New(&hclog.LoggerOptions{
-		Output: ioutil.Discard,
+		//Output: ioutil.Discard,
+		Level: hclog.Warn,
 	})
 
 	//setup the correct url and port for the node
