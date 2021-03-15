@@ -2,6 +2,7 @@
 package utils
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,6 +15,9 @@ import (
 	"github.com/shibukawa/configdir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	nxclient "github.com/gammazero/nexus/v3/client"
+	"github.com/gammazero/nexus/v3/wamp"
 )
 
 var (
@@ -364,4 +368,79 @@ func RemoveConfigFile(name string) error {
 	err := os.Remove(path)
 
 	return err
+}
+
+// WAMP API for conf read/write
+type ConfigHandler struct {
+	client *nxclient.Client
+}
+
+func NewConfigAPI(client *nxclient.Client) *ConfigHandler {
+
+	handler := &ConfigHandler{client}
+	client.Register("ocp.config.read", handler.read, wamp.Dict{})
+	client.Register("ocp.config.write", handler.write, wamp.Dict{})
+	client.Register("ocp.config.keys", handler.keys, wamp.Dict{})
+
+	return handler
+}
+
+func (self *ConfigHandler) Close() {
+	self.client.Close()
+}
+
+func (self *ConfigHandler) read(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 1 {
+		err := NewError(User, "config", "invalid_argument", "Argument must be config key")
+		return ErrorToWampResult(err)
+	}
+
+	key, ok := wamp.AsString(inv.Arguments[0])
+	if !ok {
+		err := NewError(User, "config", "invalid_argument", "Argument must be config key as string")
+		return ErrorToWampResult(err)
+	}
+	val := viper.Get(key)
+	return nxclient.InvokeResult{Args: wamp.List{val}}
+}
+
+func (self *ConfigHandler) write(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 2 {
+		err := NewError(User, "config", "invalid_argument", "Arguments must be config key and value")
+		return ErrorToWampResult(err)
+	}
+
+	key, ok := wamp.AsString(inv.Arguments[0])
+	if !ok {
+		err := NewError(User, "config", "invalid_argument", "First argument must be config key as string")
+		return ErrorToWampResult(err)
+	}
+
+	//first check if it is a valid accessor
+	if !viper.IsSet(key) {
+		err := NewError(User, "config", "key_not_available", "Config has no such entry")
+		return ErrorToWampResult(err)
+	}
+
+	viper.Set(key, inv.Arguments[1])
+	err := viper.WriteConfig()
+	if err != nil {
+		err = NewError(User, "config", "operation_invalid", err.Error())
+		return ErrorToWampResult(err)
+	}
+
+	return nxclient.InvokeResult{}
+}
+
+func (self *ConfigHandler) keys(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 0 {
+		err := NewError(User, "config", "invalid_argument", "No arguments supportet")
+		return ErrorToWampResult(err)
+	}
+
+	keys := viper.AllKeys()
+	return nxclient.InvokeResult{Args: wamp.List{keys}}
 }

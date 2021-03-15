@@ -35,6 +35,7 @@ type Node struct {
 	//functionality
 	Documents *document.DocumentHandler //the handler for documents
 	Users     *user.UserHandler         //handler for users
+	Config    *utils.ConfigHandler      //handler for config API
 
 	//misc
 	logger  hclog.Logger
@@ -102,6 +103,10 @@ func (self *Node) Start() error {
 		return err
 	}
 	self.Users = uh
+
+	//add config API
+	client, _ := self.Router.GetLocalClient("config")
+	self.Config = utils.NewConfigAPI(client)
 
 	//make sure we get system signals
 	sigs := make(chan os.Signal)
