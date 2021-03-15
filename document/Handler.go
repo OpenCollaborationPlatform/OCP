@@ -142,7 +142,7 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host, logger hclog.
 	//start handling invitations
 	go dh.handleInvitationRequest(inviteSub)
 	go func() {
-		time.Sleep(1 * time.Second)
+		time.Sleep(3 * time.Second)
 		host.Event.Publish("Documents.InvitationRequest")
 	}()
 
@@ -432,11 +432,11 @@ func (self *DocumentHandler) handleInvitationRequest(sub p2p.Subscription) {
 		}
 
 		//send out the invites!
-		for _, invite := range self.invitations {
+		for _, invitation := range invite {
 			var ret bool
-			err := self.host.Rpc.Call(evt.Source, "DocumentAPI", "Invite", invite, &ret)
+			err := self.host.Rpc.Call(evt.Source, "DocumentAPI", "Invite", invitation, &ret)
 			if err != nil {
-				self.logger.Debug("Could not invite peer", "peer", evt.Source, "doc", invite)
+				self.logger.Debug("Could not invite peer", "peer", evt.Source, "doc", invitation)
 			}
 		}
 		self.mutex.RUnlock()
