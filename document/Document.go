@@ -111,6 +111,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.setPeerAuth", doc.ID), doc.setPeerAuth, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.getPeerAuth", doc.ID), doc.getPeerAuth, wamp.Dict{}))
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.listPeers", doc.ID), doc.listPeers, wamp.Dict{}))
+	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.hasMajority", doc.ID), doc.majority, wamp.Dict{}))
 
 	options := wamp.SetOption(wamp.Dict{}, wamp.OptDiscloseCaller, true)
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.view", doc.ID), doc.view, options))
@@ -380,6 +381,21 @@ func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclie
 	}
 
 	return nxclient.InvokeResult{Args: wamp.List{resargs}}
+}
+
+func (self Document) majority(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	if len(inv.Arguments) != 0 {
+		err := newUserError(Error_Arguments, "Function does not support arguments")
+		return utils.ErrorToWampResult(err)
+	}
+	if len(inv.ArgumentsKw) != 0 {
+		err := newUserError(Error_Arguments, "Function does not support arguments")
+		return utils.ErrorToWampResult(err)
+	}
+
+	hasM := self.swarm.State.HasMajority()
+	return nxclient.InvokeResult{Args: wamp.List{hasM}}
 }
 
 //							View Handling
