@@ -109,11 +109,11 @@ func TestSwarmRPC(t *testing.T) {
 		Convey("Setting up a swarm without any peers", func() {
 
 			sw1, err := h1.CreateSwarm(ctx, NoStates())
+			So(err, ShouldBeNil)
 			defer sw1.Close(ctx)
 			if ocperr, ok := err.(utils.OCPError); ok {
 				fmt.Println(ocperr.ErrorWithStacktrace())
 			}
-			So(err, ShouldBeNil)
 			time.Sleep(50 * time.Millisecond)
 
 			Convey("registering a read only reguirement service must work", func() {

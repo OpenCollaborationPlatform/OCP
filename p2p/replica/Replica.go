@@ -18,27 +18,12 @@ import (
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
 )
 
-type Event_Type int
-
-const (
-	EVENT_ADDED Event_Type = iota
-	EVENT_REMOVED
-	EVENT_LEADER
-)
-
-type ReplicaPeerEvent struct {
-	Peer  peer.ID
-	Event Event_Type
-}
-
 type Replica struct {
 	host  p2phost.Host
 	dht   *kaddht.IpfsDHT
 	state *multiState
 	rep   *raft.Raft
 	obs   *raft.Observer
-	obsCh chan raft.Observation
-	evtCh chan ReplicaPeerEvent
 	logs  raft.LogStore
 	confs raft.StableStore
 	snaps raft.SnapshotStore
@@ -72,7 +57,7 @@ func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT
 	//setup the state
 	state := newMultiState()
 
-	return &Replica{host, dht, state, nil, nil, nil, nil,
+	return &Replica{host, dht, state, nil, nil,
 		logStore, stableStore, snapshots, name}, nil
 }
 
@@ -102,13 +87,6 @@ func (self *Replica) Join() error {
 	if err != nil {
 		return wrapInternalError(err, Error_Setup)
 	}
-
-	//setup the default observers
-	self.evtCh = make(chan ReplicaPeerEvent, 10)
-	self.obsCh = make(chan raft.Observation, 10)
-	self.obs = raft.NewObserver(self.obsCh, true, nil)
-	ra.RegisterObserver(self.obs)
-	go self.observationLoop()
 
 	self.rep = ra
 	return nil
@@ -146,10 +124,6 @@ func (self *Replica) IsRunning() bool {
 }
 
 func (self *Replica) cleanup() {
-
-	//remove the observers
-	self.rep.DeregisterObserver(self.obs)
-	close(self.obsCh) //evtCh is closed when eventLoop closes
 
 	//close the stores
 	store, _ := self.logs.(*raftbolt.BoltStore)
@@ -509,37 +483,12 @@ func (self *Replica) ConnectedPeers() ([]peer.ID, error) {
 	return result, nil
 }
 
-func (self *Replica) EventChannel() chan ReplicaPeerEvent {
-	return self.evtCh
-}
-
-func (self *Replica) observationLoop() {
-
-	//stops when obsCh is closed
-	for obs := range self.obsCh {
-
-		switch obs := obs.Data.(type) {
-
-		case raft.LeaderObservation:
-			pid, err := peer.IDB58Decode(string(obs.Leader))
-			if err != nil {
-				continue
-			}
-			self.evtCh <- ReplicaPeerEvent{pid, EVENT_LEADER}
-
-		case raft.PeerObservation:
-			pid, err := peer.IDB58Decode(string(obs.Peer.Address))
-			if err != nil {
-				continue
-			}
-			evtType := EVENT_ADDED
-			if obs.Removed {
-				evtType = EVENT_REMOVED
-			}
-			self.evtCh <- ReplicaPeerEvent{pid, evtType}
-		}
+func (self *Replica) HasMajority() bool {
+	state := self.rep.State()
+	if state == raft.Candidate {
+		return false
 	}
-	close(self.evtCh)
+	return true
 }
 
 func durationFromContext(ctx context.Context) time.Duration {
@@ -550,7 +499,7 @@ func durationFromContext(ctx context.Context) time.Duration {
 		duration = deadline.Sub(time.Now())
 
 	} else {
-		duration = 2000 * time.Millisecond
+		duration = 3000 * time.Millisecond
 	}
 	return duration
 }

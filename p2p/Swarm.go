@@ -134,7 +134,7 @@ func newSwarm(ctx context.Context, host *Host, id SwarmID, states []State, boots
 	swarm.Event.RegisterTopic("peerAdded", AUTH_READWRITE)
 	swarm.Event.RegisterTopic("peerRemoved", AUTH_READWRITE)
 	swarm.Event.RegisterTopic("peerAuthChanged", AUTH_READWRITE)
-	swarm.Event.RegisterTopic("state.peerActivityChanged", AUTH_READWRITE)
+	swarm.Event.RegisterTopic("peerActivityChanged", AUTH_READWRITE)
 
 	swarm.State, err = newSharedStateService(swarm)
 	if err != nil {

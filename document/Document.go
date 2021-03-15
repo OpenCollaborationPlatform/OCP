@@ -103,7 +103,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	errS = append(errS, doc.handleEvent("peerAdded"))
 	errS = append(errS, doc.handleEvent("peerRemoved"))
 	errS = append(errS, doc.handleEvent("peerAuthChanged"))
-	errS = append(errS, doc.handleEvent("state.peerActivityChanged"))
+	errS = append(errS, doc.handleEvent("peerActivityChanged"))
 
 	//peer handling
 	errS = append(errS, client.Register(fmt.Sprintf("ocp.documents.%s.addPeer", doc.ID), doc.addPeer, wamp.Dict{}))
@@ -192,6 +192,22 @@ func (self Document) handleEvent(topic string) error {
 	}(sub, self.client, self.ID)
 
 	return nil
+}
+
+func (self Document) stateEventLoop(obs p2p.StateObserver) {
+
+	//read events and do something useful with it!
+	for evt := range obs.EventChannel() {
+
+		if evt.Event == p2p.STATE_EVENT_MAJORITY_AVAILABLE {
+			uri := fmt.Sprintf("ocp.documents.%s.majorityChanged", self.ID)
+			self.client.Publish(uri, wamp.Dict{}, wamp.List{true}, wamp.Dict{})
+
+		} else if evt.Event == p2p.STATE_EVENT_PEER_INACTIVE {
+			uri := fmt.Sprintf("ocp.documents.%s.majorityChanged", self.ID)
+			self.client.Publish(uri, wamp.Dict{}, wamp.List{false}, wamp.Dict{})
+		}
+	}
 }
 
 //							Peer Handling

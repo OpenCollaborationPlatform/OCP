@@ -15,6 +15,16 @@ import (
 )
 
 type State = replica.State
+type StateEvent = replica.Event
+type StateObserver = replica.Observer
+type State_Event_Type = replica.Event_Type
+
+const (
+	STATE_EVENT_PEER_ACTIVE        = replica.EVENT_PEER_ADDED
+	STATE_EVENT_PEER_INACTIVE      = replica.EVENT_PEER_REMOVED
+	STATE_EVENT_MAJORITY_AVAILABLE = replica.EVENT_MAJORITY_AVAILABLE
+	STATE_EVENT_MAJORITY_LOST      = replica.EVENT_MAJORITY_LOST
+)
 
 /******************************************************************************
 							RPC API for replica
@@ -94,6 +104,7 @@ type sharedStateService struct {
 	api    ReplicaAPI
 	rApi   ReplicaReadAPI
 	logger hclog.Logger
+	repObs StateObserver
 }
 
 func newSharedStateService(swarm *Swarm) (*sharedStateService, error) {
@@ -105,26 +116,13 @@ func newSharedStateService(swarm *Swarm) (*sharedStateService, error) {
 		return nil, utils.StackError(err, "Unable to create replica")
 	}
 
-	return &sharedStateService{swarm, rep, ReplicaAPI{}, ReplicaReadAPI{}, swarm.logger.Named("State")}, nil
+	return &sharedStateService{swarm, rep, ReplicaAPI{}, ReplicaReadAPI{},
+		swarm.logger.Named("State"), StateObserver{}}, nil
+
 }
 
 func (self *sharedStateService) IsRunning() bool {
 	return self.rep.IsRunning()
-}
-
-//internal
-func (self *sharedStateService) share(state replica.State) error {
-
-	//get the name
-	var name string
-	if t := reflect.TypeOf(state); t.Kind() == reflect.Ptr {
-		name = t.Elem().Name()
-	} else {
-		name = t.Name()
-	}
-
-	//add to replica
-	return utils.StackOnError(self.rep.AddState(name, state), "Unable to add state to replica")
 }
 
 func (self *sharedStateService) AddCommand(ctx context.Context, state string, cmd []byte) (interface{}, error) {
@@ -218,6 +216,7 @@ func (self *sharedStateService) Close(ctx context.Context) {
 	}
 
 	self.logger.Debug("Close replica")
+	self.rep.CloseObserver(self.repObs)
 	self.rep.Close(ctx)
 }
 
@@ -232,6 +231,30 @@ func (self *sharedStateService) ActivePeers() ([]PeerID, error) {
 		result[i] = PeerID(p)
 	}
 	return result, nil
+}
+
+func (self *sharedStateService) HasMajority() bool {
+	if !self.IsRunning() {
+		return false
+	}
+	return self.rep.HasMajority()
+}
+
+// Internal functions
+// ***********************************************************************************
+
+func (self *sharedStateService) share(state replica.State) error {
+
+	//get the name
+	var name string
+	if t := reflect.TypeOf(state); t.Kind() == reflect.Ptr {
+		name = t.Elem().Name()
+	} else {
+		name = t.Name()
+	}
+
+	//add to replica
+	return utils.StackOnError(self.rep.AddState(name, state), "Unable to add state to replica")
 }
 
 func (self *sharedStateService) startup(bootstrap bool) error {
@@ -250,8 +273,8 @@ func (self *sharedStateService) startup(bootstrap bool) error {
 		}
 	}
 
-	//replica event handling
-	go self.eventLoop(self.rep.EventChannel())
+	self.repObs = self.rep.NewObserver(false)
+	go self.eventLoop(self.repObs)
 
 	//setup API
 	self.api = ReplicaAPI{self.rep}
@@ -313,25 +336,26 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 	return err
 }
 
-func (self *sharedStateService) eventLoop(channel chan replica.ReplicaPeerEvent) {
+func (self *sharedStateService) eventLoop(obs StateObserver) {
 
-	//read events and do something useful with it!
-	ctx, cncl := context.WithCancel(context.Background())
-	for evt := range channel {
+	for evt := range obs.EventChannel() {
+		if evt.Event == STATE_EVENT_PEER_ACTIVE {
+			self.logger.Debug("Peer became active", "peer", evt.Peer.Pretty())
+			go self.swarm.connect(self.swarm.ctx, evt.Peer)
+			self.swarm.Event.Publish("peerActivityChanged", evt.Peer.Pretty(), true)
 
-		if evt.Event == replica.EVENT_ADDED {
-			self.logger.Debug("Replica peers changed", "peer", evt.Peer.Pretty(), "action", "added")
-			go self.swarm.connect(ctx, evt.Peer)
-			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer.Pretty(), true)
+		} else if evt.Event == STATE_EVENT_PEER_INACTIVE {
+			self.logger.Debug("Peer became inactive", "peer", evt.Peer.Pretty())
+			self.swarm.Event.Publish("peerActivityChanged", evt.Peer.Pretty(), false)
 
-		} else if evt.Event == replica.EVENT_REMOVED {
-			self.logger.Debug("Replica peers changed", "peer", evt.Peer.Pretty(), "action", "removed")
-			self.swarm.Event.Publish("state.peerActivityChanged", evt.Peer.Pretty(), false)
+		} else if evt.Event == replica.EVENT_LEADER_CHANGED {
+			self.logger.Debug("New leader", "peer", evt.Peer.Pretty())
 
-		} else if evt.Event == replica.EVENT_LEADER {
-			self.logger.Debug("New Replica leader", "peer", evt.Peer.Pretty())
+		} else if evt.Event == STATE_EVENT_MAJORITY_AVAILABLE {
+			self.logger.Debug("Majority became available")
+
+		} else if evt.Event == STATE_EVENT_PEER_INACTIVE {
+			self.logger.Debug("Majority lost")
 		}
 	}
-	//cancel all still running connect calls
-	cncl()
 }
