@@ -3,7 +3,7 @@ package dml
 
 /*
 import (
-	datastore "github.com/OpenCollaborationPlatform/OCP /datastores"
+	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 	"index/suffixarray"
 	"io/ioutil"
 	"os"

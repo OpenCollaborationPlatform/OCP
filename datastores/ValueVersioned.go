@@ -45,7 +45,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/boltdb/bolt"
 	"github.com/mr-tron/base58/base58"

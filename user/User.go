@@ -1,7 +1,7 @@
 package user
 
 import (
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 	cid "github.com/ipfs/go-cid"
 	mh "github.com/multiformats/go-multihash"
 )

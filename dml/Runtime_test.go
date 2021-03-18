@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	datastore "github.com/OpenCollaborationPlatform/OCP /datastores"
+	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
 )

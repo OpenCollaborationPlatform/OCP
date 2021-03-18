@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OpenCollaborationPlatform/OCP /connection"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/connection"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"

@@ -12,11 +12,11 @@ import (
 
 	"github.com/spf13/viper"
 
-	"github.com/OpenCollaborationPlatform/OCP /connection"
-	"github.com/OpenCollaborationPlatform/OCP /document"
-	"github.com/OpenCollaborationPlatform/OCP /p2p"
-	"github.com/OpenCollaborationPlatform/OCP /user"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/connection"
+	"github.com/OpenCollaborationPlatform/OCP/document"
+	"github.com/OpenCollaborationPlatform/OCP/p2p"
+	"github.com/OpenCollaborationPlatform/OCP/user"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	hclog "github.com/hashicorp/go-hclog"
 	"gopkg.in/natefinch/lumberjack.v2"

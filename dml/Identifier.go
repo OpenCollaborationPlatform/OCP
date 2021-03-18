@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/mr-tron/base58/base58"
 )

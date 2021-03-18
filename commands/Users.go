@@ -4,7 +4,7 @@ import (
 	"context"
 	"github.com/spf13/cobra"
 
-	"github.com/OpenCollaborationPlatform/OCP /user"
+	"github.com/OpenCollaborationPlatform/OCP/user"
 )
 
 //flag variables

@@ -3,12 +3,12 @@ package document
 import (
 	"reflect"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/gammazero/nexus/v3/wamp"
-	"github.com/OpenCollaborationPlatform/OCP /datastores"
-	"github.com/OpenCollaborationPlatform/OCP /dml"
-	"github.com/OpenCollaborationPlatform/OCP /p2p"
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
+	"github.com/OpenCollaborationPlatform/OCP/dml"
+	"github.com/OpenCollaborationPlatform/OCP/p2p"
 	"github.com/ugorji/go/codec"
 )
 

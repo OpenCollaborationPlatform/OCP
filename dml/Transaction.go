@@ -8,8 +8,8 @@ package dml
 // 	"fmt"
 
 // 	"crypto/sha256"
-// 	datastore "github.com/OpenCollaborationPlatform/OCP /datastores"
-// 	"github.com/OpenCollaborationPlatform/OCP /utils"
+// 	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
+// 	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 // 	"github.com/dop251/goja"
 // 	uuid "github.com/satori/go.uuid"

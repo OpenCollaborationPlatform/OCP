@@ -1,8 +1,8 @@
 package dml
 
 import (
-	"github.com/OpenCollaborationPlatform/OCP /datastores"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/dop251/goja"
 )

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OpenCollaborationPlatform/OCP /connection"
-	"github.com/OpenCollaborationPlatform/OCP /p2p"
+	"github.com/OpenCollaborationPlatform/OCP/connection"
+	"github.com/OpenCollaborationPlatform/OCP/p2p"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"

@@ -7,8 +7,8 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/iancoleman/strcase"
-	"github.com/OpenCollaborationPlatform/OCP /datastores"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 )
 
 var (

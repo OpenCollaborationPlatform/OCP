@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

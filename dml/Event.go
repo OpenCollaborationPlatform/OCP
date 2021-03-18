@@ -4,8 +4,8 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	"github.com/OpenCollaborationPlatform/OCP /datastores"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/dop251/goja"
 )

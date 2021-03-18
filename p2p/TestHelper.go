@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	blocks "github.com/ipfs/go-block-format"
 	//ipfslog "github.com/ipfs/go-log"

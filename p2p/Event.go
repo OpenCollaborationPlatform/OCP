@@ -8,7 +8,7 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p-core/protocol"

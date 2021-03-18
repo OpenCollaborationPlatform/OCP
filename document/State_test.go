@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/gammazero/nexus/v3/wamp"
-	"github.com/OpenCollaborationPlatform/OCP /dml"
+	"github.com/OpenCollaborationPlatform/OCP/dml"
 	. "github.com/smartystreets/goconvey/convey"
 )
 

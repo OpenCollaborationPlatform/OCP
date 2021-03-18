@@ -3,7 +3,7 @@ package datastore
 import (
 	"math"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/boltdb/bolt"
 )

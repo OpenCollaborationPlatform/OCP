@@ -12,7 +12,7 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/hashicorp/raft"
 	raftbolt "github.com/hashicorp/raft-boltdb"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	peer "github.com/libp2p/go-libp2p-core/peer"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"

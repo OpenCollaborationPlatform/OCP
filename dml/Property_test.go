@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
-	datastore "github.com/OpenCollaborationPlatform/OCP /datastores"
+	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
 )

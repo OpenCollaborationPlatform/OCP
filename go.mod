@@ -1,4 +1,4 @@
-module github.com/ickby/CollaborationNode
+module github.com/OpenCollaborationPlatform/OCP
 
 go 1.12
 

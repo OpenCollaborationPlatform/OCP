@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/hashicorp/raft"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 	uuid "github.com/satori/go.uuid"
 )
 

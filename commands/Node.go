@@ -10,8 +10,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/OpenCollaborationPlatform/OCP /node"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/node"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/libp2p/go-libp2p-crypto"
 	"github.com/spf13/cobra"

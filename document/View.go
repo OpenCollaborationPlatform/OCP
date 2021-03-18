@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OpenCollaborationPlatform/OCP /datastores"
-	"github.com/OpenCollaborationPlatform/OCP /dml"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
+	"github.com/OpenCollaborationPlatform/OCP/dml"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"io"
 	"os"

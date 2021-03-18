@@ -10,10 +10,10 @@ import (
 	"sync"
 
 	"github.com/gammazero/nexus/v3/wamp"
-	"github.com/OpenCollaborationPlatform/OCP /datastores"
-	"github.com/OpenCollaborationPlatform/OCP /dml"
-	"github.com/OpenCollaborationPlatform/OCP /p2p"
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
+	"github.com/OpenCollaborationPlatform/OCP/dml"
+	"github.com/OpenCollaborationPlatform/OCP/p2p"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 )
 
 //sharing information about the session, that is currently manipulating the state

@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OpenCollaborationPlatform/OCP /utils"
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/boltdb/bolt"
 )
