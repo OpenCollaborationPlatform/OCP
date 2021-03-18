@@ -7,7 +7,7 @@ import (
 
 	"github.com/mr-tron/base58"
 
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 )
 
 func init() {

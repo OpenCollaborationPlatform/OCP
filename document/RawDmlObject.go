@@ -3,9 +3,9 @@ package document
 import (
 	"encoding/gob"
 
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
-	"github.com/ickby/CollaborationNode/dml"
+	"github.com/OpenCollaborationPlatform/OCP /dml"
 )
 
 var cidKey = []byte("__raw_cid")

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ickby/CollaborationNode/connection"
-	"github.com/ickby/CollaborationNode/p2p"
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /connection"
+	"github.com/OpenCollaborationPlatform/OCP /p2p"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ickby/CollaborationNode/datastores"
-	"github.com/ickby/CollaborationNode/dml"
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /datastores"
+	"github.com/OpenCollaborationPlatform/OCP /dml"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
 	"io"
 	"os"

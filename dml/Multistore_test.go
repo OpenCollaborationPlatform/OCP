@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	datastore "github.com/ickby/CollaborationNode/datastores"
+	datastore "github.com/OpenCollaborationPlatform/OCP /datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
 )

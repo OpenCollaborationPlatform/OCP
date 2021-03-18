@@ -7,8 +7,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/ickby/CollaborationNode/node"
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /node"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	"github.com/gammazero/nexus/v3/wamp"

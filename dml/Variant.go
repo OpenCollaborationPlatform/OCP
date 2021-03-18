@@ -2,8 +2,8 @@
 package dml
 
 import (
-	"github.com/ickby/CollaborationNode/datastores"
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /datastores"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 )
 
 var variantKey = []byte("__variant_value")

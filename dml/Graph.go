@@ -11,7 +11,7 @@ import (
 	topo "gonum.org/v1/gonum/graph/topo"
 	trav "gonum.org/v1/gonum/graph/traverse"
 
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 )
 
 var nodeKey = []byte("__graph_node")

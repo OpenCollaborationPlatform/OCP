@@ -25,8 +25,8 @@ import (
 
 	"github.com/satori/go.uuid"
 
-	datastore "github.com/ickby/CollaborationNode/datastores"
-	"github.com/ickby/CollaborationNode/utils"
+	datastore "github.com/OpenCollaborationPlatform/OCP /datastores"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
 	"github.com/alecthomas/participle"
 	"github.com/dop251/goja"

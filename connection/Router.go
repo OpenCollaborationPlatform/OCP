@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	nxrouter "github.com/gammazero/nexus/v3/router"

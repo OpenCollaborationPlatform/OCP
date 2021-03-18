@@ -3,7 +3,7 @@ package dml
 import (
 	"fmt"
 
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
 	"github.com/dop251/goja"
 )

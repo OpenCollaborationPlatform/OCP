@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/ickby/CollaborationNode/commands"
+	"github.com/OpenCollaborationPlatform/OCP /commands"
 )
 
 func main() {

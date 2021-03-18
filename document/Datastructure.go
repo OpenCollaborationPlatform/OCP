@@ -6,9 +6,9 @@ import (
 
 	nxclient "github.com/gammazero/nexus/v3/client"
 	wamp "github.com/gammazero/nexus/v3/wamp"
-	"github.com/ickby/CollaborationNode/dml"
-	"github.com/ickby/CollaborationNode/p2p"
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /dml"
+	"github.com/OpenCollaborationPlatform/OCP /p2p"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 )
 
 //Async datastructure which encapsulates synchronous DML runtime and a datastore.

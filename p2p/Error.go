@@ -1,7 +1,7 @@
 package p2p
 
 import (
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 )
 
 /*Error handling*/

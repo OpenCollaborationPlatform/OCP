@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
 	. "github.com/smartystreets/goconvey/convey"
 )

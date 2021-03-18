@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/ickby/CollaborationNode/p2p/replica"
-	"github.com/ickby/CollaborationNode/utils"
+	"github.com/OpenCollaborationPlatform/OCP /p2p/replica"
+	"github.com/OpenCollaborationPlatform/OCP /utils"
 
 	hclog "github.com/hashicorp/go-hclog"
 	"github.com/libp2p/go-libp2p-core/peer"
