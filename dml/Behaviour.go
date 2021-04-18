@@ -31,7 +31,6 @@ import (
 /* The general behaviour manager, exposing Methods */
 type behaviourManager interface {
 	MethodHandler
-	JSObject
 
 	CanHandleEvent(string) bool
 }

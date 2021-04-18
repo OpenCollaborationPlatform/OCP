@@ -1,15 +1,15 @@
 //parser for the datastructure markup language
 package dml
 
-/*
 import (
-	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 	"index/suffixarray"
 	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
 	"testing"
+
+	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -25,11 +25,16 @@ func TestTransactionBasics(t *testing.T) {
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
 		So(err, ShouldBeNil)
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
+		err = rntm.Parse(strings.NewReader("Data {}"))
+		So(err, ShouldBeNil)
+		rntm.currentUser = "User1"
+		err = rntm.InitializeDatastore(store)
+		So(err, ShouldBeNil)
 
 		Convey("a transaction manager shall be created", func() {
 
-			mngr := rntm.behaviours["Transaction"].(*TransactionManager)
+			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 			So(err, ShouldBeNil)
 
 			Convey("which allows creating transactions", func() {
@@ -78,25 +83,25 @@ func TestTransactionBasics(t *testing.T) {
 				store.Begin()
 				So(mngr.IsOpen(), ShouldBeFalse)
 				store.Rollback()
-				res, err := rntm.RunJavaScript("User3", "Transaction.IsOpen()")
+				res, err := rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeFalse)
 
-				_, err = rntm.RunJavaScript("User3", "Transaction.Open()")
+				_, err = rntm.RunJavaScript(store, "User3", "Transaction.Open()")
 				So(err, ShouldBeNil)
 				store.Begin()
 				So(mngr.IsOpen(), ShouldBeTrue)
 				store.Rollback()
-				res, err = rntm.RunJavaScript("User3", "Transaction.IsOpen()")
+				res, err = rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeTrue)
 
-				_, err = rntm.RunJavaScript("User3", "Transaction.Close()")
+				_, err = rntm.RunJavaScript(store, "User3", "Transaction.Close()")
 				So(err, ShouldBeNil)
 				store.Begin()
 				So(mngr.IsOpen(), ShouldBeFalse)
 				store.Rollback()
-				res, err = rntm.RunJavaScript("User3", "Transaction.IsOpen()")
+				res, err = rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeFalse)
 			})
@@ -189,15 +194,17 @@ func TestTransactionBehaviour(t *testing.T) {
 
 				}`
 
-		rntm := NewRuntime(store)
+		rntm := NewRuntime()
 		rntm.currentUser = "User1"
 		err := rntm.Parse(strings.NewReader(code))
 		So(err, ShouldBeNil)
-		mngr := rntm.behaviours["Transaction"].(*TransactionManager)
+		err = rntm.InitializeDatastore(store)
+		So(err, ShouldBeNil)
+		mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 
 		Convey("the object structure must be correct", func() {
 
-			val, err := rntm.RunJavaScript("User1", "Document.trans.parent.name")
+			val, err := rntm.RunJavaScript(store, "User1", "Document.trans.parent.name")
 			So(err, ShouldBeNil)
 			value, ok := val.(string)
 			So(ok, ShouldBeTrue)
@@ -223,7 +230,7 @@ func TestTransactionBehaviour(t *testing.T) {
 			})
 
 			Convey("all objects with transaction behaviour must be called", func() {
-				res, err := rntm.Call("User1", "Document.result.value")
+				res, err := rntm.Call(store, "User1", "Document.result.value")
 				So(err, ShouldBeNil)
 				str := res.(string)
 				//note: ordering of calls is undefined
@@ -244,11 +251,12 @@ func TestTransactionBehaviour(t *testing.T) {
 				So(err, ShouldBeNil)
 				store.Commit()
 
-				_, err = rntm.RunJavaScript("User1", "Document.result.value = ''")
+				_, err = rntm.RunJavaScript(store, "User1", "Document.result.value = ''")
 				So(err, ShouldBeNil)
 
 				store.Begin()
-				err = mngr.Add(rntm.mainObj)
+				mset, _ := rntm.getMainObjectSet()
+				err = mngr.Add(mset.id)
 				So(err, ShouldBeNil)
 				store.Commit()
 
@@ -263,25 +271,27 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(len(objs), ShouldEqual, 1)
 
 					obj, _ := rntm.getObjectFromPath("Document")
-					So(trans.HasObject(obj.Id()), ShouldBeTrue)
+					So(trans.HasObject(obj.id), ShouldBeTrue)
 				})
 
 				Convey("and knows itself that it belongs to the transaction", func() {
 
 					store.Begin()
 					defer store.Rollback()
-					trns := rntm.mainObj.GetBehaviour("Transaction").(*transactionBehaviour)
-					ok, err := trns.InTransaction()
+					mset, _ := rntm.getMainObjectSet()
+					bhvrSet, _ := mset.obj.(Data).GetBehaviour(mset.id, "Transaction")
+					trns := bhvrSet.obj.(*transactionBehaviour)
+					ok, err := trns.InTransaction(bhvrSet.id)
 					So(err, ShouldBeNil)
 					So(ok, ShouldBeTrue)
-					ok, err = trns.InCurrentTransaction()
+					ok, err = trns.InCurrentTransaction(bhvrSet.id)
 					So(err, ShouldBeNil)
 					So(ok, ShouldBeTrue)
 				})
 
 				Convey("only its participation event must have been called", func() {
 
-					res, err := rntm.Call("User1", "Document.result.value")
+					res, err := rntm.Call(store, "User1", "Document.result.value")
 					So(err, ShouldBeNil)
 					str := res.(string)
 					So(str, ShouldEqual, "p1")
@@ -293,20 +303,21 @@ func TestTransactionBehaviour(t *testing.T) {
 					defer store.Commit()
 
 					rntm.currentUser = "User2"
-					err := mngr.Add(rntm.mainObj)
+					mset, _ := rntm.getMainObjectSet()
+					err := mngr.Add(mset.id)
 					So(err, ShouldNotBeNil)
 					So(mngr.IsOpen(), ShouldBeFalse)
 
 					err = mngr.Open()
 					So(err, ShouldBeNil)
-					err = mngr.Add(rntm.mainObj)
+					err = mngr.Add(mset.id)
 					So(err, ShouldNotBeNil)
 				})
 			})
 
 			Convey("Changing a object below a recursive transaction", func() {
 
-				_, err := rntm.RunJavaScript("User1", "Document.Child.ChildChild.value = 2")
+				_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildChild.value = 2")
 				So(err, ShouldBeNil)
 
 				Convey("Adds the behaviour equiped object to the transaction", func() {
@@ -314,17 +325,17 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					defer store.Rollback()
 
-					obj, _ := rntm.getObjectFromPath("Document.Child")
+					set, _ := rntm.getObjectFromPath("Document.Child")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
-					has := trans.HasObject(obj.Id())
+					has := trans.HasObject(set.id)
 					So(has, ShouldBeTrue)
 				})
 			})
 
 			Convey("Creating a new object below a recursive transaction behaviour", func() {
 
-				_, err := rntm.RunJavaScript("User1", "Document.Child.ChildMap.New(\"test\")")
+				_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.New(\"test\")")
 				So(err, ShouldBeNil)
 
 				Convey("adds the behaviour equiped object to the transaction.", func() {
@@ -332,10 +343,10 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					defer store.Rollback()
 
-					obj, _ := rntm.getObjectFromPath("Document.Child")
+					set, _ := rntm.getObjectFromPath("Document.Child")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
-					has := trans.HasObject(obj.Id())
+					has := trans.HasObject(set.id)
 					So(has, ShouldBeTrue)
 				})
 
@@ -346,7 +357,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Commit()
 					So(err, ShouldBeNil)
 
-					_, err := rntm.RunJavaScript("User1", "Document.Child.ChildMap.Get(\"test\").value = 5")
+					_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.Get(\"test\").value = 5")
 					So(err, ShouldBeNil)
 
 					Convey("adds the behaviour equiped object to the transaction.", func() {
@@ -354,10 +365,10 @@ func TestTransactionBehaviour(t *testing.T) {
 						store.Begin()
 						defer store.Rollback()
 
-						obj, _ := rntm.getObjectFromPath("Document.Child")
+						set, _ := rntm.getObjectFromPath("Document.Child")
 						trans, err := mngr.getTransaction()
 						So(err, ShouldBeNil)
-						has := trans.HasObject(obj.Id())
+						has := trans.HasObject(set.id)
 						So(has, ShouldBeTrue)
 					})
 				})
@@ -455,12 +466,14 @@ func TestTransactionAbort(t *testing.T) {
 					}
 				}`
 
-		rntm := NewRuntime(store)
-		rntm.currentUser = "User1"
+		rntm := NewRuntime()
 		err := rntm.Parse(strings.NewReader(code))
 		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
+		So(err, ShouldBeNil)
+		rntm.currentUser = "User1"
 		store.Begin()
-		So(rntm.behaviours["Transaction"].(*TransactionManager).Open(), ShouldBeNil)
+		So(rntm.behaviours.GetManager("Transaction").(*TransactionManager).Open(), ShouldBeNil)
 		store.Commit()
 
 		Convey("leads to a single transaction in the manager.", func() {
@@ -468,8 +481,10 @@ func TestTransactionAbort(t *testing.T) {
 			store.Begin()
 			defer store.Rollback()
 
-			mngr := rntm.behaviours["Transaction"].(*TransactionManager)
-			keys, err := mngr.transactions.GetKeys()
+			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			transactions, err := mngr.transactionMap()
+			So(err, ShouldBeNil)
+			keys, err := transactions.GetKeys()
 
 			So(err, ShouldBeNil)
 			So(len(keys), ShouldEqual, 1)
@@ -480,12 +495,14 @@ func TestTransactionAbort(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			mngr := rntm.behaviours["Transaction"].(*TransactionManager)
+			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 			mngr.Close()
 
 			Convey("leads to zero transaction in the manager.", func() {
-				mngr := rntm.behaviours["Transaction"].(*TransactionManager)
-				keys, err := mngr.transactions.GetKeys()
+				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+				transactions, err := mngr.transactionMap()
+				So(err, ShouldBeNil)
+				keys, err := transactions.GetKeys()
 
 				So(err, ShouldBeNil)
 				So(len(keys), ShouldEqual, 0)
@@ -496,13 +513,14 @@ func TestTransactionAbort(t *testing.T) {
 
 			code = `	Document.p = 2; Document.DocumentObject.p=2;`
 
-			_, err := rntm.RunJavaScript("User1", code)
+			_, err := rntm.RunJavaScript(store, "User1", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
-			So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 2)
-			do, _ := rntm.mainObj.GetChildByName("DocumentObject")
-			So(do.GetProperty("p").GetValue(), ShouldEqual, 2)
+			mset, _ := rntm.getMainObjectSet()
+			So(mset.obj.GetProperty("p").GetValue(mset.id), ShouldEqual, 2)
+			do, _ := mset.obj.(Data).GetChildByName(mset.id, "DocumentObject")
+			So(do.obj.GetProperty("p").GetValue(do.id), ShouldEqual, 2)
 			store.Rollback()
 
 			Convey("and lead to an open transaction with the relevant object included", func() {
@@ -510,7 +528,7 @@ func TestTransactionAbort(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				trans, err := rntm.behaviours["Transaction"].(*TransactionManager).getTransaction()
+				trans, err := rntm.behaviours.GetManager("Transaction").(*TransactionManager).getTransaction()
 				So(err, ShouldBeNil)
 				user, err := trans.User()
 				So(err, ShouldBeNil)
@@ -518,46 +536,49 @@ func TestTransactionAbort(t *testing.T) {
 				objs, err := trans.Objects()
 				So(err, ShouldBeNil)
 				So(len(objs), ShouldEqual, 1)
-				So(objs[0].Id().Name, ShouldEqual, "Document")
+				So(objs[0].id.Name, ShouldEqual, "Document")
 			})
 		})
 
 		Convey("Setting abort to true and opening a new transaction", func() {
 
 			store.Begin()
-			err := rntm.mainObj.GetProperty("abort").SetValue(true)
+			mset, _ := rntm.getMainObjectSet()
+			err := mset.obj.GetProperty("abort").SetValue(mset.id, true)
 			So(err, ShouldBeNil)
-			So(rntm.behaviours["Transaction"].(*TransactionManager).Open(), ShouldBeNil)
+			So(rntm.behaviours.GetManager("Transaction").(*TransactionManager).Open(), ShouldBeNil)
 			store.Commit()
 
 			Convey("Changing data of non-transaction subobject should work", func() {
 
 				code = `Document.DocumentObject.p=3;`
-				_, err := rntm.RunJavaScript("User1", code)
+				_, err := rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()
-				So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 1)
-				do, _ := rntm.mainObj.GetChildByName("DocumentObject")
-				So(do.GetProperty("p").GetValue(), ShouldEqual, 3)
+				mset, _ := rntm.getMainObjectSet()
+				So(mset.obj.GetProperty("p").GetValue(mset.id), ShouldEqual, 1)
+				do, _ := mset.obj.(Data).GetChildByName(mset.id, "DocumentObject")
+				So(do.obj.GetProperty("p").GetValue(do.id), ShouldEqual, 3)
 				store.Commit()
 			})
 
 			Convey("but changing data of toplevel should fail", func() {
 
 				code = `Document.p=4;`
-				_, err := rntm.RunJavaScript("User1", code)
+				_, err := rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldNotBeNil)
 
 				store.Begin()
-				So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 1)
-				do, _ := rntm.mainObj.GetChildByName("DocumentObject")
-				So(do.GetProperty("p").GetValue(), ShouldEqual, 1)
+				mset, _ := rntm.getMainObjectSet()
+				So(mset.obj.GetProperty("p").GetValue(mset.id), ShouldEqual, 1)
+				do, _ := mset.obj.(Data).GetChildByName(mset.id, "DocumentObject")
+				So(do.obj.GetProperty("p").GetValue(do.id), ShouldEqual, 1)
 				store.Rollback()
 
 				Convey("And transaction should have no object", func() {
 					store.Begin()
-					mngr := rntm.behaviours["Transaction"].(*TransactionManager)
+					mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 					trans, _ := mngr.getTransaction()
 					obj, err := trans.Objects()
 					So(err, ShouldBeNil)
@@ -570,7 +591,7 @@ func TestTransactionAbort(t *testing.T) {
 
 				//initially 0 objects required
 				store.Begin()
-				mngr := rntm.behaviours["Transaction"].(*TransactionManager)
+				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 				trans, _ := mngr.getTransaction()
 				obj, err := trans.Objects()
 				So(err, ShouldBeNil)
@@ -578,16 +599,17 @@ func TestTransactionAbort(t *testing.T) {
 				store.Commit()
 
 				code = `Document.TransDocumentObject.p=5; Document.FailTransDocumentObject.p = 5`
-				_, err = rntm.RunJavaScript("User1", code)
+				_, err = rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldNotBeNil)
 
 				Convey("Should not have changed the data", func() {
 					store.Begin()
-					So(rntm.mainObj.GetProperty("p").GetValue(), ShouldEqual, 1)
-					tdo, _ := rntm.mainObj.GetChildByName("TransDocumentObject")
-					So(tdo.GetProperty("p").GetValue(), ShouldEqual, 1)
-					tdo, _ = rntm.mainObj.GetChildByName("FailTransDocumentObject")
-					So(tdo.GetProperty("p").GetValue(), ShouldEqual, 1)
+					mset, _ := rntm.getMainObjectSet()
+					So(mset.obj.GetProperty("p").GetValue(mset.id), ShouldEqual, 1)
+					tdo, _ := mset.obj.(Data).GetChildByName(mset.id, "TransDocumentObject")
+					So(tdo.obj.GetProperty("p").GetValue(tdo.id), ShouldEqual, 1)
+					tdo, _ = mset.obj.(Data).GetChildByName(mset.id, "FailTransDocumentObject")
+					So(tdo.obj.GetProperty("p").GetValue(tdo.id), ShouldEqual, 1)
 					store.Rollback()
 				})
 
@@ -602,18 +624,20 @@ func TestTransactionAbort(t *testing.T) {
 
 			Convey("Opening a transaction directly bevore failing data change", func() {
 				store.Begin()
-				mngr := rntm.behaviours["Transaction"].(*TransactionManager)
+				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 
 				mngr.Close()
 
 				_, err := mngr.getTransaction()
 				So(err, ShouldNotBeNil)
-				keys, _ := mngr.transactions.GetKeys()
+				transactions, err := mngr.transactionMap()
+				So(err, ShouldBeNil)
+				keys, _ := transactions.GetKeys()
 				So(len(keys), ShouldEqual, 0)
 				store.Commit()
 
 				code = `Transaction.Open(); Document.FailTransDocument.p = 5`
-				_, err = rntm.RunJavaScript("User1", code)
+				_, err = rntm.RunJavaScript(store, "User1", code)
 
 				Convey("Should be an error", func() {
 					So(err, ShouldNotBeNil)
@@ -623,7 +647,9 @@ func TestTransactionAbort(t *testing.T) {
 					store.Begin()
 					_, err := mngr.getTransaction()
 					So(err, ShouldNotBeNil)
-					keys, _ := mngr.transactions.GetKeys()
+					transactions, err := mngr.transactionMap()
+					So(err, ShouldBeNil)
+					keys, _ := transactions.GetKeys()
 					So(len(keys), ShouldEqual, 0)
 					store.Rollback()
 				})
@@ -633,7 +659,7 @@ func TestTransactionAbort(t *testing.T) {
 		Convey("Changing a object with automatic transaction enabled", func() {
 
 			code = `Transaction.Close(); Document.DepTest.Child2.p = 1`
-			_, err := rntm.RunJavaScript("User1", code)
+			_, err := rntm.RunJavaScript(store, "User1", code)
 			So(err, ShouldBeNil)
 
 			Convey("should add this object to the transaction", func() {
@@ -641,14 +667,14 @@ func TestTransactionAbort(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				trans, err := rntm.behaviours["Transaction"].(*TransactionManager).getTransaction()
+				trans, err := rntm.behaviours.GetManager("Transaction").(*TransactionManager).getTransaction()
 				So(err, ShouldBeNil)
 				user, err := trans.User()
 				So(err, ShouldBeNil)
 				So(user, ShouldEqual, "User1")
 				objs, err := trans.Objects()
 				So(err, ShouldBeNil)
-				So(objs[0].Id().Name, ShouldEqual, "Child2")
+				So(objs[0].id.Name, ShouldEqual, "Child2")
 			})
 
 			Convey("and also adds the dependent object to the transaction", func() {
@@ -656,7 +682,7 @@ func TestTransactionAbort(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				trans, err := rntm.behaviours["Transaction"].(*TransactionManager).getTransaction()
+				trans, err := rntm.behaviours.GetManager("Transaction").(*TransactionManager).getTransaction()
 				So(err, ShouldBeNil)
 				user, err := trans.User()
 				So(err, ShouldBeNil)
@@ -664,9 +690,8 @@ func TestTransactionAbort(t *testing.T) {
 				objs, err := trans.Objects()
 				So(err, ShouldBeNil)
 				So(len(objs), ShouldEqual, 2)
-				So(objs[1].Id().Name, ShouldEqual, "Child1")
+				So(objs[1].id.Name, ShouldEqual, "Child1")
 			})
 		})
 	})
 }
-*/

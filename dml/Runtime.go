@@ -69,13 +69,13 @@ func NewRuntime() *Runtime {
 	}
 
 	//build the managers and expose
-	/*	transMngr, err := NewTransactionManager(rntm)
-		if err != nil {
-			panic("Unable to initilize transaction manager")
-		}
-		rntm.behaviours["Transaction"] = transMngr
-		rntm.jsvm.Set("Transaction", transMngr.GetJSObject())
-	*/
+	transMngr, err := NewTransactionManager(rntm)
+	if err != nil {
+		panic("Unable to initilize transaction manager")
+	}
+	rntm.behaviours.RegisterManager("Transaction", transMngr)
+	rntm.jsvm.Set("Transaction", transMngr.GetJSObject())
+
 	//add the datastructures
 	rntm.RegisterObjectCreator("Data", NewData)
 	rntm.RegisterObjectCreator("Variant", NewVariant)
