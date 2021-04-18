@@ -65,7 +65,7 @@ func NewRuntime() *Runtime {
 		ready:        false,
 		currentUser:  "none",
 		objects:      make(map[DataType]Object, 0),
-		behaviours:   make(map[string]BehaviourManager, 0),
+		behaviours:   newBehaviourManagerHandler(),
 	}
 
 	//build the managers and expose
@@ -111,7 +111,7 @@ type Runtime struct {
 	main        DataType
 
 	//managers
-	behaviours map[string]BehaviourManager
+	behaviours behaviourManagerHandler
 }
 
 // Setup / creation Methods
@@ -355,8 +355,8 @@ func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args .
 	accessor := fullpath[(idx + 1):]
 
 	//check if manager
-	mngr, ok := self.behaviours[path]
-	if ok && mngr.HasMethod(accessor) {
+	mngr := self.behaviours.GetManager(path)
+	if (mngr != nil) && mngr.HasMethod(accessor) {
 		return mngr.GetMethod(accessor).IsConst(), nil
 	}
 
@@ -420,8 +420,8 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	accessor := fullpath[(idx + 1):]
 
 	//first check if it is a Manager
-	mngr, ok := self.behaviours[path]
-	if ok {
+	mngr := self.behaviours.GetManager(path)
+	if mngr != nil {
 		if !mngr.HasMethod(accessor) {
 			return nil, newUserError(Error_Key_Not_Available, "Manager %v does not have method %v", path[0], accessor)
 		}

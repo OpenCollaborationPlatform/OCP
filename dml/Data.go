@@ -272,3 +272,33 @@ func (self *DataImpl) Created(id Identifier) error {
 	}
 	return nil
 }
+
+/*Override  event emitted, to forward them to the behaviour handler*/
+func (self *DataImpl) EventEmitted(id Identifier, event string, args ...interface{}) error {
+
+	//call ourself and our parents till all behaviours are handled. Note that initially we use
+	//unrecursive behaviours, all parents only use the recursive ones.
+	behaviours := self.GetRuntime().behaviours.GetEventBehaviours(event)
+	res := self.HandleBehaviourEvent(id, event, behaviours, false)
+	self.recursiveHandleBehaviourEvent(id, event, res)
+
+	//call base class implementation
+	return self.object.EventEmitted(id, event, args...)
+}
+
+func (self *DataImpl) recursiveHandleBehaviourEvent(id Identifier, name string, behaviours []string) {
+
+	if len(behaviours) > 0 {
+		res := self.HandleBehaviourEvent(id, name, behaviours, true)
+
+		//if we have unhadled behaviours left we forward them to the parent object
+		if len(res) > 0 {
+			parentSet, err := self.GetParent(id)
+			if err == nil {
+				if parent, ok := parentSet.obj.(*DataImpl); ok {
+					parent.recursiveHandleBehaviourEvent(parentSet.id, name, res)
+				}
+			}
+		}
+	}
+}

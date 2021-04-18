@@ -4,6 +4,8 @@ package dml
 import (
 	"io/ioutil"
 	"os"
+	"path"
+	"runtime"
 	"testing"
 
 	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
@@ -16,16 +18,18 @@ func TestDmlFile(t *testing.T) {
 	Convey("Establishing a datastore and runtime,", t, func() {
 
 		//make temporary folder for the data
-		path, _ := ioutil.TempDir("", "dml")
-		defer os.RemoveAll(path)
-		store, err := datastore.NewDatastore(path)
+		tmpPath, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(tmpPath)
+		store, err := datastore.NewDatastore(tmpPath)
 		defer store.Close()
 		So(err, ShouldBeNil)
 
 		rntm := NewRuntime()
 
 		//read in the file and parse
-		filereader, err := os.Open("/home/stefan/Projects/Go/CollaborationNode/dml/test.dml")
+		_, filename, _, _ := runtime.Caller(0)
+		dmlPath := path.Join(path.Dir(filename), "test.dml")
+		filereader, err := os.Open(dmlPath)
 		So(err, ShouldBeNil)
 		err = rntm.Parse(filereader)
 		So(err, ShouldBeNil)

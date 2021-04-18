@@ -16,29 +16,78 @@ import (
  *  - Provides Methods to override and hence customice the behaviour
  *
  * Behaviour infrastructure consists of:
- * - Behaviours: Objects (not Data) that can be added to Data Objects and describe the
- * 	 Object for the given behaviour type
+ * - Behaviours: Objects (not Data) that can be added to Data Objects and describe how the
+ * 	 parent Object is handled for the given behaviour type
  * - Behaviour Handler: Helper interface to manage behaviours within an Object, similar
  *   to MethodHandler or EventHandler
- * - BehaviourManager: A general managing class for a given behaviour. This is a singleton
- *   and accessible as toplevel global object. It exposes global behaviour methods
+ * - behaviourManager: A general managing class for a given behaviour (TO be overriden).
+ *   This is a singleton and accessible as toplevel global object. It exposes global behaviour
+ *   methods
+ * - behaviourManagerHandler: Helper interface to manage multiple behaviour managers. This is used
+ *   by the runtime to store and access all behaviourManager. behaviourManagerHandler is to behaviourManager
+ *   what BehaviourHandler is to Behaviour
  */
 
 /* The general behaviour manager, exposing Methods */
-type BehaviourManager interface {
+type behaviourManager interface {
 	MethodHandler
 	JSObject
+
+	CanHandleEvent(string) bool
 }
 
-/* The behaviour object */
+/*Type to handle multiple behaviourManagers. As we use this only in runtime, and not to define other
+interfaces, we do not a interface for this type*/
+type behaviourManagerHandler struct {
+	managers map[string]behaviourManager
+}
+
+func newBehaviourManagerHandler() behaviourManagerHandler {
+	return behaviourManagerHandler{make(map[string]behaviourManager, 0)}
+}
+
+func (self *behaviourManagerHandler) RegisterManager(name string, manager behaviourManager) error {
+
+	if _, has := self.managers[name]; has {
+		return newInternalError(Error_Operation_Invalid, "Manager already registered", "name", name)
+	}
+
+	self.managers[name] = manager
+	return nil
+}
+
+func (self *behaviourManagerHandler) HasManager(name string) bool {
+	_, has := self.managers[name]
+	return has
+}
+
+func (self behaviourManagerHandler) GetManager(name string) behaviourManager {
+	manager, has := self.managers[name]
+	if !has {
+		return nil
+	}
+	return manager
+}
+
+func (self behaviourManagerHandler) GetEventBehaviours(event string) []string {
+
+	result := make([]string, 0)
+	for name, manager := range self.managers {
+		if manager.CanHandleEvent(event) {
+			result = append(result, name)
+		}
+	}
+	return result
+}
+
+/* The behaviour interface*/
 type Behaviour interface {
 	Object
 
-	Setup() error                  //Called after parent is fully setup
-	SetupRecursive(obj Data) error //Called for each recursive data Object (if recursive is true)
+	HandleEvent(Identifier, string)
 }
 
-func NewBehaviour(runtime *Runtime) (*behaviour, error) {
+func NewBaseBehaviour(runtime *Runtime) (*behaviour, error) {
 
 	obj, err := NewObject(runtime)
 	if err != nil {
@@ -55,6 +104,7 @@ func NewBehaviour(runtime *Runtime) (*behaviour, error) {
 	return &result, nil
 }
 
+//Base implementation
 type behaviour struct {
 	*object
 }
@@ -80,9 +130,9 @@ type BehaviourHandler interface {
 	//convinience function for combined logic and db access
 	GetBehaviour(Identifier, string) (dmlSet, error)
 
-	//Setup all behaviours, possible including all childs
-	//to be called after data hirarchy is setup (parent and children)
-	//SetupBehaviours(Data, bool) error
+	//Forwards event to all behaviours given in list, and returns the ones not available
+	//Identifier, eventname, behaviours to forward, recursive (true) or original object(false9
+	HandleBehaviourEvent(Identifier, string, []string, bool) []string
 }
 
 func NewBehaviourHandler(runtime *Runtime) behaviourHandler {
@@ -174,74 +224,26 @@ func (self *behaviourHandler) GetBehaviour(id Identifier, name string) (dmlSet, 
 	return dmlSet{obj: self.GetBehaviourObject(name), id: bhvrID}, nil
 }
 
-/*
-func (self *behaviourHandler) SetupBehaviours(obj Data, childs bool) error {
+func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, event string, behaviours []string, isrecursive bool) []string {
 
-	//We need to setup all behaviours we have been added, and all recursive
-	//ones in any of our parents
+	result := make([]string, 0)
+	for _, behaviour := range behaviours {
+		if self.HasBehaviour(behaviour) {
+			bhvrSet, _ := self.GetBehaviour(id, behaviour)
+			bhvrObj := bhvrSet.obj.(Behaviour)
 
-	//own behaviours
-	done := make([]string, 0)
-	for name, bhvr := range self.behaviours {
-		bhvr.Setup()
-		done = append(done, name)
-	}
-
-	//let's start recursive behaviour setup (iterate upwards)
-	if obj.Parent() != nil {
-		parent, ok := obj.Parent().(Data)
-		if ok {
-			err := self.setupRecursive(parent, obj, done)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	//setup the children too if required  (iterate downwards)
-	if childs {
-		for _, child := range obj.GetSubobjects(false) {
-			data, ok := child.(Data)
-			if !ok {
+			if isrecursive && !bhvrObj.GetProperty("recursive").GetValue(bhvrSet.id).(bool) {
+				// we do not add the bahaviour to the result: We have the relevant behaviour, it is just
+				//not recursive. this means processing ends here
 				continue
 			}
-			data.SetupBehaviours(data, true)
+
+			//handle the event, and do no not propagate further
+			bhvrObj.HandleEvent(bhvrSet.id, event)
+
+		} else {
+			result = append(result, behaviour)
 		}
 	}
-
-	return nil
+	return result
 }
-
-func (self *behaviourHandler) setupRecursive(setup Data, with Data, done []string) error {
-
-	//we check if there are any behaviours available, that we did not yet Setup
-	for _, bhvr := range setup.Behaviours() {
-
-		in := false
-		for _, d := range done {
-			if d == bhvr {
-				in = true
-				break
-			}
-		}
-
-		if !in {
-			done = append(done, bhvr)
-			err := setup.GetBehaviour(bhvr).SetupRecursive(with)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	//go on check the parent
-	if setup.GetParent() != nil {
-		parent, ok := setup.GetParent().(Data)
-		if ok {
-			return self.setupRecursive(parent, with, done)
-		}
-	}
-
-	return nil
-}
-*/
