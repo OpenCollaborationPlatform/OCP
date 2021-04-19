@@ -32,16 +32,16 @@ func NewVector(rntm *Runtime) (Object, error) {
 	vec.AddProperty("type", MustNewDataType("type"), MustNewDataType("none"), true)
 
 	//add methods
-	vec.AddMethod("Length", MustNewMethod(vec.Length, true))
-	vec.AddMethod("Get", MustNewMethod(vec.Get, true))
-	vec.AddMethod("GetAll", MustNewMethod(vec.GetAll, true))
-	vec.AddMethod("Set", MustNewMethod(vec.Set, false))
-	vec.AddMethod("Append", MustNewMethod(vec.Append, false))
-	vec.AddMethod("AppendNew", MustNewMethod(vec.AppendNew, false))
-	vec.AddMethod("Insert", MustNewMethod(vec.Insert, false))
-	vec.AddMethod("Remove", MustNewMethod(vec.Remove, false))
-	vec.AddMethod("Swap", MustNewMethod(vec.Swap, false))
-	vec.AddMethod("Move", MustNewMethod(vec.Move, false))
+	vec.AddMethod("Length", MustNewIdMethod(vec.Length, true))
+	vec.AddMethod("Get", MustNewIdMethod(vec.Get, true))
+	vec.AddMethod("GetAll", MustNewIdMethod(vec.GetAll, true))
+	vec.AddMethod("Set", MustNewIdMethod(vec.Set, false))
+	vec.AddMethod("Append", MustNewIdMethod(vec.Append, false))
+	vec.AddMethod("AppendNew", MustNewIdMethod(vec.AppendNew, false))
+	vec.AddMethod("Insert", MustNewIdMethod(vec.Insert, false))
+	vec.AddMethod("Remove", MustNewIdMethod(vec.Remove, false))
+	vec.AddMethod("Swap", MustNewIdMethod(vec.Swap, false))
+	vec.AddMethod("Move", MustNewIdMethod(vec.Move, false))
 
 	//events of a vector
 	vec.AddEvent(NewEvent("onNewEntry", vec))

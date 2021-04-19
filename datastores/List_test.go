@@ -234,7 +234,8 @@ func TestListVersionedData(t *testing.T) {
 			So(has, ShouldBeTrue)
 			has, _ = list.HasUpdates()
 			So(has, ShouldBeTrue)
-			So(lset.HasVersions(), ShouldBeFalse)
+			has, _ = lset.HasVersions()
+			So(has, ShouldBeFalse)
 			has, _ = list.HasVersions()
 			So(has, ShouldBeFalse)
 
@@ -245,7 +246,8 @@ func TestListVersionedData(t *testing.T) {
 			So(has, ShouldBeFalse)
 			has, _ = list.HasUpdates()
 			So(has, ShouldBeFalse)
-			So(lset.HasVersions(), ShouldBeTrue)
+			has, _ = lset.HasVersions()
+			So(has, ShouldBeTrue)
 			has, _ = list.HasVersions()
 			So(has, ShouldBeTrue)
 

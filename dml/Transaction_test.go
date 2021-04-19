@@ -2,10 +2,8 @@
 package dml
 
 import (
-	"index/suffixarray"
 	"io/ioutil"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -16,11 +14,11 @@ import (
 
 func TestTransactionBasics(t *testing.T) {
 
-	//make temporary folder for the data
-	path, _ := ioutil.TempDir("", "dml")
-	defer os.RemoveAll(path)
-
 	Convey("Setting up the basic runtime,", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
 
 		store, err := datastore.NewDatastore(path)
 		defer store.Close()
@@ -134,9 +132,6 @@ func TestTransactionBehaviour(t *testing.T) {
 
 						.name: "trans"
 
-						.onOpen: function() {
-							this.parent.result.value += "o1"
-						}
 						.onParticipation: function() {this.parent.result.value += "p1"}
 						.onClosing: function() {this.parent.result.value += "c1"}
 						.onFailure: function() {this.parent.result.value += "f1"}
@@ -144,6 +139,8 @@ func TestTransactionBehaviour(t *testing.T) {
 
 					Data {
 						.name: "Child"
+						
+						property int test: 0
 
 						Data {
 							.name: "ChildChild"
@@ -164,7 +161,6 @@ func TestTransactionBehaviour(t *testing.T) {
 							.name: "ChildTransaction"
 							.recursive: true
 
-							.onOpen: function() {Document.result.value += "o2"}
 							.onParticipation: function() {Document.result.value += "p2"}
 							.onClosing: function() {Document.result.value += "c2"}
 							.onFailure: function() {Document.result.value += "f2"}
@@ -227,20 +223,6 @@ func TestTransactionBehaviour(t *testing.T) {
 				user, err := trans.User()
 				So(err, ShouldBeNil)
 				So(user, ShouldEqual, "User1")
-			})
-
-			Convey("all objects with transaction behaviour must be called", func() {
-				res, err := rntm.Call(store, "User1", "Document.result.value")
-				So(err, ShouldBeNil)
-				str := res.(string)
-				//note: ordering of calls is undefined
-				r1 := regexp.MustCompile("o1")
-				index := suffixarray.New([]byte(str))
-				results := index.FindAllIndex(r1, -1)
-				So(len(results), ShouldEqual, 1)
-				r2 := regexp.MustCompile("o2")
-				results = index.FindAllIndex(r2, -1)
-				So(len(results), ShouldEqual, 1)
 			})
 
 			Convey("Adding the main object to a transaction", func() {
@@ -312,6 +294,24 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(err, ShouldBeNil)
 					err = mngr.Add(mset.id)
 					So(err, ShouldNotBeNil)
+				})
+			})
+
+			Convey("Changing a property on object with transaction behaviour", func() {
+
+				_, err := rntm.RunJavaScript(store, "User1", "Document.Child.test = 2")
+				So(err, ShouldBeNil)
+
+				Convey("Adds the object to the transaction", func() {
+
+					store.Begin()
+					defer store.Rollback()
+
+					set, _ := rntm.getObjectFromPath("Document.Child")
+					trans, err := mngr.getTransaction()
+					So(err, ShouldBeNil)
+					has := trans.HasObject(set.id)
+					So(has, ShouldBeTrue)
 				})
 			})
 

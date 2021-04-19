@@ -237,7 +237,7 @@ func (self *ListVersionedSet) HasUpdates() (bool, error) {
 	return false, nil
 }
 
-func (self *ListVersionedSet) HasVersions() bool {
+func (self *ListVersionedSet) HasVersions() (bool, error) {
 
 	var versions bool
 	self.db.View(func(tx *bolt.Tx) error {
@@ -250,7 +250,7 @@ func (self *ListVersionedSet) HasVersions() bool {
 		versions = (bucket.Sequence() != 0)
 		return nil
 	})
-	return versions
+	return versions, nil
 }
 
 func (self *ListVersionedSet) ResetHead() error {

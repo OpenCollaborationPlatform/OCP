@@ -226,8 +226,7 @@ func (self *TransactionManager) GetJSRuntime() *goja.Runtime {
 func (self *TransactionManager) CanHandleEvent(event string) bool {
 
 	switch event {
-	case "onPropertyChanged":
-	case "onChanged":
+	case "onPropertyChanged", "onChanged":
 		return true
 	}
 
@@ -406,6 +405,10 @@ func (self *TransactionManager) Add(id Identifier) error {
 	if err != nil {
 		return err
 	}
+
+	//store state (required for revert)
+	set.obj.FixStateAsVersion(set.id)
+
 	//throw relevant event
 	bhvrSet.obj.GetEvent("onParticipation").Emit(bhvrSet.id)
 
@@ -548,9 +551,9 @@ func NewTransactionBehaviour(rntm *Runtime) (Object, error) {
 	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) //open transaction automatically on change
 
 	//add default methods for overriding by the user
-	tbhvr.AddMethod("CanBeAdded", MustNewMethod(tbhvr.defaultAddable, true))                //return true/false if object can be used in current transaction
-	tbhvr.AddMethod("CanBeClosed", MustNewMethod(tbhvr.defaultCloseable, true))             //return true/false if transaction containing the object can be closed
-	tbhvr.AddMethod("DependentObjects", MustNewMethod(tbhvr.defaultDependentObjects, true)) //return array of objects that need also to be added to transaction
+	tbhvr.AddMethod("CanBeAdded", MustNewIdMethod(tbhvr.defaultAddable, true))                //return true/false if object can be used in current transaction
+	tbhvr.AddMethod("CanBeClosed", MustNewIdMethod(tbhvr.defaultCloseable, true))             //return true/false if transaction containing the object can be closed
+	tbhvr.AddMethod("DependentObjects", MustNewIdMethod(tbhvr.defaultDependentObjects, true)) //return array of objects that need also to be added to transaction
 
 	//add default events
 	tbhvr.AddEvent(NewEvent(`onParticipation`, behaviour)) //called when added to a transaction
@@ -558,10 +561,22 @@ func NewTransactionBehaviour(rntm *Runtime) (Object, error) {
 	tbhvr.AddEvent(NewEvent(`onFailure`, behaviour))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
-	tbhvr.AddMethod("InTransaction", MustNewMethod(tbhvr.InTransaction, true))               //behaviour is in any transaction, also other users?
-	tbhvr.AddMethod("InCurrentTransaction", MustNewMethod(tbhvr.InCurrentTransaction, true)) //behaviour is in currently open transaction for user?
+	tbhvr.AddMethod("InTransaction", MustNewIdMethod(tbhvr.InTransaction, true))               //behaviour is in any transaction, also other users?
+	tbhvr.AddMethod("InCurrentTransaction", MustNewIdMethod(tbhvr.InCurrentTransaction, true)) //behaviour is in currently open transaction for user?
 
 	return tbhvr, nil
+}
+
+func (self *transactionBehaviour) HandleEvent(id Identifier, event string) {
+
+	//whenever a property or the object itself changed, we add ourself to the current transaction
+	switch event {
+	case "onPropertyChanged", "onChanged":
+		set, err := self.GetParent(id)
+		if err == nil {
+			self.mngr.Add(set.id)
+		}
+	}
 }
 
 func (self *transactionBehaviour) InTransaction(id Identifier) (bool, error) {
@@ -637,14 +652,14 @@ func (self *transactionBehaviour) setCurrent(id Identifier, transIdent [32]byte)
 	return utils.StackOnError(trans.Write(transIdent), "Unable to write transaction status")
 }
 
-func (self *transactionBehaviour) defaultAddable() bool {
+func (self *transactionBehaviour) defaultAddable(id Identifier) bool {
 	return true
 }
 
-func (self *transactionBehaviour) defaultCloseable() bool {
+func (self *transactionBehaviour) defaultCloseable(id Identifier) bool {
 	return true
 }
 
-func (self *transactionBehaviour) defaultDependentObjects() []interface{} {
+func (self *transactionBehaviour) defaultDependentObjects(id Identifier) []interface{} {
 	return make([]interface{}, 0)
 }

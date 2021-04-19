@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/dop251/goja"
-	"github.com/iancoleman/strcase"
 	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
+	"github.com/dop251/goja"
+	"github.com/iancoleman/strcase"
 )
 
 var (
@@ -32,7 +32,7 @@ const Error_Compiler = "compilation_failed"
 const Error_Filesystem = "filesystem_not_accessible"
 
 func newInternalError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Internal, "runtime", reason, args)
+	err := utils.NewError(utils.Internal, "runtime", reason, args...)
 	if msg != "" {
 		err.AddToStack(msg)
 	}
@@ -47,7 +47,7 @@ func wrapInternalError(err error, reason string) error {
 }
 
 func newUserError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Application, "runtime", reason, args)
+	err := utils.NewError(utils.Application, "runtime", reason, args...)
 	if msg != "" {
 		err.AddToStack(msg)
 	}
@@ -55,7 +55,7 @@ func newUserError(reason, msg string, args ...interface{}) utils.OCPError {
 }
 
 func newSetupError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Application, "setup", reason, args)
+	err := utils.NewError(utils.Application, "setup", reason, args...)
 	if msg != "" {
 		err.AddToStack(msg)
 	}

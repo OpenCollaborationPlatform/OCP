@@ -10,12 +10,13 @@ import (
 )
 
 type Method interface {
-	Call(id Identifier, args ...interface{}) (interface{}, error)
-	CallBoolReturn(id Identifier, args ...interface{}) (bool, error)
+	Call(args ...interface{}) (interface{}, error)
+	CallBoolReturn(args ...interface{}) (bool, error)
 	IsConst() bool
+	IsIdMethod() bool
 }
 
-func NewMethod(fnc interface{}, constant bool) (Method, error) {
+func NewIdMethod(fnc interface{}, constant bool) (Method, error) {
 
 	jsfnc, isJs := fnc.(func(goja.FunctionCall) goja.Value)
 	if isJs {
@@ -32,7 +33,30 @@ func NewMethod(fnc interface{}, constant bool) (Method, error) {
 		return nil, newInternalError(Error_Fatal, "First Argument of method needs to be Identifier, not %s", first.String())
 	}
 
-	return &method{value, constant}, nil
+	return &method{value, constant, true}, nil
+}
+
+func MustNewIdMethod(fnc interface{}, constant bool) Method {
+	m, err := NewIdMethod(fnc, constant)
+	if err != nil {
+		panic(err)
+	}
+	return m
+}
+
+func NewMethod(fnc interface{}, constant bool) (Method, error) {
+
+	jsfnc, isJs := fnc.(func(goja.FunctionCall) goja.Value)
+	if isJs {
+		return &jsMethod{fnc: jsfnc, constant: constant}, nil
+	}
+
+	value := reflect.ValueOf(fnc)
+	if value.Type().Kind() != reflect.Func {
+		return nil, newInternalError(Error_Fatal, "Expected function, not %s", value.Type().String())
+	}
+
+	return &method{value, constant, false}, nil
 }
 
 func MustNewMethod(fnc interface{}, constant bool) Method {
@@ -46,15 +70,15 @@ func MustNewMethod(fnc interface{}, constant bool) Method {
 type method struct {
 	fnc      reflect.Value
 	constant bool
+	idMethod bool
 }
 
-func (self *method) Call(id Identifier, args ...interface{}) (interface{}, error) {
+func (self *method) Call(args ...interface{}) (interface{}, error) {
 
-	rfargs := make([]reflect.Value, len(args)+1)
+	rfargs := make([]reflect.Value, len(args))
 	for i, arg := range args {
-		rfargs[i+1] = reflect.ValueOf(arg)
+		rfargs[i] = reflect.ValueOf(arg)
 	}
-	rfargs[0] = reflect.ValueOf(id)
 	res := self.fnc.Call(rfargs)
 
 	if len(res) == 0 {
@@ -84,9 +108,9 @@ func (self *method) Call(id Identifier, args ...interface{}) (interface{}, error
 	return nil, newInternalError(Error_Fatal, "Function returns too many results: not supported")
 }
 
-func (self *method) CallBoolReturn(id Identifier, args ...interface{}) (bool, error) {
+func (self *method) CallBoolReturn(args ...interface{}) (bool, error) {
 
-	result, err := self.Call(id, args...)
+	result, err := self.Call(args...)
 	if err != nil {
 		return false, err
 	}
@@ -101,7 +125,11 @@ func (self *method) IsConst() bool {
 	return self.constant
 }
 
-//special method type that handles js functions
+func (self *method) IsIdMethod() bool {
+	return self.idMethod
+}
+
+//special method type that handles js functions (always is ID method)
 type jsMethod struct {
 	fnc      func(goja.FunctionCall) goja.Value
 	rntm     *Runtime
@@ -110,30 +138,30 @@ type jsMethod struct {
 	name     string
 }
 
-func (self *jsMethod) Call(id Identifier, args ...interface{}) (result interface{}, err error) {
+func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) {
 
 	//goja panics as form of error reporting...
 	defer func() {
 		if e := recover(); e != nil {
 			if er, ok := e.(error); ok {
 				ocpErr := wrapJSError(er, self.rntm.jsvm)
-				ocpErr.AddToStack(fmt.Sprintf("JavaScript function %v failed in %v", self.name, id))
+				ocpErr.AddToStack(fmt.Sprintf("JavaScript function %v failed in %v", self.name, args[0]))
 				err = ocpErr
 			} else {
-				err = newInternalError(Error_Fatal, fmt.Sprintf("Unknown error occured during JavaScript function %v in %v: %v", self.name, id, e), e)
+				err = newInternalError(Error_Fatal, fmt.Sprintf("Unknown error occured during JavaScript function %v in %v: %v", self.name, args[0], e), e)
 			}
 		}
 	}()
 
 	//build the function call argument
-	jsargs := make([]goja.Value, len(args))
-	for i, arg := range args {
+	jsargs := make([]goja.Value, len(args)-1)
+	for i, arg := range args[1:] {
 		jsargs[i] = self.rntm.jsvm.ToValue(arg)
 	}
 
 	//build the object to call on
 	obj := self.rntm.jsvm.CreateObject(self.jsProto)
-	obj.Set("identifier", self.rntm.jsvm.ToValue(id))
+	obj.Set("identifier", self.rntm.jsvm.ToValue(args[0]))
 
 	//call and return
 	err = nil
@@ -142,9 +170,9 @@ func (self *jsMethod) Call(id Identifier, args ...interface{}) (result interface
 	return
 }
 
-func (self *jsMethod) CallBoolReturn(id Identifier, args ...interface{}) (bool, error) {
+func (self *jsMethod) CallBoolReturn(args ...interface{}) (bool, error) {
 
-	result, err := self.Call(id, args...)
+	result, err := self.Call(args...)
 	if err != nil {
 		return false, err
 	}
@@ -157,6 +185,10 @@ func (self *jsMethod) CallBoolReturn(id Identifier, args ...interface{}) (bool, 
 
 func (self *jsMethod) IsConst() bool {
 	return self.constant
+}
+
+func (self *jsMethod) IsIdMethod() bool {
+	return false
 }
 
 type MethodHandler interface {
@@ -234,15 +266,19 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				//js args to go args
 				args := extractValues(jsargs.Arguments, rntm)
 
-				//get the identifier from whom we are called
-				id := jsargs.This.ToObject(rntm.jsvm).Get("identifier").Export()
-				ident, ok := id.(Identifier)
-				if !ok || !ident.Valid() {
-					panic(rntm.jsvm.ToValue(newInternalError(Error_Fatal, "Called object does not have identifier setup correctly")))
+				//if it is a ID method we extract the identifier and add it to the arguments
+				if thisMethod.IsIdMethod() {
+					//get the identifier from whom we are called
+					id := jsargs.This.ToObject(rntm.jsvm).Get("identifier").Export()
+					ident, ok := id.(Identifier)
+					if !ok || !ident.Valid() {
+						panic(rntm.jsvm.ToValue(newInternalError(Error_Fatal, "Called object does not have identifier setup correctly")))
+					}
+					args = append([]interface{}{ident}, args...)
 				}
 
 				//call the function
-				res, err := thisMethod.Call(ident, args...)
+				res, err := thisMethod.Call(args...)
 
 				//check if we have a error and if it is not nil we panic for goja
 				if err != nil {
@@ -251,7 +287,7 @@ func (self *methodHandler) SetupJSMethods(rntm *Runtime, obj *goja.Object) error
 				}
 
 				//Identifier has special return value (need to build the correct js obj)
-				if ident, ok = res.(Identifier); ok {
+				if ident, ok := res.(Identifier); ok {
 					set, err := rntm.getObjectSet(ident)
 					if err != nil {
 						panic(rntm.jsvm.ToValue(newInternalError(Error_Fatal, "Object is returned, but unable to build JS representation")))

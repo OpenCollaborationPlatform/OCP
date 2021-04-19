@@ -29,8 +29,8 @@ func NewVariant(rntm *Runtime) (Object, error) {
 	vari.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), false)
 
 	//add methods
-	vari.AddMethod("SetValue", MustNewMethod(vari.SetValue, false))
-	vari.AddMethod("GetValue", MustNewMethod(vari.GetValue, true))
+	vari.AddMethod("SetValue", MustNewIdMethod(vari.SetValue, false))
+	vari.AddMethod("GetValue", MustNewIdMethod(vari.GetValue, true))
 
 	vari.AddEvent(NewEvent("onTypeChanged", vari))
 	vari.AddEvent(NewEvent("onValueChanged", vari))

@@ -82,7 +82,7 @@ func NewRuntime() *Runtime {
 	rntm.RegisterObjectCreator("Vector", NewVector)
 	rntm.RegisterObjectCreator("Map", NewMap)
 	rntm.RegisterObjectCreator("Graph", NewGraph)
-	//	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
+	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
 
 	//setup globals
 	SetupGlobals(rntm)
@@ -426,7 +426,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 			return nil, newUserError(Error_Key_Not_Available, "Manager %v does not have method %v", path[0], accessor)
 		}
 		fnc := mngr.GetMethod(accessor)
-		result, e := fnc.Call(Identifier{}, args...)
+		result, e := fnc.Call(args...)
 
 		//did somethign go wrong?
 		if e != nil {
@@ -456,7 +456,8 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	if dbSet.obj.HasMethod(accessor) {
 		fnc := dbSet.obj.GetMethod(accessor)
 
-		result, err = fnc.Call(dbSet.id, args...)
+		args = append([]interface{}{dbSet.id}, args...)
+		result, err = fnc.Call(args...)
 		handled = true
 	}
 
@@ -808,7 +809,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 	//build the object!
 	creator, ok := self.creators[astObj.Identifier]
 	if !ok {
-		return nil, newSetupError(Error_Key_Not_Available, "No object type \"%s\" exists", astObj.Identifier)
+		return nil, newSetupError(Error_Key_Not_Available, "No such object type exists", "type", astObj.Identifier)
 	}
 
 	var err error
@@ -848,6 +849,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 		}
 	}
 	obj.SetupJSEvents(obj.GetJSPrototype())
+	obj.SetupEventNotifyer(obj)
 
 	//than all methods (including defaults if required)
 	for _, fnc := range astObj.Functions {
@@ -909,7 +911,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 				}
 
 				var name = childName
-				child, err := obj.(Data).GetChildByName(identifier, name)
+				child, err := obj.(Data).GetSubobjectByName(identifier, name, true)
 				if err != nil {
 					panic(utils.StackError(err, "Unable to access child").Error())
 				}
@@ -969,7 +971,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 			}
 
 		} else {
-			return nil, newSetupError(Error_Key_Not_Available, "Key of assignment is not a property or event")
+			return nil, newSetupError(Error_Key_Not_Available, "Key of assignment is not a property or event", "key", parts[0])
 		}
 	}
 
@@ -1116,7 +1118,7 @@ func (self *Runtime) buildMethod(astFnc *astFunction) (Method, error) {
 		return nil, wrapSetupError(err, Error_Compiler)
 	}
 
-	return NewMethod(val.Export(), astFnc.Const == "const")
+	return NewIdMethod(val.Export(), astFnc.Const == "const")
 }
 
 //func (self *Runtime) registerEvtFunction

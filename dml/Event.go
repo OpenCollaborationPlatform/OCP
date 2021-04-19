@@ -30,6 +30,7 @@ type Event interface {
 	MethodHandler
 
 	GetName() string
+	SetNotifyer(EventEmitNotifyer)
 
 	Emit(Identifier, ...interface{}) error
 	Enabled(Identifier) (bool, error)
@@ -56,20 +57,21 @@ func NewEvent(name string, owner Object) Event {
 		enabled:       true,
 		name:          name,
 		owner:         owner,
+		notifyer:      nil,
 	}
 
 	//now the js object
 	evtObj := owner.GetJSRuntime().NewObject()
 
-	emitMethod, _ := NewMethod(evt.Emit, false)
+	emitMethod, _ := NewIdMethod(evt.Emit, false)
 	evt.AddMethod("Emit", emitMethod)
-	enabledMethod, _ := NewMethod(evt.Enabled, true)
+	enabledMethod, _ := NewIdMethod(evt.Enabled, true)
 	evt.AddMethod("Enabled", enabledMethod)
-	enableMethod, _ := NewMethod(evt.Enable, false)
+	enableMethod, _ := NewIdMethod(evt.Enable, false)
 	evt.AddMethod("Enable", enableMethod)
-	disableMethod, _ := NewMethod(evt.Disable, false)
+	disableMethod, _ := NewIdMethod(evt.Disable, false)
 	evt.AddMethod("Disable", disableMethod)
-	registerMethod, _ := NewMethod(evt.RegisterCallback, false)
+	registerMethod, _ := NewIdMethod(evt.RegisterCallback, false)
 	evt.AddMethod("RegisterCallback", registerMethod)
 
 	evt.jsProto = evtObj
@@ -85,12 +87,17 @@ type event struct {
 	enabled   bool
 	name      string
 
-	owner   Object
-	jsProto *goja.Object
+	owner    Object
+	notifyer EventEmitNotifyer
+	jsProto  *goja.Object
 }
 
 func (self *event) GetName() string {
 	return self.name
+}
+
+func (self *event) SetNotifyer(een EventEmitNotifyer) {
+	self.notifyer = een
 }
 
 func (self *event) Emit(id Identifier, args ...interface{}) error {
@@ -145,14 +152,18 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 			if !set.obj.HasMethod(cb.Function) {
 				return newUserError(Error_Key_Not_Available, "Registerd callback %v not available in object %v", cb.Function, cb.Id.Name)
 			}
-			if _, err = set.obj.GetMethod(cb.Function).Call(set.id, args...); err != nil {
+			args = append([]interface{}{set.id}, args...)
+			if _, err = set.obj.GetMethod(cb.Function).Call(args...); err != nil {
 				return utils.StackError(err, "Function %v failed", cb.Function)
 			}
 		}
 	}
 
 	//inform runtime about event
-	return utils.StackOnError(self.owner.EventEmitted(id, self.name, args...), "Object function failed for event emit")
+	if self.notifyer != nil {
+		return utils.StackOnError(self.notifyer.EventEmitted(id, self.name, args...), "Object function failed for event emit")
+	}
+	return nil
 }
 
 func (self *event) Enabled(id Identifier) (bool, error) {
@@ -282,6 +293,7 @@ type EventHandler interface {
 	GetEvent(name string) Event
 	Events() []string
 	SetupJSEvents(*goja.Object) error
+	SetupEventNotifyer(EventEmitNotifyer)
 	InitializeEventDB(Identifier) error
 }
 
@@ -344,6 +356,13 @@ func (self *eventHandler) SetupJSEvents(jsobj *goja.Object) error {
 	}
 
 	return nil
+}
+
+func (self *eventHandler) SetupEventNotifyer(een EventEmitNotifyer) {
+
+	for _, evt := range self.events {
+		evt.SetNotifyer(een)
+	}
 }
 
 func (self *eventHandler) InitializeEventDB(id Identifier) error {

@@ -162,7 +162,7 @@ func (self *DataImpl) GetChildIdentifierByName(id Identifier, name string) (Iden
 			return child, nil
 		}
 	}
-	return Identifier{}, newUserError(Error_Key_Not_Available, "No such object available")
+	return Identifier{}, newUserError(Error_Key_Not_Available, "No such object available", "name", name)
 }
 
 func (self *DataImpl) GetChildren(id Identifier) ([]dmlSet, error) {
@@ -234,12 +234,19 @@ func (self *DataImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) 
 
 	//search behaviour
 	if bhvr {
-		if self.HasBehaviour(name) {
-			return self.GetBehaviour(id, name)
+		bhvrs := self.Behaviours()
+		for _, bhvr := range bhvrs {
+			bhvrId, err := self.GetBehaviourIdentifier(id, bhvr)
+			if err == nil {
+				if bhvrId.Name == name {
+					bhvrObj := self.GetBehaviourObject(bhvr)
+					return dmlSet{bhvrObj, bhvrId}, nil
+				}
+			}
 		}
 	}
 
-	return dmlSet{}, newUserError(Error_Key_Not_Available, fmt.Sprintf("Child %v not available in %v", name, id))
+	return dmlSet{}, newUserError(Error_Key_Not_Available, "Subobject not available", "name", name, "parent", id.Name)
 }
 
 func (self *DataImpl) GetValueByName(id Identifier, name string) (interface{}, error) {

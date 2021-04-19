@@ -44,13 +44,13 @@ func NewMap(rntm *Runtime) (Object, error) {
 	mapI.AddProperty("value", MustNewDataType("type"), MustNewDataType("none"), true)
 
 	//add methods
-	mapI.AddMethod("Length", MustNewMethod(mapI.Length, true))
-	mapI.AddMethod("Get", MustNewMethod(mapI.Get, true))
-	mapI.AddMethod("Set", MustNewMethod(mapI.Set, false))
-	mapI.AddMethod("Has", MustNewMethod(mapI.Has, true))
-	mapI.AddMethod("Keys", MustNewMethod(mapI.Keys, true))
-	mapI.AddMethod("New", MustNewMethod(mapI.New, false))
-	mapI.AddMethod("Remove", MustNewMethod(mapI.Remove, false))
+	mapI.AddMethod("Length", MustNewIdMethod(mapI.Length, true))
+	mapI.AddMethod("Get", MustNewIdMethod(mapI.Get, true))
+	mapI.AddMethod("Set", MustNewIdMethod(mapI.Set, false))
+	mapI.AddMethod("Has", MustNewIdMethod(mapI.Has, true))
+	mapI.AddMethod("Keys", MustNewIdMethod(mapI.Keys, true))
+	mapI.AddMethod("New", MustNewIdMethod(mapI.New, false))
+	mapI.AddMethod("Remove", MustNewIdMethod(mapI.Remove, false))
 
 	//events of a mapImpl
 	//mapI.AddEvent("onNewEntry", NewEvent(mapI.GetJSObject(), rntm.jsvm, MustNewDataType("int")))

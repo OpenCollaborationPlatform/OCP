@@ -77,8 +77,13 @@ func (self *Error) ErrorType() string {
 func (self *Error) Error() string {
 
 	str := self.ErrorType()
+	//first stack entry is the real error message
 	if len(self.stack) != 0 {
 		str += ": " + self.stack[0]
+	}
+	//args are important information
+	for i := 0; i < int(len(self.args)/2); i++ {
+		str += fmt.Sprintf(", %v: %v", self.args[i*2], self.args[i*2+1])
 	}
 
 	return str
@@ -92,6 +97,17 @@ func (self *Error) ErrorWithStacktrace() string {
 	}
 
 	return str
+}
+
+func PrintWithStacktrace(err error) {
+
+	if err == nil {
+		return
+	}
+
+	if ocperr, ok := err.(OCPError); ok {
+		fmt.Println(ocperr.ErrorWithStacktrace())
+	}
 }
 
 func StackError(err error, args ...interface{}) error {
