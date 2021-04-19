@@ -51,7 +51,7 @@ type OwnerAwareBlockService struct {
 }
 
 func (self *OwnerAwareBlockService) Close() error {
-	return utils.StackOnError(self.blocksvc.Close(), "Unable to close internal blockservice")
+	return utils.StackError(self.blocksvc.Close(), "Unable to close internal blockservice")
 }
 
 // GetBlock gets the requested block.

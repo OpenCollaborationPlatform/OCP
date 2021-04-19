@@ -643,7 +643,7 @@ func (self *ListVersioned) Add(value interface{}) (ListEntry, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access or create value in ds value set")
 	}
-	return &listVersionedEntry{*kv}, utils.StackOnError(kv.Write(value), "Unable to write ds value")
+	return &listVersionedEntry{*kv}, utils.StackError(kv.Write(value), "Unable to write ds value")
 }
 
 func (self *ListVersioned) GetEntries() ([]ListEntry, error) {
@@ -676,13 +676,13 @@ func (self *ListVersioned) LatestVersion() VersionID {
 func (self *ListVersioned) HasUpdates() (bool, error) {
 
 	res, err := self.kvset.HasUpdates()
-	return res, utils.StackOnError(err, "Unable to query value set for updates")
+	return res, utils.StackError(err, "Unable to query value set for updates")
 }
 
 func (self *ListVersioned) HasVersions() (bool, error) {
 
 	res, err := self.kvset.HasVersions()
-	return res, utils.StackOnError(err, "Unable to query value set for versions")
+	return res, utils.StackError(err, "Unable to query value set for versions")
 }
 
 func (self *ListVersioned) getListKey() []byte {
@@ -698,12 +698,12 @@ type listVersionedEntry struct {
 }
 
 func (self *listVersionedEntry) Write(value interface{}) error {
-	return utils.StackOnError(self.value.Write(value), "Unable to write ds value")
+	return utils.StackError(self.value.Write(value), "Unable to write ds value")
 }
 
 func (self *listVersionedEntry) Read() (interface{}, error) {
 	res, err := self.value.Read()
-	return res, utils.StackOnError(err, "Unable to read ds value")
+	return res, utils.StackError(err, "Unable to read ds value")
 }
 
 func (self *listVersionedEntry) IsValid() bool {
@@ -711,7 +711,7 @@ func (self *listVersionedEntry) IsValid() bool {
 }
 
 func (self *listVersionedEntry) Remove() error {
-	return utils.StackOnError(self.value.remove(), "Unable to remove ds value")
+	return utils.StackError(self.value.remove(), "Unable to remove ds value")
 }
 
 func (self *listVersionedEntry) Id() uint64 {

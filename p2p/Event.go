@@ -170,7 +170,7 @@ func (self *hostEventService) Publish(topic string, args ...interface{}) error {
 }
 
 func (self *hostEventService) RegisterTopic(topic string) error {
-	return utils.StackOnError(self.auth.addAuth(topic, AUTH_NONE, nil), "Unable  to add to authrisation handler")
+	return utils.StackError(self.auth.addAuth(topic, AUTH_NONE, nil), "Unable  to add to authrisation handler")
 }
 
 func (self *hostEventService) Stop() {
@@ -234,7 +234,7 @@ func (self *swarmEventService) Publish(topic string, args ...interface{}) error 
 func (self *swarmEventService) RegisterTopic(topic string, required_auth AUTH_STATE) error {
 
 	topic = self.swarm.ID.Pretty() + `.` + topic
-	return utils.StackOnError(self.auth.addAuth(topic, required_auth, self.swarm), "Unable to add to authorizer")
+	return utils.StackError(self.auth.addAuth(topic, required_auth, self.swarm), "Unable to add to authorizer")
 }
 
 func (self *swarmEventService) Stop() {

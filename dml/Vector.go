@@ -209,7 +209,7 @@ func (self *vector) set(id Identifier, dt DataType, idx int64, value interface{}
 		err = dbEntries.Write(idx, value)
 	}
 
-	return utils.StackOnError(err, "Unable to access DB")
+	return utils.StackError(err, "Unable to access DB")
 }
 
 //creates a new entry with a all new type, returns the index of the new one

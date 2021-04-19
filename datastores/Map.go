@@ -242,7 +242,7 @@ func (self *Map) Write(key interface{}, value interface{}) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to access key in value set")
 	}
-	return utils.StackOnError(entry.Write(value), "Unable to write ds value")
+	return utils.StackError(entry.Write(value), "Unable to write ds value")
 }
 
 func (self *Map) IsValid() bool {
@@ -287,7 +287,7 @@ func (self *Map) Remove(key interface{}) error {
 	if err != nil {
 		return err
 	}
-	return utils.StackOnError(self.kvset.removeKey(k), "Unable to remove in ds value set")
+	return utils.StackError(self.kvset.removeKey(k), "Unable to remove in ds value set")
 }
 
 func (self *Map) GetKeys() ([]interface{}, error) {

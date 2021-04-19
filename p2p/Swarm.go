@@ -243,7 +243,7 @@ func (s *Swarm) AddPeer(ctx context.Context, pid PeerID, state AUTH_STATE) error
 		s.logger.Debug("Adding peer failed", "peer", pid, "auth", state, "error", err)
 	}
 
-	return utils.StackOnError(err, "Unable to add conf update command to state")
+	return utils.StackError(err, "Unable to add conf update command to state")
 }
 
 func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
@@ -271,7 +271,7 @@ func (s *Swarm) RemovePeer(ctx context.Context, peer PeerID) error {
 		s.logger.Debug("Removing peer failed", "peer", peer, "error", err)
 	}
 
-	return utils.StackOnError(err, "Unable to add conf update command to state")
+	return utils.StackError(err, "Unable to add conf update command to state")
 }
 
 func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) error {
@@ -312,7 +312,7 @@ func (s *Swarm) ChangePeer(ctx context.Context, peer PeerID, auth AUTH_STATE) er
 		s.logger.Debug("Changing peer failed", "peer", peer, "auth", auth, "error", err)
 	}
 
-	return utils.StackOnError(err, "Unable to add conf update command to state")
+	return utils.StackError(err, "Unable to add conf update command to state")
 }
 
 func (s *Swarm) HasPeer(peer PeerID) bool {

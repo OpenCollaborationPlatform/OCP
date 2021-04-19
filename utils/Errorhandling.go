@@ -112,40 +112,36 @@ func PrintWithStacktrace(err error) {
 
 func StackError(err error, args ...interface{}) error {
 
-	//Get the function name in which the error occured
-	pc := make([]uintptr, 1)
-	n := runtime.Callers(2, pc)
-	pc = pc[:n]
-	frames := runtime.CallersFrames(pc)
-	frame, _ := frames.Next()
-
-	//build the message
-	var msg string
-	if len(args) > 1 {
-		msg = fmt.Sprintf(args[0].(string), args[1:]...)
-	} else if len(args) == 1 {
-		msg = args[0].(string)
-	}
-	msg = fmt.Sprintf("%v (Line %v): %v", frame.Function, frame.Line, msg)
-
-	if ocperr, ok := err.(OCPError); ok {
-		ocperr.AddToStack(msg)
-		err = ocperr
-
-	} else {
-		ocperr := NewError(Internal, "library", "failure")
-		ocperr.AddToStack(err.Error())
-		ocperr.AddToStack(msg)
-		err = ocperr
-	}
-
-	return err
-}
-
-func StackOnError(err error, args ...interface{}) error {
-
 	if err != nil {
-		return StackError(err, args...)
+
+		//Get the function name in which the error occured
+		pc := make([]uintptr, 1)
+		n := runtime.Callers(2, pc)
+		pc = pc[:n]
+		frames := runtime.CallersFrames(pc)
+		frame, _ := frames.Next()
+
+		//build the message
+		var msg string
+		if len(args) > 1 {
+			msg = fmt.Sprintf(args[0].(string), args[1:]...)
+		} else if len(args) == 1 {
+			msg = args[0].(string)
+		}
+		msg = fmt.Sprintf("%v (Line %v): %v", frame.Function, frame.Line, msg)
+
+		if ocperr, ok := err.(OCPError); ok {
+			ocperr.AddToStack(msg)
+			err = ocperr
+
+		} else {
+			ocperr := NewError(Internal, "library", "failure")
+			ocperr.AddToStack(err.Error())
+			ocperr.AddToStack(msg)
+			err = ocperr
+		}
+
+		return err
 	}
 	return nil
 }

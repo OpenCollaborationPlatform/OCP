@@ -218,11 +218,11 @@ func (self *Adder) addFileNode(path string, file files.Node, toplevel bool) erro
 
 	switch f := file.(type) {
 	case files.Directory:
-		return utils.StackOnError(self.addDir(path, f, toplevel), "Unable to add directory")
+		return utils.StackError(self.addDir(path, f, toplevel), "Unable to add directory")
 	case *files.Symlink:
-		return utils.StackOnError(self.addSymlink(path, f), "Unable to add Symlink")
+		return utils.StackError(self.addSymlink(path, f), "Unable to add Symlink")
 	case files.File:
-		return utils.StackOnError(self.addFile(path, f), "Unable to add file")
+		return utils.StackError(self.addFile(path, f), "Unable to add file")
 	default:
 		return newInternalError(Error_Data, "Unknown file type", "path", path)
 	}

@@ -161,7 +161,7 @@ func (self *event) Emit(id Identifier, args ...interface{}) error {
 
 	//inform runtime about event
 	if self.notifyer != nil {
-		return utils.StackOnError(self.notifyer.EventEmitted(id, self.name, args...), "Object function failed for event emit")
+		return utils.StackError(self.notifyer.EventEmitted(id, self.name, args...), "Object function failed for event emit")
 	}
 	return nil
 }

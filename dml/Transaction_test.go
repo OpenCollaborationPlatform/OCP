@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OpenCollaborationPlatform/OCP/utils"
+
 	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -355,6 +357,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					err = mngr.Open()
 					store.Commit()
+					utils.PrintWithStacktrace(err)
 					So(err, ShouldBeNil)
 
 					_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.Get(\"test\").value = 5")

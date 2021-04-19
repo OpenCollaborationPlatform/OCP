@@ -137,7 +137,7 @@ func NewDocumentHandler(router *connection.Router, host *p2p.Host, logger hclog.
 
 	//register the RPC api
 	err = host.Rpc.Register(DocumentAPI{dh})
-	err = utils.StackOnError(err, "Unable to register DocumentAPI")
+	err = utils.StackError(err, "Unable to register DocumentAPI")
 
 	//start handling invitations
 	go dh.handleInvitationRequest(inviteSub)

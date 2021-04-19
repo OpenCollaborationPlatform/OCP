@@ -95,7 +95,7 @@ bucket(SetKey) [
 
 func (self *VersionManagerImp) GetDatabaseSet(sType StorageType) (Set, error) {
 	res, err := self.store.GetOrCreateSet(sType, true, self.key)
-	return res, utils.StackOnError(err, "Unable to access or create set")
+	return res, utils.StackError(err, "Unable to access or create set")
 }
 
 //VerionedData interface

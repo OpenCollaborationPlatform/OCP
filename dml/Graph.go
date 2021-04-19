@@ -238,7 +238,7 @@ func (self *graph) AddNode(id Identifier, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	return utils.StackOnError(dbNodes.Write(dbentry, struct{}{}), "Unable to write to DB")
+	return utils.StackError(dbNodes.Write(dbentry, struct{}{}), "Unable to write to DB")
 }
 
 //creates a new entry with a all new type, returns the new node
@@ -368,7 +368,7 @@ func (self *graph) AddEdge(id Identifier, source, target, value interface{}) err
 	}
 	dbentry := self.typeToDB(value, dt)
 	edge := graphEdge{source, target}
-	return utils.StackOnError(dbEdges.Write(dbentry, edge), "Unable to write into DB")
+	return utils.StackError(dbEdges.Write(dbentry, edge), "Unable to write into DB")
 }
 
 //creates a new entry with a all new type, returns the new edge
@@ -453,7 +453,7 @@ func (self *graph) RemoveEdge(id Identifier, value interface{}) error {
 	}
 	dbentry := self.typeToDB(value, dt)
 	err = dbEdges.Remove(dbentry)
-	return utils.StackOnError(err, "Unable to remove from DB")
+	return utils.StackError(err, "Unable to remove from DB")
 }
 
 func (self *graph) RemoveEdgeBetween(id Identifier, source, target interface{}) error {
@@ -498,7 +498,7 @@ func (self *graph) RemoveEdgeBetween(id Identifier, source, target interface{}) 
 			(!self.isDirected() && (edge.Source == target && edge.Target == source)) {
 
 			//remove it!
-			return utils.StackOnError(dbEdges.Remove(key), "Umable to remove key from DB")
+			return utils.StackError(dbEdges.Remove(key), "Umable to remove key from DB")
 		}
 	}
 

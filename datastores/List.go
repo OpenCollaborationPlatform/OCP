@@ -252,7 +252,7 @@ func (self *List) Add(value interface{}) (ListEntry, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to get or create value Set")
 	}
-	return &listEntry{*entry}, utils.StackOnError(entry.Write(value), "Unable to write value")
+	return &listEntry{*entry}, utils.StackError(entry.Write(value), "Unable to write value")
 }
 
 func (self *List) GetEntries() ([]ListEntry, error) {
@@ -312,12 +312,12 @@ type listEntry struct {
 }
 
 func (self *listEntry) Write(value interface{}) error {
-	return utils.StackOnError(self.value.Write(value), "Unable to write ds value")
+	return utils.StackError(self.value.Write(value), "Unable to write ds value")
 }
 
 func (self *listEntry) Read() (interface{}, error) {
 	val, err := self.value.Read()
-	return val, utils.StackOnError(err, "Unable to read ds value")
+	return val, utils.StackError(err, "Unable to read ds value")
 }
 
 func (self *listEntry) IsValid() bool {
@@ -325,7 +325,7 @@ func (self *listEntry) IsValid() bool {
 }
 
 func (self *listEntry) Remove() error {
-	return utils.StackOnError(self.value.remove(), "Unable to remove ds value")
+	return utils.StackError(self.value.remove(), "Unable to remove ds value")
 }
 
 func (self *listEntry) Id() uint64 {

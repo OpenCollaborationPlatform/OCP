@@ -610,7 +610,7 @@ func (self *MapVersioned) Write(key interface{}, valueVersioned interface{}) err
 	if err != nil {
 		return utils.StackError(err, "Unable to access or create value in ds value set")
 	}
-	return utils.StackOnError(pair.Write(valueVersioned), "Unable to write ds value")
+	return utils.StackError(pair.Write(valueVersioned), "Unable to write ds value")
 }
 
 func (self *MapVersioned) IsValid() bool {
@@ -647,7 +647,7 @@ func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 		return nil, utils.StackError(err, "Unable to access or create value in ds value set")
 	}
 	res, err := pair.Read()
-	return res, utils.StackOnError(err, "Unable to write ds value")
+	return res, utils.StackError(err, "Unable to write ds value")
 }
 
 func (self *MapVersioned) Remove(key interface{}) error {
@@ -660,7 +660,7 @@ func (self *MapVersioned) Remove(key interface{}) error {
 	if err != nil {
 		return err
 	}
-	return utils.StackOnError(self.kvset.removeKey(k), "Unable to remove entry in ds value set")
+	return utils.StackError(self.kvset.removeKey(k), "Unable to remove entry in ds value set")
 }
 
 func (self *MapVersioned) CurrentVersion() VersionID {
@@ -678,13 +678,13 @@ func (self *MapVersioned) LatestVersion() VersionID {
 func (self *MapVersioned) HasUpdates() (bool, error) {
 
 	res, err := self.kvset.HasUpdates()
-	return res, utils.StackOnError(err, "Unable to query updates in ds value set")
+	return res, utils.StackError(err, "Unable to query updates in ds value set")
 }
 
 func (self *MapVersioned) HasVersions() (bool, error) {
 
 	res, err := self.kvset.HasVersions()
-	return res, utils.StackOnError(err, "Unable to query uversions in ds value set")
+	return res, utils.StackError(err, "Unable to query uversions in ds value set")
 }
 
 func (self *MapVersioned) GetKeys() ([]interface{}, error) {

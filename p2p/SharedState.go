@@ -42,7 +42,7 @@ func (self *ReplicaAPI) AddCommand(ctx context.Context, op replica.Operation, re
 
 	err := self.rep.AddCommand(ctx, op)
 	*ret = (err == nil)
-	return utils.StackOnError(err, "Unable to add command to replica")
+	return utils.StackError(err, "Unable to add command to replica")
 }
 
 // Api callable by Read Only auth
@@ -59,7 +59,7 @@ func (self *ReplicaReadAPI) GetLeader(ctx context.Context, inp struct{}, ret *pe
 
 	value, err := self.rep.GetLeader(ctx)
 	*ret = value
-	return utils.StackOnError(err, "Unable to get leader from replica")
+	return utils.StackError(err, "Unable to get leader from replica")
 }
 
 //join is ReadAPI as also read only peers need to call it for themself. If joining is allowed will be
@@ -77,7 +77,7 @@ func (self *ReplicaReadAPI) Join(ctx context.Context, peer PeerID, ret *AUTH_STA
 	auth := self.conf.PeerAuth(peer)
 	err := self.rep.ConnectPeer(ctx, peer, auth == AUTH_READWRITE)
 	*ret = auth
-	return utils.StackOnError(err, "Unable to connect peer to replica")
+	return utils.StackError(err, "Unable to connect peer to replica")
 }
 
 //leav is ReadAPI as also read only peers need to call it for themself.
@@ -91,7 +91,7 @@ func (self *ReplicaReadAPI) Leave(ctx context.Context, peer PeerID, ret *struct{
 		return newConnectionError(Error_Authorisation, "Peer is not part of the state sharing: can't leave")
 	}
 	err := self.rep.DisconnectPeer(ctx, peer)
-	return utils.StackOnError(err, "Unable to disconnect peer from replica")
+	return utils.StackError(err, "Unable to disconnect peer from replica")
 }
 
 /******************************************************************************
@@ -254,7 +254,7 @@ func (self *sharedStateService) share(state replica.State) error {
 	}
 
 	//add to replica
-	return utils.StackOnError(self.rep.AddState(name, state), "Unable to add state to replica")
+	return utils.StackError(self.rep.AddState(name, state), "Unable to add state to replica")
 }
 
 func (self *sharedStateService) startup(bootstrap bool) error {
@@ -332,7 +332,7 @@ func (self *sharedStateService) connect(ctx context.Context, peers []PeerID) err
 	//call the leader to let us join
 	var auth AUTH_STATE
 	err = self.swarm.Rpc.CallContext(callctx, leader, "ReplicaReadAPI", "Join", self.swarm.host.ID(), &auth)
-	err = utils.StackOnError(err, "Unable to call leader with join rpc")
+	err = utils.StackError(err, "Unable to call leader with join rpc")
 	return err
 }
 

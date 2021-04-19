@@ -263,7 +263,7 @@ func (self *object) EventEmitted(id Identifier, name string, args ...interface{}
 	if err != nil {
 		return utils.StackError(err, "Unable to retreive object path")
 	}
-	return utils.StackOnError(self.rntm.emitEvent(path, name, args...), "Event emittion failed")
+	return utils.StackError(self.rntm.emitEvent(path, name, args...), "Event emittion failed")
 }
 
 func (self *object) GetRuntime() *Runtime {
@@ -277,7 +277,7 @@ func (self *object) HasUpdates(id Identifier) (bool, error) {
 		return false, utils.StackError(err, "Unable to access DB version manager")
 	}
 	res, err := mngr.HasUpdates()
-	return res, utils.StackOnError(err, "Unable to query DB for updates")
+	return res, utils.StackError(err, "Unable to query DB for updates")
 }
 
 func (self *object) HasVersions(id Identifier) (bool, error) {
@@ -286,7 +286,7 @@ func (self *object) HasVersions(id Identifier) (bool, error) {
 		return false, utils.StackError(err, "Unable to access DB version manager")
 	}
 	res, err := mngr.HasVersions()
-	return res, utils.StackOnError(err, "Unable to query DB for versions")
+	return res, utils.StackError(err, "Unable to query DB for versions")
 }
 
 func (self *object) ResetHead(id Identifier) error {
@@ -294,7 +294,7 @@ func (self *object) ResetHead(id Identifier) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to access DB version manager")
 	}
-	return utils.StackOnError(mngr.ResetHead(), "Unable to reset head in DB")
+	return utils.StackError(mngr.ResetHead(), "Unable to reset head in DB")
 }
 
 func (self *object) FixStateAsVersion(id Identifier) (datastore.VersionID, error) {
@@ -303,7 +303,7 @@ func (self *object) FixStateAsVersion(id Identifier) (datastore.VersionID, error
 		return datastore.VersionID(datastore.INVALID), utils.StackError(err, "Unable to access DB version manager")
 	}
 	res, err := mngr.FixStateAsVersion()
-	return res, utils.StackOnError(err, "Unable to fix state")
+	return res, utils.StackError(err, "Unable to fix state")
 }
 
 func (self *object) LoadVersion(id Identifier, vId datastore.VersionID) error {
@@ -311,7 +311,7 @@ func (self *object) LoadVersion(id Identifier, vId datastore.VersionID) error {
 	if err != nil {
 		return utils.StackError(err, "Unable to access DB version manager")
 	}
-	return utils.StackOnError(mngr.LoadVersion(vId), "Unable to load DB version")
+	return utils.StackError(mngr.LoadVersion(vId), "Unable to load DB version")
 }
 
 func (self *object) GetLatestVersion(id Identifier) (datastore.VersionID, error) {
@@ -320,7 +320,7 @@ func (self *object) GetLatestVersion(id Identifier) (datastore.VersionID, error)
 		return datastore.VersionID(datastore.INVALID), utils.StackError(err, "Unable to access DB version manager")
 	}
 	res, err := mngr.GetLatestVersion()
-	return res, utils.StackOnError(err, "Unable to access latest version in DB")
+	return res, utils.StackError(err, "Unable to access latest version in DB")
 }
 
 func (self *object) GetCurrentVersion(id Identifier) (datastore.VersionID, error) {
@@ -329,7 +329,7 @@ func (self *object) GetCurrentVersion(id Identifier) (datastore.VersionID, error
 		return datastore.VersionID(datastore.INVALID), utils.StackError(err, "Unable to access DB version manager")
 	}
 	res, err := mngr.GetCurrentVersion()
-	return res, utils.StackOnError(err, "Unable to access current version in DB")
+	return res, utils.StackError(err, "Unable to access current version in DB")
 }
 
 func (self *object) RemoveVersionsUpTo(id Identifier, vId datastore.VersionID) error {
@@ -337,7 +337,7 @@ func (self *object) RemoveVersionsUpTo(id Identifier, vId datastore.VersionID) e
 	if err != nil {
 		return utils.StackError(err, "Unable to access DB version manager")
 	}
-	return utils.StackOnError(mngr.RemoveVersionsUpTo(vId), "Unable to remove versions in DB")
+	return utils.StackError(mngr.RemoveVersionsUpTo(vId), "Unable to remove versions in DB")
 }
 
 func (self *object) RemoveVersionsUpFrom(id Identifier, vId datastore.VersionID) error {
@@ -345,7 +345,7 @@ func (self *object) RemoveVersionsUpFrom(id Identifier, vId datastore.VersionID)
 	if err != nil {
 		return utils.StackError(err, "Unable to access DB version manager")
 	}
-	return utils.StackOnError(mngr.RemoveVersionsUpFrom(vId), "Unable to remove versions in DB")
+	return utils.StackError(mngr.RemoveVersionsUpFrom(vId), "Unable to remove versions in DB")
 }
 
 func (self *object) InitializeDB(id Identifier) error {

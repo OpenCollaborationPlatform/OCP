@@ -606,7 +606,7 @@ func (self *transactionBehaviour) setInTransaction(id Identifier, value bool) er
 	if err != nil {
 		return utils.StackError(err, "Unable to read transaction status from DB")
 	}
-	return utils.StackOnError(inTransaction.Write(value), "Unable to write transaction status")
+	return utils.StackError(inTransaction.Write(value), "Unable to write transaction status")
 }
 
 func (self *transactionBehaviour) InCurrentTransaction(id Identifier) (bool, error) {
@@ -649,7 +649,7 @@ func (self *transactionBehaviour) setCurrent(id Identifier, transIdent [32]byte)
 	if err != nil {
 		return utils.StackError(err, "Unable to get transaction from DB")
 	}
-	return utils.StackOnError(trans.Write(transIdent), "Unable to write transaction status")
+	return utils.StackError(trans.Write(transIdent), "Unable to write transaction status")
 }
 
 func (self *transactionBehaviour) defaultAddable(id Identifier) bool {
