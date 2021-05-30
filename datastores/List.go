@@ -213,6 +213,15 @@ func (self *ListSet) GetOrCreateList(key []byte) (*List, error) {
 	return &mp, nil
 }
 
+func (self *ListSet) GetEntry(key []byte) (Entry, error) {
+
+	if !self.HasList(key) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Set does not have list", "List", key)
+	}
+
+	return self.GetOrCreateList(key)
+}
+
 /*
  * List functions
  * ********************************************************************************
@@ -228,7 +237,7 @@ func newList(db *boltWrapper, dbkey []byte, listkeys [][]byte) List {
 	return List{kv}
 }
 
-func (self *List) Add(value interface{}) (ListEntry, error) {
+func (self *List) Add(value interface{}) (ListValue, error) {
 
 	var id uint64
 	err := self.kvset.db.Update(func(tx *bolt.Tx) error {
@@ -252,12 +261,12 @@ func (self *List) Add(value interface{}) (ListEntry, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to get or create value Set")
 	}
-	return &listEntry{*entry}, utils.StackError(entry.Write(value), "Unable to write value")
+	return &listValue{*entry}, utils.StackError(entry.Write(value), "Unable to write value")
 }
 
-func (self *List) GetEntries() ([]ListEntry, error) {
+func (self *List) GetValues() ([]ListValue, error) {
 
-	entries := make([]ListEntry, 0)
+	entries := make([]ListValue, 0)
 
 	//iterate over all entries...
 	err := self.kvset.db.View(func(tx *bolt.Tx) error {
@@ -282,7 +291,7 @@ func (self *List) GetEntries() ([]ListEntry, error) {
 			value.key = key
 
 			//add to the list
-			entries = append(entries, &listEntry{value})
+			entries = append(entries, &listValue{value})
 			return nil
 		})
 		return err
@@ -291,43 +300,107 @@ func (self *List) GetEntries() ([]ListEntry, error) {
 	return entries, wrapDSError(err, Error_Bolt_Access_Failure)
 }
 
+func (self *List) HasReference(ref uint64) bool {
+	//check if exist
+	var exists bool = false
+	self.kvset.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.kvset.dbkey)
+		for _, bkey := range self.kvset.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		val := bucket.Get(itob(ref))
+		exists = (val != nil)
+		return nil
+	})
+	return exists
+}
+
 func (self *List) getListKey() []byte {
 	return self.kvset.getSetKey()
+}
+
+func (self *List) SupportsSubentries() bool {
+	return true
+}
+
+func (self *List) GetSubentry(key interface{}) (Entry, error) {
+
+	var id uint64
+	switch k := key.(type) {
+	case int:
+		id = uint64(k)
+	case int8:
+		id = uint64(k)
+	case int16:
+		id = uint64(k)
+	case int32:
+		id = uint64(k)
+	case uint:
+		id = uint64(k)
+	case uint8:
+		id = uint64(k)
+	case uint16:
+		id = uint64(k)
+	case uint32:
+		id = uint64(k)
+	case uint64:
+		id = uint64(k)
+	case ListValue:
+		id = k.(ListValue).Reference()
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Subentry key must be integer or ListValue type")
+	}
+
+	if !self.HasReference(id) {
+		return nil, NewDSError(Error_Key_Not_Existant, "List does not have value with given reference")
+	}
+
+	return &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, itob(id)}}, nil
 }
 
 /*
  * List entries functions
  * ********************************************************************************
  */
-type ListEntry interface {
+type ListValue interface {
+	Entry
 	Write(value interface{}) error
 	Read() (interface{}, error)
 	IsValid() bool
 	Remove() error
-	Id() uint64
+	Reference() uint64
 }
 
-type listEntry struct {
+type listValue struct {
 	value Value
 }
 
-func (self *listEntry) Write(value interface{}) error {
+func (self *listValue) Write(value interface{}) error {
 	return utils.StackError(self.value.Write(value), "Unable to write ds value")
 }
 
-func (self *listEntry) Read() (interface{}, error) {
+func (self *listValue) Read() (interface{}, error) {
 	val, err := self.value.Read()
 	return val, utils.StackError(err, "Unable to read ds value")
 }
 
-func (self *listEntry) IsValid() bool {
+func (self *listValue) IsValid() bool {
 	return self.value.IsValid()
 }
 
-func (self *listEntry) Remove() error {
+func (self *listValue) Remove() error {
 	return utils.StackError(self.value.remove(), "Unable to remove ds value")
 }
 
-func (self *listEntry) Id() uint64 {
+func (self *listValue) Reference() uint64 {
 	return btoi(self.value.key)
+}
+
+func (self *listValue) SupportsSubentries() bool {
+	return false
+}
+func (self *listValue) GetSubentry(interface{}) (Entry, error) {
+	return nil, NewDSError(Error_Operation_Invalid, "ListValue does not support subentries")
 }

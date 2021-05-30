@@ -248,13 +248,11 @@ func (self *object) SetObjectPath(id Identifier, path string) error {
 }
 
 func (self *object) BeforePropertyChange(id Identifier, name string) error {
-	self.GetEvent("onBeforePropertyChange").Emit(id, name)
-	return nil
+	return self.GetEvent("onBeforePropertyChange").Emit(id, name)
 }
 
 func (self *object) PropertyChanged(id Identifier, name string) error {
-	self.GetEvent("onPropertyChanged").Emit(id, name)
-	return nil
+	return self.GetEvent("onPropertyChanged").Emit(id, name)
 }
 
 func (self *object) EventEmitted(id Identifier, name string, args ...interface{}) error {
@@ -361,6 +359,9 @@ func (self *object) InitializeDB(id Identifier) error {
 	}
 	if err := self.SetDataType(id, DataType{}); err != nil {
 		return utils.StackError(err, "Unable to set data type for %v", id)
+	}
+	if err := self.SetObjectPath(id, ""); err != nil {
+		return utils.StackError(err, "Unable to set object path for %v", id)
 	}
 
 	return nil

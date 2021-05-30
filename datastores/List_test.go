@@ -102,7 +102,7 @@ func TestListBasic(t *testing.T) {
 			set, _ := genset.(*ListSet)
 			list, err := set.GetOrCreateList([]byte("list"))
 
-			entries, err := list.GetEntries()
+			entries, err := list.GetValues()
 			So(err, ShouldBeNil)
 			So(len(entries), ShouldEqual, 1)
 		})

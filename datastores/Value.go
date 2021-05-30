@@ -178,6 +178,14 @@ func (self *ValueSet) Print(params ...int) {
 	})
 }
 
+func (self *ValueSet) GetEntry(key []byte) (Entry, error) {
+
+	if !self.HasKey(key) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Key does not exist in set", "Key", key)
+	}
+	return self.GetOrCreateValue(key)
+}
+
 /*
  * Value functions
  * ********************************************************************************
@@ -383,6 +391,13 @@ func (self *Value) Exists() (bool, error) {
 	})
 
 	return exists, nil
+}
+
+func (self *Value) SupportsSubentries() bool {
+	return false
+}
+func (self *Value) GetSubentry(interface{}) (Entry, error) {
+	return nil, NewDSError(Error_Operation_Invalid, "Value does not have subentries")
 }
 
 func (self *Value) remove() error {

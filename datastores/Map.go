@@ -217,6 +217,15 @@ func (self *MapSet) GetOrCreateMap(key []byte) (*Map, error) {
 	return &mp, nil
 }
 
+func (self *MapSet) GetEntry(key []byte) (Entry, error) {
+
+	if !self.HasMap(key) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Map does not exist in Set", "Map", key)
+	}
+
+	return self.GetOrCreateMap(key)
+}
+
 /*
  * Map functions
  * ********************************************************************************
@@ -308,6 +317,24 @@ func (self *Map) GetKeys() ([]interface{}, error) {
 	}
 
 	return keys, nil
+}
+
+func (self *Map) SupportsSubentries() bool {
+	return true
+}
+
+func (self *Map) GetSubentry(key interface{}) (Entry, error) {
+
+	k, err := getBytes(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !self.kvset.HasKey(k) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Key not available in map")
+	}
+
+	return self.kvset.GetOrCreateValue(k)
 }
 
 func (self *Map) getMapKey() []byte {

@@ -1,8 +1,11 @@
 /* Data dbs as base for persistence
  *
- * Datastore: A folder that holds all the relevant data and in which a multitude of
- *            different databases can be placed. The datastore handles the creation
+ * Datastore: A type that holds all the relevant data and in which a multitude of
+ *            different databases can exist. The datastore handles the creation
  *            and management of all different databases
+ * Key:	  A universal way of accessing data entries within a datastore without knowing any
+ *			  specifics about it. A key consists of the DB type, the set key and than
+ *			  multiple entrie keys, dependend on the required recursiveness
  * Database:  Special type of storage with unique properties, e.g. ValueVersionedType database,
  *            relational database etc. A database lives within a Datastorage and is
  *            managed by it. It provides access to its functionality in sub entries,
@@ -14,7 +17,14 @@
  *            must be added at the beginning, bevor versioning, as they are not part
  *            of the versioning process. Versioning happens inside the set, e.g.
  *            for a ValueVersionedType set the individual valueVersioneds are versioned.
- *
+ * Entry: 	  A data entry within a set. It is accessed via a key in a Set, and can be
+ *			  almost anything dependend in type of database. E.g for a ValueType Set a entry
+ * 			  is just a single value. For a MapType a entry is a Map. Entries are recursive,
+ * 			  that means an entry can hold other entries also accessbile by key. This goes
+ * 			  down till no subentries are available. E.g. a ValueType entry does not have
+ *			  any more subentries, but a MapType entry has one subentry for each map key.
+ * 			  Entries can be Versioned, as well as subentries. Any versioning action on a
+ * 			  VersionedEntry is also applied to the subentries.
  *
  * General properties:
  * - Not enabled for concurrent usage, user needs to ensure single access
@@ -71,11 +81,26 @@ type Set interface {
 	GetType() StorageType
 	IsValid() bool
 	Print(params ...int)
+	GetEntry([]byte) (Entry, error)
 }
 
 type VersionedSet interface {
 	VersionedData
 	Set
+
+	GetVersionedEntry([]byte) (VersionedEntry, error)
+}
+
+type Entry interface {
+	SupportsSubentries() bool
+	GetSubentry(interface{}) (Entry, error)
+}
+
+type VersionedEntry interface {
+	VersionedData
+	Entry
+
+	GetVersionedSubentry(interface{}) (VersionedEntry, error)
 }
 
 type StorageType uint64
@@ -87,6 +112,18 @@ const (
 )
 
 var StorageTypes = []StorageType{ValueType, MapType, ListType}
+
+func NewKey(stype StorageType, versioned bool, set [32]byte, entry []byte, subentries []interface{}) Key {
+	return Key{stype, versioned, set, entry, subentries}
+}
+
+type Key struct {
+	Type       StorageType
+	Versioned  bool
+	Set        [32]byte
+	Entry      []byte
+	Subentries []interface{}
+}
 
 func NewDatastore(path string) (*Datastore, error) {
 
@@ -175,7 +212,7 @@ func (self *Datastore) GetDatabase(kind StorageType, versioned bool) (DataBase, 
 		db, ok = self.dbs[kind]
 	}
 	if !ok {
-		return nil, NewDSError(Error_Setup_Incorrectly, "", kind)
+		return nil, NewDSError(Error_Setup_Incorrectly, "Storage type not available", "Type", kind)
 	}
 
 	return db, nil
@@ -188,6 +225,68 @@ func (self *Datastore) GetOrCreateSet(kind StorageType, versioned bool, set [32]
 		return nil, utils.StackError(err, "Unable to get database of type %v (versioned=%v)", kind, versioned)
 	}
 	return db.GetOrCreateSet(set)
+}
+
+//Retrieve any entry from within the datastore
+func (self *Datastore) GetEntry(key Key) (Entry, error) {
+
+	var db DataBase
+	var ok bool
+	if key.Versioned {
+		db, ok = self.vDbs[key.Type]
+	} else {
+		db, ok = self.dbs[key.Type]
+	}
+	if !ok {
+		return nil, NewDSError(Error_Setup_Incorrectly, "Storage type not available", "Type", key.Type)
+	}
+
+	if has, err := db.HasSet(key.Set); !has || err != nil {
+		return nil, NewDSError(Error_Key_Not_Existant, "Set does not exist in Database", "Type", key.Type, "Set", key.Set)
+	}
+
+	set, err := db.GetOrCreateSet(key.Set)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access set in DB, even though it should exist", "Type", key.Type, "Set", key.Set)
+	}
+
+	//get set entry
+	entry, err := set.GetEntry(key.Entry)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access entry in set", "Type", key.Type, "Set", key.Set, "Entry", key.Entry)
+	}
+
+	//get subentries if available
+	if len(key.Subentries) > 0 && !entry.SupportsSubentries() {
+		return nil, NewDSError(Error_Operation_Invalid, "Key specifies subentries, but entry doe not support those")
+	}
+	for _, v := range key.Subentries {
+		entry, err = entry.GetSubentry(v)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to access subentry", "Type", "Entry", v)
+		}
+	}
+	return entry, nil
+}
+
+//Retrieve any versioned entry from the datastore
+func (self *Datastore) GetVersionedEntry(key Key) (VersionedEntry, error) {
+
+	if !key.Versioned {
+		return nil, NewDSError(Error_Operation_Invalid, "Accessing of versioned entry with unversioned key")
+	}
+
+	entry, err := self.GetEntry(key)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access entry as specified by key", "Key", key)
+	}
+
+	ventry, ok := entry.(VersionedEntry)
+	if !ok {
+		return nil, NewDSError(Error_Invalid_Data, "Versioned entry is of wrong type")
+	}
+
+	return ventry, nil
 }
 
 func (self *Datastore) Begin() error {

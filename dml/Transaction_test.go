@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OpenCollaborationPlatform/OCP/utils"
-
 	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -232,8 +230,8 @@ func TestTransactionBehaviour(t *testing.T) {
 				rntm.currentUser = "User1"
 				store.Begin()
 				err := mngr.Open()
-				So(err, ShouldBeNil)
 				store.Commit()
+				So(err, ShouldBeNil)
 
 				_, err = rntm.RunJavaScript(store, "User1", "Document.result.value = ''")
 				So(err, ShouldBeNil)
@@ -241,8 +239,8 @@ func TestTransactionBehaviour(t *testing.T) {
 				store.Begin()
 				mset, _ := rntm.getMainObjectSet()
 				err = mngr.Add(mset.id)
-				So(err, ShouldBeNil)
 				store.Commit()
+				So(err, ShouldBeNil)
 
 				Convey("it is listed as part of the transaction ", func() {
 
@@ -296,6 +294,38 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(err, ShouldBeNil)
 					err = mngr.Add(mset.id)
 					So(err, ShouldNotBeNil)
+				})
+
+				Convey("and closing the transaction works", func() {
+
+					store.Begin()
+
+					rntm.currentUser = "User1"
+					err := mngr.Close()
+					open := mngr.IsOpen()
+					store.Commit()
+					So(err, ShouldBeNil)
+					So(open, ShouldBeFalse)
+
+					res, err := rntm.Call(store, "User1", "Document.result.value")
+					So(err, ShouldBeNil)
+					str := res.(string)
+					So(str, ShouldEqual, "p1c1")
+
+					Convey("makes the main object transactionless again", func() {
+
+						store.Begin()
+						defer store.Rollback()
+						mset, _ := rntm.getMainObjectSet()
+						bhvrSet, _ := mset.obj.(Data).GetBehaviour(mset.id, "Transaction")
+						trns := bhvrSet.obj.(*transactionBehaviour)
+						ok, err := trns.InTransaction(bhvrSet.id)
+						So(err, ShouldBeNil)
+						So(ok, ShouldBeFalse)
+						ok, err = trns.InCurrentTransaction(bhvrSet.id)
+						So(err, ShouldBeNil)
+						So(ok, ShouldBeFalse)
+					})
 				})
 			})
 
@@ -357,7 +387,6 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					err = mngr.Open()
 					store.Commit()
-					utils.PrintWithStacktrace(err)
 					So(err, ShouldBeNil)
 
 					_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.Get(\"test\").value = 5")
@@ -380,7 +409,7 @@ func TestTransactionBehaviour(t *testing.T) {
 	})
 }
 
-func TestTransactionAbort(t *testing.T) {
+func TestTransactionFail(t *testing.T) {
 
 	//create the runtime
 	Convey("Testing transaction abort by loading dml code and opening an transaction", t, func() {
@@ -695,6 +724,86 @@ func TestTransactionAbort(t *testing.T) {
 				So(len(objs), ShouldEqual, 2)
 				So(objs[1].id.Name, ShouldEqual, "Child1")
 			})
+		})
+	})
+}
+
+func TestTransactionAbort(t *testing.T) {
+
+	//create the runtime
+	Convey("Testing transaction abort by loading dml code", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
+
+		store, _ := datastore.NewDatastore(path)
+		defer store.Close()
+
+		var code = `
+				Data {
+					.name: "Document"
+
+					property  int value: 1
+
+					Data {
+						.name: "Child"
+
+						property int value: 1
+
+						function test() {
+							this.p = 10
+							this.parent.p = 10
+						}
+					}
+
+					Transaction {
+
+						.name: "trans"
+						.recursive: true
+						.automatic: true
+
+						function CanBeAdded() {
+							return !this.parent.abort
+						}
+					}
+				}`
+
+		rntm := NewRuntime()
+		err := rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
+		So(err, ShouldBeNil)
+		rntm.currentUser = "User1"
+
+		Convey("Changing some data in the toplevel object is abortable", func() {
+
+			code := `Document.value = 5
+					 Transaction.Abort()`
+			_, err = rntm.RunJavaScript(store, "User1", code)
+			So(err, ShouldBeNil)
+
+			store.Begin()
+			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			So(mngr.IsOpen(), ShouldBeFalse)
+			set, _ := rntm.getObjectFromPath("Document")
+			value := set.obj.GetProperty("value").GetValue(set.id)
+			So(value, ShouldEqual, 1)
+		})
+
+		Convey("Changing some data in the recursive object is abortable", func() {
+
+			code := `Document.Child.value = 5
+					 Transaction.Abort()`
+			_, err = rntm.RunJavaScript(store, "User1", code)
+			So(err, ShouldBeNil)
+
+			store.Begin()
+			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			So(mngr.IsOpen(), ShouldBeFalse)
+			set, _ := rntm.getObjectFromPath("Document.Child")
+			value := set.obj.GetProperty("value").GetValue(set.id)
+			So(value, ShouldEqual, 1)
 		})
 	})
 }

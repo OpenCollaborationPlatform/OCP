@@ -387,23 +387,39 @@ func TestValueVersioned(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			So(pair1.IsValid(), ShouldBeFalse)
-			So(pair1.CurrentVersion().IsHead(), ShouldBeTrue)
-			So(pair1.LatestVersion().IsValid(), ShouldBeFalse)
-			So(pair1.HasUpdates(), ShouldBeTrue)
+			cur, err := pair1.GetCurrentVersion()
+			So(err, ShouldBeNil)
+			So(cur.IsHead(), ShouldBeTrue)
+			lat, err := pair1.GetLatestVersion()
+			So(err, ShouldBeNil)
+			So(lat.IsValid(), ShouldBeFalse)
+			upd, err := pair1.HasUpdates()
+			So(err, ShouldBeNil)
+			So(upd, ShouldBeTrue)
 			data, err := pair1.Read()
 			So(err, ShouldNotBeNil)
 			So(data, ShouldBeNil)
 
 			pair1.Write("hello guys")
 			So(pair1.IsValid(), ShouldBeTrue)
-			So(pair1.HasUpdates(), ShouldBeTrue)
-			So(pair1.CurrentVersion().IsHead(), ShouldBeTrue)
-			So(pair1.LatestVersion().IsValid(), ShouldBeFalse)
+			upd, err = pair1.HasUpdates()
+			So(err, ShouldBeNil)
+			So(upd, ShouldBeTrue)
+			cur, err = pair1.GetCurrentVersion()
+			So(err, ShouldBeNil)
+			So(cur.IsHead(), ShouldBeTrue)
+			lat, err = pair1.GetLatestVersion()
+			So(err, ShouldBeNil)
+			So(lat.IsValid(), ShouldBeFalse)
 
 			pair1.Write("override")
 			So(pair1.IsValid(), ShouldBeTrue)
-			So(pair1.CurrentVersion().IsHead(), ShouldBeTrue)
-			So(pair1.LatestVersion().IsValid(), ShouldBeFalse)
+			cur, err = pair1.GetCurrentVersion()
+			So(err, ShouldBeNil)
+			So(cur.IsHead(), ShouldBeTrue)
+			lat, err = pair1.GetLatestVersion()
+			So(err, ShouldBeNil)
+			So(lat.IsValid(), ShouldBeFalse)
 		})
 
 		Convey("and the old version should be reloadable.", func() {
@@ -546,7 +562,7 @@ func TestValueVersioned(t *testing.T) {
 			So(set.RemoveVersionsUpFrom(VersionID(4)), ShouldBeNil)
 		})
 
-		Convey("Creating a new list for reset testing", func() {
+		Convey("Creating a new set for reset testing", func() {
 
 			genset, _ := db.GetOrCreateSet(makeSetFromString("testreset"))
 			set := genset.(VersionedSet)
@@ -556,18 +572,23 @@ func TestValueVersioned(t *testing.T) {
 
 				value, _ := kvset.GetOrCreateValue([]byte("key1"))
 				value.Write("test")
-				So(value.HasUpdates(), ShouldBeTrue)
+				upd, err := value.HasUpdates()
+				So(err, ShouldBeNil)
+				So(upd, ShouldBeTrue)
 
 				holds, err := value.WasWrittenOnce()
 				So(err, ShouldBeNil)
 				So(holds, ShouldBeTrue)
 				So(value.IsValid(), ShouldBeTrue)
-				So(value.LatestVersion().IsValid(), ShouldBeFalse)
+				lat, err := value.GetLatestVersion()
+				So(err, ShouldBeNil)
+				So(lat.IsValid(), ShouldBeFalse)
 
 				has, _ := kvset.HasUpdates()
 				So(has, ShouldBeTrue)
-				kvset.ResetHead()
 
+				err = kvset.ResetHead()
+				So(err, ShouldBeNil)
 				So(kvset.HasKey([]byte("key1")), ShouldBeFalse)
 			})
 		})

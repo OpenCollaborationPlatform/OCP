@@ -259,7 +259,7 @@ func (self *ListVersionedSet) ResetHead() error {
 	for _, list := range listVersioneds {
 		//if the list has a version we can reset, otherwise we need a full delete
 		//(to reset to not-available-state
-		if list.LatestVersion().IsValid() {
+		if lat, err := list.GetLatestVersion(); err == nil && lat.IsValid() {
 			if err := list.kvset.ResetHead(); err != nil {
 				return utils.StackError(err, "Unable to reset head in ds value set")
 			}
@@ -608,6 +608,24 @@ func (self *ListVersionedSet) GetOrCreateList(key []byte) (*ListVersioned, error
 	return &list, nil
 }
 
+func (self *ListVersionedSet) GetEntry(key []byte) (Entry, error) {
+
+	if !self.HasList(key) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Set does not have list", "List", key)
+	}
+
+	return self.GetOrCreateList(key)
+}
+
+func (self *ListVersionedSet) GetVersionedEntry(key []byte) (VersionedEntry, error) {
+
+	if !self.HasList(key) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Set does not have list", "List", key)
+	}
+
+	return self.GetOrCreateList(key)
+}
+
 /*
  * ListVersioned functions
  * ********************************************************************************
@@ -623,7 +641,7 @@ func newListVersioned(db *boltWrapper, dbkey []byte, listVersionedkeys [][]byte)
 	return ListVersioned{kv}
 }
 
-func (self *ListVersioned) Add(value interface{}) (ListEntry, error) {
+func (self *ListVersioned) Add(value interface{}) (ListValue, error) {
 
 	var id uint64
 	err := self.kvset.db.Update(func(tx *bolt.Tx) error {
@@ -643,77 +661,212 @@ func (self *ListVersioned) Add(value interface{}) (ListEntry, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access or create value in ds value set")
 	}
-	return &listVersionedEntry{*kv}, utils.StackError(kv.Write(value), "Unable to write ds value")
+	return &listVersionedValue{*kv}, utils.StackError(kv.Write(value), "Unable to write ds value")
 }
 
-func (self *ListVersioned) GetEntries() ([]ListEntry, error) {
+func (self *ListVersioned) GetEntries() ([]ListValue, error) {
 
 	vals, err := self.kvset.getValues()
 	if err != nil {
-		return []ListEntry{}, utils.StackError(err, "Unable to get values from ds value set")
+		return []ListValue{}, utils.StackError(err, "Unable to get values from ds value set")
 	}
 
-	entries := make([]ListEntry, len(vals))
+	entries := make([]ListValue, len(vals))
 	for i, val := range vals {
-		entries[i] = &listVersionedEntry{val}
+		entries[i] = &listVersionedValue{val}
 	}
 
 	return entries, err
 }
 
-func (self *ListVersioned) CurrentVersion() VersionID {
-
-	v, _ := self.kvset.GetCurrentVersion()
-	return v
+func (self *ListVersioned) GetCurrentVersion() (VersionID, error) {
+	return self.kvset.GetCurrentVersion()
 }
 
-func (self *ListVersioned) LatestVersion() VersionID {
-
-	v, _ := self.kvset.GetLatestVersion()
-	return v
+func (self *ListVersioned) GetLatestVersion() (VersionID, error) {
+	return self.kvset.GetLatestVersion()
 }
 
 func (self *ListVersioned) HasUpdates() (bool, error) {
 
 	res, err := self.kvset.HasUpdates()
-	return res, utils.StackError(err, "Unable to query value set for updates")
+	return res, utils.StackError(err, "Unable to query updates in ds value set")
 }
 
 func (self *ListVersioned) HasVersions() (bool, error) {
 
 	res, err := self.kvset.HasVersions()
-	return res, utils.StackError(err, "Unable to query value set for versions")
+	return res, utils.StackError(err, "Unable to query uversions in ds value set")
+}
+
+func (self *ListVersioned) ResetHead() error {
+	return self.kvset.ResetHead()
+}
+
+func (self *ListVersioned) FixStateAsVersion() (VersionID, error) {
+	return self.kvset.FixStateAsVersion()
+}
+
+func (self *ListVersioned) LoadVersion(id VersionID) error {
+	return self.kvset.LoadVersion(id)
+}
+
+func (self *ListVersioned) RemoveVersionsUpTo(id VersionID) error {
+	return self.kvset.RemoveVersionsUpTo(id)
+}
+
+func (self *ListVersioned) RemoveVersionsUpFrom(id VersionID) error {
+	return self.kvset.RemoveVersionsUpFrom(id)
 }
 
 func (self *ListVersioned) getListKey() []byte {
 	return self.kvset.getSetKey()
 }
 
+func (self *ListVersioned) HasReference(ref uint64) bool {
+	//check if exist
+	return self.kvset.HasKey(itob(ref))
+}
+
+func (self *ListVersioned) SupportsSubentries() bool {
+	return true
+}
+
+func (self *ListVersioned) GetSubentry(key interface{}) (Entry, error) {
+
+	var id uint64
+	switch k := key.(type) {
+	case int:
+		id = uint64(k)
+	case int8:
+		id = uint64(k)
+	case int16:
+		id = uint64(k)
+	case int32:
+		id = uint64(k)
+	case uint:
+		id = uint64(k)
+	case uint8:
+		id = uint64(k)
+	case uint16:
+		id = uint64(k)
+	case uint32:
+		id = uint64(k)
+	case uint64:
+		id = uint64(k)
+	case ListValue:
+		id = k.(ListValue).Reference()
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Subentry key must be integer or ListValue type")
+	}
+
+	if !self.HasReference(id) {
+		return nil, NewDSError(Error_Key_Not_Existant, "List does not have value with given reference")
+	}
+
+	return &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, itob(id)}}, nil
+}
+
+func (self *ListVersioned) GetVersionedSubentry(key interface{}) (VersionedEntry, error) {
+
+	var id uint64
+	switch k := key.(type) {
+	case int:
+		id = uint64(k)
+	case int8:
+		id = uint64(k)
+	case int16:
+		id = uint64(k)
+	case int32:
+		id = uint64(k)
+	case uint:
+		id = uint64(k)
+	case uint8:
+		id = uint64(k)
+	case uint16:
+		id = uint64(k)
+	case uint32:
+		id = uint64(k)
+	case uint64:
+		id = uint64(k)
+	case ListValue:
+		id = k.(ListValue).Reference()
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Subentry key must be integer or ListValue type")
+	}
+
+	if !self.HasReference(id) {
+		return nil, NewDSError(Error_Key_Not_Existant, "List does not have value with given reference")
+	}
+
+	return &listVersionedValue{ValueVersioned{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, itob(id)}}, nil
+}
+
 /*
  * List entries functions
  * ********************************************************************************
  */
-type listVersionedEntry struct {
+type listVersionedValue struct {
 	value ValueVersioned
 }
 
-func (self *listVersionedEntry) Write(value interface{}) error {
+func (self *listVersionedValue) Write(value interface{}) error {
 	return utils.StackError(self.value.Write(value), "Unable to write ds value")
 }
 
-func (self *listVersionedEntry) Read() (interface{}, error) {
+func (self *listVersionedValue) Read() (interface{}, error) {
 	res, err := self.value.Read()
 	return res, utils.StackError(err, "Unable to read ds value")
 }
 
-func (self *listVersionedEntry) IsValid() bool {
+func (self *listVersionedValue) IsValid() bool {
 	return self.value.IsValid()
 }
 
-func (self *listVersionedEntry) Remove() error {
+func (self *listVersionedValue) Remove() error {
 	return utils.StackError(self.value.remove(), "Unable to remove ds value")
 }
 
-func (self *listVersionedEntry) Id() uint64 {
+func (self *listVersionedValue) Reference() uint64 {
 	return btoi(self.value.key)
+}
+
+func (self *listVersionedValue) SupportsSubentries() bool {
+	return false
+}
+
+func (self *listVersionedValue) GetSubentry(interface{}) (Entry, error) {
+	return nil, NewDSError(Error_Operation_Invalid, "ListValue does not support subentries")
+}
+
+func (self *listVersionedValue) GetVersionedSubentry(interface{}) (VersionedEntry, error) {
+	return nil, NewDSError(Error_Operation_Invalid, "ListValue does not support subentries")
+}
+
+func (self *listVersionedValue) HasUpdates() (bool, error) {
+	return self.value.HasUpdates()
+}
+func (self *listVersionedValue) HasVersions() (bool, error) {
+	return self.value.HasVersions()
+}
+func (self *listVersionedValue) ResetHead() error {
+	return self.value.ResetHead()
+}
+func (self *listVersionedValue) FixStateAsVersion() (VersionID, error) {
+	return self.value.FixStateAsVersion()
+}
+func (self *listVersionedValue) LoadVersion(id VersionID) error {
+	return self.value.LoadVersion(id)
+}
+func (self *listVersionedValue) GetLatestVersion() (VersionID, error) {
+	return self.value.GetLatestVersion()
+}
+func (self *listVersionedValue) GetCurrentVersion() (VersionID, error) {
+	return self.value.GetCurrentVersion()
+}
+func (self *listVersionedValue) RemoveVersionsUpTo(id VersionID) error {
+	return self.value.RemoveVersionsUpTo(id)
+}
+func (self *listVersionedValue) RemoveVersionsUpFrom(id VersionID) error {
+	return self.value.RemoveVersionsUpFrom(id)
 }

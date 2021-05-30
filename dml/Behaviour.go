@@ -83,7 +83,7 @@ func (self behaviourManagerHandler) GetEventBehaviours(event string) []string {
 type Behaviour interface {
 	Object
 
-	HandleEvent(Identifier, string)
+	HandleEvent(Identifier, string) error
 }
 
 func NewBaseBehaviour(runtime *Runtime) (*behaviour, error) {
@@ -131,7 +131,7 @@ type BehaviourHandler interface {
 
 	//Forwards event to all behaviours given in list, and returns the ones not available
 	//Identifier, eventname, behaviours to forward, recursive (true) or original object(false9
-	HandleBehaviourEvent(Identifier, string, []string, bool) []string
+	HandleBehaviourEvent(Identifier, string, []string, bool) ([]string, error)
 }
 
 func NewBehaviourHandler(runtime *Runtime) behaviourHandler {
@@ -223,7 +223,7 @@ func (self *behaviourHandler) GetBehaviour(id Identifier, name string) (dmlSet, 
 	return dmlSet{obj: self.GetBehaviourObject(name), id: bhvrID}, nil
 }
 
-func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, event string, behaviours []string, isrecursive bool) []string {
+func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, event string, behaviours []string, isrecursive bool) ([]string, error) {
 
 	result := make([]string, 0)
 	for _, behaviour := range behaviours {
@@ -238,11 +238,14 @@ func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, event string, 
 			}
 
 			//handle the event, and do no not propagate further
-			bhvrObj.HandleEvent(bhvrSet.id, event)
+			err := bhvrObj.HandleEvent(bhvrSet.id, event)
+			if err != nil {
+				return result, err
+			}
 
 		} else {
 			result = append(result, behaviour)
 		}
 	}
-	return result
+	return result, nil
 }

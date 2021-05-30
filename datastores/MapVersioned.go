@@ -585,6 +585,24 @@ func (self *MapVersionedSet) GetOrCreateMap(key []byte) (*MapVersioned, error) {
 	return &mp, nil
 }
 
+func (self *MapVersionedSet) GetEntry(key []byte) (Entry, error) {
+
+	if !self.HasMap(key) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Map does not exist in set", "Map", key)
+	}
+
+	return self.GetOrCreateMap(key)
+}
+
+func (self *MapVersionedSet) GetVersionedEntry(key []byte) (VersionedEntry, error) {
+
+	if !self.HasMap(key) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Map does not exist in set", "Map", key)
+	}
+
+	return self.GetOrCreateMap(key)
+}
+
 /*
  * MapVersioned functions
  * ********************************************************************************
@@ -650,6 +668,38 @@ func (self *MapVersioned) Read(key interface{}) (interface{}, error) {
 	return res, utils.StackError(err, "Unable to write ds value")
 }
 
+func (self *MapVersioned) SupportsSubentries() bool {
+	return true
+}
+
+func (self *MapVersioned) GetSubentry(key interface{}) (Entry, error) {
+
+	k, err := getBytes(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !self.kvset.HasKey(k) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Key not available in map")
+	}
+
+	return self.kvset.GetOrCreateValue(k)
+}
+
+func (self *MapVersioned) GetVersionedSubentry(key interface{}) (VersionedEntry, error) {
+
+	k, err := getBytes(key)
+	if err != nil {
+		return nil, err
+	}
+
+	if !self.kvset.HasKey(k) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Key not available in map")
+	}
+
+	return self.kvset.GetOrCreateValue(k)
+}
+
 func (self *MapVersioned) Remove(key interface{}) error {
 
 	if !self.HasKey(key) {
@@ -663,16 +713,12 @@ func (self *MapVersioned) Remove(key interface{}) error {
 	return utils.StackError(self.kvset.removeKey(k), "Unable to remove entry in ds value set")
 }
 
-func (self *MapVersioned) CurrentVersion() VersionID {
-
-	v, _ := self.kvset.GetCurrentVersion()
-	return v
+func (self *MapVersioned) GetCurrentVersion() (VersionID, error) {
+	return self.kvset.GetCurrentVersion()
 }
 
-func (self *MapVersioned) LatestVersion() VersionID {
-
-	v, _ := self.kvset.GetLatestVersion()
-	return v
+func (self *MapVersioned) GetLatestVersion() (VersionID, error) {
+	return self.kvset.GetLatestVersion()
 }
 
 func (self *MapVersioned) HasUpdates() (bool, error) {
@@ -685,6 +731,26 @@ func (self *MapVersioned) HasVersions() (bool, error) {
 
 	res, err := self.kvset.HasVersions()
 	return res, utils.StackError(err, "Unable to query uversions in ds value set")
+}
+
+func (self *MapVersioned) ResetHead() error {
+	return self.kvset.ResetHead()
+}
+
+func (self *MapVersioned) FixStateAsVersion() (VersionID, error) {
+	return self.kvset.FixStateAsVersion()
+}
+
+func (self *MapVersioned) LoadVersion(id VersionID) error {
+	return self.kvset.LoadVersion(id)
+}
+
+func (self *MapVersioned) RemoveVersionsUpTo(id VersionID) error {
+	return self.kvset.RemoveVersionsUpTo(id)
+}
+
+func (self *MapVersioned) RemoveVersionsUpFrom(id VersionID) error {
+	return self.kvset.RemoveVersionsUpFrom(id)
 }
 
 func (self *MapVersioned) GetKeys() ([]interface{}, error) {
