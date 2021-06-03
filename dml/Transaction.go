@@ -109,7 +109,7 @@ func (self transaction) SetUser(user User) error {
 
 func (self transaction) Objects() ([]dmlSet, error) {
 
-	entries, err := self.objects.GetEntries()
+	entries, err := self.objects.GetValues()
 	if err != nil {
 		return make([]dmlSet, 0), err
 	}
@@ -133,7 +133,7 @@ func (self transaction) Objects() ([]dmlSet, error) {
 
 func (self transaction) HasObject(id Identifier) bool {
 
-	entries, err := self.objects.GetEntries()
+	entries, err := self.objects.GetValues()
 	if err != nil {
 		panic(err)
 	}

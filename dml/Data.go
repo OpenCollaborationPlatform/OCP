@@ -136,7 +136,7 @@ func (self *DataImpl) GetChildIdentifiers(id Identifier) ([]Identifier, error) {
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to access DB for %v", id)
 	}
-	entries, err := list.GetEntries()
+	entries, err := list.GetValues()
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to query object children")
 	}

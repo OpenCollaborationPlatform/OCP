@@ -3,7 +3,7 @@
  * Datastore: A type that holds all the relevant data and in which a multitude of
  *            different databases can exist. The datastore handles the creation
  *            and management of all different databases
- * Key:	  A universal way of accessing data entries within a datastore without knowing any
+ * Key:	  	  A universal way of accessing data entries within a datastore without knowing any
  *			  specifics about it. A key consists of the DB type, the set key and than
  *			  multiple entrie keys, dependend on the required recursiveness
  * Database:  Special type of storage with unique properties, e.g. ValueVersionedType database,

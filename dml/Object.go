@@ -50,7 +50,7 @@ type Object interface {
 	//Genertic
 	GetRuntime() *Runtime
 
-	//VersionedData interface based on Identifiers
+	//VersionedData interface based on Identifiers (For whole object)
 	HasUpdates(Identifier) (bool, error)
 	HasVersions(Identifier) (bool, error)
 	ResetHead(Identifier) error
@@ -60,6 +60,18 @@ type Object interface {
 	GetCurrentVersion(Identifier) (datastore.VersionID, error)
 	RemoveVersionsUpTo(Identifier, datastore.VersionID) error
 	RemoveVersionsUpFrom(Identifier, datastore.VersionID) error
+
+	//VersionedData interface based on keys, and subkeys
+	BuildVersionedKey(Identifier, datastore.StorageType, []byte, []interface{}) datastore.Key
+	KeysAnyHasUpdates([]datastore.Key) (bool, error)   //true if any of the given keys has an update
+	KeysAllHaveVersions([]datastore.Key) (bool, error) //true if all of the given keys have updates
+	KeysResetHead([]datastore.Key) error
+	KeysFixStateAsVersion([]datastore.Key) ([]datastore.VersionID, error)
+	KeysLoadVersion([]datastore.Key, []datastore.VersionID) error
+	KeysGetLatestVersion([]datastore.Key) ([]datastore.VersionID, error)
+	KeysGetCurrentVersion([]datastore.Key) ([]datastore.VersionID, error)
+	KeysRemoveVersionsUpTo([]datastore.Key, []datastore.VersionID) error
+	KeysRemoveVersionsUpFrom([]datastore.Key, []datastore.VersionID) error
 
 	//helpers method for getting database access
 	GetDBValue(Identifier, []byte) (datastore.Value, error)
@@ -268,7 +280,31 @@ func (self *object) GetRuntime() *Runtime {
 	return self.rntm
 }
 
-//Versioned Data Interface
+func (self *object) InitializeDB(id Identifier) error {
+
+	//first all handlers
+	if err := self.InitializeEventDB(id); err != nil {
+		return err
+	}
+
+	//now our own DB entries
+	if err := self.SetParentIdentifier(id, Identifier{}); err != nil {
+		return utils.StackError(err, "Unable to set parent identifier for %v", id)
+	}
+	if err := self.SetDataType(id, DataType{}); err != nil {
+		return utils.StackError(err, "Unable to set data type for %v", id)
+	}
+	if err := self.SetObjectPath(id, ""); err != nil {
+		return utils.StackError(err, "Unable to set object path for %v", id)
+	}
+
+	return nil
+}
+
+// Database Handling
+// *************************************************************************************************************
+
+//Versioned Data Interface with identifiers for whole object
 func (self *object) HasUpdates(id Identifier) (bool, error) {
 	mngr, err := datastore.NewVersionManager(id.Hash(), self.rntm.datastore)
 	if err != nil {
@@ -346,24 +382,197 @@ func (self *object) RemoveVersionsUpFrom(id Identifier, vId datastore.VersionID)
 	return utils.StackError(mngr.RemoveVersionsUpFrom(vId), "Unable to remove versions in DB")
 }
 
-func (self *object) InitializeDB(id Identifier) error {
+func (self *object) BuildVersionedKey(id Identifier, storage datastore.StorageType, key []byte, subentries []interface{}) datastore.Key {
 
-	//first all handlers
-	if err := self.InitializeEventDB(id); err != nil {
-		return err
+	if subentries == nil {
+		subentries = make([]interface{}, 0)
+	}
+	return datastore.NewKey(storage, true, id.Hash(), key, subentries)
+}
+
+func (self *object) KeysAnyHasUpdates(keys []datastore.Key) (bool, error) {
+
+	for _, key := range keys {
+		if !key.Versioned {
+			return false, newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return false, utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		upd, err := entry.HasUpdates()
+		if err != nil {
+			return false, utils.StackError(err, "Unable to check updates for key", "Key", key)
+		}
+		if upd {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (self *object) KeysAllHaveVersions(keys []datastore.Key) (bool, error) {
+
+	for _, key := range keys {
+		if !key.Versioned {
+			return false, newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return false, utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		ver, err := entry.HasVersions()
+		if err != nil {
+			return false, utils.StackError(err, "Unable to check versions for key", "Key", key)
+		}
+		if !ver {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func (self *object) KeysResetHead(keys []datastore.Key) error {
+
+	for _, key := range keys {
+		if !key.Versioned {
+			return newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		err = entry.ResetHead()
+		if err != nil {
+			return utils.StackError(err, "Unable to reset head for key", "Key", key)
+		}
+	}
+	return nil
+}
+
+func (self *object) KeysFixStateAsVersion(keys []datastore.Key) ([]datastore.VersionID, error) {
+
+	result := make([]datastore.VersionID, len(keys))
+	for i, key := range keys {
+		if !key.Versioned {
+			return nil, newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		res, err := entry.FixStateAsVersion()
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to fix version for key", "Key", key)
+		}
+		result[i] = res
+	}
+	return result, nil
+}
+
+func (self *object) KeysLoadVersion(keys []datastore.Key, versions []datastore.VersionID) error {
+
+	if len(keys) != len(versions) {
+		return newInternalError(Error_Operation_Invalid, "One versions needs to be provided for each key", "NumKeys", len(keys), "NumVersions", len(versions))
 	}
 
-	//now our own DB entries
-	if err := self.SetParentIdentifier(id, Identifier{}); err != nil {
-		return utils.StackError(err, "Unable to set parent identifier for %v", id)
+	for i, key := range keys {
+		if !key.Versioned {
+			return newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		err = entry.LoadVersion(versions[i])
+		if err != nil {
+			return utils.StackError(err, "Unable to load version for key", "Key", key, "Version", versions[i])
+		}
 	}
-	if err := self.SetDataType(id, DataType{}); err != nil {
-		return utils.StackError(err, "Unable to set data type for %v", id)
+	return nil
+}
+
+func (self *object) KeysGetLatestVersion(keys []datastore.Key) ([]datastore.VersionID, error) {
+
+	result := make([]datastore.VersionID, len(keys))
+	for i, key := range keys {
+		if !key.Versioned {
+			return nil, newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		res, err := entry.GetLatestVersion()
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to get latest version for key", "Key", key)
+		}
+		result[i] = res
 	}
-	if err := self.SetObjectPath(id, ""); err != nil {
-		return utils.StackError(err, "Unable to set object path for %v", id)
+	return result, nil
+}
+
+func (self *object) KeysGetCurrentVersion(keys []datastore.Key) ([]datastore.VersionID, error) {
+
+	result := make([]datastore.VersionID, len(keys))
+	for i, key := range keys {
+		if !key.Versioned {
+			return nil, newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		res, err := entry.GetCurrentVersion()
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to get current version for key", "Key", key)
+		}
+		result[i] = res
+	}
+	return result, nil
+}
+
+func (self *object) KeysRemoveVersionsUpTo(keys []datastore.Key, versions []datastore.VersionID) error {
+
+	if len(keys) != len(versions) {
+		return newInternalError(Error_Operation_Invalid, "One versions needs to be provided for each key", "NumKeys", len(keys), "NumVersions", len(versions))
 	}
 
+	for i, key := range keys {
+		if !key.Versioned {
+			return newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		err = entry.RemoveVersionsUpTo(versions[i])
+		if err != nil {
+			return utils.StackError(err, "Unable to remove versions for key", "Key", key, "UpTo", versions[i])
+		}
+	}
+	return nil
+}
+
+func (self *object) KeysRemoveVersionsUpFrom(keys []datastore.Key, versions []datastore.VersionID) error {
+
+	if len(keys) != len(versions) {
+		return newInternalError(Error_Operation_Invalid, "One versions needs to be provided for each key", "NumKeys", len(keys), "NumVersions", len(versions))
+	}
+
+	for i, key := range keys {
+		if !key.Versioned {
+			return newInternalError(Error_Operation_Invalid, "Version operation with unversioned key not possible")
+		}
+		entry, err := self.rntm.datastore.GetVersionedEntry(key)
+		if err != nil {
+			return utils.StackError(err, "Unable to get entry by key in datastore", "Key", key)
+		}
+		err = entry.RemoveVersionsUpFrom(versions[i])
+		if err != nil {
+			return utils.StackError(err, "Unable to remove versions for key", "Key", key, "UpFrom", versions[i])
+		}
+	}
 	return nil
 }
 
