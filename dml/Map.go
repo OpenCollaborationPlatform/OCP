@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 )
 
@@ -40,7 +41,7 @@ func NewMap(rntm *Runtime) (Object, error) {
 	}
 
 	//add properties
-	mapI.AddProperty("key", MustNewDataType("type"), MustNewDataType("none"), true)
+	mapI.AddProperty("key", MustNewDataType("key"), MustNewDataType("string"), true)
 	mapI.AddProperty("value", MustNewDataType("type"), MustNewDataType("none"), true)
 
 	//add methods
@@ -383,112 +384,6 @@ func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 //			Internal functions
 //*****************************************************************************
 
-func (self *mapImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
-
-	//get default objects
-	res, err := self.DataImpl.GetSubobjects(id, bhvr)
-	if err != nil {
-		return nil, err
-	}
-
-	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
-	if err != nil {
-		return nil, err
-	}
-
-	//handle key objects!
-	dt := self.keyDataType(id)
-	if dt.IsComplex() {
-
-		keys, err := dbEntries.GetKeys()
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to access keys in DB")
-		}
-		for _, key := range keys {
-
-			id, ok := key.(*Identifier)
-			if ok {
-				set, err := self.rntm.getObjectSet(*id)
-				if err != nil {
-					return nil, err
-				}
-				res = append(res, set)
-			}
-		}
-	}
-
-	//handle value objects!
-	dt = self.valueDataType(id)
-	if dt.IsComplex() {
-
-		keys, err := dbEntries.GetKeys()
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to access keys in DB")
-		}
-		for _, key := range keys {
-
-			id, ok := key.(*Identifier)
-			if ok {
-				set, err := self.rntm.getObjectSet(*id)
-				if err != nil {
-					return nil, err
-				}
-				res = append(res, set)
-			}
-		}
-	}
-
-	return res, nil
-}
-
-func (self *mapImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) (dmlSet, error) {
-
-	//default search
-	set, err := self.DataImpl.GetSubobjectByName(id, name, bhvr)
-	if err == nil {
-		return set, nil
-	}
-
-	//let's see if it is a map key
-	var key interface{}
-	dt := self.keyDataType(id)
-	switch dt.AsString() {
-	case "int":
-		i, err := strconv.ParseInt(name, 10, 64)
-		if err != nil {
-			return dmlSet{}, fmt.Errorf("No such key available")
-		}
-		key = self.typeToDB(i, dt)
-
-	case "string":
-		key = self.typeToDB(name, dt)
-
-	default:
-		return dmlSet{}, newUserError(Error_Key_Not_Available, fmt.Sprintf("Map key type %v does no allow access with %v", dt.AsString(), name))
-	}
-
-	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
-	if err != nil {
-		return dmlSet{}, err
-	}
-
-	if !dbEntries.HasKey(key) {
-		return dmlSet{}, newUserError(Error_Key_Not_Available, "No such key available")
-	}
-	val, err := dbEntries.Read(key)
-	if err != nil {
-		return dmlSet{}, utils.StackError(err, "Unable to read key")
-	}
-	dt = self.valueDataType(id)
-	result, _ := self.dbToType(val, dt)
-	if dt.IsComplex() {
-
-		return result.(dmlSet), nil
-	}
-
-	return dmlSet{}, newUserError(Error_Key_Not_Available, "No such key available", name)
-}
-
 func (self *mapImpl) GetValueByName(id Identifier, name string) (interface{}, error) {
 
 	//let's see if it is a valid key
@@ -515,6 +410,75 @@ func (self *mapImpl) GetValueByName(id Identifier, name string) (interface{}, er
 	}
 
 	return res, nil
+}
+
+//Key handling for generic access to Data
+func (self *mapImpl) GetByKey(id Identifier, key Key) (interface{}, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return self.DataImpl.GetByKey(id, key)
+	}
+
+	dtKey, err := key.AsDataType(self.keyDataType(id))
+	if err != nil {
+		return nil, err
+	}
+	return self.Get(id, dtKey)
+}
+
+func (self *mapImpl) HasKey(id Identifier, key Key) (bool, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return true, nil
+	}
+
+	dtKey, err := key.AsDataType(self.keyDataType(id))
+	if err != nil {
+		return false, err
+	}
+	return self.Has(id, dtKey)
+}
+
+func (self *mapImpl) GetKeys(id Identifier) ([]Key, error) {
+
+	keys, err := self.DataImpl.GetKeys(id)
+	if err != nil {
+		return nil, err
+	}
+
+	mapkeys, err := self.Keys(id)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, mapkey := range mapkeys {
+		keys = append(keys, MustNewKey(mapkey))
+	}
+	return keys, nil
+}
+
+func (self *mapImpl) keyRemoved(Identifier, Key) error {
+
+	//TODO: check if key is object and remove it accordingly
+	return nil
+}
+
+func (self *mapImpl) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return self.DataImpl.keyToDS(id, key)
+	}
+
+	dtKey, err := key.AsDataType(self.keyDataType(id))
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to use key for map entries")
+	}
+	if has, _ := self.Has(id, dtKey); has {
+		dbKeyType := self.typeToDB(dtKey, self.keyDataType(id))
+		return []datastore.Key{datastore.NewKey(datastore.MapType, true, id.Hash(), entryKey, dbKeyType)}, nil
+	}
+
+	return nil, newInternalError(Error_Key_Not_Available, "Key does not exist in map")
 }
 
 func (self *mapImpl) SetObjectPath(id Identifier, path string) error {

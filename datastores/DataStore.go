@@ -113,7 +113,7 @@ const (
 
 var StorageTypes = []StorageType{ValueType, MapType, ListType}
 
-func NewKey(stype StorageType, versioned bool, set [32]byte, entry []byte, subentries []interface{}) Key {
+func NewKey(stype StorageType, versioned bool, set [32]byte, entry []byte, subentries ...interface{}) Key {
 	return Key{stype, versioned, set, entry, subentries}
 }
 

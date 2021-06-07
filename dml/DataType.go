@@ -48,6 +48,9 @@ func UnifyDataType(val interface{}) interface{} {
 	case *DataType:
 		dt := val.(*DataType)
 		return *dt
+	case *Key:
+		key := val.(*Key)
+		return *key
 	}
 
 	//everything else is correct
@@ -83,6 +86,11 @@ func UnifyDataType(val interface{}) interface{} {
  *  Var:
  * 		- Variable, can be any of the above datatypes
  *      - Is allowed to change at runtime if not const
+ *
+ *  Key:
+ *		- A subset of "Type", describing all types that can be used as key
+ * 		- Supported: String, Int, Bool, Cid
+ *      - Used by datatypes that have user definable keys like maps: property key accessor: string
  */
 
 //a datatype can be either a pod type or any complex dml object
@@ -176,9 +184,14 @@ func (self DataType) IsPOD() bool {
 
 func (self DataType) MustBeTypeOf(val interface{}) error {
 
-	//nil is special
+	//var is special: we accept everything
+	if self.IsVar() {
+		return nil
+	}
+
+	//nil is special: cannot be handled by switc
 	if val == nil {
-		if self.IsNone() || self.IsVar() {
+		if self.IsNone() {
 			return nil
 		}
 		return newUserError(Error_Type, fmt.Sprintf("wrong object type, got '%T' and expected 'nil'", val))
@@ -187,33 +200,38 @@ func (self DataType) MustBeTypeOf(val interface{}) error {
 	//check if the type is correct
 	switch UnifyDataType(val).(type) {
 	case int64:
-		if !self.IsInt() && !self.IsFloat() && !self.IsVar() {
+		if !self.IsInt() && !self.IsFloat() && !self.IsKey() {
 			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'int' and expected '%s'`, self.AsString()))
 		}
 	case float64:
-		if !self.IsFloat() && !self.IsVar() {
+		if !self.IsFloat() {
 			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'float' and expected '%s'`, self.AsString()))
 		}
 	case string:
-		if !self.IsString() && !self.IsVar() {
+		if !self.IsString() && !self.IsKey() {
 			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'string' and expected '%s'`, self.AsString()))
 		}
 	case bool:
-		if !self.IsBool() && !self.IsVar() {
+		if !self.IsBool() && !self.IsKey() {
 			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'bool' and expected '%s'`, self.AsString()))
 		}
-	case DataType, *DataType:
-		if !self.IsType() && !self.IsVar() {
+	case DataType:
+		if self.IsKey() {
+			arg := UnifyDataType(val).(DataType)
+			if !arg.IsString() && !arg.IsBool() && !arg.IsInt() && !arg.IsRaw() {
+				return newUserError(Error_Type, fmt.Sprintf("wrong type, got %v, but expected a supported key datatype (int, string, bool, raw)", arg.AsString()))
+			}
+			return nil
+		}
+		if !self.IsType() {
 			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'type' and expected '%s'`, self.AsString()))
 		}
-	case utils.Cid, *utils.Cid:
-		if !self.IsRaw() && !self.IsVar() {
+	case utils.Cid:
+		if !self.IsRaw() && !self.IsKey() {
 			return newUserError(Error_Type, fmt.Sprintf(`wrong type, got 'raw' and expected '%s'`, self.AsString()))
 		}
 	default:
-		if !self.IsVar() {
-			return newUserError(Error_Type, fmt.Sprintf("Unknown type: %T", val))
-		}
+		return newUserError(Error_Type, fmt.Sprintf("Unknown type: %T", val))
 	}
 
 	return nil
@@ -241,12 +259,14 @@ func (self DataType) IsBool() bool   { return self.Value == "bool" }
 func (self DataType) IsType() bool   { return self.Value == "type" }
 func (self DataType) IsRaw() bool    { return self.Value == "raw" }
 func (self DataType) IsVar() bool    { return self.Value == "var" }
+func (self DataType) IsKey() bool    { return self.Value == "key" }
 func (self DataType) IsComplex() bool {
 	return !self.IsPOD() &&
 		!self.IsNone() &&
 		!self.IsRaw() &&
 		!self.IsType() &&
-		!self.IsVar()
+		!self.IsVar() &&
+		!self.IsKey()
 }
 
 func (self DataType) GetDefaultValue() interface{} {
@@ -263,6 +283,8 @@ func (self DataType) GetDefaultValue() interface{} {
 	case "raw":
 		return utils.CidUndef
 	case "type":
+		return MustNewDataType("none")
+	case "key":
 		return MustNewDataType("none")
 	}
 

@@ -349,37 +349,33 @@ func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args .
 		return false, err
 	}
 
-	//get path and accessor
-	idx := strings.LastIndex(string(fullpath), ".")
-	path := fullpath[:idx]
-	accessor := fullpath[(idx + 1):]
-
-	//check if manager
-	mngr := self.behaviours.GetManager(path)
-	if (mngr != nil) && mngr.HasMethod(accessor) {
-		return mngr.GetMethod(accessor).IsConst(), nil
-	}
-
-	//the relevant object
-	dbSet, err := self.getObjectFromPath(path)
+	//get the path resolved
+	result, _, err := self.resolvePath(fullpath)
 	if err != nil {
 		return false, err
 	}
 
-	//check if it is a method that could be const
-	if dbSet.obj.HasMethod(accessor) {
-		fnc := dbSet.obj.GetMethod(accessor)
-		return fnc.IsConst(), nil
-	}
+	switch result.(type) {
 
-	//check if it is a property, and if we read or write
-	if dbSet.obj.HasProperty(accessor) {
+	case Method:
+		mthd := result.(Method)
+		return mthd.IsConst(), nil
+
+	case Property:
+		//no arguments means reading
 		return len(args) == 0, nil
-	}
 
-	//events are not read only
-	if dbSet.obj.HasEvent(accessor) {
+	case Event:
+		//events are never const
 		return false, nil
+
+	case behaviourManager:
+		//that action is not allowed, we cannot return a behaviour manager
+		return false, newUserError(Error_Operation_Invalid, "Path points to behaviour without function call")
+
+	case dmlSet:
+		//it only returns a object ID, which is const
+		return true, nil
 	}
 
 	//the only alternative left is a direct value access. This is always const
@@ -414,86 +410,48 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	//save the user for processing
 	self.currentUser = user
 
-	//get path and accessor
-	idx := strings.LastIndex(string(fullpath), ".")
-	path := fullpath[:idx]
-	accessor := fullpath[(idx + 1):]
-
-	//first check if it is a Manager
-	mngr := self.behaviours.GetManager(path)
-	if mngr != nil {
-		if !mngr.HasMethod(accessor) {
-			return nil, newUserError(Error_Key_Not_Available, "Manager %v does not have method %v", path[0], accessor)
-		}
-		fnc := mngr.GetMethod(accessor)
-		result, e := fnc.Call(args...)
-
-		//did somethign go wrong?
-		if e != nil {
-			self.datastore.Rollback()
-			return nil, e
-		}
-		if fnc.IsConst() {
-			self.datastore.Rollback()
-			return result, nil
-		}
-		err = self.postprocess(false)
-		return result, err
-	}
-
-	//not a manager: now check if path is correct and object available
-	dbSet, err := self.getObjectFromPath(path)
+	//get the path resolved
+	resolved, id, err := self.resolvePath(fullpath)
 	if err != nil {
 		self.datastore.Rollback()
-		return nil, err
+		return false, err
 	}
 
-	handled := false
 	var result interface{} = nil
 	err = nil
 
-	//check if it is a method
-	if dbSet.obj.HasMethod(accessor) {
-		fnc := dbSet.obj.GetMethod(accessor)
+	switch resolved.(type) {
 
-		args = append([]interface{}{dbSet.id}, args...)
-		result, err = fnc.Call(args...)
-		handled = true
-	}
+	case Method:
+		mthd := resolved.(Method)
+		args = append([]interface{}{id}, args...)
+		result, err = mthd.Call(args...)
 
-	//a property maybe?
-	if !handled && dbSet.obj.HasProperty(accessor) {
-		prop := dbSet.obj.GetProperty(accessor)
-		handled = true
+	case Property:
+		prop := resolved.(Property)
 
 		if len(args) == 0 {
 			//read only
-			result = prop.GetValue(dbSet.id)
+			result = prop.GetValue(id)
 		} else {
-			err = prop.SetValue(dbSet.id, args[0])
+			err = prop.SetValue(id, args[0])
 			result = args[0]
 		}
-	}
 
-	//an event?
-	if !handled && dbSet.obj.HasEvent(accessor) {
-		err = dbSet.obj.GetEvent(accessor).Emit(dbSet.id, args...)
-		handled = true
-	}
+	case Event:
+		evt := resolved.(Event)
+		err = evt.Emit(id, args...)
 
-	//or a simple value?
-	if !handled {
-		dat, ok := dbSet.obj.(Data)
-		if ok {
-			result, err = dat.GetValueByName(dbSet.id, accessor)
-			handled = true
-		}
-	}
+	case behaviourManager:
+		//that action is not allowed, we cannot return a behaviour manager
+		return false, newUserError(Error_Operation_Invalid, "Path points to behaviour without function call")
 
-	//was it handled? If not no change to db was done
-	if !handled {
-		self.datastore.Rollback()
-		return nil, newUserError(Error_Key_Not_Available, "No accessor %v known in object %v", accessor, path)
+	case dmlSet:
+		result = id //in this case id == dmlSet.id
+
+	default:
+		//remaining is any possible value... that is just our result!
+		result = resolved
 	}
 
 	//did an error occure?
@@ -503,14 +461,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	}
 
 	//postprocess correctly
-	err = self.postprocess(constant)
-
-	//we do not return dmlSets
-	if set, ok := result.(dmlSet); ok {
-		result = set.id
-	}
-
-	return result, err
+	return result, self.postprocess(constant)
 }
 
 // 							Internal Functions
@@ -579,33 +530,52 @@ func (self *Runtime) getMainObjectSet() (dmlSet, error) {
 	return self.getObjectSet(*ident)
 }
 
-//get the object from the identifier path list (e.g. myobj.childname.yourobject)
-//alternatively to names it can include identifiers (e.g. from Object.Identifier())
-func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
+//recursively follows the path till it finds the last element it points to
+//result can be Manager, Property, Event, Method, Object (dmlSet), or any possible value,
+//as well as the last object Identifier found in path
+func (self *Runtime) resolvePath(path string) (interface{}, Identifier, error) {
 
 	names := strings.Split(path, `.`)
 	if len(names) == 0 {
-		return dmlSet{}, newUserError(Error_Arguments_Wrong, "Not a valid path to object: no names found")
+		return nil, Identifier{}, newUserError(Error_Arguments_Wrong, "Not a valid path to object: no keys found")
+	}
+
+	//check if manager
+	mngr := self.behaviours.GetManager(names[0])
+	if mngr != nil {
+		if len(names) == 1 {
+			return mngr, Identifier{}, nil
+
+		} else if len(names) == 2 {
+			if !mngr.HasMethod(names[1]) {
+				return nil, Identifier{}, newUserError(Error_Key_Not_Available, "Manager has no method with given name", "Manager", names[0], "Method", names[1])
+			}
+			return mngr.GetMethod(names[1]), Identifier{}, nil
+
+		} else {
+			return nil, Identifier{}, newUserError(Error_Key_Not_Available, "Manager does only expose methods, but multiple keys left", "Manager", names[0], "Keys", names[1:])
+		}
 	}
 
 	main, err := self.getMainObjectSet()
 	if err != nil {
-		return dmlSet{}, err
+		return nil, Identifier{}, err
 	}
 
+	//check if the path is a object id
 	var dbSet dmlSet
 	if names[0] != main.id.Name {
 		id, err := IdentifierFromEncoded(names[0])
 		if err != nil {
-			return dmlSet{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
+			return nil, Identifier{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
 		}
 		dt, err := main.obj.GetDataType(id)
 		if err != nil {
-			return dmlSet{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
+			return nil, Identifier{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
 		}
 		dtObj, ok := self.objects[dt]
 		if !ok {
-			return dmlSet{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
+			return nil, Identifier{}, newUserError(Error_Arguments_Wrong, "First identifier in %v cannot be found", path)
 		}
 		dbSet = dmlSet{id: id, obj: dtObj}
 
@@ -613,32 +583,29 @@ func (self *Runtime) getObjectFromPath(path string) (dmlSet, error) {
 		dbSet = main
 	}
 
-	for _, name := range names[1:] {
+	for i, name := range names[1:] {
 
-		//check all childs to find the one with given name
-		child, err := dbSet.obj.(Data).GetSubobjectByName(dbSet.id, name, true)
+		key, err := NewKey(name)
 		if err != nil {
-			//it may be an identifier within the path!
-			id, err2 := IdentifierFromEncoded(name)
-			if err2 == nil {
-				set, err := self.getObjectSet(id)
-				if err != nil {
-					return dmlSet{}, utils.StackError(err, "Name %v is not available in object %v", name, dbSet.id.Name)
-				}
-				child = set
+			return nil, Identifier{}, utils.StackError(err, "Part of path is not valid key", "Key", name)
+		}
+		result, err := dbSet.obj.GetByKey(dbSet.id, key)
+		if err != nil {
+			return nil, Identifier{}, utils.StackError(err, "Unable to access key in object")
+		}
+
+		obj, ok := result.(dmlSet)
+		if !ok {
+			if i < len(names)-2 {
+				return nil, Identifier{}, newUserError(Error_Operation_Invalid, "Path element not an object, but further keys are given", "Element", name, "Remaining", names[i:])
 			} else {
-				return dmlSet{}, utils.StackError(err, "Name %v is not available in object %v", name, dbSet.id.Name)
+				return result, dbSet.id, nil
 			}
 		}
-
-		//check if it is a behaviour, and if so end here
-		_, isBehaviour := child.obj.(Behaviour)
-		if isBehaviour {
-			return child, nil
-		}
-		dbSet = child
+		dbSet = obj
 	}
-	return dbSet, nil
+
+	return dbSet, dbSet.id, nil
 }
 
 //postprocess for all done operations. Entry point for behaviours
@@ -911,9 +878,13 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 				}
 
 				var name = childName
-				child, err := obj.(Data).GetSubobjectByName(identifier, name, true)
+				sub, err := obj.GetByKey(identifier, MustNewKey(name))
 				if err != nil {
 					panic(utils.StackError(err, "Unable to access child").Error())
+				}
+				child, ok := sub.(dmlSet)
+				if !ok {
+					panic("Child exposed as wrong type")
 				}
 
 				return child.obj.GetJSObject(child.id)
@@ -971,7 +942,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 			}
 
 		} else {
-			return nil, newSetupError(Error_Key_Not_Available, "Key of assignment is not a property or event", "key", parts[0])
+			return nil, newSetupError(Error_Compiler, "Assignment is unknown, it's not a property or event", "key", parts[0])
 		}
 	}
 

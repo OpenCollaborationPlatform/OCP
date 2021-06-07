@@ -4,6 +4,7 @@ package dml
 import (
 	"fmt"
 
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 )
 
@@ -37,14 +38,10 @@ type Data interface {
 	GetChildren(Identifier) ([]dmlSet, error)
 	GetChildByName(Identifier, string) (dmlSet, error)
 
-	//Subobject handling is more than only childrens
-	//Hirarchy + dynamic objects, optional behaviours
-	GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error)
-	GetSubobjectByName(id Identifier, name string, bhvr bool) (dmlSet, error)
-
 	Created(id Identifier) error //emits onCreated event for this and all subobjects (not behaviours)
 
 	recursiveHandleBehaviourEvent(Identifier, string, []string) error //Helper function to propagate behaviour events to the parent (if availbabe)
+
 }
 
 type DataImpl struct {
@@ -73,6 +70,8 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 
 	dat.AddEvent(NewEvent("onCreated", dat))
 	dat.AddEvent(NewEvent("onRemove", dat))
+	dat.AddEvent(NewEvent("onBeforeChange", obj))
+	dat.AddEvent(NewEvent("onChanged", obj))
 
 	return dat, nil
 }
@@ -226,31 +225,6 @@ func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) 
 	return result, nil
 }
 
-func (self *DataImpl) GetSubobjectByName(id Identifier, name string, bhvr bool) (dmlSet, error) {
-
-	//search hirarchy
-	child, err := self.GetChildByName(id, name)
-	if err == nil {
-		return child, nil
-	}
-
-	//search behaviour
-	if bhvr {
-		bhvrs := self.Behaviours()
-		for _, bhvr := range bhvrs {
-			bhvrId, err := self.GetBehaviourIdentifier(id, bhvr)
-			if err == nil {
-				if bhvrId.Name == name {
-					bhvrObj := self.GetBehaviourObject(bhvr)
-					return dmlSet{bhvrObj, bhvrId}, nil
-				}
-			}
-		}
-	}
-
-	return dmlSet{}, newUserError(Error_Key_Not_Available, "Subobject not available", "name", name, "parent", id.Name)
-}
-
 func (self *DataImpl) GetValueByName(id Identifier, name string) (interface{}, error) {
 	return nil, newUserError(Error_Key_Not_Available, fmt.Sprintf("No value %v available in %v", name, id))
 }
@@ -280,6 +254,136 @@ func (self *DataImpl) Created(id Identifier) error {
 		}
 	}
 	return nil
+}
+
+func (self *DataImpl) GetByKey(id Identifier, key Key) (interface{}, error) {
+	//first check if it is a property
+	prop, err := self.object.HasKey(id, key)
+	if err != nil {
+		return nil, err
+	}
+	if prop {
+		return self.object.GetByKey(id, key)
+	}
+
+	//check if it is a child
+	child, err := self.GetChildByName(id, key.AsString())
+	if err == nil {
+		return child, nil
+	}
+
+	//search behaviour
+	bhvrs := self.Behaviours()
+	for _, bhvr := range bhvrs {
+		bhvrId, err := self.GetBehaviourIdentifier(id, bhvr)
+		if err == nil {
+			if bhvrId.Name == key.AsString() {
+				bhvrObj := self.GetBehaviourObject(bhvr)
+				return dmlSet{bhvrObj, bhvrId}, nil
+			}
+		}
+	}
+
+	//it could be an identifier which may be a cild
+	subid, err := IdentifierFromEncoded(key.AsString())
+	if err == nil {
+		if subid.Parent == id.Hash() {
+			dt, err := self.GetDataType(subid)
+			if err != nil {
+				return dmlSet{}, newInternalError(Error_Setup_Invalid, "Datatype not available for sub ID")
+			}
+			dtObj, ok := self.rntm.objects[dt]
+			if !ok {
+				return dmlSet{}, newInternalError(Error_Setup_Invalid, "Object not available for datatype")
+			}
+			return dmlSet{id: subid, obj: dtObj}, nil
+		}
+	}
+
+	return nil, newUserError(Error_Key_Not_Available, "Key not available", "key", key, "object", id.Name)
+}
+
+func (self *DataImpl) HasKey(id Identifier, key Key) (bool, error) {
+
+	prop, err := self.object.HasKey(id, key)
+	if prop || err != nil {
+		return prop, err
+	}
+
+	//check if it is a child
+	_, err = self.GetChildByName(id, key.AsString())
+	if err == nil {
+		return true, nil
+	}
+
+	//search behaviour
+	bhvrs := self.Behaviours()
+	for _, bhvr := range bhvrs {
+		bhvrId, err := self.GetBehaviourIdentifier(id, bhvr)
+		if err == nil {
+			if bhvrId.Name == key.AsString() {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
+}
+
+func (self *DataImpl) GetKeys(id Identifier) ([]Key, error) {
+
+	keys, err := self.object.GetKeys(id)
+	if err != nil {
+		return nil, err
+	}
+	childs, err := self.GetChildIdentifiers(id)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access object children")
+	}
+	for _, child := range childs {
+		keys = append(keys, MustNewKey(child.Name))
+	}
+	bhvrs := self.Behaviours()
+	for _, bhvr := range bhvrs {
+		id, err := self.GetBehaviourIdentifier(id, bhvr)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to access object behaviour", "Behaviour", bhvr)
+		}
+		keys = append(keys, MustNewKey(id.Name))
+	}
+	return keys, nil
+}
+
+func (self *DataImpl) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
+
+	if has, _ := self.object.HasKey(id, key); has {
+		return self.object.keyToDS(id, key)
+	}
+
+	//check children
+	list, err := self.GetDBList(id, childKey)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := list.GetValues()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, child := range entries {
+		data, err := child.Read()
+		if err != nil {
+			return nil, err
+		}
+		id = *data.(*Identifier)
+		if id.Name == key.AsString() {
+			return []datastore.Key{datastore.NewKey(datastore.ListType, false, id.Hash(), childKey, []interface{}{child.Reference()})}, nil
+		}
+	}
+
+	//check behaviours
+
+	return nil, newInternalError(Error_Key_Not_Available, "Key not available in data object")
 }
 
 /*Override  event emitted, to forward them to the behaviour handler*/

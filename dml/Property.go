@@ -3,6 +3,7 @@ package dml
 import (
 	"fmt"
 
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	"github.com/dop251/goja"
@@ -33,6 +34,7 @@ func NewProperty(name string, dtype DataType, default_value interface{}, constpr
 
 	err := dtype.MustBeTypeOf(default_value)
 	if err != nil {
+		fmt.Printf("\n type: %v, default: %v\n", dtype, default_value)
 		return nil, utils.StackError(err, "Cannot create property, default value does not match data type")
 	}
 
@@ -142,6 +144,10 @@ func (self *dataProperty) GetValue(id Identifier) interface{} {
 
 	val = UnifyDataType(val)
 	return val
+}
+
+func (self *dataProperty) getDSKey(id Identifier) datastore.Key {
+	return datastore.NewKey(datastore.ValueType, true, id.Hash(), []byte(self.name), nil)
 }
 
 //Const property

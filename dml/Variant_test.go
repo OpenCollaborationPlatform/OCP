@@ -112,7 +112,7 @@ func TestTypeVariant(t *testing.T) {
 			store.Begin()
 			defer store.Rollback()
 
-			vari, err := rntm.getObjectFromPath("toplevel.TypeVariant")
+			vari, err := getObjectFromPath(rntm, "toplevel.TypeVariant")
 			So(err, ShouldBeNil)
 			value, err := vari.obj.(*variant).GetValue(vari.id)
 			So(err, ShouldBeNil)

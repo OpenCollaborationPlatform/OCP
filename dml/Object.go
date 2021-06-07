@@ -73,6 +73,13 @@ type Object interface {
 	KeysRemoveVersionsUpTo([]datastore.Key, []datastore.VersionID) error
 	KeysRemoveVersionsUpFrom([]datastore.Key, []datastore.VersionID) error
 
+	//Key handling for generic access to Data, events, properties, methods etc.
+	GetByKey(Identifier, Key) (interface{}, error)    //Returns whatever the key represents in the Dataobject
+	HasKey(Identifier, Key) (bool, error)             //Returns true if the provided key exists
+	GetKeys(Identifier) ([]Key, error)                //returns all available keys
+	keyRemoved(Identifier, Key) error                 //internal: Called whenever a key gets removed by external code
+	keyToDS(Identifier, Key) ([]datastore.Key, error) //internal: Translates a object key to its coresponding datastore keys.
+
 	//helpers method for getting database access
 	GetDBValue(Identifier, []byte) (datastore.Value, error)
 	GetDBValueVersioned(Identifier, []byte) (datastore.ValueVersioned, error)
@@ -121,8 +128,6 @@ func NewObject(rntm *Runtime) (*object, error) {
 	//add default events
 	obj.AddEvent(NewEvent("onBeforePropertyChange", obj))
 	obj.AddEvent(NewEvent("onPropertyChanged", obj))
-	obj.AddEvent(NewEvent("onBeforeChange", obj))
-	obj.AddEvent(NewEvent("onChanged", obj))
 
 	return obj, nil
 }
@@ -299,6 +304,76 @@ func (self *object) InitializeDB(id Identifier) error {
 	}
 
 	return nil
+}
+
+// Key handling
+// *************************************************************************************************************
+func (self *object) GetByKey(id Identifier, key Key) (interface{}, error) {
+
+	accessor := key.AsString()
+	if self.HasProperty(accessor) {
+		return self.GetProperty(accessor), nil
+	}
+	if self.HasMethod(accessor) {
+		return self.GetMethod(accessor), nil
+	}
+	if self.HasEvent(accessor) {
+		return self.GetEvent(accessor), nil
+	}
+
+	return nil, newUserError(Error_Key_Not_Available, "Key not available in object")
+}
+
+func (self *object) HasKey(id Identifier, key Key) (bool, error) {
+	//we only hold properties, hence we check those
+	accessor := key.AsString()
+	has := self.HasProperty(accessor) || self.HasMethod(accessor) || self.HasEvent(accessor)
+	return has, nil
+}
+
+func (self *object) GetKeys(id Identifier) ([]Key, error) {
+
+	props := self.GetProperties()
+	result := make([]Key, len(props))
+	for i, name := range props {
+		result[i] = MustNewKey(name)
+	}
+
+	methods := self.Methods()
+	for _, name := range methods {
+		result = append(result, MustNewKey(name))
+	}
+
+	events := self.Events()
+	for _, name := range events {
+		result = append(result, MustNewKey(name))
+	}
+
+	return result, nil
+}
+
+func (self *object) keyRemoved(id Identifier, key Key) error {
+	//Properties cannot be removed: fail!
+	return newInternalError(Error_Operation_Invalid, "object property cannot be removed", "Key", key)
+}
+
+func (self *object) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
+
+	if !self.HasProperty(key.AsString()) {
+		//events and methods do not have DS keys assiociated
+		return []datastore.Key{}, nil
+	}
+
+	prop := self.GetProperty(key.AsString())
+	if prop.IsConst() {
+		return nil, newInternalError(Error_Operation_Invalid, "Const property does not have DS key")
+	}
+
+	dataProp, ok := prop.(*dataProperty)
+	if !ok {
+		return nil, newInternalError(Error_Setup_Invalid, "Property s of wrong type")
+	}
+	return []datastore.Key{dataProp.getDSKey(id)}, nil
 }
 
 // Database Handling

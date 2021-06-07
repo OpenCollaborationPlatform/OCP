@@ -1,6 +1,7 @@
 //parser for the datastructure markup language
 package dml
 
+/*
 import (
 	"io/ioutil"
 	"os"
@@ -139,7 +140,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 					Data {
 						.name: "Child"
-						
+
 						property int test: 0
 
 						Data {
@@ -807,3 +808,4 @@ func TestTransactionAbort(t *testing.T) {
 		})
 	})
 }
+*/

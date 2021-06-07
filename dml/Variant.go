@@ -125,9 +125,51 @@ func (self *variant) GetValue(id Identifier) (interface{}, error) {
 
 	return result, nil
 }
-func (self *variant) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 
-	objs, err := self.DataImpl.GetSubobjects(id, bhvr)
+//Key handling for generic access to Data
+func (self *variant) GetByKey(id Identifier, key Key) (interface{}, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return self.DataImpl.GetByKey(id, key)
+	}
+
+	dt := self.getDataType(id)
+	if dt.IsComplex() {
+		obj, err := self.getStoredObject(id)
+		if err != nil {
+			return dmlSet{}, utils.StackError(err, "Invalid object stored")
+		}
+
+		if obj.id.Name == key.AsString() {
+			return obj, nil
+		}
+	}
+
+	return nil, newUserError(Error_Key_Not_Available, "Key not available in variant")
+}
+
+func (self *variant) HasKey(id Identifier, key Key) (bool, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return true, nil
+	}
+
+	dt := self.getDataType(id)
+	if dt.IsComplex() {
+		obj, err := self.getStoredObject(id)
+		if err != nil {
+			return false, utils.StackError(err, "Invalid object stored")
+		}
+
+		return obj.id.Name == key.AsString(), nil
+	}
+
+	return false, nil
+}
+
+func (self *variant) GetKeys(id Identifier) ([]Key, error) {
+
+	keys, err := self.DataImpl.GetKeys(id)
 	if err != nil {
 		return nil, err
 	}
@@ -138,32 +180,39 @@ func (self *variant) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
 		if err != nil {
 			return nil, utils.StackError(err, "Invalid object stored")
 		}
-		return append(objs, obj), nil
+
+		keys = append(keys, MustNewKey(obj.id.Name))
 	}
 
-	return objs, nil
+	return keys, nil
 }
 
-func (self *variant) GetSubobjectByName(id Identifier, name string, bhvr bool) (dmlSet, error) {
+func (self *variant) keyRemoved(Identifier, Key) error {
 
-	obj, err := self.DataImpl.GetSubobjectByName(id, name, bhvr)
-	if err == nil {
-		return obj, err
+	//TODO: check if key is object and remove it accordingly
+	return nil
+}
+
+func (self *variant) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return self.DataImpl.keyToDS(id, key)
 	}
 
 	dt := self.getDataType(id)
 	if dt.IsComplex() {
 		obj, err := self.getStoredObject(id)
 		if err != nil {
-			return dmlSet{}, utils.StackError(err, "Invalid object stored")
+			return nil, utils.StackError(err, "Invalid object stored")
+		}
+		if obj.id.Name != key.AsString() {
+			return nil, newUserError(Error_Key_Not_Available, "Key not available in variant")
 		}
 
-		if obj.id.Name == name {
-			return obj, nil
-		}
+		return []datastore.Key{datastore.NewKey(datastore.ValueType, true, id.Hash(), variantKey)}, nil
 	}
 
-	return dmlSet{}, newUserError(Error_Key_Not_Available, "No child with name available")
+	return nil, newUserError(Error_Key_Not_Available, "Key does not exist in variant")
 }
 
 func (self *variant) PropertyChanged(id Identifier, name string) error {

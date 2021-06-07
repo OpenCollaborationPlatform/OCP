@@ -4,6 +4,7 @@ package dml
 import (
 	"fmt"
 
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 )
 
@@ -27,6 +28,8 @@ import (
  *   by the runtime to store and access all behaviourManager. behaviourManagerHandler is to behaviourManager
  *   what BehaviourHandler is to Behaviour
  */
+
+var behaviourKey []byte = []byte("__behaviours")
 
 /* The general behaviour manager, exposing Methods */
 type behaviourManager interface {
@@ -132,6 +135,9 @@ type BehaviourHandler interface {
 	//Forwards event to all behaviours given in list, and returns the ones not available
 	//Identifier, eventname, behaviours to forward, recursive (true) or original object(false9
 	HandleBehaviourEvent(Identifier, string, []string, bool) ([]string, error)
+
+	//key handlings
+	getDSKeyForBehaviour(Identifier, string) datastore.Key
 }
 
 func NewBehaviourHandler(runtime *Runtime) behaviourHandler {
@@ -180,7 +186,7 @@ func (self *behaviourHandler) Behaviours() []string {
 
 func (self *behaviourHandler) GetBehaviourIdentifier(id Identifier, name string) (Identifier, error) {
 
-	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
+	map_, err := mapFromStore(self.runtime.datastore, id, behaviourKey)
 	if err != nil {
 		return Identifier{}, utils.StackError(err, "Unable to access behaviours in database for %s", id)
 	}
@@ -197,7 +203,7 @@ func (self *behaviourHandler) SetBehaviourIdentifier(id Identifier, name string,
 		return fmt.Errorf("Behaviour already set: %v", name)
 	}
 
-	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
+	map_, err := mapFromStore(self.runtime.datastore, id, behaviourKey)
 	if err != nil {
 		return err
 	}
@@ -206,7 +212,7 @@ func (self *behaviourHandler) SetBehaviourIdentifier(id Identifier, name string,
 
 func (self *behaviourHandler) HasBehaviourIdentifier(id Identifier, name string) (bool, error) {
 
-	map_, err := mapFromStore(self.runtime.datastore, id, []byte("__behaviours"))
+	map_, err := mapFromStore(self.runtime.datastore, id, behaviourKey)
 	if err != nil {
 		return false, err
 	}
@@ -248,4 +254,13 @@ func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, event string, 
 		}
 	}
 	return result, nil
+}
+
+func (self *behaviourHandler) getDSKeyForBehaviour(id Identifier, name string) datastore.Key {
+
+	if !self.HasBehaviour(name) {
+		return datastore.Key{}
+	}
+
+	return datastore.NewKey(datastore.MapType, false, id.Hash(), behaviourKey, name)
 }

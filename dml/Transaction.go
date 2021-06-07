@@ -468,31 +468,31 @@ func (self *TransactionManager) Add(id Identifier) error {
 // - Stops recursion on objects having a Transaction behaviour (and does not call fix for those)
 // - Does call on Behaviours
 func (self *TransactionManager) recursiveFixVersionTransaction(set dmlSet) error {
-
-	data, ok := set.obj.(Data)
-	if ok {
-		sets, err := data.GetSubobjects(set.id, true)
-		if err != nil {
-			return utils.StackError(err, "Unable to access children of dataobject")
-		}
-		for _, set := range sets {
-			data, ok := set.obj.(Data)
-			if ok && data.HasBehaviour("Transaction") {
-				continue
+	/*
+		data, ok := set.obj.(Data)
+		if ok {
+			sets, err := data.GetSubobjects(set.id, true)
+			if err != nil {
+				return utils.StackError(err, "Unable to access children of dataobject")
 			}
-			if updates, _ := set.obj.HasUpdates(set.id); updates {
-				_, err := set.obj.FixStateAsVersion(set.id)
+			for _, set := range sets {
+				data, ok := set.obj.(Data)
+				if ok && data.HasBehaviour("Transaction") {
+					continue
+				}
+				if updates, _ := set.obj.HasUpdates(set.id); updates {
+					_, err := set.obj.FixStateAsVersion(set.id)
+					if err != nil {
+						return err
+					}
+				}
+
+				err := self.recursiveFixVersionTransaction(set)
 				if err != nil {
 					return err
 				}
 			}
-
-			err := self.recursiveFixVersionTransaction(set)
-			if err != nil {
-				return err
-			}
-		}
-	}
+		}*/
 	return nil
 }
 
@@ -562,31 +562,31 @@ func (self *TransactionManager) Abort() error {
 // - Stops recursion on objects having a Transaction behaviour (and does not call revert for those)
 // - Does call on Behaviours
 func (self *TransactionManager) recursiveResetTransaction(set dmlSet) error {
-
-	data, ok := set.obj.(Data)
-	if ok {
-		sets, err := data.GetSubobjects(set.id, true)
-		if err != nil {
-			return utils.StackError(err, "Unable to access children of dataobject")
-		}
-		for _, set := range sets {
-			data, ok := set.obj.(Data)
-			if ok && data.HasBehaviour("Transaction") {
-				continue
+	/*
+		data, ok := set.obj.(Data)
+		if ok {
+			sets, err := data.GetSubobjects(set.id, true)
+			if err != nil {
+				return utils.StackError(err, "Unable to access children of dataobject")
 			}
-			if updates, _ := set.obj.HasUpdates(set.id); updates {
-				err := set.obj.ResetHead(set.id)
+			for _, set := range sets {
+				data, ok := set.obj.(Data)
+				if ok && data.HasBehaviour("Transaction") {
+					continue
+				}
+				if updates, _ := set.obj.HasUpdates(set.id); updates {
+					err := set.obj.ResetHead(set.id)
+					if err != nil {
+						return err
+					}
+				}
+
+				err := self.recursiveResetTransaction(set)
 				if err != nil {
 					return err
 				}
 			}
-
-			err := self.recursiveResetTransaction(set)
-			if err != nil {
-				return err
-			}
-		}
-	}
+		}*/
 	return nil
 }
 

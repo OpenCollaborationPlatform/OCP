@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 )
 
@@ -699,73 +700,6 @@ func (self *vector) print(id Identifier) {
 	fmt.Println("]")
 }
 
-func (self *vector) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
-
-	//get default objects
-	res, err := self.DataImpl.GetSubobjects(id, bhvr)
-	if err != nil {
-		return nil, err
-	}
-
-	dt := self.entryDataType(id)
-	if dt.IsComplex() {
-
-		dbEntries, err := self.GetDBMapVersioned(id, entryKey)
-		if err != nil {
-			return nil, err
-		}
-
-		//iterate over all entries and add them
-		length, _ := self.Length(id)
-		for i := int64(0); i < length; i++ {
-			read, err := dbEntries.Read(i)
-			if err == nil {
-				id, ok := read.(*Identifier)
-				if ok {
-					set, err := self.rntm.getObjectSet(*id)
-					if err != nil {
-						return nil, err
-					}
-					res = append(res, set)
-				}
-			}
-		}
-	}
-
-	return res, nil
-}
-
-func (self *vector) GetSubobjectByName(id Identifier, name string, bhvr bool) (dmlSet, error) {
-
-	//default search
-	set, err := self.DataImpl.GetSubobjectByName(id, name, bhvr)
-	if err == nil {
-		return set, nil
-	}
-
-	if !self.entryDataType(id).IsComplex() {
-		return dmlSet{}, newUserError(Error_Type, "Vector does not hold objects")
-	}
-
-	//let's see if it is a index
-	i, err := strconv.ParseInt(name, 10, 64)
-	if err != nil {
-		return dmlSet{}, newUserError(Error_Key_Not_Available, "No such idx available")
-	}
-
-	res, err := self.Get(id, i)
-	if err != nil {
-		return dmlSet{}, utils.StackError(err, "No index %v available in %v", name, id.Name)
-	}
-
-	result, ok := res.(dmlSet)
-	if !ok {
-		return dmlSet{}, newInternalError(Error_Fatal, "Index is %v not a object", name)
-	}
-
-	return result, nil
-}
-
 func (self *vector) GetValueByName(id Identifier, name string) (interface{}, error) {
 
 	//let's see if it is a index
@@ -780,6 +714,78 @@ func (self *vector) GetValueByName(id Identifier, name string) (interface{}, err
 	}
 
 	return res, nil
+}
+
+//Key handling for generic access to Data
+func (self *vector) GetByKey(id Identifier, key Key) (interface{}, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return self.DataImpl.GetByKey(id, key)
+	}
+
+	i, err := key.AsDataType(MustNewDataType("int"))
+	if err != nil {
+		return nil, err
+	}
+	return self.Get(id, i.(int64))
+}
+
+func (self *vector) HasKey(id Identifier, key Key) (bool, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return true, nil
+	}
+
+	i, err := key.AsDataType(MustNewDataType("int"))
+	if err != nil {
+		return false, err
+	}
+	length, err := self.Length(id)
+	if err != nil {
+		return false, utils.StackError(err, "Unable to access vector length")
+	}
+	if i.(int64) < length {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (self *vector) GetKeys(id Identifier) ([]Key, error) {
+
+	keys, err := self.DataImpl.GetKeys(id)
+	if err != nil {
+		return nil, err
+	}
+
+	length, err := self.Length(id)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access vector length")
+	}
+
+	for i := int64(0); i < length; i++ {
+		keys = append(keys, MustNewKey(i))
+	}
+	return keys, nil
+}
+
+func (self *vector) keyRemoved(Identifier, Key) error {
+
+	//TODO: check if key is object and remove it accordingly
+	return nil
+}
+
+func (self *vector) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
+
+	if has, _ := self.DataImpl.HasKey(id, key); has {
+		return self.DataImpl.keyToDS(id, key)
+	}
+
+	i, err := key.AsDataType(MustNewDataType("int"))
+	if err != nil {
+		return nil, err
+	}
+
+	return []datastore.Key{datastore.NewKey(datastore.MapType, true, id.Hash(), entryKey, i)}, nil
 }
 
 func (self *vector) SetObjectPath(id Identifier, path string) error {

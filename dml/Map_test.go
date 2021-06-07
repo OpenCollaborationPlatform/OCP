@@ -11,6 +11,19 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
+//little helper
+func getObjectFromPath(rntm *Runtime, path string) (dmlSet, error) {
+	res, _, err := rntm.resolvePath(path)
+	if err != nil {
+		return dmlSet{}, err
+	}
+	set, ok := res.(dmlSet)
+	if !ok {
+		return dmlSet{}, newInternalError(Error_Operation_Invalid, "Path is not Object")
+	}
+	return set, nil
+}
+
 func TestPODMap(t *testing.T) {
 
 	Convey("Loading dml code into runtime including pod map types,", t, func() {
@@ -254,7 +267,7 @@ func TestComplexTypeMap(t *testing.T) {
 				defer store.Rollback()
 
 				path := "toplevel.TypeMap.test"
-				set, err := rntm.getObjectFromPath(path)
+				set, err := getObjectFromPath(rntm, path)
 				So(err, ShouldBeNil)
 				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 0)
 
@@ -271,7 +284,7 @@ func TestComplexTypeMap(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				obj, err := rntm.getObjectFromPath("toplevel.TypeMap.test")
+				obj, err := getObjectFromPath(rntm, "toplevel.TypeMap.test")
 				So(err, ShouldBeNil)
 				So(obj.obj.GetProperty("created").GetValue(obj.id), ShouldEqual, obj.id.Encode())
 				store.Rollback()
