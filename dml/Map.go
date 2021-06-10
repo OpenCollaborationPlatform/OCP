@@ -13,7 +13,6 @@ package dml
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
@@ -383,34 +382,6 @@ func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 //*****************************************************************************
 //			Internal functions
 //*****************************************************************************
-
-func (self *mapImpl) GetValueByName(id Identifier, name string) (interface{}, error) {
-
-	//let's see if it is a valid key
-	var key interface{}
-	dt := self.keyDataType(id)
-	switch dt.AsString() {
-	case "int":
-		i, err := strconv.ParseInt(name, 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		key = self.typeToDB(i, dt)
-
-	case "string":
-		key = self.typeToDB(name, dt)
-
-	default:
-		return nil, newUserError(Error_Key_Not_Available, "Only int and string keys are accessible by name")
-	}
-
-	res, err := self.Get(id, key)
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
-}
 
 //Key handling for generic access to Data
 func (self *mapImpl) GetByKey(id Identifier, key Key) (interface{}, error) {

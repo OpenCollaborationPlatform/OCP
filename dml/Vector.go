@@ -3,7 +3,6 @@ package dml
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
@@ -698,22 +697,6 @@ func (self *vector) print(id Identifier) {
 		fmt.Printf("%v ", val)
 	}
 	fmt.Println("]")
-}
-
-func (self *vector) GetValueByName(id Identifier, name string) (interface{}, error) {
-
-	//let's see if it is a index
-	i, err := strconv.ParseInt(name, 10, 64)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := self.Get(id, i)
-	if err != nil {
-		return nil, err
-	}
-
-	return res, nil
 }
 
 //Key handling for generic access to Data

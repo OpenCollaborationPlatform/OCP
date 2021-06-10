@@ -2,8 +2,6 @@
 package dml
 
 import (
-	"fmt"
-
 	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 )
@@ -20,9 +18,6 @@ var childKey = []byte("__children")
 type Data interface {
 	Object
 	BehaviourHandler
-
-	//Access a value by name. Could be overriden by some objects, e.g. maps and vectors
-	GetValueByName(id Identifier, name string) (interface{}, error)
 
 	//Data hirarchy allows childs. Here we add the structure and logic by
 	//adding static objects. Database access by identifiers is handled seperatly
@@ -223,10 +218,6 @@ func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) 
 	}
 
 	return result, nil
-}
-
-func (self *DataImpl) GetValueByName(id Identifier, name string) (interface{}, error) {
-	return nil, newUserError(Error_Key_Not_Available, fmt.Sprintf("No value %v available in %v", name, id))
 }
 
 func (self *DataImpl) Created(id Identifier) error {

@@ -253,7 +253,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(len(objs), ShouldEqual, 1)
 
-					obj, _ := rntm.getObjectFromPath("Document")
+					obj, _ := getObjectFromPath(rntm, "Document")
 					So(trans.HasObject(obj.id), ShouldBeTrue)
 				})
 
@@ -340,7 +340,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					defer store.Rollback()
 
-					set, _ := rntm.getObjectFromPath("Document.Child")
+					set, _ := getObjectFromPath(rntm, "Document.Child")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
 					has := trans.HasObject(set.id)
@@ -358,7 +358,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					defer store.Rollback()
 
-					set, _ := rntm.getObjectFromPath("Document.Child")
+					set, _ := getObjectFromPath(rntm, "Document.Child")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
 					has := trans.HasObject(set.id)
@@ -376,7 +376,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					defer store.Rollback()
 
-					set, _ := rntm.getObjectFromPath("Document.Child")
+					set, _ := getObjectFromPath(rntm, "Document.Child")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
 					has := trans.HasObject(set.id)
@@ -398,7 +398,7 @@ func TestTransactionBehaviour(t *testing.T) {
 						store.Begin()
 						defer store.Rollback()
 
-						set, _ := rntm.getObjectFromPath("Document.Child")
+						set, _ := getObjectFromPath(rntm, "Document.Child")
 						trans, err := mngr.getTransaction()
 						So(err, ShouldBeNil)
 						has := trans.HasObject(set.id)
@@ -787,7 +787,7 @@ func TestTransactionAbort(t *testing.T) {
 			store.Begin()
 			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 			So(mngr.IsOpen(), ShouldBeFalse)
-			set, _ := rntm.getObjectFromPath("Document")
+			set, _ := getObjectFromPath(rntm, "Document")
 			value := set.obj.GetProperty("value").GetValue(set.id)
 			So(value, ShouldEqual, 1)
 		})
@@ -802,7 +802,7 @@ func TestTransactionAbort(t *testing.T) {
 			store.Begin()
 			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 			So(mngr.IsOpen(), ShouldBeFalse)
-			set, _ := rntm.getObjectFromPath("Document.Child")
+			set, _ := getObjectFromPath(rntm, "Document.Child")
 			value := set.obj.GetProperty("value").GetValue(set.id)
 			So(value, ShouldEqual, 1)
 		})
