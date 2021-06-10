@@ -126,6 +126,25 @@ func (self *variant) GetValue(id Identifier) (interface{}, error) {
 	return result, nil
 }
 
+func (self *variant) GetSubobjects(id Identifier) ([]dmlSet, error) {
+
+	objs, err := self.DataImpl.GetSubobjects(id)
+	if err != nil {
+		return nil, err
+	}
+
+	dt := self.getDataType(id)
+	if dt.IsComplex() {
+		obj, err := self.getStoredObject(id)
+		if err != nil {
+			return nil, utils.StackError(err, "Invalid object stored")
+		}
+		return append(objs, obj), nil
+	}
+
+	return objs, nil
+}
+
 //Key handling for generic access to Data
 func (self *variant) GetByKey(id Identifier, key Key) (interface{}, error) {
 

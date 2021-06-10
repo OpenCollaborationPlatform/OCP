@@ -1,7 +1,6 @@
 //parser for the datastructure markup language
 package dml
 
-/*
 import (
 	"io/ioutil"
 	"os"
@@ -808,4 +807,3 @@ func TestTransactionAbort(t *testing.T) {
 		})
 	})
 }
-*/

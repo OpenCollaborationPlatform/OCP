@@ -699,6 +699,42 @@ func (self *vector) print(id Identifier) {
 	fmt.Println("]")
 }
 
+func (self *vector) GetSubobjects(id Identifier) ([]dmlSet, error) {
+
+	//get default objects
+	res, err := self.DataImpl.GetSubobjects(id)
+	if err != nil {
+		return nil, err
+	}
+
+	dt := self.entryDataType(id)
+	if dt.IsComplex() {
+
+		dbEntries, err := self.GetDBMapVersioned(id, entryKey)
+		if err != nil {
+			return nil, err
+		}
+
+		//iterate over all entries and add them
+		length, _ := self.Length(id)
+		for i := int64(0); i < length; i++ {
+			read, err := dbEntries.Read(i)
+			if err == nil {
+				id, ok := read.(*Identifier)
+				if ok {
+					set, err := self.rntm.getObjectSet(*id)
+					if err != nil {
+						return nil, err
+					}
+					res = append(res, set)
+				}
+			}
+		}
+	}
+
+	return res, nil
+}
+
 //Key handling for generic access to Data
 func (self *vector) GetByKey(id Identifier, key Key) (interface{}, error) {
 

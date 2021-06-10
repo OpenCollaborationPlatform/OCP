@@ -795,10 +795,10 @@ func (self *graph) ReachableNodes(id Identifier, node interface{}) ([]interface{
 //*****************************************************************************
 //			Internal functions
 //*****************************************************************************
-func (self *graph) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
+func (self *graph) GetSubobjects(id Identifier) ([]dmlSet, error) {
 
 	//get default objects
-	res, err := self.DataImpl.GetSubobjects(id, bhvr)
+	res, err := self.DataImpl.GetSubobjects(id)
 	if err != nil {
 		return nil, utils.StackError(err, "Get Data Subobjects failed")
 	}

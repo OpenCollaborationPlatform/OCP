@@ -383,6 +383,43 @@ func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 //			Internal functions
 //*****************************************************************************
 
+func (self *mapImpl) GetSubobjects(id Identifier) ([]dmlSet, error) {
+
+	//get default objects
+	res, err := self.DataImpl.GetSubobjects(id)
+	if err != nil {
+		return nil, err
+	}
+
+	//handle value objects! (Keys cannot be objects)
+	dt := self.valueDataType(id)
+	if dt.IsComplex() {
+
+		dbEntries, err := self.GetDBMapVersioned(id, entryKey)
+		if err != nil {
+			return nil, err
+		}
+
+		keys, err := dbEntries.GetKeys()
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to access keys in DB")
+		}
+		for _, key := range keys {
+
+			id, ok := key.(*Identifier)
+			if ok {
+				set, err := self.rntm.getObjectSet(*id)
+				if err != nil {
+					return nil, err
+				}
+				res = append(res, set)
+			}
+		}
+	}
+
+	return res, nil
+}
+
 //Key handling for generic access to Data
 func (self *mapImpl) GetByKey(id Identifier, key Key) (interface{}, error) {
 

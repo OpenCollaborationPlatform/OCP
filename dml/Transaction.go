@@ -468,31 +468,31 @@ func (self *TransactionManager) Add(id Identifier) error {
 // - Stops recursion on objects having a Transaction behaviour (and does not call fix for those)
 // - Does call on Behaviours
 func (self *TransactionManager) recursiveFixVersionTransaction(set dmlSet) error {
-	/*
-		data, ok := set.obj.(Data)
-		if ok {
-			sets, err := data.GetSubobjects(set.id, true)
-			if err != nil {
-				return utils.StackError(err, "Unable to access children of dataobject")
-			}
-			for _, set := range sets {
-				data, ok := set.obj.(Data)
-				if ok && data.HasBehaviour("Transaction") {
-					continue
-				}
-				if updates, _ := set.obj.HasUpdates(set.id); updates {
-					_, err := set.obj.FixStateAsVersion(set.id)
-					if err != nil {
-						return err
-					}
-				}
 
-				err := self.recursiveFixVersionTransaction(set)
+	data, ok := set.obj.(Data)
+	if ok {
+		sets, err := data.GetSubobjects(set.id)
+		if err != nil {
+			return utils.StackError(err, "Unable to access children of dataobject")
+		}
+		for _, set := range sets {
+			data, ok := set.obj.(Data)
+			if ok && data.HasBehaviour("Transaction") {
+				continue
+			}
+			if updates, _ := set.obj.HasUpdates(set.id); updates {
+				_, err := set.obj.FixStateAsVersion(set.id)
 				if err != nil {
 					return err
 				}
 			}
-		}*/
+
+			err := self.recursiveFixVersionTransaction(set)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -562,10 +562,10 @@ func (self *TransactionManager) Abort() error {
 // - Stops recursion on objects having a Transaction behaviour (and does not call revert for those)
 // - Does call on Behaviours
 func (self *TransactionManager) recursiveResetTransaction(set dmlSet) error {
-/*
+
 	data, ok := set.obj.(Data)
 	if ok {
-		sets, err := data.GetSubobjects(set.id, true)
+		sets, err := data.GetSubobjects(set.id)
 		if err != nil {
 			return utils.StackError(err, "Unable to access children of dataobject")
 		}
@@ -586,7 +586,7 @@ func (self *TransactionManager) recursiveResetTransaction(set dmlSet) error {
 				return err
 			}
 		}
-	}*/
+	}
 	return nil
 }
 

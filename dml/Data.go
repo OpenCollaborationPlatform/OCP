@@ -33,8 +33,8 @@ type Data interface {
 	GetChildren(Identifier) ([]dmlSet, error)
 	GetChildByName(Identifier, string) (dmlSet, error)
 
-	Created(id Identifier) error //emits onCreated event for this and all subobjects (not behaviours)
-
+	GetSubobjects(id Identifier) ([]dmlSet, error)                    //Convinience function to get all subobjects, including childs, behaviours any any created ones
+	Created(id Identifier) error                                      //emits onCreated event for this and all subobjects (not behaviours)
 	recursiveHandleBehaviourEvent(Identifier, string, []string) error //Helper function to propagate behaviour events to the parent (if availbabe)
 
 }
@@ -194,7 +194,7 @@ func (self *DataImpl) GetChildByName(id Identifier, name string) (dmlSet, error)
 	return dmlSet{obj: self.rntm.objects[childDT].(Data), id: childID}, nil
 }
 
-func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) {
+func (self *DataImpl) GetSubobjects(id Identifier) ([]dmlSet, error) {
 
 	result := make([]dmlSet, 0)
 
@@ -206,15 +206,13 @@ func (self *DataImpl) GetSubobjects(id Identifier, bhvr bool) ([]dmlSet, error) 
 	result = append(result, children...)
 
 	//add behaviour
-	if bhvr {
-		bhvrs := self.Behaviours()
-		for _, name := range bhvrs {
-			bhvr, err := self.GetBehaviour(id, name)
-			if err != nil {
-				return nil, utils.StackError(err, "Unable to query behaviour manager")
-			}
-			result = append(result, bhvr)
+	bhvrs := self.Behaviours()
+	for _, name := range bhvrs {
+		bhvr, err := self.GetBehaviour(id, name)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to query behaviour manager")
 		}
+		result = append(result, bhvr)
 	}
 
 	return result, nil
@@ -227,7 +225,7 @@ func (self *DataImpl) Created(id Identifier) error {
 		return utils.StackError(err, "Unable to emit event")
 	}
 
-	subs, err := self.GetSubobjects(id, false)
+	subs, err := self.GetSubobjects(id)
 	if err != nil {
 		return utils.StackError(err, "Unable to access subobjects")
 	}
@@ -240,8 +238,6 @@ func (self *DataImpl) Created(id Identifier) error {
 				return err
 			}
 
-		} else {
-			return newInternalError(Error_Fatal, "Data subobject of wrong type")
 		}
 	}
 	return nil
