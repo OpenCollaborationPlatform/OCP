@@ -176,7 +176,7 @@ func (self *vector) Set(id Identifier, idx int64, value interface{}) error {
 	value = UnifyDataType(value)
 
 	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id)
+	err = self.GetEvent("onBeforeChange").Emit(id, idx)
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func (self *vector) Set(id Identifier, idx int64, value interface{}) error {
 		return err
 	}
 
-	self.GetEvent("onChanged").Emit(id)
+	self.GetEvent("onChanged").Emit(id, idx)
 	return nil
 }
 
@@ -229,37 +229,38 @@ func (self *vector) Append(id Identifier, value interface{}) (int64, error) {
 	//make sure to use unified types
 	value = UnifyDataType(value)
 
-	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id)
-	if err != nil {
-		return -1, err
-	}
-
 	newLength, err := self.changeLength(id, 1)
 	if err != nil {
 		return -1, err
 	}
 	newIdx := newLength - 1
 
+	//event handling
+	err = self.GetEvent("onBeforeChange").Emit(id, newIdx)
+	if err != nil {
+		return -1, err
+	}
+
 	//and set value
 	err = self.set(id, dt, newIdx, value)
 
 	self.GetEvent("onNewEntry").Emit(id, newIdx)
-	self.GetEvent("onChanged").Emit(id)
+	self.GetEvent("onChanged").Emit(id, newIdx)
 	return newIdx, err
 }
 
 //creates a new entry with a all new type, returns the index of the new one
 func (self *vector) AppendNew(id Identifier) (interface{}, error) {
 
+	length, _ := self.Length(id)
+
 	//event handling
-	err := self.GetEvent("onBeforeChange").Emit(id)
+	err := self.GetEvent("onBeforeChange").Emit(id, length)
 	if err != nil {
 		return nil, err
 	}
 
 	//create a new entry
-	length, _ := self.Length(id)
 	result, err := self.buildNew(id)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create new object to append to vector")
@@ -299,7 +300,7 @@ func (self *vector) AppendNew(id Identifier) (interface{}, error) {
 	}
 
 	self.GetEvent("onNewEntry").Emit(id, length)
-	self.GetEvent("onChanged").Emit(id)
+	self.GetEvent("onChanged").Emit(id, length)
 	return result, nil
 }
 
@@ -314,23 +315,17 @@ func (self *vector) Insert(id Identifier, idx int64, value interface{}) error {
 	//make sure to use unified types
 	value = UnifyDataType(value)
 
-	//event handling
-	err := self.GetEvent("onBeforeChange").Emit(id)
-	if err != nil {
-		return err
-	}
-
 	appidx, err := self.Append(id, value)
 	if err != nil {
 		return utils.StackError(err, "Unable to insert value into vector")
 	}
+	//move take care of events
 	err = self.move(id, appidx, idx)
 	if err != nil {
 		return utils.StackError(err, "Unable to insert value into vector")
 	}
 
 	self.GetEvent("onNewEntry").Emit(id, idx)
-	self.GetEvent("onChanged").Emit(id)
 	return nil
 }
 
@@ -342,23 +337,17 @@ func (self *vector) InsertNew(id Identifier, idx int64) (interface{}, error) {
 		return nil, newUserError(Error_Key_Not_Available, "Index out of bounds: %v", idx)
 	}
 
-	//event handling
-	err := self.GetEvent("onBeforeChange").Emit(id)
-	if err != nil {
-		return nil, err
-	}
-
 	res, err := self.AppendNew(id)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to insert value into vector")
 	}
+	//move takes care of eventy
 	err = self.move(id, length, idx)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to insert value into vector")
 	}
 
 	self.GetEvent("onNewEntry").Emit(id, idx)
-	self.GetEvent("onChanged").Emit(id)
 	return res, nil
 }
 
@@ -370,14 +359,8 @@ func (self *vector) Remove(id Identifier, idx int64) error {
 		return newUserError(Error_Key_Not_Available, "Index out of bounds: %v", idx)
 	}
 
-	//event handling
-	err := self.GetEvent("onBeforeChange").Emit(id)
-	if err != nil {
-		return err
-	}
-
 	//inform that we are going to remove
-	err = self.GetEvent("onDeleteEntry").Emit(id, idx)
+	err := self.GetEvent("onDeleteEntry").Emit(id, idx)
 	if err != nil {
 		return err
 	}
@@ -395,9 +378,16 @@ func (self *vector) Remove(id Identifier, idx int64) error {
 	}
 
 	for i := idx; i < (length - 1); i++ {
+
 		data, err := dbEntries.Read(i + 1)
 		if err != nil {
 			return utils.StackError(err, "Unable to move vector entries after deleting entry")
+		}
+
+		//event handling
+		err = self.GetEvent("onBeforeChange").Emit(id, i)
+		if err != nil {
+			return err
 		}
 		err = dbEntries.Write(i, data)
 		if err != nil {
@@ -417,6 +407,13 @@ func (self *vector) Remove(id Identifier, idx int64) error {
 				}
 			}
 		}
+
+		self.GetEvent("onChanged").Emit(id, i)
+	}
+
+	err = self.GetEvent("onBeforeChange").Emit(id, length-1)
+	if err != nil {
+		return err
 	}
 
 	//now shorten the length
@@ -431,7 +428,7 @@ func (self *vector) Remove(id Identifier, idx int64) error {
 		return err
 	}
 
-	self.GetEvent("onChanged").Emit(id)
+	self.GetEvent("onChanged").Emit(id, length-1)
 	return nil
 }
 
@@ -450,7 +447,11 @@ func (self *vector) Swap(id Identifier, idx1 int64, idx2 int64) error {
 	}
 
 	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id)
+	err = self.GetEvent("onBeforeChange").Emit(id, idx1)
+	if err != nil {
+		return err
+	}
+	err = self.GetEvent("onBeforeChange").Emit(id, idx2)
 	if err != nil {
 		return err
 	}
@@ -507,7 +508,8 @@ func (self *vector) Swap(id Identifier, idx1 int64, idx2 int64) error {
 		}
 	}
 
-	self.GetEvent("onChanged").Emit(id)
+	self.GetEvent("onChanged").Emit(id, idx1)
+	self.GetEvent("onChanged").Emit(id, idx2)
 	return nil
 }
 
@@ -525,18 +527,11 @@ func (self *vector) Move(id Identifier, oldIdx int64, newIdx int64) error {
 		return newUserError(Error_Key_Not_Available, "Both indices need to be within vector range")
 	}
 
-	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id)
-	if err != nil {
-		return err
-	}
-
 	err = self.move(id, oldIdx, newIdx)
 	if err != nil {
 		return err
 	}
 
-	self.GetEvent("onChanged").Emit(id)
 	return nil
 }
 
@@ -566,6 +561,13 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 	//move the in-between idx 1 down
 	if oldIdx < newIdx {
 		for i := oldIdx + 1; i <= newIdx; i++ {
+
+			//event handling
+			err = self.GetEvent("onBeforeChange").Emit(id, i-1)
+			if err != nil {
+				return err
+			}
+
 			res, err := dbEntries.Read(i)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
@@ -588,6 +590,8 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 					}
 				}
 			}
+
+			self.GetEvent("onChanged").Emit(id, i-1)
 		}
 	} else {
 
@@ -618,6 +622,10 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 	}
 
 	//write the data into the correct location
+	err = self.GetEvent("onBeforeChange").Emit(id, newIdx)
+	if err != nil {
+		return err
+	}
 	err = dbEntries.Write(newIdx, data)
 	if err != nil {
 		return utils.StackError(err, "Failed to write entry")
@@ -635,6 +643,7 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 			}
 		}
 	}
+	self.GetEvent("onChanged").Emit(id, newIdx)
 	return nil
 }
 

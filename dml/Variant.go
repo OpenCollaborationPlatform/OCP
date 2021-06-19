@@ -51,7 +51,7 @@ func (self *variant) SetValue(id Identifier, value interface{}) error {
 	value = UnifyDataType(value)
 
 	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id)
+	err = self.GetEvent("onBeforeChange").Emit(id, "value")
 	if err != nil {
 		return utils.StackError(err, "Event onBeforeChange failed")
 	}
@@ -79,7 +79,7 @@ func (self *variant) SetValue(id Identifier, value interface{}) error {
 	}
 
 	self.GetEvent("onValueChanged").Emit(id)
-	self.GetEvent("onChanged").Emit(id)
+	self.GetEvent("onChanged").Emit(id, "value")
 	return nil
 }
 
@@ -152,19 +152,11 @@ func (self *variant) GetByKey(id Identifier, key Key) (interface{}, error) {
 		return self.DataImpl.GetByKey(id, key)
 	}
 
-	dt := self.getDataType(id)
-	if dt.IsComplex() {
-		obj, err := self.getStoredObject(id)
-		if err != nil {
-			return dmlSet{}, utils.StackError(err, "Invalid object stored")
-		}
-
-		if obj.id.Name == key.AsString() {
-			return obj, nil
-		}
+	if key.AsString() != "value" {
+		return nil, newUserError(Error_Key_Not_Available, "Key not available in variant", "key", key.AsString())
 	}
 
-	return nil, newUserError(Error_Key_Not_Available, "Key not available in variant")
+	return self.GetValue(id)
 }
 
 func (self *variant) HasKey(id Identifier, key Key) (bool, error) {
@@ -173,17 +165,7 @@ func (self *variant) HasKey(id Identifier, key Key) (bool, error) {
 		return true, nil
 	}
 
-	dt := self.getDataType(id)
-	if dt.IsComplex() {
-		obj, err := self.getStoredObject(id)
-		if err != nil {
-			return false, utils.StackError(err, "Invalid object stored")
-		}
-
-		return obj.id.Name == key.AsString(), nil
-	}
-
-	return false, nil
+	return key.AsString() == "value", nil
 }
 
 func (self *variant) GetKeys(id Identifier) ([]Key, error) {
@@ -193,16 +175,7 @@ func (self *variant) GetKeys(id Identifier) ([]Key, error) {
 		return nil, err
 	}
 
-	dt := self.getDataType(id)
-	if dt.IsComplex() {
-		obj, err := self.getStoredObject(id)
-		if err != nil {
-			return nil, utils.StackError(err, "Invalid object stored")
-		}
-
-		keys = append(keys, MustNewKey(obj.id.Name))
-	}
-
+	keys = append(keys, MustNewKey("value"))
 	return keys, nil
 }
 
@@ -218,20 +191,12 @@ func (self *variant) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
 		return self.DataImpl.keyToDS(id, key)
 	}
 
-	dt := self.getDataType(id)
-	if dt.IsComplex() {
-		obj, err := self.getStoredObject(id)
-		if err != nil {
-			return nil, utils.StackError(err, "Invalid object stored")
-		}
-		if obj.id.Name != key.AsString() {
-			return nil, newUserError(Error_Key_Not_Available, "Key not available in variant")
-		}
-
-		return []datastore.Key{datastore.NewKey(datastore.ValueType, true, id.Hash(), variantKey)}, nil
+	if key.AsString() != "value" {
+		return nil, newUserError(Error_Key_Not_Available, "Key not available in variant", "key", key.AsString())
 	}
 
-	return nil, newUserError(Error_Key_Not_Available, "Key does not exist in variant")
+	return []datastore.Key{datastore.NewKey(datastore.ValueType, true, id.Hash(), variantKey)}, nil
+
 }
 
 func (self *variant) PropertyChanged(id Identifier, name string) error {

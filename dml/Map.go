@@ -215,7 +215,7 @@ func (self *mapImpl) Set(id Identifier, key interface{}, value interface{}) erro
 	}
 
 	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id)
+	err = self.GetEvent("onBeforeChange").Emit(id, self.typeToDB(key, kdt))
 	if err != nil {
 		return utils.StackError(err, "Abort operation due to event onBeforeChange error")
 	}
@@ -225,7 +225,7 @@ func (self *mapImpl) Set(id Identifier, key interface{}, value interface{}) erro
 		return err
 	}
 
-	self.GetEvent("onChanged").Emit(id) //do not return error as setting was already successfull
+	self.GetEvent("onChanged").Emit(id, self.typeToDB(key, kdt)) //do not return error as setting was already successfull
 	return nil
 }
 
@@ -294,7 +294,7 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 	}
 
 	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id)
+	err = self.GetEvent("onBeforeChange").Emit(id, self.typeToDB(key, kdt))
 	if err != nil {
 		return nil, utils.StackError(err, "Abort operation due to event onBeforeChange error")
 	}
@@ -338,7 +338,7 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 		}
 	}
 
-	self.GetEvent("onChanged").Emit(id) //do not return error as setting was already successfull
+	self.GetEvent("onChanged").Emit(id, self.typeToDB(key, kdt)) //do not return error as setting was already successfull
 	return result, nil
 }
 
@@ -364,7 +364,7 @@ func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 	}
 
 	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id)
+	err = self.GetEvent("onBeforeChange").Emit(id, dbkey)
 	if err != nil {
 		return utils.StackError(err, "Abort operation due to event onBeforeChange error")
 	}
@@ -375,7 +375,7 @@ func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 		return utils.StackError(err, "Unable to remove entry from DB")
 	}
 
-	self.GetEvent("onChanged").Emit(id) //do not return error as setting was already successfull
+	self.GetEvent("onChanged").Emit(id, dbkey) //do not return error as setting was already successfull
 	return nil
 }
 
