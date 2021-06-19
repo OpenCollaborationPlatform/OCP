@@ -107,7 +107,7 @@ func (self transaction) SetUser(user User) error {
 	return self.user.Write(user)
 }
 
-func (self transaction) Objects() ([]dmlSet, error) {
+func (self transaction) Behaviours() ([]dmlSet, error) {
 
 	entries, err := self.objects.GetValues()
 	if err != nil {
@@ -131,7 +131,7 @@ func (self transaction) Objects() ([]dmlSet, error) {
 	return result, nil
 }
 
-func (self transaction) HasObject(id Identifier) bool {
+func (self transaction) HasBehaviour(id Identifier) bool {
 
 	entries, err := self.objects.GetValues()
 	if err != nil {
@@ -155,9 +155,9 @@ func (self transaction) HasObject(id Identifier) bool {
 
 //Adds object to the transaction. Note: Already having it is not a error to avoid
 //the need of excessive checking
-func (self transaction) AddObject(id Identifier) error {
+func (self transaction) AddBehaviour(id Identifier) error {
 
-	if self.HasObject(id) {
+	if self.HasBehaviour(id) {
 		return nil
 	}
 
@@ -189,7 +189,6 @@ func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
 	mngr.AddMethod("IsOpen", MustNewMethod(mngr.IsOpen, true))
 	mngr.AddMethod("Open", MustNewMethod(mngr.Open, false))
 	mngr.AddMethod("Close", MustNewMethod(mngr.Close, false))
-	mngr.AddMethod("Add", MustNewMethod(mngr.Add, false))
 	mngr.AddMethod("Abort", MustNewMethod(mngr.Abort, false))
 
 	//build js object
@@ -271,30 +270,17 @@ func (self *TransactionManager) Close() error {
 	}
 
 	//iterate over all objects and call the close event
-	objs, err := trans.Objects()
+	bhvrs, err := trans.Behaviours()
 	if err != nil {
 		return err
 	}
-	for _, set := range objs {
+	for _, set := range bhvrs {
 
-		//the object is not part of a transaction anymode
-		bhvr, bhvrId := getTransactionBehaviour(set)
-
-		if bhvr != nil {
-			err = bhvr.GetEvent("onClosing").Emit(bhvrId)
-			if err != nil {
-				return utils.StackError(err, "Unable to close transaction due to failed close event emitting")
-			}
-			//the object is not part of a transaction anymode
-			bhvr.setInTransaction(bhvrId, false)
-		}
-
-		//fix the new state as version
-		if updates, _ := set.obj.HasUpdates(set.id); updates {
-			set.obj.FixStateAsVersion(set.id)
-		}
-		if bhvr != nil && bhvr.GetProperty("recursive").GetValue(bhvrId).(bool) {
-			self.recursiveFixVersionTransaction(set)
+		//the object is not part of a transaction anymore
+		bhvr := set.obj.(transactionBehaviour)
+		err := bhvr.closeTransaction(set.id, trans.identification)
+		if err != nil {
+			return utils.StackError(err, "Unable to close transaction for object", "Object", set.id)
 		}
 	}
 
@@ -320,179 +306,6 @@ func (self *TransactionManager) Close() error {
 	//remove from map
 	transactions.Remove(self.rntm.currentUser)
 
-	return nil
-}
-
-//Adds a new object to the current transaction. Fails if object is already part of
-//annother transaction
-//Note: If transaction has Object already no error is returned
-func (self *TransactionManager) Add(id Identifier) error {
-
-	set, err := self.rntm.getObjectSet(id)
-	if err != nil {
-		return utils.StackError(err, "Unable to get object for id")
-	}
-	data, ok := set.obj.(Data)
-	if !ok {
-		return newUserError(Error_Operation_Invalid, "Cannot add behaviour to transaction, only data objects")
-	}
-
-	if !data.HasBehaviour("Transaction") {
-		return newUserError(Error_Operation_Invalid, "Object has no transaction behaviour: cannot be added to transaction")
-	}
-	bhvrSet, _ := data.GetBehaviour(id, "Transaction")
-	transBhvr, ok := bhvrSet.obj.(*transactionBehaviour)
-	if !ok {
-		return newInternalError(Error_Setup_Invalid, "Wrong behaviour type used in object")
-	}
-
-	trans, err := self.getTransaction()
-	if err != nil {
-		//seems we do not have a transaction open. Let's check if we shall open one
-		if bhvrSet.obj.GetProperty("automatic").GetValue(bhvrSet.id).(bool) {
-			err = self.Open()
-			if err == nil {
-				trans, err = self.getTransaction()
-			}
-		}
-
-		if err != nil {
-			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
-			bhvrSet.obj.GetEvent("onFailure").Emit(bhvrSet.id, err.Error())
-			return err
-		}
-	}
-
-	//check if object is not already in annother transaction
-	ok, err = transBhvr.InTransaction(bhvrSet.id)
-	if err != nil {
-		return utils.StackError(err, "Unable to check if object is in transaction")
-	}
-	if ok {
-		objTrans, err := transBhvr.GetTransaction(bhvrSet.id)
-		if err != nil {
-			return utils.StackError(err, "Unable to retreive transaction from behaviour")
-		}
-		if !objTrans.Equal(trans) {
-			err = newUserError(Error_Operation_Invalid, "Object already part of different transaction")
-			bhvrSet.obj.GetEvent("onFailure").Emit(bhvrSet.id, err.Error())
-			return err
-		}
-	}
-
-	//check if we are already in this transaction
-	if trans.HasObject(id) {
-		return nil
-	}
-
-	//check if it is allowed by the object
-	res, err := bhvrSet.obj.GetMethod("CanBeAdded").CallBoolReturn(bhvrSet.id)
-	if err != nil {
-		err = utils.StackError(err, "Calling CanBeAdded failed")
-		bhvrSet.obj.GetEvent("onFailure").Emit(bhvrSet.id, err.Error())
-		return err
-	}
-	if !res {
-		err = newUserError(Error_Operation_Invalid, "Object cannot be added to transaction according to \"CanBeAdded\"")
-		bhvrSet.obj.GetEvent("onFailure").Emit(bhvrSet.id, err.Error())
-		return err
-	}
-
-	err = trans.AddObject(id)
-	if err != nil {
-		err = utils.StackError(err, "Unable to add object to transaction")
-		bhvrSet.obj.GetEvent("onFailure").Emit(bhvrSet.id, err.Error())
-		return err
-	}
-
-	//store in the behaviour
-	err = transBhvr.setCurrent(bhvrSet.id, trans.identification)
-	if err != nil {
-		return utils.StackError(err, "Unable to write transaction to behaviour")
-	}
-	err = transBhvr.setInTransaction(bhvrSet.id, true)
-	if err != nil {
-		return err
-	}
-
-	//make sure we have a fixed state at the beginning of the transaction (required for revert later)
-	if has, _ := set.obj.HasUpdates(set.id); has {
-		_, err = set.obj.FixStateAsVersion(set.id)
-		if err != nil {
-			return utils.StackError(err, "Unable to fix current state as version")
-		}
-	}
-	if bhvrSet.obj.GetProperty("recursive").GetValue(bhvrSet.id).(bool) {
-		err = self.recursiveFixVersionTransaction(set)
-		if err != nil {
-			return utils.StackError(err, "Unable to fix current state as version")
-		}
-	}
-
-	//throw relevant event
-	err = bhvrSet.obj.GetEvent("onParticipation").Emit(bhvrSet.id)
-	if err != nil {
-		return err
-	}
-
-	//add the requried additional objects to the transaction
-	list, err := bhvrSet.obj.GetMethod("DependentObjects").Call(bhvrSet.id)
-	if err != nil {
-		return utils.StackError(err, "Error in \"DependentObjects\" function")
-	}
-	objs, ok := list.([]interface{})
-	if !ok {
-		err = newUserError(Error_Operation_Invalid, "Invalid \"DependentObjects\" function: return value must be list of objects, not %T", list)
-		bhvrSet.obj.GetEvent("onFailure").Emit(bhvrSet.id, err.Error())
-		return err
-	}
-	for _, obj := range objs {
-		dat, ok := obj.(Identifier)
-		if !ok {
-			err = newUserError(Error_Operation_Invalid, "Only objects are allowed to be added to transactions, not %T", obj)
-			bhvrSet.obj.GetEvent("onFailure").Emit(bhvrSet.id, err.Error())
-			return err
-		}
-		err := self.Add(dat)
-		if err != nil {
-			return utils.StackError(err, "Unable to add dependend object")
-		}
-	}
-
-	return nil
-}
-
-// calls FixStateAsVersion for all childs of the provided dmlSet, and recursively for their
-// childs too. Notes:
-// - Calls not for the provided object itself
-// - Stops recursion on objects having a Transaction behaviour (and does not call fix for those)
-// - Does call on Behaviours
-func (self *TransactionManager) recursiveFixVersionTransaction(set dmlSet) error {
-
-	data, ok := set.obj.(Data)
-	if ok {
-		sets, err := data.GetSubobjects(set.id)
-		if err != nil {
-			return utils.StackError(err, "Unable to access children of dataobject")
-		}
-		for _, set := range sets {
-			data, ok := set.obj.(Data)
-			if ok && data.HasBehaviour("Transaction") {
-				continue
-			}
-			if updates, _ := set.obj.HasUpdates(set.id); updates {
-				_, err := set.obj.FixStateAsVersion(set.id)
-				if err != nil {
-					return err
-				}
-			}
-
-			err := self.recursiveFixVersionTransaction(set)
-			if err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
 
@@ -505,29 +318,17 @@ func (self *TransactionManager) Abort() error {
 	}
 
 	//iterate over all objects
-	objs, err := trans.Objects()
+	bhvrs, err := trans.Behaviours()
 	if err != nil {
 		return err
 	}
-	for _, set := range objs {
+	for _, set := range bhvrs {
 
 		//the object is not part of a transaction anymode
-		bhvr, bhvrId := getTransactionBehaviour(set)
-
-		//call abort
-		if bhvr != nil {
-			//we do not fail on emit error, as aborting should always work to prevent deadlock
-			bhvr.GetEvent("onAborting").Emit(bhvrId)
-			//the object is not part of a transaction anymore
-			bhvr.setInTransaction(bhvrId, false)
-		}
-
-		//revert the object, and possibly all recursive ones
-		if updates, _ := set.obj.HasUpdates(set.id); updates {
-			set.obj.ResetHead(set.id)
-		}
-		if bhvr != nil && bhvr.GetProperty("recursive").GetValue(bhvrId).(bool) {
-			self.recursiveResetTransaction(set)
+		bhvr := set.obj.(transactionBehaviour)
+		err := bhvr.abortTransaction(set.id, trans.identification)
+		if err != nil {
+			return utils.StackError(err, "Unable to abort transaction for object", "Object", set.id)
 		}
 	}
 
@@ -553,40 +354,6 @@ func (self *TransactionManager) Abort() error {
 	//remove from map
 	transactions.Remove(self.rntm.currentUser)
 
-	return nil
-}
-
-// calls RevertHead for all childs of the provided dmlSet, and recursively for their
-// childs too. Notes:
-// - Calls not for the provided object itself
-// - Stops recursion on objects having a Transaction behaviour (and does not call revert for those)
-// - Does call on Behaviours
-func (self *TransactionManager) recursiveResetTransaction(set dmlSet) error {
-
-	data, ok := set.obj.(Data)
-	if ok {
-		sets, err := data.GetSubobjects(set.id)
-		if err != nil {
-			return utils.StackError(err, "Unable to access children of dataobject")
-		}
-		for _, set := range sets {
-			data, ok := set.obj.(Data)
-			if ok && data.HasBehaviour("Transaction") {
-				continue
-			}
-			if updates, _ := set.obj.HasUpdates(set.id); updates {
-				err := set.obj.ResetHead(set.id)
-				if err != nil {
-					return err
-				}
-			}
-
-			err := self.recursiveResetTransaction(set)
-			if err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
 
@@ -655,7 +422,7 @@ func (self *TransactionManager) newTransaction() (transaction, error) {
 	return trans, nil
 }
 
-func getTransactionBehaviour(set dmlSet) (*transactionBehaviour, Identifier) {
+func getTransactionBehaviour(set dmlSet) (transactionBehaviour, Identifier) {
 
 	data, ok := set.obj.(Data)
 	if !ok {
@@ -667,7 +434,7 @@ func getTransactionBehaviour(set dmlSet) (*transactionBehaviour, Identifier) {
 		return nil, Identifier{}
 	}
 	set, _ = data.GetBehaviour(set.id, "Transaction")
-	return set.obj.(*transactionBehaviour), set.id
+	return set.obj.(transactionBehaviour), set.id
 }
 
 /*********************************************************************************
@@ -676,13 +443,18 @@ func getTransactionBehaviour(set dmlSet) (*transactionBehaviour, Identifier) {
 var inTransKey []byte = []byte("__inTransaction")
 var curTransKey []byte = []byte("__currentTransaction")
 
-type transactionBehaviour struct {
+type transactionBehaviour interface {
+	closeTransaction(Identifier, [32]byte) error //called when a transaction, which holds the behaviour, is closed
+	abortTransaction(Identifier, [32]byte) error //called when a transaction, which holds the behaviour, is abortet
+}
+
+type objectTransaction struct {
 	*behaviour
 
 	mngr *TransactionManager
 }
 
-func NewTransactionBehaviour(rntm *Runtime) (Object, error) {
+func NewObjectTransactionBehaviour(rntm *Runtime) (Object, error) {
 
 	behaviour, _ := NewBaseBehaviour(rntm)
 
@@ -696,7 +468,7 @@ func NewTransactionBehaviour(rntm *Runtime) (Object, error) {
 	curTrans, _ := vset.GetOrCreateValue([]byte("__currentTransaction"))
 	*/
 	mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
-	tbhvr := &transactionBehaviour{behaviour, mngr}
+	tbhvr := &objectTransaction{behaviour, mngr}
 
 	//add default properties
 	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) //open transaction automatically on change
@@ -713,29 +485,171 @@ func NewTransactionBehaviour(rntm *Runtime) (Object, error) {
 	tbhvr.AddEvent(NewEvent(`onFailure`, behaviour))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
-	tbhvr.AddMethod("InTransaction", MustNewIdMethod(tbhvr.InTransaction, true))               //behaviour is in any transaction, also other users?
-	tbhvr.AddMethod("InCurrentTransaction", MustNewIdMethod(tbhvr.InCurrentTransaction, true)) //behaviour is in currently open transaction for user?
+	tbhvr.AddMethod("Add", MustNewIdMethod(tbhvr.add, false))                                      //Adds the object to the current transaction
+	tbhvr.AddMethod("InTransaction", MustNewIdMethod(tbhvr.InTransaction, true))                   //behaviour is in any transaction, also other users?
+	tbhvr.AddMethod("InCurrentTransaction", MustNewIdMethod(tbhvr.InCurrentTransaction, true))     //behaviour is in currently open transaction for user?
+	tbhvr.AddMethod("InDifferentTransaction", MustNewIdMethod(tbhvr.InDifferentTransaction, true)) //behaviour is in currently open transaction for user?
 
 	return tbhvr, nil
 }
 
-func (self *transactionBehaviour) HandleEvent(id Identifier, event string) error {
+func (self *objectTransaction) GetBehaviourType() string {
+	return "Transaction"
+}
+
+func (self *objectTransaction) HandleEvent(id Identifier, event string) error {
 
 	//whenever a property or the object itself changed, we add ourself to the current transaction
 	switch event {
 	case "onBeforePropertyChange", "onBeforeChange":
-		set, err := self.GetParent(id)
-		if err == nil {
-			err := self.mngr.Add(set.id)
-			if err != nil {
-				return err
-			}
+		err := self.add(id)
+		if err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-func (self *transactionBehaviour) InTransaction(id Identifier) (bool, error) {
+//Adds a new object to the current transaction. Fails if object is already part of
+//annother transaction
+//Note: If transaction has Object already no error is returned
+func (self *objectTransaction) add(id Identifier) error {
+
+	parent, err := self.GetParent(id)
+	if err != nil {
+		return utils.StackError(err, "Unable to get parent objecct of transaction behaviour")
+	}
+
+	trans, err := self.mngr.getTransaction()
+	if err != nil {
+		//seems we do not have a transaction open. Let's check if we shall open one
+		if self.GetProperty("automatic").GetValue(id).(bool) {
+			err = self.mngr.Open()
+			if err == nil {
+				trans, err = self.mngr.getTransaction()
+			}
+		}
+
+		if err != nil {
+			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
+			self.GetEvent("onFailure").Emit(id, err.Error())
+			return err
+		}
+	}
+
+	//check if object is not already in annother transaction
+	different, err := self.InDifferentTransaction(id)
+	if err != nil {
+		return utils.StackError(err, "Unable to check if object is in transaction")
+	}
+	if different {
+		err = newUserError(Error_Operation_Invalid, "Object already part of different transaction")
+		self.GetEvent("onFailure").Emit(id, err.Error())
+		return err
+	}
+
+	//check if we are already in this transaction
+	if trans.HasBehaviour(id) {
+		return nil
+	}
+
+	//check if it is allowed by the object
+	res, err := self.GetMethod("CanBeAdded").CallBoolReturn(id)
+	if err != nil {
+		err = utils.StackError(err, "Calling CanBeAdded failed")
+		self.GetEvent("onFailure").Emit(id, err.Error())
+		return err
+	}
+	if !res {
+		err = newUserError(Error_Operation_Invalid, "Object cannot be added to transaction according to \"CanBeAdded\"")
+		self.GetEvent("onFailure").Emit(id, err.Error())
+		return err
+	}
+
+	err = trans.AddBehaviour(id)
+	if err != nil {
+		err = utils.StackError(err, "Unable to add object to transaction")
+		self.GetEvent("onFailure").Emit(id, err.Error())
+		return err
+	}
+
+	//store in the behaviour
+	err = self.setCurrent(id, trans.identification)
+	if err != nil {
+		return utils.StackError(err, "Unable to write transaction to behaviour")
+	}
+	err = self.setInTransaction(id, true)
+	if err != nil {
+		return err
+	}
+
+	//make sure we have a fixed state at the beginning of the transaction (required for revert later)
+	if has, _ := parent.obj.HasUpdates(parent.id); has {
+		_, err = parent.obj.FixStateAsVersion(parent.id)
+		if err != nil {
+			return utils.StackError(err, "Unable to fix current state as version")
+		}
+	}
+	if self.GetProperty("recursive").GetValue(id).(bool) {
+		err = self.recursiveFixVersionTransaction(parent)
+		if err != nil {
+			return utils.StackError(err, "Unable to fix current state as version")
+		}
+	}
+
+	//throw relevant event
+	err = self.GetEvent("onParticipation").Emit(id)
+	if err != nil {
+		return err
+	}
+
+	//add the requried additional objects to the transaction
+	list, err := self.GetMethod("DependentObjects").Call(id)
+	if err != nil {
+		return utils.StackError(err, "Error in \"DependentObjects\" function")
+	}
+	objs, ok := list.([]interface{})
+	if !ok {
+		err = newUserError(Error_Operation_Invalid, "Invalid \"DependentObjects\" function: return value must be list of objects, not %T", list)
+		self.GetEvent("onFailure").Emit(id, err.Error())
+		return err
+	}
+	for _, obj := range objs {
+		dat, ok := obj.(Identifier)
+		if !ok {
+			err = newUserError(Error_Operation_Invalid, "Only objects are allowed to be added to transactions, not %T", obj)
+			self.GetEvent("onFailure").Emit(id, err.Error())
+			return err
+		}
+		obj, err := self.rntm.getObjectSet(dat)
+		if err != nil {
+			return err
+		}
+		var bhvr dmlSet
+		data, ok := obj.obj.(Data)
+		if ok {
+			bhvr, err = data.GetBehaviour(obj.id, "Transaction")
+			if err != nil {
+				return newUserError(Error_Operation_Invalid, "Provided object does not have Transaction behaviour, cannot be added", "Object", obj.id)
+			}
+		} else {
+			return newUserError(Error_Operation_Invalid, "List of dependent objects contain behaviours ")
+		}
+		//for now only allow object transactions
+		_, ok = bhvr.obj.(*objectTransaction)
+		if !ok {
+			return newUserError(Error_Operation_Invalid, "Partial transaction behaviour cannot be dependent object")
+		}
+		err = self.add(bhvr.id)
+		if err != nil {
+			return utils.StackError(err, "Unable to add dependend object")
+		}
+	}
+
+	return nil
+}
+
+func (self *objectTransaction) InTransaction(id Identifier) (bool, error) {
 
 	inTransaction, err := self.GetDBValue(id, inTransKey)
 	if err != nil {
@@ -756,7 +670,7 @@ func (self *transactionBehaviour) InTransaction(id Identifier) (bool, error) {
 	return res.(bool), nil
 }
 
-func (self *transactionBehaviour) setInTransaction(id Identifier, value bool) error {
+func (self *objectTransaction) setInTransaction(id Identifier, value bool) error {
 
 	inTransaction, err := self.GetDBValue(id, inTransKey)
 	if err != nil {
@@ -765,7 +679,7 @@ func (self *transactionBehaviour) setInTransaction(id Identifier, value bool) er
 	return utils.StackError(inTransaction.Write(value), "Unable to write transaction status")
 }
 
-func (self *transactionBehaviour) InCurrentTransaction(id Identifier) (bool, error) {
+func (self *objectTransaction) InCurrentTransaction(id Identifier) (bool, error) {
 
 	if in, err := self.InTransaction(id); err != nil || !in {
 		return false, nil
@@ -784,7 +698,26 @@ func (self *transactionBehaviour) InCurrentTransaction(id Identifier) (bool, err
 	return current.Equal(trans), nil
 }
 
-func (self *transactionBehaviour) GetTransaction(id Identifier) (transaction, error) {
+func (self *objectTransaction) InDifferentTransaction(id Identifier) (bool, error) {
+
+	if in, err := self.InTransaction(id); err != nil || !in {
+		return false, nil
+	}
+
+	trans, err := self.GetTransaction(id)
+	if err != nil {
+		return false, err
+	}
+
+	current, err := self.mngr.getTransaction()
+	if err != nil {
+		return false, err
+	}
+
+	return !current.Equal(trans), nil
+}
+
+func (self *objectTransaction) GetTransaction(id Identifier) (transaction, error) {
 
 	current, err := self.GetDBValue(id, curTransKey)
 	if err != nil {
@@ -799,7 +732,7 @@ func (self *transactionBehaviour) GetTransaction(id Identifier) (transaction, er
 	return trans, nil
 }
 
-func (self *transactionBehaviour) setCurrent(id Identifier, transIdent [32]byte) error {
+func (self *objectTransaction) setCurrent(id Identifier, transIdent [32]byte) error {
 
 	trans, err := self.GetDBValue(id, curTransKey)
 	if err != nil {
@@ -808,7 +741,7 @@ func (self *transactionBehaviour) setCurrent(id Identifier, transIdent [32]byte)
 	return utils.StackError(trans.Write(transIdent), "Unable to write transaction status")
 }
 
-func (self *transactionBehaviour) InitializeDB(id Identifier) error {
+func (self *objectTransaction) InitializeDB(id Identifier) error {
 
 	err := self.object.InitializeDB(id)
 	if err != nil {
@@ -834,14 +767,125 @@ func (self *transactionBehaviour) InitializeDB(id Identifier) error {
 	return nil
 }
 
-func (self *transactionBehaviour) defaultAddable(id Identifier) bool {
+func (self *objectTransaction) defaultAddable(id Identifier) bool {
 	return true
 }
 
-func (self *transactionBehaviour) defaultCloseable(id Identifier) bool {
+func (self *objectTransaction) defaultCloseable(id Identifier) bool {
 	return true
 }
 
-func (self *transactionBehaviour) defaultDependentObjects(id Identifier) []interface{} {
+func (self *objectTransaction) defaultDependentObjects(id Identifier) []interface{} {
 	return make([]interface{}, 0)
+}
+
+func (self *objectTransaction) closeTransaction(id Identifier, transIdent [32]byte) error {
+
+	err := self.GetEvent("onClosing").Emit(id)
+	if err != nil {
+		return utils.StackError(err, "Unable to close transaction due to failed close event emitting")
+	}
+	//the object is not part of a transaction anymode
+	self.setInTransaction(id, false)
+
+	//fix the new state as version
+	set, err := self.GetParent(id)
+	if err != nil {
+		return err
+	}
+	if updates, _ := set.obj.HasUpdates(set.id); updates {
+		set.obj.FixStateAsVersion(set.id)
+	}
+	if self.GetProperty("recursive").GetValue(id).(bool) {
+		self.recursiveFixVersionTransaction(set)
+	}
+	return nil
+}
+
+// calls FixStateAsVersion for all childs of the provided dmlSet, and recursively for their
+// childs too. Notes:
+// - Calls not for the provided object itself
+// - Stops recursion on objects having a Transaction behaviour (and does not call fix for those)
+// - Does call on Behaviours
+func (self *objectTransaction) recursiveFixVersionTransaction(set dmlSet) error {
+
+	data, ok := set.obj.(Data)
+	if ok {
+		sets, err := data.GetSubobjects(set.id)
+		if err != nil {
+			return utils.StackError(err, "Unable to access children of dataobject")
+		}
+		for _, set := range sets {
+			data, ok := set.obj.(Data)
+			if ok && data.HasBehaviour("Transaction") {
+				continue
+			}
+			if updates, _ := set.obj.HasUpdates(set.id); updates {
+				_, err := set.obj.FixStateAsVersion(set.id)
+				if err != nil {
+					return err
+				}
+			}
+
+			err := self.recursiveFixVersionTransaction(set)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (self *objectTransaction) abortTransaction(id Identifier, transIdent [32]byte) error {
+
+	//infrm abort. We do not care about errors, aborts are not cancable
+	self.GetEvent("onAborting").Emit(id)
+
+	//the object is not part of a transaction anymore
+	self.setInTransaction(id, false)
+
+	//revert to the old state
+	set, err := self.GetParent(id)
+	if err != nil {
+		return err
+	}
+	set.obj.ResetHead(set.id)
+	if self.GetProperty("recursive").GetValue(id).(bool) {
+		self.recursiveResetTransaction(set)
+	}
+	return nil
+}
+
+// calls RevertHead for all childs of the provided dmlSet, and recursively for their
+// childs too. Notes:
+// - Calls not for the provided object itself
+// - Stops recursion on objects having a Transaction behaviour (and does not call revert for those)
+// - Does call on Behaviours
+func (self *objectTransaction) recursiveResetTransaction(set dmlSet) error {
+
+	data, ok := set.obj.(Data)
+	if ok {
+		sets, err := data.GetSubobjects(set.id)
+		if err != nil {
+			return utils.StackError(err, "Unable to access children of dataobject")
+		}
+		for _, set := range sets {
+			data, ok := set.obj.(Data)
+			if ok && data.HasBehaviour("Transaction") {
+				continue
+			}
+			if updates, _ := set.obj.HasUpdates(set.id); updates {
+				err := set.obj.ResetHead(set.id)
+				if err != nil {
+					return err
+				}
+			}
+
+			err := self.recursiveResetTransaction(set)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -158,7 +158,7 @@ func TestTransactionBehaviour(t *testing.T) {
 						}
 
 						Transaction {
-							.name: "ChildTransaction"
+							.name: "trans"
 							.recursive: true
 
 							.onParticipation: function() {Document.result.value += "p2"}
@@ -238,7 +238,9 @@ func TestTransactionBehaviour(t *testing.T) {
 
 				store.Begin()
 				mset, _ := rntm.getMainObjectSet()
-				err = mngr.Add(mset.id)
+				bhvrSet, _ := mset.obj.(Data).GetBehaviour(mset.id, "Transaction")
+				trns := bhvrSet.obj.(*objectTransaction)
+				err = trns.add(bhvrSet.id)
 				store.Commit()
 				So(err, ShouldBeNil)
 
@@ -248,12 +250,12 @@ func TestTransactionBehaviour(t *testing.T) {
 					defer store.Rollback()
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
-					objs, err := trans.Objects()
+					objs, err := trans.Behaviours()
 					So(err, ShouldBeNil)
 					So(len(objs), ShouldEqual, 1)
 
-					obj, _ := getObjectFromPath(rntm, "Document")
-					So(trans.HasObject(obj.id), ShouldBeTrue)
+					obj, _ := getObjectFromPath(rntm, "Document.trans")
+					So(trans.HasBehaviour(obj.id), ShouldBeTrue)
 				})
 
 				Convey("and knows itself that it belongs to the transaction", func() {
@@ -262,7 +264,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					defer store.Rollback()
 					mset, _ := rntm.getMainObjectSet()
 					bhvrSet, _ := mset.obj.(Data).GetBehaviour(mset.id, "Transaction")
-					trns := bhvrSet.obj.(*transactionBehaviour)
+					trns := bhvrSet.obj.(*objectTransaction)
 					ok, err := trns.InTransaction(bhvrSet.id)
 					So(err, ShouldBeNil)
 					So(ok, ShouldBeTrue)
@@ -286,13 +288,15 @@ func TestTransactionBehaviour(t *testing.T) {
 
 					rntm.currentUser = "User2"
 					mset, _ := rntm.getMainObjectSet()
-					err := mngr.Add(mset.id)
+					bhvrSet, _ := mset.obj.(Data).GetBehaviour(mset.id, "Transaction")
+					trns := bhvrSet.obj.(*objectTransaction)
+					err = trns.add(bhvrSet.id)
 					So(err, ShouldNotBeNil)
 					So(mngr.IsOpen(), ShouldBeFalse)
 
 					err = mngr.Open()
 					So(err, ShouldBeNil)
-					err = mngr.Add(mset.id)
+					err = trns.add(bhvrSet.id)
 					So(err, ShouldNotBeNil)
 				})
 
@@ -318,7 +322,7 @@ func TestTransactionBehaviour(t *testing.T) {
 						defer store.Rollback()
 						mset, _ := rntm.getMainObjectSet()
 						bhvrSet, _ := mset.obj.(Data).GetBehaviour(mset.id, "Transaction")
-						trns := bhvrSet.obj.(*transactionBehaviour)
+						trns := bhvrSet.obj.(*objectTransaction)
 						ok, err := trns.InTransaction(bhvrSet.id)
 						So(err, ShouldBeNil)
 						So(ok, ShouldBeFalse)
@@ -339,10 +343,10 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					defer store.Rollback()
 
-					set, _ := getObjectFromPath(rntm, "Document.Child")
+					set, _ := getObjectFromPath(rntm, "Document.Child.trans")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
-					has := trans.HasObject(set.id)
+					has := trans.HasBehaviour(set.id)
 					So(has, ShouldBeTrue)
 				})
 			})
@@ -357,10 +361,10 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					defer store.Rollback()
 
-					set, _ := getObjectFromPath(rntm, "Document.Child")
+					set, _ := getObjectFromPath(rntm, "Document.Child.trans")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
-					has := trans.HasObject(set.id)
+					has := trans.HasBehaviour(set.id)
 					So(has, ShouldBeTrue)
 				})
 			})
@@ -375,10 +379,10 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Begin()
 					defer store.Rollback()
 
-					set, _ := getObjectFromPath(rntm, "Document.Child")
+					set, _ := getObjectFromPath(rntm, "Document.Child.trans")
 					trans, err := mngr.getTransaction()
 					So(err, ShouldBeNil)
-					has := trans.HasObject(set.id)
+					has := trans.HasBehaviour(set.id)
 					So(has, ShouldBeTrue)
 				})
 
@@ -397,10 +401,10 @@ func TestTransactionBehaviour(t *testing.T) {
 						store.Begin()
 						defer store.Rollback()
 
-						set, _ := getObjectFromPath(rntm, "Document.Child")
+						set, _ := getObjectFromPath(rntm, "Document.Child.trans")
 						trans, err := mngr.getTransaction()
 						So(err, ShouldBeNil)
-						has := trans.HasObject(set.id)
+						has := trans.HasBehaviour(set.id)
 						So(has, ShouldBeTrue)
 					})
 				})
@@ -565,10 +569,11 @@ func TestTransactionFail(t *testing.T) {
 				user, err := trans.User()
 				So(err, ShouldBeNil)
 				So(user, ShouldEqual, "User1")
-				objs, err := trans.Objects()
+				objs, err := trans.Behaviours()
 				So(err, ShouldBeNil)
 				So(len(objs), ShouldEqual, 1)
-				So(objs[0].id.Name, ShouldEqual, "Document")
+				parent, _ := objs[0].obj.GetParent(objs[0].id)
+				So(parent.id.Name, ShouldEqual, "Document")
 			})
 		})
 
@@ -612,7 +617,7 @@ func TestTransactionFail(t *testing.T) {
 					store.Begin()
 					mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 					trans, _ := mngr.getTransaction()
-					obj, err := trans.Objects()
+					obj, err := trans.Behaviours()
 					So(err, ShouldBeNil)
 					So(len(obj), ShouldEqual, 0)
 					store.Rollback()
@@ -625,7 +630,7 @@ func TestTransactionFail(t *testing.T) {
 				store.Begin()
 				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 				trans, _ := mngr.getTransaction()
-				obj, err := trans.Objects()
+				obj, err := trans.Behaviours()
 				So(err, ShouldBeNil)
 				So(len(obj), ShouldEqual, 0)
 				store.Commit()
@@ -647,7 +652,7 @@ func TestTransactionFail(t *testing.T) {
 
 				Convey("and transaction should have no object", func() {
 					store.Begin()
-					obj, err := trans.Objects()
+					obj, err := trans.Behaviours()
 					So(err, ShouldBeNil)
 					So(len(obj), ShouldEqual, 0)
 					store.Rollback()
@@ -704,9 +709,10 @@ func TestTransactionFail(t *testing.T) {
 				user, err := trans.User()
 				So(err, ShouldBeNil)
 				So(user, ShouldEqual, "User1")
-				objs, err := trans.Objects()
+				objs, err := trans.Behaviours()
 				So(err, ShouldBeNil)
-				So(objs[0].id.Name, ShouldEqual, "Child2")
+				parent, _ := objs[0].obj.GetParent(objs[0].id)
+				So(parent.id.Name, ShouldEqual, "Child2")
 			})
 
 			Convey("and also adds the dependent object to the transaction", func() {
@@ -719,10 +725,11 @@ func TestTransactionFail(t *testing.T) {
 				user, err := trans.User()
 				So(err, ShouldBeNil)
 				So(user, ShouldEqual, "User1")
-				objs, err := trans.Objects()
+				objs, err := trans.Behaviours()
 				So(err, ShouldBeNil)
 				So(len(objs), ShouldEqual, 2)
-				So(objs[1].id.Name, ShouldEqual, "Child1")
+				parent, _ := objs[1].obj.GetParent(objs[1].id)
+				So(parent.id.Name, ShouldEqual, "Child1")
 			})
 		})
 	})

@@ -82,7 +82,7 @@ func NewRuntime() *Runtime {
 	rntm.RegisterObjectCreator("Vector", NewVector)
 	rntm.RegisterObjectCreator("Map", NewMap)
 	rntm.RegisterObjectCreator("Graph", NewGraph)
-	rntm.RegisterObjectCreator("Transaction", NewTransactionBehaviour)
+	rntm.RegisterObjectCreator("Transaction", NewObjectTransactionBehaviour)
 
 	//setup globals
 	SetupGlobals(rntm)
@@ -863,7 +863,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 			//check if this child is a behaviour, and handle accordingly
 			behaviour, isBehaviour := child.(Behaviour)
 			if isBehaviour {
-				obj.(Data).AddBehaviourObject(astChild.Identifier, behaviour)
+				obj.(Data).AddBehaviourObject(behaviour)
 			} else {
 				obj.(Data).AddChildObject(child.(Data))
 			}

@@ -86,7 +86,8 @@ func (self behaviourManagerHandler) GetEventBehaviours(event string) []string {
 type Behaviour interface {
 	Object
 
-	HandleEvent(Identifier, string) error
+	GetBehaviourType() string             //returns the type of behaviour, e.g. "Transaction". Needed to allow multiple different structs implement single behaviour
+	HandleEvent(Identifier, string) error //Entry for any kind of behhaviour handling. Here the event that can be handled according to the relevant Manager are provided
 }
 
 func NewBaseBehaviour(runtime *Runtime) (*behaviour, error) {
@@ -121,7 +122,7 @@ type BehaviourHandler interface {
 	//This does not provide any database access, only logic
 	HasBehaviour(string) bool
 	GetBehaviourObject(string) Behaviour
-	AddBehaviourObject(string, Behaviour) error
+	AddBehaviourObject(Behaviour) error
 	Behaviours() []string
 
 	//This function is used to retrieve a behaviour database access Identifier
@@ -155,7 +156,9 @@ func (self *behaviourHandler) HasBehaviour(name string) bool {
 	return has
 }
 
-func (self *behaviourHandler) AddBehaviourObject(name string, behaviour Behaviour) error {
+func (self *behaviourHandler) AddBehaviourObject(behaviour Behaviour) error {
+
+	name := behaviour.GetBehaviourType()
 
 	if self.HasBehaviour(name) {
 		return fmt.Errorf("Behaviour already set, cannot override")
