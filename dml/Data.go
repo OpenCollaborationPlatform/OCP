@@ -244,7 +244,7 @@ func (self *DataImpl) Created(id Identifier) error {
 }
 
 func (self *DataImpl) GetByKey(id Identifier, key Key) (interface{}, error) {
-	//first check if it is a property
+	//first check if it is a property/event/method
 	prop, err := self.object.HasKey(id, key)
 	if err != nil {
 		return nil, err

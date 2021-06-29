@@ -199,54 +199,70 @@ func (self *variant) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
 
 }
 
-func (self *variant) PropertyChanged(id Identifier, name string) error {
+func (self *variant) setDefaultType(id Identifier, withEvents bool) error {
 
-	if name == "type" {
+	//build the default values! And set the value. Don't use SetValue as this
+	//assumes old and new value have same datatype
+	dbValue, e := self.GetDBValueVersioned(id, variantKey)
+	if e != nil {
+		return utils.StackError(e, "Unable to access DB")
+	}
 
-		//build the default values! And set the value. Don't use SetValue as this
-		//assumes old and new value have same datatype
-		dbValue, e := self.GetDBValueVersioned(id, variantKey)
-		if e != nil {
-			return utils.StackError(e, "Unable to access DB")
+	if withEvents {
+		//event handling: need to emit onChanged as the "value" key changed, which is not a property
+		err := self.GetEvent("onBeforeChange").Emit(id, "value")
+		if err != nil {
+			return utils.StackError(err, "Event onBeforeChange failed")
 		}
+	}
 
-		dt := self.getDataType(id)
-		var err error
-		if dt.IsComplex() {
-			set, err := self.rntm.constructObjectSet(dt, id)
-			if err != nil {
-				return utils.StackError(err, "Construction of object failed")
-			}
-			err = dbValue.Write(set.id)
-
-			//build the path
-			path, err := self.GetObjectPath(id)
-			if err != nil {
-				return err
-			}
-			path += ".value"
-			set.obj.SetObjectPath(set.id, path)
-			if data, ok := set.obj.(Data); ok {
-				data.Created(id)
-			}
-
-			set.obj.(Data).Created(set.id)
-
-		} else if dt.IsType() {
-
-			val, _ := dt.GetDefaultValue().(DataType)
-			err = dbValue.Write(val.AsString())
-
-		} else {
-			result := dt.GetDefaultValue()
-			err = dbValue.Write(result)
+	dt := self.getDataType(id)
+	var err error
+	if dt.IsComplex() {
+		set, err := self.rntm.constructObjectSet(dt, id)
+		if err != nil {
+			return utils.StackError(err, "Construction of object failed")
 		}
+		err = dbValue.Write(set.id)
 
+		//build the path
+		path, err := self.GetObjectPath(id)
 		if err != nil {
 			return err
 		}
+		path += ".value"
+		set.obj.SetObjectPath(set.id, path)
+		if data, ok := set.obj.(Data); ok {
+			data.Created(id)
+		}
 
+		set.obj.(Data).Created(set.id)
+
+	} else if dt.IsType() {
+
+		val, _ := dt.GetDefaultValue().(DataType)
+		err = dbValue.Write(val.AsString())
+
+	} else {
+		result := dt.GetDefaultValue()
+		err = dbValue.Write(result)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	if withEvents {
 		self.GetEvent("onTypeChanged").Emit(id)
+		self.GetEvent("onChanged").Emit(id, "value")
+	}
+	return nil
+}
+
+func (self *variant) PropertyChanged(id Identifier, name string) error {
+
+	if name == "type" {
+		self.setDefaultType(id, true)
 	}
 
 	return self.DataImpl.PropertyChanged(id, name)
@@ -254,9 +270,8 @@ func (self *variant) PropertyChanged(id Identifier, name string) error {
 
 func (self *variant) Created(id Identifier) error {
 
-	//on initialisation we want to set default values. That is the same as happens
-	//with a changed type proeprty, hence we reuse this function
-	err := self.PropertyChanged(id, "type")
+	//on initialisation we want to set default values.
+	err := self.setDefaultType(id, false)
 	if err != nil {
 		return err
 	}

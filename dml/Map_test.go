@@ -42,12 +42,32 @@ func TestPODMap(t *testing.T) {
 						.name: "IntIntMap"
 						.key: int
 						.value: int
+
+						property string beforeChangeKeys
+						property string changeKeys
+
+						.onBeforeChange: function(key) {
+							this.beforeChangeKeys += key
+						}
+						.onChanged: function(key) {
+							this.changeKeys += key
+						}
 					}
 
 					Map {
 						.name: "StringBoolMap"
 						.key: string
 						.value: bool
+						
+						property string beforeChangeKeys
+						property string changeKeys
+
+						.onBeforeChange: function(key) {
+							this.beforeChangeKeys += key
+						}
+						.onChanged: function(key) {
+							this.changeKeys += key
+						}
 					}
 
 					Map {
@@ -95,6 +115,23 @@ func TestPODMap(t *testing.T) {
 			res, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
+
+			Convey("and the relevant events with keys have been emitted", func() {
+
+				code := `toplevel.IntIntMap.Set(10, 11)`
+				_, err = rntm.RunJavaScript(store, "", code)
+				So(err, ShouldBeNil)
+
+				code = `toplevel.IntIntMap.beforeChangeKeys`
+				res, err := rntm.Call(store, "", code)
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, "1010")
+
+				code = `toplevel.IntIntMap.changeKeys`
+				res, err = rntm.Call(store, "", code)
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, "1010")
+			})
 		})
 
 		Convey("Adding new values should work", func() {
@@ -135,6 +172,19 @@ func TestPODMap(t *testing.T) {
 			res, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeFalse)
+
+			Convey("and the relevant events with keys have been emitted", func() {
+
+				code = `toplevel.StringBoolMap.beforeChangeKeys`
+				res, err := rntm.Call(store, "", code)
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, "heyho")
+
+				code = `toplevel.StringBoolMap.changeKeys`
+				res, err = rntm.Call(store, "", code)
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, "heyho")
+			})
 		})
 
 		Convey("Deleting values must be supported", func() {

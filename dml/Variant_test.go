@@ -29,6 +29,16 @@ func TestPODVariant(t *testing.T) {
 					Variant {
 						.name: "Variant"
 						.type: int
+						
+						property string beforeChangeKeys
+						property string changeKeys
+
+						.onBeforeChange: function(key) {
+							this.beforeChangeKeys += key
+						}
+						.onChanged: function(key) {
+							this.changeKeys += key
+						}
 					}
 				}`
 
@@ -48,6 +58,19 @@ func TestPODVariant(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
 
+			Convey("and emit correct events", func() {
+
+				code = `toplevel.Variant.beforeChangeKeys`
+				res, err := rntm.Call(store, "", code)
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, "value")
+
+				code = `toplevel.Variant.changeKeys`
+				res, err = rntm.Call(store, "", code)
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, "value")
+			})
+
 			Convey("but setting wrong type should fail", func() {
 
 				code = `toplevel.Variant.SetValue("hello")`
@@ -56,6 +79,19 @@ func TestPODVariant(t *testing.T) {
 				res, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 10)
+
+				Convey("and not add any events", func() {
+
+					code = `toplevel.Variant.beforeChangeKeys`
+					res, err := rntm.Call(store, "", code)
+					So(err, ShouldBeNil)
+					So(res, ShouldEqual, "value")
+
+					code = `toplevel.Variant.changeKeys`
+					res, err = rntm.Call(store, "", code)
+					So(err, ShouldBeNil)
+					So(res, ShouldEqual, "value")
+				})
 			})
 
 			Convey("Changeing the datatype works", func() {
@@ -68,6 +104,19 @@ func TestPODVariant(t *testing.T) {
 					res, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
 					So(err, ShouldBeNil)
 					So(res, ShouldBeFalse)
+				})
+
+				Convey("and emit aditional change events", func() {
+
+					code = `toplevel.Variant.beforeChangeKeys`
+					res, err := rntm.Call(store, "", code)
+					So(err, ShouldBeNil)
+					So(res, ShouldEqual, "valuevalue")
+
+					code = `toplevel.Variant.changeKeys`
+					res, err = rntm.Call(store, "", code)
+					So(err, ShouldBeNil)
+					So(res, ShouldEqual, "valuevalue")
 				})
 			})
 		})

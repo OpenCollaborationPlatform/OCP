@@ -325,7 +325,7 @@ func (self *object) GetByKey(id Identifier, key Key) (interface{}, error) {
 }
 
 func (self *object) HasKey(id Identifier, key Key) (bool, error) {
-	//we only hold properties, hence we check those
+	//we only hold properties/methods/events, hence we check those
 	accessor := key.AsString()
 	has := self.HasProperty(accessor) || self.HasMethod(accessor) || self.HasEvent(accessor)
 	return has, nil
