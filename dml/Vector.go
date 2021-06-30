@@ -212,9 +212,7 @@ func (self *vector) set(id Identifier, dt DataType, idx int64, value interface{}
 	return utils.StackError(err, "Unable to access DB")
 }
 
-//creates a new entry with a all new type, returns the index of the new one
-func (self *vector) Append(id Identifier, value interface{}) (int64, error) {
-
+func (self *vector) append(id Identifier, value interface{}) (int64, error) {
 	//check if the type of the value is correct (must be done befor increasing length)
 	dt := self.entryDataType(id)
 	err := dt.MustBeTypeOf(value)
@@ -235,30 +233,35 @@ func (self *vector) Append(id Identifier, value interface{}) (int64, error) {
 	}
 	newIdx := newLength - 1
 
+	//and set value
+	err = self.set(id, dt, newIdx, value)
+
+	return newIdx, err
+}
+
+//creates a new entry with a all new type, returns the index of the new one
+func (self *vector) Append(id Identifier, value interface{}) (int64, error) {
+
 	//event handling
-	err = self.GetEvent("onBeforeChange").Emit(id, newIdx)
+	length, _ := self.Length(id)
+	err := self.GetEvent("onBeforeChange").Emit(id, length)
 	if err != nil {
 		return -1, err
 	}
 
-	//and set value
-	err = self.set(id, dt, newIdx, value)
+	newIdx, err := self.append(id, value)
+	if err != nil {
+		return -1, err
+	}
 
 	self.GetEvent("onNewEntry").Emit(id, newIdx)
 	self.GetEvent("onChanged").Emit(id, newIdx)
 	return newIdx, err
 }
 
-//creates a new entry with a all new type, returns the index of the new one
-func (self *vector) AppendNew(id Identifier) (interface{}, error) {
+func (self *vector) appendNew(id Identifier) (interface{}, error) {
 
 	length, _ := self.Length(id)
-
-	//event handling
-	err := self.GetEvent("onBeforeChange").Emit(id, length)
-	if err != nil {
-		return nil, err
-	}
 
 	//create a new entry
 	result, err := self.buildNew(id)
@@ -299,6 +302,24 @@ func (self *vector) AppendNew(id Identifier) (interface{}, error) {
 		}
 	}
 
+	return result, nil
+}
+
+//creates a new entry with a all new type, returns the the new one
+func (self *vector) AppendNew(id Identifier) (interface{}, error) {
+
+	//event handling
+	length, _ := self.Length(id)
+	err := self.GetEvent("onBeforeChange").Emit(id, length)
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := self.appendNew(id)
+	if err != nil {
+		return nil, err
+	}
+
 	self.GetEvent("onNewEntry").Emit(id, length)
 	self.GetEvent("onChanged").Emit(id, length)
 	return result, nil
@@ -315,7 +336,7 @@ func (self *vector) Insert(id Identifier, idx int64, value interface{}) error {
 	//make sure to use unified types
 	value = UnifyDataType(value)
 
-	appidx, err := self.Append(id, value)
+	appidx, err := self.append(id, value)
 	if err != nil {
 		return utils.StackError(err, "Unable to insert value into vector")
 	}
@@ -337,7 +358,7 @@ func (self *vector) InsertNew(id Identifier, idx int64) (interface{}, error) {
 		return nil, newUserError(Error_Key_Not_Available, "Index out of bounds: %v", idx)
 	}
 
-	res, err := self.AppendNew(id)
+	res, err := self.appendNew(id)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to insert value into vector")
 	}
@@ -547,6 +568,11 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 	if err != nil {
 		return err
 	}
+
+	err = self.GetEvent("onBeforeChange").Emit(id, newIdx)
+	if err != nil {
+		return err
+	}
 	data, err := dbEntries.Read(oldIdx)
 	if err != nil {
 		return utils.StackError(err, "Unable to move vector entries")
@@ -560,6 +586,7 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 
 	//move the in-between idx 1 down
 	if oldIdx < newIdx {
+		//e.g. move 1->3
 		for i := oldIdx + 1; i <= newIdx; i++ {
 
 			//event handling
@@ -595,7 +622,16 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 		}
 	} else {
 
+		//e.g. move 3->1
+		//[01234] -> [03124]
 		for i := oldIdx; i > newIdx; i-- {
+
+			//event handling
+			err = self.GetEvent("onBeforeChange").Emit(id, i)
+			if err != nil {
+				return err
+			}
+
 			res, err := dbEntries.Read(i - 1)
 			if err != nil {
 				return utils.StackError(err, "Unable to move vector entries")
@@ -618,14 +654,12 @@ func (self *vector) move(id Identifier, oldIdx int64, newIdx int64) error {
 					}
 				}
 			}
+
+			self.GetEvent("onChanged").Emit(id, i)
 		}
 	}
 
 	//write the data into the correct location
-	err = self.GetEvent("onBeforeChange").Emit(id, newIdx)
-	if err != nil {
-		return err
-	}
 	err = dbEntries.Write(newIdx, data)
 	if err != nil {
 		return utils.StackError(err, "Failed to write entry")

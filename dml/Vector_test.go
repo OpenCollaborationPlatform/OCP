@@ -28,6 +28,16 @@ func TestPODVector(t *testing.T) {
 					Vector {
 						.name: "IntVec"
 						.type: int
+						
+						property string beforeChangeKeys
+						property string changeKeys
+
+						.onBeforeChange: function(key) {
+							this.beforeChangeKeys += key
+						}
+						.onChanged: function(key) {
+							this.changeKeys += key
+						}
 					}
 
 					Vector {
@@ -43,6 +53,16 @@ func TestPODVector(t *testing.T) {
 					Vector {
 						.name: "FloatVec"
 						.type: float
+						
+						property string beforeChangeKeys
+						property string changeKeys
+
+						.onBeforeChange: function(key) {
+							this.beforeChangeKeys += key
+						}
+						.onChanged: function(key) {
+							this.changeKeys += key
+						}
 					}
 				}`
 
@@ -71,6 +91,19 @@ func TestPODVector(t *testing.T) {
 			length, _ = intvec.Length(child.id)
 			store.Rollback()
 			So(length, ShouldEqual, 1)
+
+			Convey("and the relevant events with keys have been emitted", func() {
+
+				code = `toplevel.IntVec.beforeChangeKeys`
+				res, err := rntm.Call(store, "", code)
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, "0")
+
+				code = `toplevel.IntVec.changeKeys`
+				res, err = rntm.Call(store, "", code)
+				So(err, ShouldBeNil)
+				So(res, ShouldEqual, "0")
+			})
 		})
 
 		Convey("Setting and reading entries of vector shall work", func() {
@@ -122,7 +155,18 @@ func TestPODVector(t *testing.T) {
 			length, _ := vec.Length(child.id)
 			So(length, ShouldEqual, 7)
 
+			//emits events
+			res, id, _ := rntm.resolvePath(`toplevel.IntVec.beforeChangeKeys`)
+			So(res.(Property).GetValue(id), ShouldEqual, "0123456")
+			res, id, _ = rntm.resolvePath(`toplevel.IntVec.changeKeys`)
+			So(res.(Property).GetValue(id), ShouldEqual, "0123456")
+
 			Convey("moving Values within the vector shall work", func() {
+
+				p, i, _ := rntm.resolvePath(`toplevel.IntVec.beforeChangeKeys`)
+				p.(Property).SetValue(i, "")
+				p, i, _ = rntm.resolvePath(`toplevel.IntVec.changeKeys`)
+				p.(Property).SetValue(i, "")
 
 				//[0 1 2 3 4 5 6]
 				// e.g. old: 2, new: 5 [0 1 3 4 5 2 6] (3->2, 4->3, 5->4, 2->5)
@@ -141,9 +185,21 @@ func TestPODVector(t *testing.T) {
 				So(val, ShouldEqual, 2)
 				val, _ = vec.Get(child.id, 6)
 				So(val, ShouldEqual, 6)
+
+				//emits events
+				res, id, _ := rntm.resolvePath(`toplevel.IntVec.beforeChangeKeys`)
+				So(res.(Property).GetValue(id), ShouldEqual, "5234")
+				res, id, _ = rntm.resolvePath(`toplevel.IntVec.changeKeys`)
+				So(res.(Property).GetValue(id), ShouldEqual, "2345")
+
 			})
 
 			Convey("and deleting values from the vector must be supported", func() {
+
+				p, i, _ := rntm.resolvePath(`toplevel.IntVec.beforeChangeKeys`)
+				p.(Property).SetValue(i, "")
+				p, i, _ = rntm.resolvePath(`toplevel.IntVec.changeKeys`)
+				p.(Property).SetValue(i, "")
 
 				main, err := rntm.getMainObjectSet()
 				So(err, ShouldBeNil)
@@ -161,6 +217,12 @@ func TestPODVector(t *testing.T) {
 				val, _ = vec.Get(child.id, 5)
 				So(val, ShouldEqual, 6)
 
+				//emits events
+				res, id, _ := rntm.resolvePath(`toplevel.IntVec.beforeChangeKeys`)
+				So(res.(Property).GetValue(id), ShouldEqual, "123456")
+				res, id, _ = rntm.resolvePath(`toplevel.IntVec.changeKeys`)
+				So(res.(Property).GetValue(id), ShouldEqual, "123456")
+
 				So(vec.Remove(child.id, 6), ShouldNotBeNil)
 				So(vec.Remove(child.id, 5), ShouldBeNil)
 				So(vec.Remove(child.id, 0), ShouldBeNil)
@@ -173,54 +235,6 @@ func TestPODVector(t *testing.T) {
 				So(length, ShouldEqual, 0)
 			})
 
-			Convey("inserting works on each position (start, end , inbetween)", func() {
-
-				main, err := rntm.getMainObjectSet()
-				So(err, ShouldBeNil)
-				child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
-				vec := child.obj.(*vector)
-
-				//insert should work only at existing indices
-				So(vec.Insert(child.id, 0, 9.5), ShouldNotBeNil)
-				vec.AppendNew(child.id)                       //[0]
-				So(vec.Insert(child.id, 0, 0.5), ShouldBeNil) //[0.5 0]
-				val, err := vec.InsertNew(child.id, 0)        //[0 0.5 0]
-				So(err, ShouldBeNil)
-				So(val, ShouldAlmostEqual, 0.0)
-
-				So(vec.Insert(child.id, 1, 7.1), ShouldBeNil) //[0 7.1 0.5 0]
-
-				length, _ := vec.Length(child.id)
-				So(length, ShouldEqual, 4)
-				val, _ = vec.Get(child.id, 0)
-				So(val, ShouldEqual, 0)
-				val, _ = vec.Get(child.id, 1)
-				So(val, ShouldAlmostEqual, 7.1)
-				val, _ = vec.Get(child.id, 2)
-				So(val, ShouldAlmostEqual, 0.5)
-				val, _ = vec.Get(child.id, 3)
-				So(val, ShouldAlmostEqual, 0.0)
-
-				Convey("and swapping entries is a thing", func() {
-
-					main, err := rntm.getMainObjectSet()
-					So(err, ShouldBeNil)
-					child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
-					vec := child.obj.(*vector)
-					vec.Swap(child.id, 0, 2)
-
-					length, _ := vec.Length(child.id)
-					So(length, ShouldEqual, 4)
-					val, _ := vec.Get(child.id, 0)
-					So(val, ShouldAlmostEqual, 0.5)
-					val, _ = vec.Get(child.id, 1)
-					So(val, ShouldAlmostEqual, 7.1)
-					val, _ = vec.Get(child.id, 2)
-					So(val, ShouldAlmostEqual, 0)
-					val, _ = vec.Get(child.id, 3)
-					So(val, ShouldAlmostEqual, 0.0)
-				})
-			})
 			Convey("Creating a new Runtime with the existing datastore", func() {
 
 				rntm2 := NewRuntime()
@@ -255,6 +269,69 @@ func TestPODVector(t *testing.T) {
 					val, _ = vec.Get(child.id, 6)
 					So(val, ShouldEqual, 6)
 				})
+			})
+		})
+
+		Convey("Inserting works on each position (start, end , inbetween) for float vector", func() {
+
+			store.Begin()
+			defer store.Commit()
+
+			main, err := rntm.getMainObjectSet()
+			So(err, ShouldBeNil)
+			child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
+			vec := child.obj.(*vector)
+
+			//insert should work only at existing indices
+			So(vec.Insert(child.id, 0, 9.5), ShouldNotBeNil)
+			vec.AppendNew(child.id)                       //[0]
+			So(vec.Insert(child.id, 0, 0.5), ShouldBeNil) //[0.5 0]
+
+			val, err := vec.InsertNew(child.id, 0) //[0 0.5 0]
+			So(err, ShouldBeNil)
+			So(val, ShouldAlmostEqual, 0.0)
+			So(vec.Insert(child.id, 1, 7.1), ShouldBeNil) //[0 7.1 0.5 0]
+
+			length, _ := vec.Length(child.id)
+			So(length, ShouldEqual, 4)
+			val, _ = vec.Get(child.id, 0)
+			So(val, ShouldEqual, 0)
+			val, _ = vec.Get(child.id, 1)
+			So(val, ShouldAlmostEqual, 7.1)
+			val, _ = vec.Get(child.id, 2)
+			So(val, ShouldAlmostEqual, 0.5)
+			val, _ = vec.Get(child.id, 3)
+			So(val, ShouldAlmostEqual, 0.0)
+
+			//emits events
+			res, id, _ := rntm.resolvePath(`toplevel.FloatVec.beforeChangeKeys`)
+			So(res.(Property).GetValue(id), ShouldEqual, "001021132")
+			res, id, _ = rntm.resolvePath(`toplevel.FloatVec.changeKeys`)
+			So(res.(Property).GetValue(id), ShouldEqual, "010210321")
+
+			Convey("and swapping entries is a thing", func() {
+
+				p, i, _ := rntm.resolvePath(`toplevel.FloatVec.beforeChangeKeys`)
+				p.(Property).SetValue(i, "")
+				p, i, _ = rntm.resolvePath(`toplevel.FloatVec.changeKeys`)
+				p.(Property).SetValue(i, "")
+
+				main, err := rntm.getMainObjectSet()
+				So(err, ShouldBeNil)
+				child, _ := main.obj.(Data).GetChildByName(main.id, "FloatVec")
+				vec := child.obj.(*vector)
+				vec.Swap(child.id, 0, 2)
+
+				length, _ := vec.Length(child.id)
+				So(length, ShouldEqual, 4)
+				val, _ := vec.Get(child.id, 0)
+				So(val, ShouldAlmostEqual, 0.5)
+				val, _ = vec.Get(child.id, 1)
+				So(val, ShouldAlmostEqual, 7.1)
+				val, _ = vec.Get(child.id, 2)
+				So(val, ShouldAlmostEqual, 0)
+				val, _ = vec.Get(child.id, 3)
+				So(val, ShouldAlmostEqual, 0.0)
 			})
 		})
 	})
