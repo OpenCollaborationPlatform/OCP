@@ -45,10 +45,7 @@ import (
 )
 
 func NewDSError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Internal, "DS", reason, args)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.Internal, "DS", reason, msg, args)
 	return err
 }
 

@@ -364,7 +364,7 @@ func (self *DataImpl) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
 		}
 		id = *data.(*Identifier)
 		if id.Name == key.AsString() {
-			return []datastore.Key{datastore.NewKey(datastore.ListType, false, id.Hash(), childKey, []interface{}{child.Reference()})}, nil
+			return []datastore.Key{datastore.NewKey(datastore.ListType, false, id.Hash(), childKey, child.Reference())}, nil
 		}
 	}
 

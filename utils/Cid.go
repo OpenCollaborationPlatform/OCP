@@ -22,11 +22,11 @@ type Cid struct {
 func CidDecode(code string) (Cid, error) {
 	parts := strings.Split(code, "_")
 	if len(parts) != 3 || parts[0] != "ocp" || parts[1] != "cid" {
-		return CidUndef, NewError(Internal, "utils", "Invalid ecoded cid")
+		return CidUndef, NewError(Internal, "utils", "codec", "Invalid ecoded cid")
 	}
 	id, err := cid.Decode(parts[2])
 	if err != nil {
-		return CidUndef, NewError(Internal, "utils", err.Error())
+		return CidUndef, NewError(Internal, "utils", "codec", err.Error())
 	}
 	return Cid{id}, nil
 }
@@ -34,7 +34,7 @@ func CidDecode(code string) (Cid, error) {
 func cidDecode(code string) (interface{}, error) {
 	id, err := cid.Decode(code)
 	if err != nil {
-		return CidUndef, NewError(Internal, "utils", err.Error())
+		return CidUndef, NewError(Internal, "utils", "codec", err.Error())
 	}
 	return Cid{id}, nil
 }

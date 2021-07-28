@@ -83,6 +83,7 @@ func NewRuntime() *Runtime {
 	rntm.RegisterObjectCreator("Map", NewMap)
 	rntm.RegisterObjectCreator("Graph", NewGraph)
 	rntm.RegisterObjectCreator("Transaction", NewObjectTransactionBehaviour)
+	rntm.RegisterObjectCreator("PartialTransaction", NewPartialTransactionBehaviour)
 
 	//setup globals
 	SetupGlobals(rntm)
@@ -321,6 +322,12 @@ func (self *Runtime) RunJavaScript(ds *datastore.Datastore, user User, code stri
 
 	if err != nil {
 		self.postprocess(true)
+
+		if except, ok := err.(*goja.Exception); ok {
+			if ocperr, ok := except.Value().Export().(utils.OCPError); ok {
+				err = ocperr
+			}
+		}
 		return nil, err
 	}
 
@@ -902,7 +909,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 			}
 			children, err := obj.(Data).GetChildren(identifier)
 			if err != nil {
-				panic(utils.StackError(err, "Unable to collect children").Error())
+				panic(utils.StackError(err, "Unable to collect children"))
 			}
 			result := make([]*goja.Object, len(children))
 			for i, child := range children {
@@ -1005,7 +1012,7 @@ func (self *Runtime) setupObject(obj Object, parent Identifier) (Identifier, err
 			if err != nil {
 				return Identifier{}, err
 			}
-			err = data.SetBehaviourIdentifier(id, bhvrID.Type, bhvrID)
+			err = data.SetBehaviourIdentifier(id, behaviour, bhvrID)
 			if err != nil {
 				return Identifier{}, err
 			}

@@ -24,6 +24,7 @@ type OCPError interface {
 	Class() OCPErrorClass
 	Source() string
 	Reason() string
+	Message() string
 	Arguments() []interface{}
 	Stack() []string
 	ErrorType() string
@@ -32,18 +33,36 @@ type OCPError interface {
 	AddToStack(string)
 }
 
-func NewError(class OCPErrorClass, source, reason string, args ...interface{}) *Error {
+/* Creates a new Error from the following informations:
+ * - class: one of the predefined OCPErrorClass types
+ * - source: custom identifier specifying the source of the error (e.g. datastore, host etc.)
+ * - reason: custom identifier specifying the general reason. This is not intended as description, but a kind of grouping for reasons, e.g. "key_not_existant"
+ * - message: detailed information of what has gone wrong
+ * - args: Arguments further detail the error with runtime information provided in log style doubles, e.g. "MyNAme", name, "MyId", id
+ */
+func NewError(class OCPErrorClass, source, reason, message string, args ...interface{}) *Error {
 
 	reason = strings.Replace(reason, " ", "_", -1)
-	return &Error{class, source, reason, args, make([]string, 0)}
+
+	//build the origin (Assuming NewError is called in second row
+	pc := make([]uintptr, 1)
+	n := runtime.Callers(3, pc)
+	pc = pc[:n]
+	frames := runtime.CallersFrames(pc)
+	frame, _ := frames.Next()
+	origin := fmt.Sprintf("%v (Line %v)", frame.Function, frame.Line)
+
+	return &Error{class, source, reason, message, origin, args, make([]string, 0)}
 }
 
 type Error struct {
-	class  OCPErrorClass
-	source string
-	reason string
-	args   []interface{}
-	stack  []string
+	class   OCPErrorClass
+	source  string
+	reason  string
+	message string
+	origin  string
+	args    []interface{}
+	stack   []string
 }
 
 func (self *Error) Class() OCPErrorClass {
@@ -58,6 +77,10 @@ func (self *Error) Reason() string {
 	return self.reason
 }
 
+func (self *Error) Message() string {
+	return self.message
+}
+
 func (self *Error) Arguments() []interface{} {
 	return self.args
 }
@@ -67,31 +90,48 @@ func (self *Error) Stack() []string {
 }
 
 func (self *Error) AddToStack(val string) {
+
 	self.stack = append(self.stack, val)
 }
 
+//Print the error type only in the form of ocp.error.class.source.reason
 func (self *Error) ErrorType() string {
 	return fmt.Sprintf("ocp.error.%v.%v.%v", string(self.class), self.source, self.reason)
 }
 
+//Prints the error in the for of ErrorType: message (arguments)
 func (self *Error) Error() string {
 
-	str := self.ErrorType()
-	//first stack entry is the real error message
-	if len(self.stack) != 0 {
-		str += ": " + self.stack[0]
-	}
+	str := self.ErrorType() + ": " + self.message
+
 	//args are important information
-	for i := 0; i < int(len(self.args)/2); i++ {
-		str += fmt.Sprintf(", %v: %v", self.args[i*2], self.args[i*2+1])
+	if len(self.args) > 0 {
+		str += " ("
+		for i := 0; i < int(len(self.args)/2); i++ {
+			str += fmt.Sprintf("%v: %v, ", self.args[i*2], self.args[i*2+1])
+		}
+		str += ")"
 	}
 
 	return str
 }
 
+//Prints the error in the form of:
+//ErrorType
+//origin: message (Arguments)
+//Stacktraces...
 func (self *Error) ErrorWithStacktrace() string {
 
-	str := self.ErrorType() + "\n"
+	str := self.ErrorType() + "\n" + self.origin + ": " + self.message
+	//args are important information
+	if len(self.args) > 0 {
+		str += " ("
+		for i := 0; i < int(len(self.args)/2); i++ {
+			str += fmt.Sprintf("%v: %v, ", self.args[i*2], self.args[i*2+1])
+		}
+		str += ")"
+	}
+	str += "\n"
 	for _, value := range self.stack {
 		str += value + "\n"
 	}
@@ -124,7 +164,23 @@ func StackError(err error, args ...interface{}) error {
 		//build the message
 		var msg string
 		if len(args) > 1 {
-			msg = fmt.Sprintf(args[0].(string), args[1:]...)
+
+			if strings.Contains(args[0].(string), "%") {
+				//build msg printf style
+				msg = fmt.Sprintf(args[0].(string), args[1:]...)
+
+			} else {
+				//build message log style
+				additional := args[1:]
+				if len(additional)%2 != 0 {
+					additional = append(additional, "MISSING ARGUMENT")
+				}
+				msg = args[0].(string) + " ("
+				for i := 0; i < len(additional); i = i + 2 {
+					msg = msg + fmt.Sprintf("%v: %v, ", additional[i], additional[i+1])
+				}
+				msg = msg + ")"
+			}
 		} else if len(args) == 1 {
 			msg = args[0].(string)
 		}
@@ -135,8 +191,7 @@ func StackError(err error, args ...interface{}) error {
 			err = ocperr
 
 		} else {
-			ocperr := NewError(Internal, "library", "failure")
-			ocperr.AddToStack(err.Error())
+			ocperr := NewError(Internal, "library", "failure", err.Error())
 			ocperr.AddToStack(msg)
 			err = ocperr
 		}

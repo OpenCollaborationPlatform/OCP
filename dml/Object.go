@@ -462,7 +462,7 @@ func (self *object) BuildVersionedKey(id Identifier, storage datastore.StorageTy
 	if subentries == nil {
 		subentries = make([]interface{}, 0)
 	}
-	return datastore.NewKey(storage, true, id.Hash(), key, subentries)
+	return datastore.NewKey(storage, true, id.Hash(), key, subentries...)
 }
 
 func (self *object) KeysAnyHasUpdates(keys []datastore.Key) (bool, error) {

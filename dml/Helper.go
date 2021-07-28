@@ -32,10 +32,7 @@ const Error_Compiler = "compilation_failed"
 const Error_Filesystem = "filesystem_not_accessible"
 
 func newInternalError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Internal, "runtime", reason, args...)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.Internal, "runtime", reason, msg, args...)
 	return err
 }
 
@@ -47,18 +44,12 @@ func wrapInternalError(err error, reason string) error {
 }
 
 func newUserError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Application, "runtime", reason, args...)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.Application, "runtime", reason, msg, args...)
 	return err
 }
 
 func newSetupError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Application, "setup", reason, args...)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.Application, "setup", reason, msg, args...)
 	return err
 }
 
@@ -79,26 +70,30 @@ func wrapJSError(err error, vm *goja.Runtime) utils.OCPError {
 	var ocpErr utils.OCPError = nil
 	if ex, ok := err.(*goja.Exception); ok {
 
-		//first check if it is a JS object based on "Error"
-		if obj := ex.Value().ToObject(vm); obj != nil && obj.ClassName() == "Error" {
-			reason := obj.Get("name").Export().(string)
-			ocpErr = utils.NewError(utils.Application, "javascript", strcase.ToSnake(reason), ex.Value().Export())
+		//maybe directly an OCP error
+		if oc, ok := ex.Value().Export().(utils.OCPError); ok {
+			ocpErr = oc
 
+			//then check if it is a JS object based on "Error"
+		} else if obj := ex.Value().ToObject(vm); obj != nil && obj.ClassName() == "Error" {
+			reason := obj.Get("name").Export().(string)
+			ocpErr = utils.NewError(utils.Application, "javascript", strcase.ToSnake(reason), fmt.Sprintf("%v", ex.Value().Export()))
+
+			//last resort: build a new error
 		} else {
-			ocpErr = utils.NewError(utils.Application, "javascript", "user_exception", ex.Value().Export())
+			ocpErr = utils.NewError(utils.Application, "javascript", "user_exception", fmt.Sprintf("%v", ex.Value().Export()))
 		}
 
 	} else if _, ok := err.(*goja.CompilerSyntaxError); ok {
-		ocpErr = utils.NewError(utils.Application, "javascript", "syntax_error")
+		ocpErr = utils.NewError(utils.Application, "javascript", "syntax_error", err.Error())
 
 	} else if _, ok := err.(*goja.CompilerReferenceError); ok {
-		ocpErr = utils.NewError(utils.Application, "javascript", "reference_error")
+		ocpErr = utils.NewError(utils.Application, "javascript", "reference_error", err.Error())
 
 	} else {
-		ocpErr = utils.NewError(utils.Application, "unknown", "unknown_error")
+		ocpErr = utils.NewError(utils.Application, "unknown", "unknown_error", err.Error())
 	}
 
-	ocpErr.AddToStack(err.Error())
 	return ocpErr
 }
 

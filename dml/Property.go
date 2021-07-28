@@ -147,7 +147,7 @@ func (self *dataProperty) GetValue(id Identifier) interface{} {
 }
 
 func (self *dataProperty) getDSKey(id Identifier) datastore.Key {
-	return datastore.NewKey(datastore.ValueType, true, id.Hash(), []byte(self.name), nil)
+	return datastore.NewKey(datastore.ValueType, true, id.Hash(), []byte(self.name))
 }
 
 //Const property

@@ -19,6 +19,7 @@ import (
 
 func init() {
 	gob.Register(new([32]byte))
+	gob.Register(new(transSet))
 }
 
 /*********************************************************************************
@@ -508,6 +509,7 @@ func (self *objectTransaction) HandleEvent(id Identifier, source Identifier, eve
 	switch parts[len(parts)-1] {
 	case "onBeforePropertyChange", "onBeforeChange":
 		err := self.add(id)
+
 		if err != nil {
 			return err
 		}
@@ -905,8 +907,8 @@ type partialTransaction struct {
 
 //little helper to store source and key in datastore
 type transSet struct {
-	id  Identifier
-	key Key
+	Id  Identifier
+	Key Key
 }
 
 var transMap []byte = []byte("__transactionMap")
@@ -937,7 +939,7 @@ func NewPartialTransactionBehaviour(rntm *Runtime) (Object, error) {
 	tbhvr.AddMethod("Add", MustNewIdMethod(tbhvr.keyAdd, false)) //Adds a given key to the current trankey is in any transaction, also other users?
 	//tbhvr.AddMethod("InCurrentTransaction", MustNewIdMethod(tbhvr.InCurrentTransaction, true))     //behaviour is in currently open transaction for user?
 	//tbhvr.AddMethod("InDifferentTransaction", MustNewIdMethod(tbhvr.InDifferentTransaction, true)) //behaviour is in currently open transaction for user?
-	//tbhvr.AddMethod("CurrentTransactionKeys", MustNewIdMethod(tbhvr.TransactionKeys, true))        //Returns the keys in current transaction
+	tbhvr.AddMethod("CurrentTransactionKeys", MustNewIdMethod(tbhvr.transactionKeys, true)) //Returns the keys in current transaction
 
 	return tbhvr, nil
 }
@@ -946,7 +948,7 @@ func (self *partialTransaction) GetBehaviourType() string {
 	return "Transaction"
 }
 
-func (self *partialTransaction) HandleEvent(id Identifier, source Identifier, event string, args ...interface{}) error {
+func (self *partialTransaction) HandleEvent(id Identifier, source Identifier, event string, args []interface{}) error {
 
 	//whenever a property or the object itself changed, we add ourself to the current transaction.
 	//note that event coud be a fully qualified path
@@ -1052,7 +1054,7 @@ func (self *partialTransaction) add(id Identifier, source Identifier, key Key, p
 		if err != nil {
 			return utils.StackError(err, "Unable to read transaction key entry")
 		}
-		transID, ok := val.([32]byte)
+		transID, ok := val.(*[32]byte)
 		if !ok {
 			return newInternalError(Error_Setup_Invalid, "Stored trasaction data has wrong format")
 		}
@@ -1090,7 +1092,11 @@ func (self *partialTransaction) add(id Identifier, source Identifier, key Key, p
 	}
 
 	//make sure we have a fixed state at the beginning of the transaction (required for revert later)
-	dskeys, err := self.keyToDS(source, key)
+	dmlset, err := self.rntm.getObjectSet(source)
+	if err != nil {
+		return err
+	}
+	dskeys, err := dmlset.obj.keyToDS(source, key)
 	if err != nil {
 		return utils.StackError(err, "Unable to access key in source object of transaction")
 	}
@@ -1136,16 +1142,71 @@ func (self *partialTransaction) InitializeDB(id Identifier) error {
 	return nil
 }
 
-func (self *partialTransaction) defaultAddable(id Identifier) bool {
-	return true
-}
+func (self *partialTransaction) transactionKeys(id Identifier) ([]string, error) {
 
-func (self *partialTransaction) defaultCloseable(id Identifier) bool {
-	return true
-}
+	//collect all keys for current transaction
+	if !self.mngr.IsOpen() {
+		return nil, newUserError(Error_Operation_Invalid, "No transaction open, hence cannot inquery keys")
+	}
+	trans, err := self.mngr.getTransaction()
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to query transaction for key search")
+	}
 
-func (self *partialTransaction) defaultDependentObjects(id Identifier) []interface{} {
-	return make([]interface{}, 0)
+	//iterate over all keys, and fix those that belong to the current transaction
+	tMap, err := self.GetDBMap(id, transMap)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to access datastore of transaction")
+	}
+	keys, err := tMap.GetKeys()
+	if err != nil {
+		return nil, err
+	}
+
+	//get othe parent path to allow string key construction
+	parent, err := self.GetParent(id)
+	if err != nil {
+		return nil, err
+	}
+	parentpath, err := parent.obj.GetObjectPath(parent.id)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]string, 0)
+	for _, key := range keys {
+		data, err := tMap.Read(key)
+		if err != nil {
+			return nil, err
+		}
+		keyTrans, ok := data.(*[32]byte)
+		if !ok {
+			return nil, newInternalError(Error_Setup_Invalid, "Transaction data of wrong type", "type", fmt.Sprintf("%T", data))
+		}
+		if bytes.Equal(keyTrans[:], trans.identification[:]) {
+
+			//this object/key set belongs to the currently closed transaction
+			transset, ok := key.(*transSet)
+			if !ok {
+				return nil, newInternalError(Error_Setup_Invalid, "Transaction set data of wrong type", "type", fmt.Sprintf("%T", key))
+			}
+			dmlset, err := self.rntm.getObjectSet(transset.Id)
+			if err != nil {
+				return nil, utils.StackError(err, "Object for changed key not valid")
+			}
+
+			sourcepath, err := dmlset.obj.GetObjectPath(dmlset.id)
+			if err != nil {
+				return nil, err
+			}
+			key := ""
+			if len(sourcepath) != len(parentpath) {
+				key = sourcepath[len(parentpath):] + "."
+			}
+			result = append(result, key+transset.Key.AsString())
+		}
+	}
+	return result, nil
 }
 
 func (self *partialTransaction) closeTransaction(id Identifier, transIdent [32]byte) error {
@@ -1170,23 +1231,23 @@ func (self *partialTransaction) closeTransaction(id Identifier, transIdent [32]b
 		if err != nil {
 			return err
 		}
-		keyTrans, ok := data.([32]byte)
+		keyTrans, ok := data.(*[32]byte)
 		if !ok {
-			return newInternalError(Error_Setup_Invalid, "Transaction data of wrong type")
+			return newInternalError(Error_Setup_Invalid, "Transaction data of wrong type", "type", fmt.Sprintf("%T", data))
 		}
 		if bytes.Equal(keyTrans[:], transIdent[:]) {
 
 			//this object/key set belongs to the currently closed transaction
-			transset, ok := key.(transSet)
+			transset, ok := key.(*transSet)
 			if !ok {
-				return newInternalError(Error_Setup_Invalid, "Transaction set data of wrong type")
+				return newInternalError(Error_Setup_Invalid, "Transaction set data of wrong type", "type", fmt.Sprintf("%T", key))
 			}
-			dmlset, err := self.rntm.getObjectSet(transset.id)
+			dmlset, err := self.rntm.getObjectSet(transset.Id)
 			if err != nil {
 				return utils.StackError(err, "Object for changed key not valid")
 			}
-			dskeys, err := dmlset.obj.keyToDS(dmlset.id, transset.key)
-			if err == nil {
+			dskeys, err := dmlset.obj.keyToDS(dmlset.id, transset.Key)
+			if err != nil {
 				return utils.StackError(err, "Unable to get DS keys from transaction key")
 			}
 
@@ -1232,30 +1293,33 @@ func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]b
 	}
 
 	for _, key := range keys {
+		fmt.Printf("\nAbort check key: %v", key)
 		data, err := tMap.Read(key)
 		if err != nil {
 			return err
 		}
-		keyTrans, ok := data.([32]byte)
+		keyTrans, ok := data.(*[32]byte)
 		if !ok {
-			return newInternalError(Error_Setup_Invalid, "Transaction data of wrong type")
+			return newInternalError(Error_Setup_Invalid, "Transaction data of wrong type", "type", fmt.Sprintf("%T", data))
 		}
 		if bytes.Equal(keyTrans[:], transIdent[:]) {
+			fmt.Printf("\n Is in transaction")
 
 			//this object/key set belongs to the currently closed transaction
-			transset, ok := key.(transSet)
+			transset, ok := key.(*transSet)
 			if !ok {
-				return newInternalError(Error_Setup_Invalid, "Transaction set data of wrong type")
+				return newInternalError(Error_Setup_Invalid, "Transaction set data of wrong type", "type", fmt.Sprintf("%T", key))
 			}
-			dmlset, err := self.rntm.getObjectSet(transset.id)
+			dmlset, err := self.rntm.getObjectSet(transset.Id)
 			if err != nil {
 				return utils.StackError(err, "Object for changed key not valid")
 			}
-			dskeys, err := dmlset.obj.keyToDS(dmlset.id, transset.key)
-			if err == nil {
+			dskeys, err := dmlset.obj.keyToDS(dmlset.id, transset.Key)
+			if err != nil {
 				return utils.StackError(err, "Unable to get DS keys from transaction key")
 			}
 
+			fmt.Printf("\n start reset")
 			for _, dskey := range dskeys {
 				if dskey.Versioned {
 					entry, err := self.rntm.datastore.GetVersionedEntry(dskey)
@@ -1272,6 +1336,7 @@ func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]b
 			}
 
 			//remove from key map
+			fmt.Printf("\n remove")
 			err = tMap.Remove(key)
 			if err != nil {
 				return utils.StackError(err, "Unable to remove key from transaction while closing")

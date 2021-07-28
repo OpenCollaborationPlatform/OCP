@@ -8,7 +8,7 @@ import (
 )
 
 type Key struct {
-	data interface{}
+	Internal interface{}
 }
 
 func NewKey(data interface{}) (Key, error) {
@@ -23,13 +23,13 @@ func NewKey(data interface{}) (Key, error) {
 func MustNewKey(data interface{}) Key {
 	key, err := NewKey(data)
 	if err != nil {
-		panic(err.Error())
+		panic(err)
 	}
 	return key
 }
 
 func (self Key) AsString() string {
-	return fmt.Sprintf("%v", self.data)
+	return fmt.Sprintf("%v", self.Internal)
 }
 
 func (self Key) Equal(second Key) bool {
@@ -37,14 +37,14 @@ func (self Key) Equal(second Key) bool {
 }
 
 func (self Key) Data() interface{} {
-	return self.data
+	return self.Internal
 }
 
 func (self Key) AsDataType(dt DataType) (interface{}, error) {
 
 	//maybe we are already the correct datatype
-	if dt.MustBeTypeOf(self.data) == nil {
-		return self.data, nil
+	if dt.MustBeTypeOf(self.Internal) == nil {
+		return self.Internal, nil
 	}
 
 	if dt.IsString() {
@@ -67,7 +67,7 @@ func (self Key) AsDataType(dt DataType) (interface{}, error) {
 	}
 
 	if dt.IsRaw() {
-		raw, ok := self.data.(utils.Cid)
+		raw, ok := self.Internal.(utils.Cid)
 		if !ok {
 			return nil, newUserError(Error_Operation_Invalid, "Key cannot be used as raw", "Key", self.AsString())
 		}

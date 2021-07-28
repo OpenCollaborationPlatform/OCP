@@ -16,10 +16,7 @@ const Error_Setup = "setup_invalid"                 // The datastructures are no
 const Error_Data = "data_share_failed"              // For all kind of internal proccesses
 
 func newInternalError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Internal, "p2p", reason, args)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.Internal, "p2p", reason, msg, args)
 	return err
 }
 
@@ -35,10 +32,7 @@ func wrapInternalError(err error, reason string, args ...interface{}) error {
 }
 
 func newConnectionError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Connection, "p2p", reason, args)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.Connection, "p2p", reason, msg, args)
 	return err
 }
 
@@ -55,9 +49,6 @@ func wrapConnectionError(err error, reason string, args ...interface{}) error {
 
 func newUserError(reason, msg string, args ...interface{}) utils.OCPError {
 
-	err := utils.NewError(utils.User, "p2p", reason, args)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.User, "p2p", reason, msg, args)
 	return err
 }

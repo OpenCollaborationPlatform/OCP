@@ -51,14 +51,14 @@ func (self decoder) Decode(data string) (interface{}, error) {
 
 	elements := strings.Split(data, "_")
 	if elements[0] != "ocp" {
-		return nil, NewError(Internal, "utils", "Data is not a valid encoded ocp type")
+		return nil, NewError(Internal, "utils", "codec", "Data is not a valid encoded ocp type")
 	}
 
 	self.mutex.RLock()
 	fnc, ok := self.decoders[elements[1]]
 	self.mutex.RUnlock()
 	if !ok {
-		return nil, NewError(Internal, "utils", "Data is not a valid encoded type")
+		return nil, NewError(Internal, "utils", "codec", "Data is not a valid encoded type")
 	}
 	return fnc(elements[2])
 }
@@ -68,5 +68,5 @@ func (self decoder) DecodeInterface(data interface{}) (interface{}, error) {
 	if str, ok := data.(string); ok {
 		return self.Decode(str)
 	}
-	return nil, NewError(Internal, "utils", "Interface is not a encoded string")
+	return nil, NewError(Internal, "utils", "codec", "Interface is not a encoded string")
 }

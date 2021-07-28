@@ -14,10 +14,7 @@ const Error_Setup = "setup_invalid"                 // The datastructures are no
 const Error_Filesytem = "filesystem"                // Problems with filesystem
 
 func newInternalError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Internal, "documents", reason, args)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.Internal, "documents", reason, msg, args)
 	return err
 }
 
@@ -33,10 +30,7 @@ func wrapInternalError(err error, reason string, args ...interface{}) error {
 }
 
 func newConnectionError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Connection, "documents", reason, args)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.Connection, "documents", reason, msg, args)
 	return err
 }
 
@@ -53,9 +47,6 @@ func wrapConnectionError(err error, reason string, args ...interface{}) error {
 
 func newUserError(reason, msg string, args ...interface{}) utils.OCPError {
 
-	err := utils.NewError(utils.User, "documents", reason, args)
-	if msg != "" {
-		err.AddToStack(msg)
-	}
+	err := utils.NewError(utils.User, "documents", reason, msg, args)
 	return err
 }

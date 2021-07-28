@@ -1,4 +1,3 @@
-//parser for the datastructure markup language
 package dml
 
 import (
@@ -6,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 
@@ -769,10 +770,6 @@ func TestTransactionAbort(t *testing.T) {
 						.name: "trans"
 						.recursive: true
 						.automatic: true
-
-						function CanBeAdded() {
-							return !this.parent.abort
-						}
 					}
 				}`
 
@@ -812,5 +809,140 @@ func TestTransactionAbort(t *testing.T) {
 			value := set.obj.GetProperty("value").GetValue(set.id)
 			So(value, ShouldEqual, 1)
 		})
+	})
+}
+
+func TestPartialTransaction(t *testing.T) {
+
+	//create the runtime
+	Convey("Testing partial transaction abort by loading dml code", t, func() {
+
+		//make temporary folder for the data
+		path, _ := ioutil.TempDir("", "dml")
+		defer os.RemoveAll(path)
+
+		store, _ := datastore.NewDatastore(path)
+		defer store.Close()
+
+		var code = `
+				Data {
+					.name: "Document"
+
+					property int value1: 1
+					property int value2: 1
+					property int value3: 1
+					
+					Map {
+						.name: "Child"
+						
+						.key: int
+						.value: int
+					}
+
+					Data {
+						.name: "Child"
+
+						property int value: 1
+
+						function test() {
+							this.p = 10
+							this.parent.p = 10
+						}
+					}
+
+					PartialTransaction {
+
+						.name: "trans"
+						.recursive: true
+						.automatic: true
+
+						
+					}
+				}`
+
+		rntm := NewRuntime()
+		err := rntm.Parse(strings.NewReader(code))
+		So(err, ShouldBeNil)
+		err = rntm.InitializeDatastore(store)
+		So(err, ShouldBeNil)
+		rntm.currentUser = "User1"
+
+		Convey("Changing some data in the toplevel object works", func() {
+
+			code := `Document.value1 = 5
+					 Document.value2 = 3
+					 Document.trans.CurrentTransactionKeys()`
+
+			keys, err := rntm.RunJavaScript(store, "User1", code)
+			utils.PrintWithStacktrace(err)
+			So(err, ShouldBeNil)
+			So(keys, ShouldResemble, []string{"value1", "value2"})
+
+			store.Begin()
+			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			So(mngr.IsOpen(), ShouldBeTrue)
+			set, _ := getObjectFromPath(rntm, "Document")
+			value := set.obj.GetProperty("value1").GetValue(set.id)
+			So(value, ShouldEqual, 5)
+			value = set.obj.GetProperty("value2").GetValue(set.id)
+			So(value, ShouldEqual, 3)
+			store.Rollback()
+
+			Convey("Closing the transaction works and preserves the values", func() {
+
+				code := `Transaction.Close()`
+				_, err = rntm.RunJavaScript(store, "User1", code)
+				utils.PrintWithStacktrace(err)
+				So(err, ShouldBeNil)
+
+				store.Begin()
+				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+				So(mngr.IsOpen(), ShouldBeFalse)
+				set, _ := getObjectFromPath(rntm, "Document")
+				value := set.obj.GetProperty("value1").GetValue(set.id)
+				So(value, ShouldEqual, 5)
+				value = set.obj.GetProperty("value2").GetValue(set.id)
+				So(value, ShouldEqual, 3)
+				store.Rollback()
+
+				Convey("And removes the keys correctly", func() {
+
+					code := `Transaction.Open()
+							 Document.trans.CurrentTransactionKeys()`
+					keys, err = rntm.RunJavaScript(store, "User1", code)
+					utils.PrintWithStacktrace(err)
+					So(err, ShouldBeNil)
+					So(keys, ShouldResemble, []string{})
+				})
+			})
+
+			Convey("Aborting the transaction works and resets both values", func() {
+
+				code := `Transaction.Abort()`
+				_, err = rntm.RunJavaScript(store, "User1", code)
+				So(err, ShouldBeNil)
+
+				store.Begin()
+				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+				So(mngr.IsOpen(), ShouldBeFalse)
+				set, _ := getObjectFromPath(rntm, "Document")
+				value := set.obj.GetProperty("value1").GetValue(set.id)
+				So(value, ShouldEqual, 1)
+				value = set.obj.GetProperty("value2").GetValue(set.id)
+				So(value, ShouldEqual, 1)
+				store.Rollback()
+
+				Convey("And removes the keys correctly", func() {
+
+					code := `Transaction.Open()
+							Document.trans.CurrentTransactionKeys()`
+					keys, err = rntm.RunJavaScript(store, "User1", code)
+					utils.PrintWithStacktrace(err)
+					So(err, ShouldBeNil)
+					So(keys, ShouldResemble, []string{})
+				})
+			})
+		})
+
 	})
 }

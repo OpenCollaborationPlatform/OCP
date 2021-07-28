@@ -240,7 +240,10 @@ func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, source Identif
 	result := make([]string, 0)
 	for _, behaviour := range behaviours {
 		if self.HasBehaviour(behaviour) {
-			bhvrSet, _ := self.GetBehaviour(id, behaviour)
+			bhvrSet, err := self.GetBehaviour(id, behaviour)
+			if err != nil {
+				return nil, utils.StackError(err, "Unable to retreive behaviour for ID, even though it said to have the behaviour", "behaviour", behaviour, "id", id.String())
+			}
 			bhvrObj := bhvrSet.obj.(Behaviour)
 
 			if isrecursive && !bhvrObj.GetProperty("recursive").GetValue(bhvrSet.id).(bool) {
@@ -250,7 +253,7 @@ func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, source Identif
 			}
 
 			//handle the event, and do no not propagate further
-			err := bhvrObj.HandleEvent(bhvrSet.id, source, event, args)
+			err = bhvrObj.HandleEvent(bhvrSet.id, source, event, args)
 			if err != nil {
 				return result, err
 			}
