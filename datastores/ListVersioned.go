@@ -831,6 +831,62 @@ func (self *listVersionedValue) Reference() uint64 {
 	return btoi(self.value.key)
 }
 
+//returns previous value. If no existant, does not error, but returns invalid ListValue
+func (self *listVersionedValue) Previous() (ListValue, error) {
+
+	var value ListValue = nil
+	err := self.value.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.value.dbkey)
+		for _, bkey := range self.value.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		cursor := bucket.Cursor()
+		retKey, _ := cursor.Seek(self.value.key)
+		if retKey == nil {
+			return NewDSError(Error_Setup_Incorrectly, "List value seems not to exist in List")
+		}
+		retKey, _ = cursor.Prev()
+		if retKey == nil {
+			return nil
+		}
+
+		value = &listValue{Value{self.value.db, self.value.dbkey, self.value.setkey, retKey}}
+		return nil
+	})
+
+	return value, err
+}
+
+//returns next value. If no existant, does not error, but returns invalid ListValue
+func (self *listVersionedValue) Next() (ListValue, error) {
+
+	var value ListValue = nil
+	err := self.value.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.value.dbkey)
+		for _, bkey := range self.value.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		cursor := bucket.Cursor()
+		retKey, _ := cursor.Seek(self.value.key)
+		if retKey == nil {
+			return NewDSError(Error_Setup_Incorrectly, "List value seems not to exist in List")
+		}
+		retKey, _ = cursor.Next()
+		if retKey == nil {
+			return nil
+		}
+
+		value = &listValue{Value{self.value.db, self.value.dbkey, self.value.setkey, retKey}}
+		return nil
+	})
+
+	return value, err
+}
+
 func (self *listVersionedValue) SupportsSubentries() bool {
 	return false
 }

@@ -190,6 +190,21 @@ func (self *ListSet) HasList(key []byte) bool {
 	return result
 }
 
+func (self *ListSet) RemoveList(key []byte) error {
+
+	err := self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		bucket = bucket.Bucket(self.setkey)
+
+		return bucket.DeleteBucket(key)
+	})
+
+	if err != nil {
+		return wrapDSError(err, Error_Bolt_Access_Failure)
+	}
+	return nil
+}
+
 func (self *ListSet) GetOrCreateList(key []byte) (*List, error) {
 
 	if !self.HasList(key) {
@@ -300,6 +315,45 @@ func (self *List) GetValues() ([]ListValue, error) {
 	return entries, wrapDSError(err, Error_Bolt_Access_Failure)
 }
 
+//returns first value. If no existant, does not error, but returns invalid ListValue
+func (self *List) First() (ListValue, error) {
+
+	var value ListValue = &listValue{}
+	err := self.kvset.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.kvset.dbkey)
+		for _, bkey := range self.kvset.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		cursor := bucket.Cursor()
+		retKey, _ := cursor.First()
+		value = &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, retKey}}
+		return nil
+	})
+
+	return value, err
+}
+
+func (self *List) Last() (ListValue, error) {
+
+	var value ListValue
+	err := self.kvset.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.kvset.dbkey)
+		for _, bkey := range self.kvset.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		cursor := bucket.Cursor()
+		retKey, _ := cursor.Last()
+		value = &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, retKey}}
+		return nil
+	})
+
+	return value, err
+}
+
 func (self *List) HasReference(ref uint64) bool {
 	//check if exist
 	var exists bool = false
@@ -371,6 +425,8 @@ type ListValue interface {
 	IsValid() bool
 	Remove() error
 	Reference() uint64
+	Previous() (ListValue, error)
+	Next() (ListValue, error)
 }
 
 type listValue struct {
@@ -396,6 +452,62 @@ func (self *listValue) Remove() error {
 
 func (self *listValue) Reference() uint64 {
 	return btoi(self.value.key)
+}
+
+//returns previous value. If no existant, does not error, but returns nil
+func (self *listValue) Previous() (ListValue, error) {
+
+	var value ListValue = nil
+	err := self.value.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.value.dbkey)
+		for _, bkey := range self.value.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		cursor := bucket.Cursor()
+		retKey, _ := cursor.Seek(self.value.key)
+		if retKey == nil {
+			return NewDSError(Error_Setup_Incorrectly, "List value seems not to exist in List")
+		}
+		retKey, _ = cursor.Prev()
+		if retKey == nil {
+			return nil
+		}
+
+		value = &listValue{Value{self.value.db, self.value.dbkey, self.value.setkey, retKey}}
+		return nil
+	})
+
+	return value, err
+}
+
+//returns next value. If no existant, does not error, but returns nil
+func (self *listValue) Next() (ListValue, error) {
+
+	var value ListValue = nil
+	err := self.value.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.value.dbkey)
+		for _, bkey := range self.value.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		cursor := bucket.Cursor()
+		retKey, _ := cursor.Seek(self.value.key)
+		if retKey == nil {
+			return NewDSError(Error_Setup_Incorrectly, "List value seems not to exist in List")
+		}
+		retKey, _ = cursor.Next()
+		if retKey == nil {
+			return nil
+		}
+
+		value = &listValue{Value{self.value.db, self.value.dbkey, self.value.setkey, retKey}}
+		return nil
+	})
+
+	return value, err
 }
 
 func (self *listValue) SupportsSubentries() bool {

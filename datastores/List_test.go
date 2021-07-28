@@ -67,9 +67,41 @@ func TestListBasic(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(entry1, ShouldNotBeNil)
 
+			iterValue, err := list.First()
+			So(err, ShouldBeNil)
+			So(iterValue.IsValid(), ShouldBeTrue)
+			So(iterValue.Reference(), ShouldEqual, entry1.Reference())
+
+			iterValue, err = list.Last()
+			So(err, ShouldBeNil)
+			So(iterValue.IsValid(), ShouldBeTrue)
+			So(iterValue.Reference(), ShouldEqual, entry1.Reference())
+
+			prev, err := iterValue.Previous()
+			So(err, ShouldBeNil)
+			So(prev, ShouldBeNil)
+			next, err := iterValue.Next()
+			So(err, ShouldBeNil)
+			So(next, ShouldBeNil)
+
 			entry2, err := list.Add("data2")
 			So(err, ShouldBeNil)
 			So(entry2, ShouldNotBeNil)
+
+			iterValue, err = list.Last()
+			So(err, ShouldBeNil)
+			So(iterValue.IsValid(), ShouldBeTrue)
+			So(iterValue.Reference(), ShouldEqual, entry2.Reference())
+
+			prev, err = entry2.Previous()
+			So(err, ShouldBeNil)
+			So(prev, ShouldNotBeNil)
+			So(prev.Reference(), ShouldEqual, entry1.Reference())
+
+			next, err = entry1.Next()
+			So(err, ShouldBeNil)
+			So(prev, ShouldNotBeNil)
+			So(next.Reference(), ShouldEqual, entry2.Reference())
 
 			val, err := entry1.Read()
 			So(err, ShouldBeNil)
@@ -87,11 +119,23 @@ func TestListBasic(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			So(inte, ShouldEqual, 12)
 
+			pval, _ := prev.Read()
+			So(pval, ShouldEqual, val)
+
 			err = entry2.Remove()
 			So(err, ShouldBeNil)
 			val, err = entry2.Read()
 			So(err, ShouldNotBeNil)
 			So(val, ShouldBeNil)
+
+			next, err = entry1.Next()
+			So(err, ShouldBeNil)
+			So(next, ShouldBeNil)
+
+			iterValue, err = list.Last()
+			So(err, ShouldBeNil)
+			So(iterValue.IsValid(), ShouldBeTrue)
+			So(iterValue.Reference(), ShouldEqual, entry1.Reference())
 		})
 
 		Convey("Entries shall be retrievable", func() {

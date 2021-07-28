@@ -33,9 +33,9 @@ type Data interface {
 	GetChildren(Identifier) ([]dmlSet, error)
 	GetChildByName(Identifier, string) (dmlSet, error)
 
-	GetSubobjects(id Identifier) ([]dmlSet, error)                    //Convinience function to get all subobjects, including childs, behaviours any any created ones
-	Created(id Identifier) error                                      //emits onCreated event for this and all subobjects (not behaviours)
-	recursiveHandleBehaviourEvent(Identifier, string, []string) error //Helper function to propagate behaviour events to the parent (if availbabe)
+	GetSubobjects(id Identifier) ([]dmlSet, error)                                               //Convinience function to get all subobjects, including childs, behaviours any any created ones
+	Created(id Identifier) error                                                                 //emits onCreated event for this and all subobjects (not behaviours)
+	recursiveHandleBehaviourEvent(Identifier, Identifier, string, []interface{}, []string) error //Helper function to propagate behaviour events to the parent (if availbabe)
 
 }
 
@@ -379,23 +379,26 @@ func (self *DataImpl) EventEmitted(id Identifier, event string, args ...interfac
 	//call ourself and our parents till all behaviours are handled. Note that initially we use
 	//unrecursive behaviours, all parents only use the recursive ones.
 	behaviours := self.GetRuntime().behaviours.GetEventBehaviours(event)
-	res, err := self.HandleBehaviourEvent(id, event, behaviours, false)
+	res, err := self.HandleBehaviourEvent(id, id, event, args, behaviours, false)
 	if err != nil {
 		return err
 	}
-	err = self.recursiveHandleBehaviourEvent(id, event, res)
-	if err != nil {
-		return err
+
+	if len(res) != 0 {
+		err = self.recursiveHandleBehaviourEvent(id, id, event, args, res)
+		if err != nil {
+			return err
+		}
 	}
 
 	//call base class implementation
 	return self.object.EventEmitted(id, event, args...)
 }
 
-func (self *DataImpl) recursiveHandleBehaviourEvent(id Identifier, name string, behaviours []string) error {
+func (self *DataImpl) recursiveHandleBehaviourEvent(id Identifier, source Identifier, name string, args []interface{}, behaviours []string) error {
 
 	if len(behaviours) > 0 {
-		res, err := self.HandleBehaviourEvent(id, name, behaviours, true)
+		res, err := self.HandleBehaviourEvent(id, source, name, args, behaviours, true)
 		if err != nil {
 			return err
 		}
@@ -405,7 +408,7 @@ func (self *DataImpl) recursiveHandleBehaviourEvent(id Identifier, name string, 
 			parentSet, err := self.GetParent(id)
 			if err == nil {
 				if parent, ok := parentSet.obj.(Data); ok {
-					err := parent.recursiveHandleBehaviourEvent(parentSet.id, name, res)
+					err := parent.recursiveHandleBehaviourEvent(parentSet.id, source, name, args, res)
 					if err != nil {
 						return err
 					}

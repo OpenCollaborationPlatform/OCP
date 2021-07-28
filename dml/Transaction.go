@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"strings"
 
 	"crypto/sha256"
 
@@ -448,6 +449,8 @@ type transactionBehaviour interface {
 	abortTransaction(Identifier, [32]byte) error //called when a transaction, which holds the behaviour, is abortet
 }
 
+//Object Transaction adds a whole object to the current transaction. This happens on every change within the object,
+//property or key, and if recursive == True also for every change of any subobject.
 type objectTransaction struct {
 	*behaviour
 
@@ -497,10 +500,12 @@ func (self *objectTransaction) GetBehaviourType() string {
 	return "Transaction"
 }
 
-func (self *objectTransaction) HandleEvent(id Identifier, event string) error {
+func (self *objectTransaction) HandleEvent(id Identifier, source Identifier, event string, args []interface{}) error {
 
 	//whenever a property or the object itself changed, we add ourself to the current transaction
-	switch event {
+	//note that event can be a fully qualified path for recursive events
+	parts := strings.Split(event, ".")
+	switch parts[len(parts)-1] {
 	case "onBeforePropertyChange", "onBeforeChange":
 		err := self.add(id)
 		if err != nil {
@@ -884,6 +889,392 @@ func (self *objectTransaction) recursiveResetTransaction(set dmlSet) error {
 			err := self.recursiveResetTransaction(set)
 			if err != nil {
 				return err
+			}
+		}
+	}
+	return nil
+}
+
+//Partial Transaction adds individual keys of an object to the transaction. With this the object can be part of multiple transactions,
+//but for each with different keys. Note: Keys are relatvice paths from the behaviours parent object, e.g. MyChild.myProperty
+type partialTransaction struct {
+	*behaviour
+
+	mngr *TransactionManager
+}
+
+//little helper to store source and key in datastore
+type transSet struct {
+	id  Identifier
+	key Key
+}
+
+var transMap []byte = []byte("__transactionMap")
+
+func NewPartialTransactionBehaviour(rntm *Runtime) (Object, error) {
+
+	behaviour, _ := NewBaseBehaviour(rntm)
+
+	mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+	tbhvr := &partialTransaction{behaviour, mngr}
+
+	//add default properties
+	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) //open transaction automatically on change
+
+	//add default methods for overriding by the user
+	//tbhvr.AddMethod("CanBeAdded", MustNewIdMethod(tbhvr.defaultAddable, true))             //return true/false if the provided key can be used in current transaction
+	//tbhvr.AddMethod("CanBeClosed", MustNewIdMethod(tbhvr.defaultCloseable, true))          //return true/false if the current transaction containing some object keys can be closed
+	//tbhvr.AddMethod("DependentKeys", MustNewIdMethod(tbhvr.defaultDependentObjects, true)) //return array of keys that need to be added to the transaction together with the provided one
+
+	//add default events
+	tbhvr.AddEvent(NewEvent(`onParticipation`, behaviour)) //called when the first key is added to the current transaction
+	tbhvr.AddEvent(NewEvent(`onKeyAdded`, behaviour))      //called when a new key is added to the transaction
+	tbhvr.AddEvent(NewEvent(`onClosing`, behaviour))       //called when transaction, to which tany key was added, is closed (means finished)
+	tbhvr.AddEvent(NewEvent(`onAborting`, behaviour))      //Caled when the transaction, any key is part of. is aborted (means reverted)
+	tbhvr.AddEvent(NewEvent(`onFailure`, behaviour))       //called when adding to transaction failed, e.g. because already in annother transaction
+
+	//add the user usable methods
+	tbhvr.AddMethod("Add", MustNewIdMethod(tbhvr.keyAdd, false)) //Adds a given key to the current trankey is in any transaction, also other users?
+	//tbhvr.AddMethod("InCurrentTransaction", MustNewIdMethod(tbhvr.InCurrentTransaction, true))     //behaviour is in currently open transaction for user?
+	//tbhvr.AddMethod("InDifferentTransaction", MustNewIdMethod(tbhvr.InDifferentTransaction, true)) //behaviour is in currently open transaction for user?
+	//tbhvr.AddMethod("CurrentTransactionKeys", MustNewIdMethod(tbhvr.TransactionKeys, true))        //Returns the keys in current transaction
+
+	return tbhvr, nil
+}
+
+func (self *partialTransaction) GetBehaviourType() string {
+	return "Transaction"
+}
+
+func (self *partialTransaction) HandleEvent(id Identifier, source Identifier, event string, args ...interface{}) error {
+
+	//whenever a property or the object itself changed, we add ourself to the current transaction.
+	//note that event coud be a fully qualified path
+	switch event {
+	case "onBeforePropertyChange", "onBeforeChange":
+
+		if len(args) != 1 {
+			return newInternalError(Error_Operation_Invalid, "Partial transaction cannot handle event due to missing key argument", "event", event)
+		}
+
+		key, err := NewKey(args[0])
+		if err != nil {
+			utils.StackError(err, "Unable to use event argument as key", "event", event, "argument", args)
+		}
+
+		//check if we need to construct the path
+		path := key.AsString()
+		if !id.Equals(source) {
+			idP, _ := self.GetObjectPath(id)
+			sourceP, _ := self.GetObjectPath(source)
+			path = sourceP[len(idP):] + "." + key.AsString()
+		}
+
+		err = self.add(id, source, key, path)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (self *partialTransaction) keyToSourceKey(id Identifier, key interface{}) (Identifier, Key, error) {
+
+	source, err := self.GetParent(id)
+	if err != nil {
+		return Identifier{}, Key{}, err
+	}
+
+	str, isstr := key.(string)
+	if isstr {
+		//could be a complex path which needs to be resolved
+		path := strings.Split(str, ".")
+		for i := 1; i < len(path); i++ {
+			data, ok := source.obj.(Data)
+			if !ok {
+				return Identifier{}, Key{}, newInternalError(Error_Setup_Invalid, "Behaviour parent is not Data object")
+			}
+			source, err = data.GetChildByName(source.id, path[1])
+			if err != nil {
+				return Identifier{}, Key{}, err
+			}
+		}
+
+		key = path[len(path)-1]
+	}
+
+	key_, err := NewKey(key)
+	return source.id, key_, err
+}
+
+//Allows to add keys in the dml path way, e.g. "mychild.subobject.property1" or simple "key". Key is always relative to parent data object.
+func (self *partialTransaction) keyAdd(id Identifier, key interface{}) error {
+
+	//add to transaction
+	source, key_, err := self.keyToSourceKey(id, key)
+	if err != nil {
+		return err
+	}
+	return self.add(id, source, key_, fmt.Sprintf("%v", key))
+}
+
+//Adds a new object/key combo to the current transaction. Fails if key is already part of
+//annother transaction
+//Note: If transaction has Object already no error is returned
+func (self *partialTransaction) add(id Identifier, source Identifier, key Key, path string) error {
+
+	trans, err := self.mngr.getTransaction()
+	if err != nil {
+		//seems we do not have a transaction open. Let's check if we shall open one
+		if self.GetProperty("automatic").GetValue(id).(bool) {
+			err = self.mngr.Open()
+			if err == nil {
+				trans, err = self.mngr.getTransaction()
+			}
+		}
+
+		if err != nil {
+			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
+			self.GetEvent("onFailure").Emit(id, err.Error())
+			return err
+		}
+	}
+
+	//store the source/key pair in the behaviour
+	tMap, err := self.GetDBMap(id, transMap)
+	if err != nil {
+		return utils.StackError(err, "Unable to access datastore of transaction")
+	}
+	//first check if we have the entry already.
+	set := transSet{source, key}
+	if tMap.HasKey(set) {
+		val, err := tMap.Read(set)
+		if err != nil {
+			return utils.StackError(err, "Unable to read transaction key entry")
+		}
+		transID, ok := val.([32]byte)
+		if !ok {
+			return newInternalError(Error_Setup_Invalid, "Stored trasaction data has wrong format")
+		}
+		if bytes.Equal(transID[:], trans.identification[:]) {
+			//we already have this key added, we return without error
+			return nil
+
+		} else {
+			//key belongs to different transaction
+			err := newUserError(Error_Operation_Invalid, "Key already belongs to different transaction")
+			self.GetEvent("onFailure").Emit(id, err.Error())
+			return err
+		}
+	}
+
+	//add the entry!
+	if err := tMap.Write(set, trans.identification); err != nil {
+		return utils.StackError(err, "Unable to store key for transaction")
+	}
+
+	//check if we are already written in the transaction
+	if !trans.HasBehaviour(id) {
+		err = trans.AddBehaviour(id)
+		if err != nil {
+			err = utils.StackError(err, "Unable to add object to transaction")
+			self.GetEvent("onFailure").Emit(id, err.Error())
+			return err
+		}
+
+		//throw relevant event that we are now part of the transaction
+		err = self.GetEvent("onParticipation").Emit(id)
+		if err != nil {
+			return err
+		}
+	}
+
+	//make sure we have a fixed state at the beginning of the transaction (required for revert later)
+	dskeys, err := self.keyToDS(source, key)
+	if err != nil {
+		return utils.StackError(err, "Unable to access key in source object of transaction")
+	}
+	for _, dskey := range dskeys {
+		if dskey.Versioned {
+			ventry, err := self.rntm.datastore.GetVersionedEntry(dskey)
+			if err != nil {
+				return utils.StackError(err, "Unable to access versioned entry based on ds key")
+			}
+			if upd, _ := ventry.HasUpdates(); upd {
+				ventry.FixStateAsVersion()
+			}
+		}
+	}
+
+	self.GetEvent("onKeyAdded").Emit(id, path)
+	return nil
+}
+
+/*
+func (self *partialTransaction) setInTransaction(id Identifier, trans *transaction, add bool) error {
+
+	list, err := self.GetDBList(id,transList)
+	if err != nil {
+		return utils.StackError(err, "Unable to read transaction list from DB")
+	}
+
+	if in {
+		list.Add(trans.identification)
+	} else {
+		list.GetSubentry()
+	}
+	return utils.StackError(inTransaction.Write(value), "Unable to write transaction status")
+}*/
+
+func (self *partialTransaction) InitializeDB(id Identifier) error {
+
+	err := self.object.InitializeDB(id)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (self *partialTransaction) defaultAddable(id Identifier) bool {
+	return true
+}
+
+func (self *partialTransaction) defaultCloseable(id Identifier) bool {
+	return true
+}
+
+func (self *partialTransaction) defaultDependentObjects(id Identifier) []interface{} {
+	return make([]interface{}, 0)
+}
+
+func (self *partialTransaction) closeTransaction(id Identifier, transIdent [32]byte) error {
+
+	err := self.GetEvent("onClosing").Emit(id)
+	if err != nil {
+		return utils.StackError(err, "Unable to close transaction due to failed close event emitting")
+	}
+
+	//iterate over all keys, and fix those that belong to the current transaction
+	tMap, err := self.GetDBMap(id, transMap)
+	if err != nil {
+		return utils.StackError(err, "Unable to access datastore of transaction")
+	}
+	keys, err := tMap.GetKeys()
+	if err != nil {
+		return err
+	}
+
+	for _, key := range keys {
+		data, err := tMap.Read(key)
+		if err != nil {
+			return err
+		}
+		keyTrans, ok := data.([32]byte)
+		if !ok {
+			return newInternalError(Error_Setup_Invalid, "Transaction data of wrong type")
+		}
+		if bytes.Equal(keyTrans[:], transIdent[:]) {
+
+			//this object/key set belongs to the currently closed transaction
+			transset, ok := key.(transSet)
+			if !ok {
+				return newInternalError(Error_Setup_Invalid, "Transaction set data of wrong type")
+			}
+			dmlset, err := self.rntm.getObjectSet(transset.id)
+			if err != nil {
+				return utils.StackError(err, "Object for changed key not valid")
+			}
+			dskeys, err := dmlset.obj.keyToDS(dmlset.id, transset.key)
+			if err == nil {
+				return utils.StackError(err, "Unable to get DS keys from transaction key")
+			}
+
+			for _, dskey := range dskeys {
+				if dskey.Versioned {
+					entry, err := self.rntm.datastore.GetVersionedEntry(dskey)
+					if err != nil {
+						return utils.StackError(err, "Unable to get DS entry for transaction keys")
+					}
+					if has, _ := entry.HasUpdates(); has {
+						_, err := entry.FixStateAsVersion()
+						if err != nil {
+							return utils.StackError(err, "Unable to fix updates in transaction key")
+						}
+					}
+				}
+			}
+
+			//remove from key map
+			err = tMap.Remove(key)
+			if err != nil {
+				return utils.StackError(err, "Unable to remove key from transaction while closing")
+			}
+		}
+	}
+
+	return nil
+}
+
+func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]byte) error {
+
+	//infrm abort. We do not care about errors, aborts are not cancable
+	self.GetEvent("onAborting").Emit(id)
+
+	//iterate over all keys, and fix those that belong to the current transaction
+	tMap, err := self.GetDBMap(id, transMap)
+	if err != nil {
+		return utils.StackError(err, "Unable to access datastore of transaction")
+	}
+	keys, err := tMap.GetKeys()
+	if err != nil {
+		return err
+	}
+
+	for _, key := range keys {
+		data, err := tMap.Read(key)
+		if err != nil {
+			return err
+		}
+		keyTrans, ok := data.([32]byte)
+		if !ok {
+			return newInternalError(Error_Setup_Invalid, "Transaction data of wrong type")
+		}
+		if bytes.Equal(keyTrans[:], transIdent[:]) {
+
+			//this object/key set belongs to the currently closed transaction
+			transset, ok := key.(transSet)
+			if !ok {
+				return newInternalError(Error_Setup_Invalid, "Transaction set data of wrong type")
+			}
+			dmlset, err := self.rntm.getObjectSet(transset.id)
+			if err != nil {
+				return utils.StackError(err, "Object for changed key not valid")
+			}
+			dskeys, err := dmlset.obj.keyToDS(dmlset.id, transset.key)
+			if err == nil {
+				return utils.StackError(err, "Unable to get DS keys from transaction key")
+			}
+
+			for _, dskey := range dskeys {
+				if dskey.Versioned {
+					entry, err := self.rntm.datastore.GetVersionedEntry(dskey)
+					if err != nil {
+						return utils.StackError(err, "Unable to get DS entry for transaction keys")
+					}
+					if has, _ := entry.HasUpdates(); has {
+						err := entry.ResetHead()
+						if err != nil {
+							return utils.StackError(err, "Unable to revert updates in transaction key")
+						}
+					}
+				}
+			}
+
+			//remove from key map
+			err = tMap.Remove(key)
+			if err != nil {
+				return utils.StackError(err, "Unable to remove key from transaction while closing")
 			}
 		}
 	}

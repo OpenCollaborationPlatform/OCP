@@ -27,6 +27,8 @@ import (
  * - behaviourManagerHandler: Helper interface to manage multiple behaviour managers. This is used
  *   by the runtime to store and access all behaviourManager. behaviourManagerHandler is to behaviourManager
  *   what BehaviourHandler is to Behaviour
+ *
+ *  TODO: Ensure behaviours are not "historical", e.g. do not to change during versioning or transactioning. Maybe only allow const properties?
  */
 
 var behaviourKey []byte = []byte("__behaviours")
@@ -86,8 +88,8 @@ func (self behaviourManagerHandler) GetEventBehaviours(event string) []string {
 type Behaviour interface {
 	Object
 
-	GetBehaviourType() string             //returns the type of behaviour, e.g. "Transaction". Needed to allow multiple different structs implement single behaviour
-	HandleEvent(Identifier, string) error //Entry for any kind of behhaviour handling. Here the event that can be handled according to the relevant Manager are provided
+	GetBehaviourType() string                                        //returns the type of behaviour, e.g. "Transaction". Needed to allow multiple different structs implement single behaviour
+	HandleEvent(Identifier, Identifier, string, []interface{}) error //Entry for any kind of behhaviour handling. Here the event that can be handled according to the relevant Manager are provided
 }
 
 func NewBaseBehaviour(runtime *Runtime) (*behaviour, error) {
@@ -134,8 +136,9 @@ type BehaviourHandler interface {
 	GetBehaviour(Identifier, string) (dmlSet, error)
 
 	//Forwards event to all behaviours given in list, and returns the ones not available
-	//Identifier, eventname, behaviours to forward, recursive (true) or original object(false9
-	HandleBehaviourEvent(Identifier, string, []string, bool) ([]string, error)
+	//Identifier, source object, eventname, arguments, behaviours to forward, recursive (true) or original object(false).
+	//If recursive == true the eventname includes the full path (e.g. "MyObject.Child.event")
+	HandleBehaviourEvent(Identifier, Identifier, string, []interface{}, []string, bool) ([]string, error)
 
 	//key handlings
 	getDSKeyForBehaviour(Identifier, string) datastore.Key
@@ -232,7 +235,7 @@ func (self *behaviourHandler) GetBehaviour(id Identifier, name string) (dmlSet, 
 	return dmlSet{obj: self.GetBehaviourObject(name), id: bhvrID}, nil
 }
 
-func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, event string, behaviours []string, isrecursive bool) ([]string, error) {
+func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, source Identifier, event string, args []interface{}, behaviours []string, isrecursive bool) ([]string, error) {
 
 	result := make([]string, 0)
 	for _, behaviour := range behaviours {
@@ -247,7 +250,7 @@ func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, event string, 
 			}
 
 			//handle the event, and do no not propagate further
-			err := bhvrObj.HandleEvent(bhvrSet.id, event)
+			err := bhvrObj.HandleEvent(bhvrSet.id, source, event, args)
 			if err != nil {
 				return result, err
 			}
