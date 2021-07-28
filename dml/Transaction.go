@@ -530,7 +530,8 @@ func (self *objectTransaction) add(id Identifier) error {
 	trans, err := self.mngr.getTransaction()
 	if err != nil {
 		//seems we do not have a transaction open. Let's check if we shall open one
-		if self.GetProperty("automatic").GetValue(id).(bool) {
+		auto, _ := self.GetProperty("automatic").GetValue(id) //const, ignore error
+		if auto.(bool) {
 			err = self.mngr.Open()
 			if err == nil {
 				trans, err = self.mngr.getTransaction()
@@ -597,7 +598,8 @@ func (self *objectTransaction) add(id Identifier) error {
 			return utils.StackError(err, "Unable to fix current state as version")
 		}
 	}
-	if self.GetProperty("recursive").GetValue(id).(bool) {
+	recursive, _ := self.GetProperty("recursive").GetValue(id) //const, ignore error!
+	if recursive.(bool) {
 		err = self.recursiveFixVersionTransaction(parent)
 		if err != nil {
 			return utils.StackError(err, "Unable to fix current state as version")
@@ -803,7 +805,8 @@ func (self *objectTransaction) closeTransaction(id Identifier, transIdent [32]by
 	if updates, _ := set.obj.HasUpdates(set.id); updates {
 		set.obj.FixStateAsVersion(set.id)
 	}
-	if self.GetProperty("recursive").GetValue(id).(bool) {
+	recursive, _ := self.GetProperty("recursive").GetValue(id) //const, ignore error
+	if recursive.(bool) {
 		self.recursiveFixVersionTransaction(set)
 	}
 	return nil
@@ -857,7 +860,8 @@ func (self *objectTransaction) abortTransaction(id Identifier, transIdent [32]by
 		return err
 	}
 	set.obj.ResetHead(set.id)
-	if self.GetProperty("recursive").GetValue(id).(bool) {
+	recursive, _ := self.GetProperty("recursive").GetValue(id) //const, ignore error
+	if recursive.(bool) {
 		self.recursiveResetTransaction(set)
 	}
 	return nil
@@ -1028,7 +1032,8 @@ func (self *partialTransaction) add(id Identifier, source Identifier, key Key, p
 	trans, err := self.mngr.getTransaction()
 	if err != nil {
 		//seems we do not have a transaction open. Let's check if we shall open one
-		if self.GetProperty("automatic").GetValue(id).(bool) {
+		automatic, _ := self.GetProperty("automatic").GetValue(id) //const, ignore error
+		if automatic.(bool) {
 			err = self.mngr.Open()
 			if err == nil {
 				trans, err = self.mngr.getTransaction()
@@ -1293,7 +1298,6 @@ func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]b
 	}
 
 	for _, key := range keys {
-		fmt.Printf("\nAbort check key: %v", key)
 		data, err := tMap.Read(key)
 		if err != nil {
 			return err
@@ -1303,7 +1307,6 @@ func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]b
 			return newInternalError(Error_Setup_Invalid, "Transaction data of wrong type", "type", fmt.Sprintf("%T", data))
 		}
 		if bytes.Equal(keyTrans[:], transIdent[:]) {
-			fmt.Printf("\n Is in transaction")
 
 			//this object/key set belongs to the currently closed transaction
 			transset, ok := key.(*transSet)
@@ -1319,7 +1322,6 @@ func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]b
 				return utils.StackError(err, "Unable to get DS keys from transaction key")
 			}
 
-			fmt.Printf("\n start reset")
 			for _, dskey := range dskeys {
 				if dskey.Versioned {
 					entry, err := self.rntm.datastore.GetVersionedEntry(dskey)
@@ -1336,7 +1338,6 @@ func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]b
 			}
 
 			//remove from key map
-			fmt.Printf("\n remove")
 			err = tMap.Remove(key)
 			if err != nil {
 				return utils.StackError(err, "Unable to remove key from transaction while closing")

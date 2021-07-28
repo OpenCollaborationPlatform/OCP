@@ -23,11 +23,12 @@ type Property interface {
 	IsConst() bool
 
 	SetValue(id Identifier, value interface{}) error
-	GetValue(id Identifier) interface{}
+	GetValue(id Identifier) (interface{}, error)
 
 	//required for startup, sets the initial value
 	SetDefaultValue(value interface{}) error
 	GetDefaultValue() interface{}
+	InitializeDB(id Identifier) error
 }
 
 func NewProperty(name string, dtype DataType, default_value interface{}, constprop bool) (Property, error) {
@@ -109,6 +110,18 @@ func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
 	return self.callback.PropertyChanged(id, self.name)
 }
 
+func (self *dataProperty) InitializeDB(id Identifier) error {
+
+	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
+	if err != nil {
+		return err
+	}
+	if ok, _ := dbValue.Exists(); !ok {
+		return newInternalError(Error_Fatal, "Invalid database entry")
+	}
+	return utils.StackError(dbValue.Write(self.default_val), "Unable to write default value into datastore")
+}
+
 func (self *dataProperty) SetDefaultValue(val interface{}) error {
 
 	err := self.propertyType.MustBeTypeOf(val)
@@ -126,24 +139,24 @@ func (self *dataProperty) GetDefaultValue() interface{} {
 	return self.default_val
 }
 
-func (self *dataProperty) GetValue(id Identifier) interface{} {
+func (self *dataProperty) GetValue(id Identifier) (interface{}, error) {
 
 	dbValue, err := valueVersionedFromStore(self.rntm.datastore, id, []byte(self.name))
 	if err != nil {
-		return utils.StackError(err, "Unable to access DB for property value")
+		return nil, utils.StackError(err, "Unable to access DB for property value")
 	}
 
 	if !dbValue.IsValid() {
-		return self.default_val
+		return nil, newInternalError(Error_Setup_Invalid, "property has no valid value")
 	}
 
 	val, err := dbValue.Read()
 	if err != nil {
-		return utils.StackError(err, "Error reading database vaue for property access")
+		return nil, utils.StackError(err, "Error reading database vaue for property access")
 	}
 
 	val = UnifyDataType(val)
-	return val
+	return val, nil
 }
 
 func (self *dataProperty) getDSKey(id Identifier) datastore.Key {
@@ -172,9 +185,9 @@ func (self *constProperty) SetValue(id Identifier, val interface{}) error {
 	return newUserError(Error_Operation_Invalid, "Const property cannot set value")
 }
 
-func (self *constProperty) GetValue(id Identifier) interface{} {
+func (self *constProperty) GetValue(id Identifier) (interface{}, error) {
 
-	return self.value
+	return self.value, nil
 }
 
 func (self *constProperty) SetDefaultValue(val interface{}) error {
@@ -193,6 +206,10 @@ func (self *constProperty) GetDefaultValue() interface{} {
 	return self.value
 }
 
+func (self *constProperty) InitializeDB(id Identifier) error {
+	return nil
+}
+
 //Property handler, which defines a interface for holding and using multiple properties
 type PropertyHandler interface {
 	HasProperty(name string) bool
@@ -201,6 +218,7 @@ type PropertyHandler interface {
 	GetProperties() []string
 
 	SetupProperties(rntm *Runtime, jsobj *goja.Object, cb PropertyChangeNotifyer) error
+	InitializePropertyDB(Identifier) error
 }
 
 func NewPropertyHandler() propertyHandler {
@@ -289,7 +307,10 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 			}
 
 			//return ob object is different than POD
-			val := self.GetProperty(propname).GetValue(identifier)
+			val, err := self.GetProperty(propname).GetValue(identifier)
+			if err != nil {
+				return rntm.jsvm.ToValue(err)
+			}
 			return rntm.jsvm.ToValue(val)
 		})
 
@@ -328,5 +349,15 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 			return err
 		}
 	}
+	return nil
+}
+
+func (self *propertyHandler) InitializePropertyDB(id Identifier) error {
+
+	//we write the property default values into the db
+	for _, prop := range self.properties {
+		prop.InitializeDB(id)
+	}
+
 	return nil
 }

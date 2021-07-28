@@ -169,7 +169,8 @@ func TestTypeVariant(t *testing.T) {
 
 			dt, err := value.(dmlSet).obj.GetDataType(value.(dmlSet).id)
 			So(err, ShouldBeNil)
-			So(dt, ShouldResemble, vari.obj.GetProperty("type").GetValue(vari.id))
+			val, _ := vari.obj.GetProperty("type").GetValue(vari.id)
+			So(dt, ShouldResemble, val)
 		})
 
 		Convey("Changing the datatype to a complex one should work", func() {

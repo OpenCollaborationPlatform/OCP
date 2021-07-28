@@ -178,7 +178,8 @@ func (self *Runtime) Parse(reader io.Reader) error {
 		}
 		return main.obj.GetJSObject(main.id)
 	})
-	name := mainObj.GetProperty("name").GetValue(Identifier{}).(string) //name is a const property, hence we can access it with any identifier, even invalid ones
+	val, _ := mainObj.GetProperty("name").GetValue(Identifier{}) //name is a const property, hence we can access it with any identifier, even invalid ones (and ignore error)
+	name := val.(string)
 	self.jsvm.GlobalObject().DefineAccessorProperty(name, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 	//store the state of the parsing
@@ -439,7 +440,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 
 		if len(args) == 0 {
 			//read only
-			result = prop.GetValue(id)
+			result, err = prop.GetValue(id)
 		} else {
 			err = prop.SetValue(id, args[0])
 			result = args[0]

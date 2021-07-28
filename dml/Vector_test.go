@@ -157,9 +157,11 @@ func TestPODVector(t *testing.T) {
 
 			//emits events
 			res, id, _ := rntm.resolvePath(`toplevel.IntVec.beforeChangeKeys`)
-			So(res.(Property).GetValue(id), ShouldEqual, "0123456")
+			val, _ := res.(Property).GetValue(id)
+			So(val, ShouldEqual, "0123456")
 			res, id, _ = rntm.resolvePath(`toplevel.IntVec.changeKeys`)
-			So(res.(Property).GetValue(id), ShouldEqual, "0123456")
+			val, _ = res.(Property).GetValue(id)
+			So(val, ShouldEqual, "0123456")
 
 			Convey("moving Values within the vector shall work", func() {
 
@@ -188,9 +190,11 @@ func TestPODVector(t *testing.T) {
 
 				//emits events
 				res, id, _ := rntm.resolvePath(`toplevel.IntVec.beforeChangeKeys`)
-				So(res.(Property).GetValue(id), ShouldEqual, "5234")
+				val, _ = res.(Property).GetValue(id)
+				So(val, ShouldEqual, "5234")
 				res, id, _ = rntm.resolvePath(`toplevel.IntVec.changeKeys`)
-				So(res.(Property).GetValue(id), ShouldEqual, "2345")
+				val, _ = res.(Property).GetValue(id)
+				So(val, ShouldEqual, "2345")
 
 			})
 
@@ -219,9 +223,11 @@ func TestPODVector(t *testing.T) {
 
 				//emits events
 				res, id, _ := rntm.resolvePath(`toplevel.IntVec.beforeChangeKeys`)
-				So(res.(Property).GetValue(id), ShouldEqual, "123456")
+				val, _ = res.(Property).GetValue(id)
+				So(val, ShouldEqual, "123456")
 				res, id, _ = rntm.resolvePath(`toplevel.IntVec.changeKeys`)
-				So(res.(Property).GetValue(id), ShouldEqual, "123456")
+				val, _ = res.(Property).GetValue(id)
+				So(val, ShouldEqual, "123456")
 
 				So(vec.Remove(child.id, 6), ShouldNotBeNil)
 				So(vec.Remove(child.id, 5), ShouldBeNil)
@@ -305,9 +311,11 @@ func TestPODVector(t *testing.T) {
 
 			//emits events
 			res, id, _ := rntm.resolvePath(`toplevel.FloatVec.beforeChangeKeys`)
-			So(res.(Property).GetValue(id), ShouldEqual, "001021132")
+			val, _ = res.(Property).GetValue(id)
+			So(val, ShouldEqual, "001021132")
 			res, id, _ = rntm.resolvePath(`toplevel.FloatVec.changeKeys`)
-			So(res.(Property).GetValue(id), ShouldEqual, "010210321")
+			val, _ = res.(Property).GetValue(id)
+			So(val, ShouldEqual, "010210321")
 
 			Convey("and swapping entries is a thing", func() {
 
@@ -400,7 +408,8 @@ func TestTypeVector(t *testing.T) {
 				path := "toplevel.TypeVec.0"
 				set, err := getObjectFromPath(rntm, path)
 				So(err, ShouldBeNil)
-				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 0)
+				val, _ := set.obj.GetProperty("test").GetValue(set.id)
+				So(val, ShouldEqual, 0)
 
 				Convey("and the same path is set in the object", func() {
 
@@ -431,14 +440,15 @@ func TestTypeVector(t *testing.T) {
 				So(err, ShouldBeNil)
 				obj := entry.(dmlSet).obj.(Object)
 
-				So(obj.GetProperty("test").GetValue(entry.(dmlSet).id), ShouldEqual, 1)
+				val, _ := obj.GetProperty("test").GetValue(entry.(dmlSet).id)
+				So(val, ShouldEqual, 1)
 
 				Convey("and accessing new set value via path works", func() {
 
 					set, err := getObjectFromPath(rntm, "toplevel.TypeVec.0")
 					So(err, ShouldBeNil)
-
-					So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 1)
+					val, _ = set.obj.GetProperty("test").GetValue(set.id)
+					So(val, ShouldEqual, 1)
 				})
 			})
 

@@ -51,7 +51,7 @@ func NewDSError(reason, msg string, args ...interface{}) utils.OCPError {
 
 func wrapDSError(err error, reason string) error {
 	if err != nil {
-		return NewDSError(reason, err.Error())
+		return utils.NewError(utils.Internal, "DS", reason, err.Error())
 	}
 	return err
 }

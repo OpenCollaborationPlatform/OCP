@@ -542,12 +542,12 @@ func (self *mapImpl) SetObjectPath(id Identifier, path string) error {
 
 func (self *mapImpl) valueDataType(id Identifier) DataType {
 
-	prop := self.GetProperty("value").GetValue(Identifier{})
+	prop, _ := self.GetProperty("value").GetValue(Identifier{})
 	return prop.(DataType)
 }
 
 func (self *mapImpl) keyDataType(id Identifier) DataType {
 
-	prop := self.GetProperty("key").GetValue(Identifier{})
+	prop, _ := self.GetProperty("key").GetValue(Identifier{})
 	return prop.(DataType)
 }

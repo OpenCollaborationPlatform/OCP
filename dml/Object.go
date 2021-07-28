@@ -291,6 +291,9 @@ func (self *object) InitializeDB(id Identifier) error {
 	if err := self.InitializeEventDB(id); err != nil {
 		return err
 	}
+	if err := self.InitializePropertyDB(id); err != nil {
+		return err
+	}
 
 	//now our own DB entries
 	if err := self.SetParentIdentifier(id, Identifier{}); err != nil {

@@ -555,9 +555,11 @@ func TestTransactionFail(t *testing.T) {
 
 			store.Begin()
 			mset, _ := rntm.getMainObjectSet()
-			So(mset.obj.GetProperty("p").GetValue(mset.id), ShouldEqual, 2)
+			val, _ := mset.obj.GetProperty("p").GetValue(mset.id)
+			So(val, ShouldEqual, 2)
 			do, _ := mset.obj.(Data).GetChildByName(mset.id, "DocumentObject")
-			So(do.obj.GetProperty("p").GetValue(do.id), ShouldEqual, 2)
+			val, _ = do.obj.GetProperty("p").GetValue(do.id)
+			So(val, ShouldEqual, 2)
 			store.Rollback()
 
 			Convey("and lead to an open transaction with the relevant object included", func() {
@@ -595,9 +597,11 @@ func TestTransactionFail(t *testing.T) {
 
 				store.Begin()
 				mset, _ := rntm.getMainObjectSet()
-				So(mset.obj.GetProperty("p").GetValue(mset.id), ShouldEqual, 1)
+				val, _ := mset.obj.GetProperty("p").GetValue(mset.id)
+				So(val, ShouldEqual, 1)
 				do, _ := mset.obj.(Data).GetChildByName(mset.id, "DocumentObject")
-				So(do.obj.GetProperty("p").GetValue(do.id), ShouldEqual, 3)
+				val, _ = do.obj.GetProperty("p").GetValue(do.id)
+				So(val, ShouldEqual, 3)
 				store.Commit()
 			})
 
@@ -609,9 +613,11 @@ func TestTransactionFail(t *testing.T) {
 
 				store.Begin()
 				mset, _ := rntm.getMainObjectSet()
-				So(mset.obj.GetProperty("p").GetValue(mset.id), ShouldEqual, 1)
+				val, _ := mset.obj.GetProperty("p").GetValue(mset.id)
+				So(val, ShouldEqual, 1)
 				do, _ := mset.obj.(Data).GetChildByName(mset.id, "DocumentObject")
-				So(do.obj.GetProperty("p").GetValue(do.id), ShouldEqual, 1)
+				val, _ = do.obj.GetProperty("p").GetValue(do.id)
+				So(val, ShouldEqual, 1)
 				store.Rollback()
 
 				Convey("And transaction should have no object", func() {
@@ -643,11 +649,14 @@ func TestTransactionFail(t *testing.T) {
 				Convey("Should not have changed the data", func() {
 					store.Begin()
 					mset, _ := rntm.getMainObjectSet()
-					So(mset.obj.GetProperty("p").GetValue(mset.id), ShouldEqual, 1)
+					val, _ := mset.obj.GetProperty("p").GetValue(mset.id)
+					So(val, ShouldEqual, 1)
 					tdo, _ := mset.obj.(Data).GetChildByName(mset.id, "TransDocumentObject")
-					So(tdo.obj.GetProperty("p").GetValue(tdo.id), ShouldEqual, 1)
+					val, _ = tdo.obj.GetProperty("p").GetValue(tdo.id)
+					So(val, ShouldEqual, 1)
 					tdo, _ = mset.obj.(Data).GetChildByName(mset.id, "FailTransDocumentObject")
-					So(tdo.obj.GetProperty("p").GetValue(tdo.id), ShouldEqual, 1)
+					val, _ = tdo.obj.GetProperty("p").GetValue(tdo.id)
+					So(val, ShouldEqual, 1)
 					store.Rollback()
 				})
 
@@ -791,7 +800,7 @@ func TestTransactionAbort(t *testing.T) {
 			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 			So(mngr.IsOpen(), ShouldBeFalse)
 			set, _ := getObjectFromPath(rntm, "Document")
-			value := set.obj.GetProperty("value").GetValue(set.id)
+			value, _ := set.obj.GetProperty("value").GetValue(set.id)
 			So(value, ShouldEqual, 1)
 		})
 
@@ -806,7 +815,7 @@ func TestTransactionAbort(t *testing.T) {
 			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 			So(mngr.IsOpen(), ShouldBeFalse)
 			set, _ := getObjectFromPath(rntm, "Document.Child")
-			value := set.obj.GetProperty("value").GetValue(set.id)
+			value, _ := set.obj.GetProperty("value").GetValue(set.id)
 			So(value, ShouldEqual, 1)
 		})
 	})
@@ -882,9 +891,9 @@ func TestPartialTransaction(t *testing.T) {
 			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 			So(mngr.IsOpen(), ShouldBeTrue)
 			set, _ := getObjectFromPath(rntm, "Document")
-			value := set.obj.GetProperty("value1").GetValue(set.id)
+			value, _ := set.obj.GetProperty("value1").GetValue(set.id)
 			So(value, ShouldEqual, 5)
-			value = set.obj.GetProperty("value2").GetValue(set.id)
+			value, _ = set.obj.GetProperty("value2").GetValue(set.id)
 			So(value, ShouldEqual, 3)
 			store.Rollback()
 
@@ -899,9 +908,9 @@ func TestPartialTransaction(t *testing.T) {
 				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 				So(mngr.IsOpen(), ShouldBeFalse)
 				set, _ := getObjectFromPath(rntm, "Document")
-				value := set.obj.GetProperty("value1").GetValue(set.id)
+				value, _ := set.obj.GetProperty("value1").GetValue(set.id)
 				So(value, ShouldEqual, 5)
-				value = set.obj.GetProperty("value2").GetValue(set.id)
+				value, _ = set.obj.GetProperty("value2").GetValue(set.id)
 				So(value, ShouldEqual, 3)
 				store.Rollback()
 
@@ -926,9 +935,9 @@ func TestPartialTransaction(t *testing.T) {
 				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 				So(mngr.IsOpen(), ShouldBeFalse)
 				set, _ := getObjectFromPath(rntm, "Document")
-				value := set.obj.GetProperty("value1").GetValue(set.id)
+				value, _ := set.obj.GetProperty("value1").GetValue(set.id)
 				So(value, ShouldEqual, 1)
-				value = set.obj.GetProperty("value2").GetValue(set.id)
+				value, _ = set.obj.GetProperty("value2").GetValue(set.id)
 				So(value, ShouldEqual, 1)
 				store.Rollback()
 

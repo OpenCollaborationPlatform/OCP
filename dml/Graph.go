@@ -857,13 +857,13 @@ func (self *graph) GetSubobjects(id Identifier) ([]dmlSet, error) {
 
 func (self *graph) nodeDataType() DataType {
 
-	prop := self.GetProperty("node").GetValue(Identifier{})
+	prop, _ := self.GetProperty("node").GetValue(Identifier{})
 	return prop.(DataType)
 }
 
 func (self *graph) edgeDataType() DataType {
 
-	prop := self.GetProperty("edge").GetValue(Identifier{})
+	prop, _ := self.GetProperty("edge").GetValue(Identifier{})
 	return prop.(DataType)
 }
 

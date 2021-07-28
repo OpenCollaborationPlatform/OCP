@@ -55,7 +55,8 @@ func TestTypeProperty(t *testing.T) {
 			main, err := rntm.getMainObjectSet()
 			So(err, ShouldBeNil)
 			So(main.obj.HasProperty("test"), ShouldBeTrue)
-			val := main.obj.GetProperty("test").GetValue(main.id)
+			val, err := main.obj.GetProperty("test").GetValue(main.id)
+			So(err, ShouldBeNil)
 			dt, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
 			store.Rollback()
@@ -190,6 +191,7 @@ func TestRawProperty(t *testing.T) {
 		Convey("The default value must be undefined Cid", func() {
 
 			res, err := rntm.Call(store, "", "toplevel.rawProp")
+			utils.PrintWithStacktrace(err)
 			So(err, ShouldBeNil)
 			id, ok := res.(utils.Cid)
 			So(ok, ShouldBeTrue)

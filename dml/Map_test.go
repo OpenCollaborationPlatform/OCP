@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/OpenCollaborationPlatform/OCP/utils"
+
 	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 
 	. "github.com/smartystreets/goconvey/convey"
@@ -81,6 +83,7 @@ func TestPODMap(t *testing.T) {
 		err = rntm.Parse(strings.NewReader(dmlcode))
 		So(err, ShouldBeNil)
 		err = rntm.InitializeDatastore(store)
+		utils.PrintWithStacktrace(err)
 		So(err, ShouldBeNil)
 
 		Convey("Adding to IntInt map should work", func() {
@@ -319,7 +322,9 @@ func TestComplexTypeMap(t *testing.T) {
 				path := "toplevel.TypeMap.test"
 				set, err := getObjectFromPath(rntm, path)
 				So(err, ShouldBeNil)
-				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 0)
+				val, err := set.obj.GetProperty("test").GetValue(set.id)
+				So(err, ShouldBeNil)
+				So(val, ShouldEqual, 0)
 
 				Convey("and the same path is set in the object", func() {
 
@@ -336,7 +341,8 @@ func TestComplexTypeMap(t *testing.T) {
 
 				obj, err := getObjectFromPath(rntm, "toplevel.TypeMap.test")
 				So(err, ShouldBeNil)
-				So(obj.obj.GetProperty("created").GetValue(obj.id), ShouldEqual, obj.id.Encode())
+				val, _ := obj.obj.GetProperty("created").GetValue(obj.id)
+				So(val, ShouldEqual, obj.id.Encode())
 				store.Rollback()
 
 				code = `
@@ -370,12 +376,14 @@ func TestComplexTypeMap(t *testing.T) {
 				entry, err := vec.Get(child.id, "test")
 				So(err, ShouldBeNil)
 				set := entry.(dmlSet)
-				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 1)
+				val, _ := set.obj.GetProperty("test").GetValue(set.id)
+				So(val, ShouldEqual, 1)
 
 				entry, err = vec.Get(child.id, "test2")
 				So(err, ShouldBeNil)
 				set = entry.(dmlSet)
-				So(set.obj.GetProperty("test").GetValue(set.id), ShouldEqual, 2)
+				val, _ = set.obj.GetProperty("test").GetValue(set.id)
+				So(val, ShouldEqual, 2)
 			})
 
 			Convey("The hirarchy is set correct", func() {

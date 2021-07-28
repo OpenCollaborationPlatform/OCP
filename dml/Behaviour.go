@@ -246,7 +246,11 @@ func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, source Identif
 			}
 			bhvrObj := bhvrSet.obj.(Behaviour)
 
-			if isrecursive && !bhvrObj.GetProperty("recursive").GetValue(bhvrSet.id).(bool) {
+			val, err := bhvrObj.GetProperty("recursive").GetValue(bhvrSet.id)
+			if err != nil {
+				return nil, utils.StackError(err, "Unable to read property value", "Property", "recursive")
+			}
+			if isrecursive && !val.(bool) {
 				// we do not add the bahaviour to the result: We have the relevant behaviour, it is just
 				//not recursive. this means processing ends here
 				continue

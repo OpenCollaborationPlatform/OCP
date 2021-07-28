@@ -94,7 +94,8 @@ func TestDmlFile(t *testing.T) {
 			store.Begin()
 			set, err := rntm.getMainObjectSet()
 			So(err, ShouldBeNil)
-			value, ok = set.obj.GetProperty(`testI`).GetValue(set.id).(int64)
+			data, _ := set.obj.GetProperty(`testI`).GetValue(set.id)
+			value, ok = data.(int64)
 			store.Rollback()
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 0)
@@ -135,7 +136,8 @@ func TestDmlFile(t *testing.T) {
 			store.Begin()
 			set, err = rntm.getMainObjectSet()
 			So(err, ShouldBeNil)
-			value, ok = set.obj.GetProperty(`testI`).GetValue(set.id).(int64)
+			data, _ = set.obj.GetProperty(`testI`).GetValue(set.id)
+			value, ok = data.(int64)
 			store.Rollback()
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)
@@ -221,14 +223,19 @@ func TestDmlFile(t *testing.T) {
 
 				prop := impchild.obj.GetProperty("test")
 				So(prop, ShouldNotBeNil)
-				So(prop.GetValue(imp.id), ShouldEqual, 10)
+				val, err := prop.GetValue(impchild.id)
+				So(err, ShouldBeNil)
+				So(val, ShouldEqual, 10)
 			})
 
 			Convey("and is extended wiith custom property and child", func() {
 
 				prop := imp.obj.GetProperty("annothertest")
+				So(err, ShouldBeNil)
 				So(prop, ShouldNotBeNil)
-				So(prop.GetValue(imp.id), ShouldEqual, 4)
+				val, err := prop.GetValue(imp.id)
+				So(err, ShouldBeNil)
+				So(val, ShouldEqual, 4)
 
 				newchild, err := imp.obj.(Data).GetChildByName(imp.id, "DefaultChild")
 				So(err, ShouldBeNil)

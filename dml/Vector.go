@@ -707,7 +707,7 @@ func (self *vector) changeLength(id Identifier, amount int64) (int64, error) {
 
 func (self *vector) entryDataType(id Identifier) DataType {
 
-	prop := self.GetProperty("type").GetValue(Identifier{})
+	prop, _ := self.GetProperty("type").GetValue(Identifier{}) //const, ignore error
 	return prop.(DataType)
 }
 
