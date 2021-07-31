@@ -86,6 +86,7 @@ type Object interface {
 	GetDBMapVersioned(Identifier, []byte) (datastore.MapVersioned, error)
 	GetDBList(Identifier, []byte) (datastore.List, error)
 	GetDBListVersioned(Identifier, []byte) (datastore.ListVersioned, error)
+	EraseFromDB(Identifier) error
 
 	//initialization function
 	InitializeDB(Identifier) error
@@ -745,4 +746,32 @@ func (self *object) GetDBListVersioned(id Identifier, key []byte) (datastore.Lis
 		return datastore.ListVersioned{}, utils.StackError(err, "Unable to access or create %s in DB", string(key))
 	}
 	return *list, nil
+}
+
+func (self *object) EraseFromDB(id Identifier) error {
+
+	for _, storage := range datastore.StorageTypes {
+
+		if has, _ := self.rntm.datastore.HasSet(storage, true, id.Hash()); has {
+			dsset, err := self.rntm.datastore.GetOrCreateSet(storage, true, id.Hash())
+			if err != nil {
+				return err
+			}
+			err = dsset.Erase()
+			if err != nil {
+				return err
+			}
+		}
+		if has, _ := self.rntm.datastore.HasSet(storage, false, id.Hash()); has {
+			dsset, err := self.rntm.datastore.GetOrCreateSet(storage, false, id.Hash())
+			if err != nil {
+				return err
+			}
+			err = dsset.Erase()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -217,11 +217,20 @@ func (self *Datastore) GetDatabase(kind StorageType, versioned bool) (DataBase, 
 	return db, nil
 }
 
+func (self *Datastore) HasSet(kind StorageType, versioned bool, set [32]byte) (bool, error) {
+
+	db, err := self.GetDatabase(kind, versioned)
+	if err != nil {
+		return false, utils.StackError(err, "Unable to get database of type", "Kind", kind, "Versioned", versioned)
+	}
+	return db.HasSet(set)
+}
+
 func (self *Datastore) GetOrCreateSet(kind StorageType, versioned bool, set [32]byte) (Set, error) {
 
 	db, err := self.GetDatabase(kind, versioned)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to get database of type %v (versioned=%v)", kind, versioned)
+		return nil, utils.StackError(err, "Unable to get database of type", "Kind", kind, "Versioned", versioned)
 	}
 	return db.GetOrCreateSet(set)
 }

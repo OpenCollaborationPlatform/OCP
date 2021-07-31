@@ -341,7 +341,7 @@ func (self *List) GetValues() ([]ListValue, error) {
 //returns first value. If no existant, does not error, but returns invalid ListValue
 func (self *List) First() (ListValue, error) {
 
-	var value ListValue = &listValue{}
+	var value ListValue = nil
 	err := self.kvset.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.kvset.dbkey)
@@ -351,7 +351,9 @@ func (self *List) First() (ListValue, error) {
 
 		cursor := bucket.Cursor()
 		retKey, _ := cursor.First()
-		value = &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, retKey}}
+		if retKey != nil {
+			value = &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, retKey}}
+		}
 		return nil
 	})
 
@@ -360,7 +362,7 @@ func (self *List) First() (ListValue, error) {
 
 func (self *List) Last() (ListValue, error) {
 
-	var value ListValue
+	var value ListValue = nil
 	err := self.kvset.db.View(func(tx *bolt.Tx) error {
 
 		bucket := tx.Bucket(self.kvset.dbkey)
@@ -370,7 +372,9 @@ func (self *List) Last() (ListValue, error) {
 
 		cursor := bucket.Cursor()
 		retKey, _ := cursor.Last()
-		value = &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, retKey}}
+		if retKey != nil {
+			value = &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, retKey}}
+		}
 		return nil
 	})
 

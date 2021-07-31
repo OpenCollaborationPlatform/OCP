@@ -228,7 +228,7 @@ func (self *TransactionManager) GetJSRuntime() *goja.Runtime {
 func (self *TransactionManager) CanHandleEvent(event string) bool {
 
 	switch event {
-	case "onBeforePropertyChange", "onBeforeChange":
+	case "onBeforePropertyChange", "onBeforeChange", "onNewSubobject":
 		return true
 	}
 
@@ -442,37 +442,242 @@ func getTransactionBehaviour(set dmlSet) (transactionBehaviour, Identifier) {
 /*********************************************************************************
 								Behaviour
 *********************************************************************************/
-var inTransKey []byte = []byte("__inTransaction")
-var curTransKey []byte = []byte("__currentTransaction")
 
 type transactionBehaviour interface {
 	closeTransaction(Identifier, [32]byte) error //called when a transaction, which holds the behaviour, is closed
 	abortTransaction(Identifier, [32]byte) error //called when a transaction, which holds the behaviour, is abortet
 }
 
-//Object Transaction adds a whole object to the current transaction. This happens on every change within the object,
-//property or key, and if recursive == True also for every change of any subobject.
-type objectTransaction struct {
+//Both transaction types, object and partial, need to handle new subobjects and reverting those. Hence we abstract that in baseTransaction
+type baseTransaction struct {
 	*behaviour
-
 	mngr *TransactionManager
 }
 
-func NewObjectTransactionBehaviour(rntm *Runtime) (Object, error) {
+var subKey []byte = []byte("__transactionSubObjects")
 
-	behaviour, _ := NewBaseBehaviour(rntm)
+func newBaseTransaction(rntm *Runtime) (*baseTransaction, error) {
+	behaviour, err := NewBaseBehaviour(rntm)
+	mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 
-	//get the datastores
-	/*set, err := rntm.datastore.GetOrCreateSet(datastore.ValueType, false, behaviour.Id().Hash())
+	return &baseTransaction{behaviour, mngr}, err
+}
+
+//add a new Identifier to the transaction
+//id: the behaviour id wo which to add
+//source: the source object which gets the new subobject (could be parent, or any child of it if recursive)
+//sub: the subobject added to source
+func (self *baseTransaction) addNewSubobject(id, source, sub Identifier) error {
+
+	subMap, err := self.GetDBMap(id, subKey)
+	if err != nil {
+		return err
+	}
+
+	err = subMap.Write(sub, source)
+	if err != nil {
+		utils.StackError(err, "Unable to add new subobject to transaction")
+	}
+
+	subSet, err := self.rntm.getObjectSet(sub)
+	if err != nil {
+		return err
+	}
+	return recursiveSubFix(subSet)
+}
+
+func recursiveSubFix(set dmlSet) error {
+
+	_, err := set.obj.FixStateAsVersion(set.id)
+	if err != nil {
+		return err
+	}
+
+	if data, ok := set.obj.(Data); ok {
+		subs, err := data.GetSubobjects(set.id)
+		if err != nil {
+			return err
+		}
+		for _, sub := range subs {
+			if err = recursiveSubFix(sub); err != nil {
+				return err
+			}
+
+		}
+	}
+	return nil
+}
+
+//clears all new sub objects stored
+func (self *baseTransaction) clear(id Identifier) error {
+
+	//remove all entries from the list (simply erase, is the fastes way of doing it
+	subMap, err := self.GetDBMap(id, subKey)
+	if err != nil {
+		return err
+	}
+	subMap.Erase()
+
+	return nil
+}
+
+func recursiveSubErase(set dmlSet) error {
+
+	//delete subs first, so that we do not need to access the db after erasure
+	if data, ok := set.obj.(Data); ok {
+		subs, err := data.GetSubobjects(set.id)
+		if err != nil {
+			return err
+		}
+		for _, sub := range subs {
+			err := recursiveSubErase(sub)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return set.obj.EraseFromDB(set.id)
+}
+
+//erases all new subobjects from the datstore
+func (self *baseTransaction) eraseSubobjects(id Identifier) error {
+
+	subMap, err := self.GetDBMap(id, subKey)
+	if err != nil {
+		return err
+	}
+
+	keys, err := subMap.GetKeys()
+	if err != nil {
+		return err
+	}
+	for _, key := range keys {
+
+		sub, ok := key.(*Identifier)
+		if !ok {
+			return newInternalError(Error_Fatal, "Transaction Identifier stored in wrong format")
+		}
+
+		sset, err := self.rntm.getObjectSet(*sub)
+		if err != nil {
+			return err
+		}
+		if err := recursiveSubErase(sset); err != nil {
+			return err
+		}
+
+	}
+
+	return nil
+}
+
+func (self *baseTransaction) getNewSubobjects(id Identifier) ([]Identifier, error) {
+
+	result := make([]Identifier, 0)
+	subMap, err := self.GetDBMap(id, subKey)
 	if err != nil {
 		return nil, err
 	}
-	vset := set.(*datastore.ValueSet)
-	inTrans, _ := vset.GetOrCreateValue(transKey)
-	curTrans, _ := vset.GetOrCreateValue([]byte("__currentTransaction"))
-	*/
-	mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
-	tbhvr := &objectTransaction{behaviour, mngr}
+
+	keys, err := subMap.GetKeys()
+	if err != nil {
+		return nil, err
+	}
+	result = make([]Identifier, len(keys))
+	for i, key := range keys {
+		sub, ok := key.(*Identifier)
+		if !ok {
+			return nil, newInternalError(Error_Fatal, "Transaction data stored in wrong format")
+		}
+		result[i] = *sub
+	}
+
+	return result, nil
+}
+
+func (self *baseTransaction) eraseUnreferenced(id Identifier) error {
+
+	sourceMap := make(map[Identifier]dmlSet, 0)
+
+	subMap, err := self.GetDBMap(id, subKey)
+	if err != nil {
+		return err
+	}
+
+	keys, err := subMap.GetKeys()
+	if err != nil {
+		return err
+	}
+
+	for _, key := range keys {
+
+		sub, ok := key.(*Identifier)
+		if !ok {
+			return newInternalError(Error_Fatal, "Transaction data stored in wrong format")
+		}
+
+		data, err := subMap.Read(key)
+		if err != nil {
+			return err
+		}
+		source, ok := data.(*Identifier)
+		if !ok {
+			return newInternalError(Error_Fatal, "Transaction data stored in wrong format")
+		}
+
+		//get the source dmlSet
+		sourceSet, ok := sourceMap[*source]
+		if !ok {
+			sourceSet, err = self.rntm.getObjectSet(*source)
+			if err != nil {
+				return err
+			}
+			sourceMap[*source] = sourceSet
+		}
+
+		//check if the subobject id is within all the subobjects of source
+		if sdata, ok := sourceSet.obj.(Data); ok {
+
+			allSubs, err := sdata.GetSubobjects(sourceSet.id)
+			if err != nil {
+				return err
+			}
+			referenced := false
+			for _, allSub := range allSubs {
+				if allSub.id.Equals(*sub) {
+					referenced = true
+					break
+				}
+			}
+			if !referenced {
+				//erase that object and all its subs!
+				subSet, err := self.rntm.getObjectSet(*sub)
+				if err != nil {
+					return err
+				}
+				if err := recursiveSubErase(subSet); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}
+
+//Object Transaction adds a whole object to the current transaction. This happens on every change within the object,
+//property or key, and if recursive == True also for every change of any subobject.
+type objectTransaction struct {
+	*baseTransaction
+}
+
+var inTransKey []byte = []byte("__inTransaction")
+var curTransKey []byte = []byte("__currentTransaction")
+
+func NewObjectTransactionBehaviour(rntm *Runtime) (Object, error) {
+
+	base, _ := newBaseTransaction(rntm)
+	tbhvr := &objectTransaction{base}
 
 	//add default properties
 	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) //open transaction automatically on change
@@ -483,10 +688,10 @@ func NewObjectTransactionBehaviour(rntm *Runtime) (Object, error) {
 	tbhvr.AddMethod("DependentObjects", MustNewIdMethod(tbhvr.defaultDependentObjects, true)) //return array of objects that need also to be added to transaction
 
 	//add default events
-	tbhvr.AddEvent(NewEvent(`onParticipation`, behaviour)) //called when added to a transaction
-	tbhvr.AddEvent(NewEvent(`onClosing`, behaviour))       //called when transaction, to which the parent was added, is closed (means finished)
-	tbhvr.AddEvent(NewEvent(`onAborting`, behaviour))      //Caled when the transaction, the object is part of. is aborted (means reverted)
-	tbhvr.AddEvent(NewEvent(`onFailure`, behaviour))       //called when adding to transaction failed, e.g. because already in annother transaction
+	tbhvr.AddEvent(NewEvent(`onParticipation`, tbhvr)) //called when added to a transaction
+	tbhvr.AddEvent(NewEvent(`onClosing`, tbhvr))       //called when transaction, to which the parent was added, is closed (means finished)
+	tbhvr.AddEvent(NewEvent(`onAborting`, tbhvr))      //Caled when the transaction, the object is part of. is aborted (means reverted)
+	tbhvr.AddEvent(NewEvent(`onFailure`, tbhvr))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
 	tbhvr.AddMethod("Add", MustNewIdMethod(tbhvr.add, false))                                      //Adds the object to the current transaction
@@ -505,14 +710,19 @@ func (self *objectTransaction) HandleEvent(id Identifier, source Identifier, eve
 
 	//whenever a property or the object itself changed, we add ourself to the current transaction
 	//note that event can be a fully qualified path for recursive events
-	parts := strings.Split(event, ".")
-	switch parts[len(parts)-1] {
+	switch event {
 	case "onBeforePropertyChange", "onBeforeChange":
 		err := self.add(id)
 
 		if err != nil {
 			return err
 		}
+	case "onNewSubobject":
+		sub, ok := args[0].(Identifier)
+		if !ok {
+			return newInternalError(Error_Fatal, "newSubobjectEvent does not provide object identifier as argument")
+		}
+		self.baseTransaction.addNewSubobject(id, source, sub)
 	}
 	return nil
 }
@@ -809,7 +1019,12 @@ func (self *objectTransaction) closeTransaction(id Identifier, transIdent [32]by
 	if recursive.(bool) {
 		self.recursiveFixVersionTransaction(set)
 	}
-	return nil
+
+	//check if we reference all of the new subobjects, and delete those that we do not.
+	if err := self.baseTransaction.eraseUnreferenced(id); err != nil {
+		return err
+	}
+	return self.baseTransaction.clear(id)
 }
 
 // calls FixStateAsVersion for all childs of the provided dmlSet, and recursively for their
@@ -862,9 +1077,16 @@ func (self *objectTransaction) abortTransaction(id Identifier, transIdent [32]by
 	set.obj.ResetHead(set.id)
 	recursive, _ := self.GetProperty("recursive").GetValue(id) //const, ignore error
 	if recursive.(bool) {
-		self.recursiveResetTransaction(set)
+		if err := self.recursiveResetTransaction(set); err != nil {
+			return err
+		}
 	}
-	return nil
+
+	//check if we reference all of the new subobjects, and delete those that we do not.
+	if err := self.baseTransaction.eraseSubobjects(id); err != nil {
+		return err
+	}
+	return self.baseTransaction.clear(id)
 }
 
 // calls RevertHead for all childs of the provided dmlSet, and recursively for their

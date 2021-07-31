@@ -372,8 +372,9 @@ func TestTransactionBehaviour(t *testing.T) {
 
 			Convey("Creating a new object below a recursive transaction behaviour", func() {
 
-				_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.New(\"test\")")
+				ret, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.New(\"test\")")
 				So(err, ShouldBeNil)
+				newMapEntry := ret.(Identifier)
 
 				Convey("adds the behaviour equiped object to the transaction.", func() {
 
@@ -387,6 +388,18 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(has, ShouldBeTrue)
 				})
 
+				Convey("stores the new object for later processing", func() {
+
+					store.Begin()
+					defer store.Rollback()
+					bhvSet, _ := getObjectFromPath(rntm, "Document.Child.trans")
+					bbhvr, ok := bhvSet.obj.(*objectTransaction)
+					So(ok, ShouldBeTrue)
+					subs, err := bbhvr.getNewSubobjects(bhvSet.id)
+					So(err, ShouldBeNil)
+					So(subs, ShouldResemble, []Identifier{newMapEntry})
+				})
+
 				Convey("Creating a new transaction and changing the new subobject value", func() {
 
 					store.Begin()
@@ -395,6 +408,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.Get(\"test\").value = 5")
+					utils.PrintWithStacktrace(err)
 					So(err, ShouldBeNil)
 
 					Convey("adds the behaviour equiped object to the transaction.", func() {
@@ -407,6 +421,54 @@ func TestTransactionBehaviour(t *testing.T) {
 						So(err, ShouldBeNil)
 						has := trans.HasBehaviour(set.id)
 						So(has, ShouldBeTrue)
+					})
+				})
+
+				Convey("Aborting the transaction", func() {
+
+					code := `Transaction.Abort()`
+					_, err := rntm.RunJavaScript(store, "User1", code)
+					So(err, ShouldBeNil)
+
+					Convey("removes every database entry of the created object", func() {
+
+						store.Begin()
+						defer store.Rollback()
+
+						for _, storage := range datastore.StorageTypes {
+							has, err := rntm.datastore.HasSet(storage, false, newMapEntry.Hash())
+							So(err, ShouldBeNil)
+							So(has, ShouldBeFalse)
+
+							has, err = rntm.datastore.HasSet(storage, true, newMapEntry.Hash())
+							So(err, ShouldBeNil)
+							So(has, ShouldBeFalse)
+						}
+					})
+				})
+
+				Convey("Directly deleting the new object and closing the transaction", func() {
+
+					code := `Document.Child.ChildMap.Remove("test")
+							 Transaction.Close()`
+					_, err := rntm.RunJavaScript(store, "User1", code)
+					So(err, ShouldBeNil)
+
+					Convey("removes every database entry of it", func() {
+
+						store.Begin()
+						defer store.Rollback()
+
+						for _, storage := range datastore.StorageTypes {
+							has, err := rntm.datastore.HasSet(storage, false, newMapEntry.Hash())
+							So(err, ShouldBeNil)
+							So(has, ShouldBeFalse)
+
+							has, err = rntm.datastore.HasSet(storage, true, newMapEntry.Hash())
+							So(err, ShouldBeNil)
+							So(has, ShouldBeFalse)
+						}
+
 					})
 				})
 			})

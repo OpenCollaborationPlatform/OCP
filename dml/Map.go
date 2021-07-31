@@ -335,6 +335,7 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 		set := result.(dmlSet)
 		if data, ok := set.obj.(Data); ok {
 			data.Created(result.(dmlSet).id)
+			self.GetEvent("onNewSubobject").Emit(id, result.(dmlSet).id)
 		}
 	}
 
@@ -406,13 +407,19 @@ func (self *mapImpl) GetSubobjects(id Identifier) ([]dmlSet, error) {
 		}
 		for _, key := range keys {
 
-			id, ok := key.(*Identifier)
+			data, err := dbEntries.Read(key)
+			if err != nil {
+				return nil, err
+			}
+			id, ok := data.(*Identifier)
 			if ok {
 				set, err := self.rntm.getObjectSet(*id)
 				if err != nil {
 					return nil, err
 				}
 				res = append(res, set)
+			} else {
+				return nil, newInternalError(Error_Fatal, "Identifier stored in wrong data format")
 			}
 		}
 	}

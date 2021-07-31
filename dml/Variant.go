@@ -233,10 +233,9 @@ func (self *variant) setDefaultType(id Identifier, withEvents bool) error {
 		path += ".value"
 		set.obj.SetObjectPath(set.id, path)
 		if data, ok := set.obj.(Data); ok {
-			data.Created(id)
+			data.Created(set.id)
+			self.GetEvent("onNewSubobject").Emit(id, set.id)
 		}
-
-		set.obj.(Data).Created(set.id)
 
 	} else if dt.IsType() {
 

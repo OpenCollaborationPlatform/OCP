@@ -65,6 +65,7 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 
 	dat.AddEvent(NewEvent("onCreated", dat))
 	dat.AddEvent(NewEvent("onRemove", dat))
+	dat.AddEvent(NewEvent("onNewSubobject", dat))
 	dat.AddEvent(NewEvent("onBeforeChange", obj))
 	dat.AddEvent(NewEvent("onChanged", obj))
 
@@ -220,6 +221,7 @@ func (self *DataImpl) GetSubobjects(id Identifier) ([]dmlSet, error) {
 
 func (self *DataImpl) Created(id Identifier) error {
 
+	//call on created events
 	err := self.GetEvent("onCreated").Emit(id)
 	if err != nil {
 		return utils.StackError(err, "Unable to emit event")
@@ -240,6 +242,7 @@ func (self *DataImpl) Created(id Identifier) error {
 
 		}
 	}
+
 	return nil
 }
 

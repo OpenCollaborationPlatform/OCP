@@ -299,6 +299,7 @@ func (self *vector) appendNew(id Identifier) (interface{}, error) {
 		//call "created"
 		if data, ok := set.obj.(Data); ok {
 			data.Created(set.id)
+			self.GetEvent("onNewSubobject").Emit(id, set.id)
 		}
 	}
 

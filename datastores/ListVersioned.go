@@ -4,6 +4,7 @@ package datastore
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 
@@ -710,6 +711,54 @@ func (self *ListVersioned) GetEntries() ([]ListValue, error) {
 	}
 
 	return entries, err
+}
+
+//returns first value. If no existant, does not error, but returns invalid ListValue
+func (self *ListVersioned) First() (ListValue, error) {
+
+	var value ListValue = nil
+	err := self.kvset.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.kvset.dbkey)
+		for _, bkey := range self.kvset.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		cursor := bucket.Cursor()
+		retKey, _ := cursor.First()
+		if retKey != nil {
+			value = &listVersionedValue{ValueVersioned{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, retKey}}
+		}
+		return nil
+	})
+
+	return value, err
+}
+
+func (self *ListVersioned) Last() (ListValue, error) {
+
+	var value ListValue = nil
+	err := self.kvset.db.View(func(tx *bolt.Tx) error {
+
+		bucket := tx.Bucket(self.kvset.dbkey)
+		for _, bkey := range self.kvset.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+
+		cursor := bucket.Cursor()
+		retKey, _ := cursor.Last()
+		if retKey == nil {
+			return nil
+		}
+		//do not use any special buckets like HEAD etc.
+		for ; btoi(retKey) > (math.MaxUint64 - 20); retKey, _ = cursor.Prev() {
+		}
+
+		value = &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, retKey}}
+		return nil
+	})
+
+	return value, err
 }
 
 func (self *ListVersioned) GetCurrentVersion() (VersionID, error) {
