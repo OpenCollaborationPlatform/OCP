@@ -850,20 +850,54 @@ func (self *ValueVersionedSet) GetOrCreateValue(key []byte) (*ValueVersioned, er
 	return &ValueVersioned{self.db, self.dbkey, self.setkey, key}, nil
 }
 
-func (self *ValueVersionedSet) GetEntry(key []byte) (Entry, error) {
+func (self *ValueVersionedSet) GetEntry(key interface{}) (Entry, error) {
 
-	if !self.HasKey(key) {
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasKey(bkey) {
 		return nil, NewDSError(Error_Key_Not_Existant, "Key does not exist in set", "Key", key)
 	}
-	return self.GetOrCreateValue(key)
+	return self.GetOrCreateValue(bkey)
 }
 
-func (self *ValueVersionedSet) GetVersionedEntry(key []byte) (VersionedEntry, error) {
+func (self *ValueVersionedSet) SupportsSubentries() bool {
+	return true
+}
 
-	if !self.HasKey(key) {
+func (self *ValueVersionedSet) Erase() error {
+	return self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range self.setkey[:len(self.setkey)-1] {
+			bucket = bucket.Bucket(bkey)
+		}
+		return wrapDSError(bucket.DeleteBucket(self.setkey[len(self.setkey)-1]), Error_Bolt_Access_Failure)
+	})
+}
+
+func (self *ValueVersionedSet) GetVersionedEntry(key interface{}) (VersionedEntry, error) {
+
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasKey(bkey) {
 		return nil, NewDSError(Error_Key_Not_Existant, "Key does not exist in set", "Key", key)
 	}
-	return self.GetOrCreateValue(key)
+	return self.GetOrCreateValue(bkey)
 }
 
 func (self *ValueVersionedSet) removeKey(key []byte) error {
@@ -1077,11 +1111,11 @@ func (self *ValueVersioned) SupportsSubentries() bool {
 	return false
 }
 
-func (self *ValueVersioned) GetSubentry(interface{}) (Entry, error) {
+func (self *ValueVersioned) GetEntry(interface{}) (Entry, error) {
 	return nil, NewDSError(Error_Operation_Invalid, "ValueVersioned does not have subentries")
 }
 
-func (self *ValueVersioned) GetVersionedSubentry(interface{}) (VersionedEntry, error) {
+func (self *ValueVersioned) GetVersionedEntry(interface{}) (VersionedEntry, error) {
 	return nil, NewDSError(Error_Operation_Invalid, "ValueVersioned does not have subentries")
 }
 
@@ -1139,6 +1173,18 @@ func (self *ValueVersioned) remove() error {
 		}
 		err := bucket.Put(itob(HEAD), INVALID_VALUE)
 		return wrapDSError(err, Error_Bolt_Access_Failure)
+	})
+}
+
+func (self *ValueVersioned) Erase() error {
+
+	//Full erasure, including all versions etc. No checks done.
+	return self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range self.setkey {
+			bucket = bucket.Bucket(bkey)
+		}
+		return wrapDSError(bucket.DeleteBucket(self.key), Error_Bolt_Access_Failure)
 	})
 }
 

@@ -585,22 +585,55 @@ func (self *MapVersionedSet) GetOrCreateMap(key []byte) (*MapVersioned, error) {
 	return &mp, nil
 }
 
-func (self *MapVersionedSet) GetEntry(key []byte) (Entry, error) {
+func (self *MapVersionedSet) GetEntry(key interface{}) (Entry, error) {
 
-	if !self.HasMap(key) {
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasMap(bkey) {
 		return nil, NewDSError(Error_Key_Not_Existant, "Map does not exist in set", "Map", key)
 	}
 
-	return self.GetOrCreateMap(key)
+	return self.GetOrCreateMap(bkey)
 }
 
-func (self *MapVersionedSet) GetVersionedEntry(key []byte) (VersionedEntry, error) {
+func (self *MapVersionedSet) GetVersionedEntry(key interface{}) (VersionedEntry, error) {
 
-	if !self.HasMap(key) {
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasMap(bkey) {
 		return nil, NewDSError(Error_Key_Not_Existant, "Map does not exist in set", "Map", key)
 	}
 
-	return self.GetOrCreateMap(key)
+	return self.GetOrCreateMap(bkey)
+}
+
+func (self *MapVersionedSet) SupportsSubentries() bool {
+	return true
+}
+
+func (self *MapVersionedSet) Erase() error {
+
+	return self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		err := bucket.DeleteBucket(self.setkey)
+		return wrapDSError(err, Error_Bolt_Access_Failure)
+	})
 }
 
 /*
@@ -672,7 +705,7 @@ func (self *MapVersioned) SupportsSubentries() bool {
 	return true
 }
 
-func (self *MapVersioned) GetSubentry(key interface{}) (Entry, error) {
+func (self *MapVersioned) GetEntry(key interface{}) (Entry, error) {
 
 	k, err := getBytes(key)
 	if err != nil {
@@ -686,7 +719,7 @@ func (self *MapVersioned) GetSubentry(key interface{}) (Entry, error) {
 	return self.kvset.GetOrCreateValue(k)
 }
 
-func (self *MapVersioned) GetVersionedSubentry(key interface{}) (VersionedEntry, error) {
+func (self *MapVersioned) GetVersionedEntry(key interface{}) (VersionedEntry, error) {
 
 	k, err := getBytes(key)
 	if err != nil {
@@ -698,6 +731,10 @@ func (self *MapVersioned) GetVersionedSubentry(key interface{}) (VersionedEntry,
 	}
 
 	return self.kvset.GetOrCreateValue(k)
+}
+
+func (self *MapVersioned) Erase() error {
+	return self.kvset.Erase()
 }
 
 func (self *MapVersioned) Remove(key interface{}) error {

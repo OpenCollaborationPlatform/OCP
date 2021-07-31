@@ -62,7 +62,7 @@ type Object interface {
 	RemoveVersionsUpFrom(Identifier, datastore.VersionID) error
 
 	//VersionedData interface based on keys, and subkeys
-	BuildVersionedKey(Identifier, datastore.StorageType, []byte, []interface{}) datastore.Key
+	BuildVersionedKey(Identifier, datastore.StorageType, ...interface{}) datastore.Key
 	KeysAnyHasUpdates([]datastore.Key) (bool, error)   //true if any of the given keys has an update
 	KeysAllHaveVersions([]datastore.Key) (bool, error) //true if all of the given keys have updates
 	KeysResetHead([]datastore.Key) error
@@ -77,8 +77,7 @@ type Object interface {
 	GetByKey(Identifier, Key) (interface{}, error)    //Returns whatever the key represents in the Dataobject
 	HasKey(Identifier, Key) (bool, error)             //Returns true if the provided key exists
 	GetKeys(Identifier) ([]Key, error)                //returns all available keys
-	keyRemoved(Identifier, Key) error                 //internal: Called whenever a key gets removed by external code
-	keyToDS(Identifier, Key) ([]datastore.Key, error) //internal: Translates a object key to its coresponding datastore keys.
+	keyToDS(Identifier, Key) ([]datastore.Key, error) //internal: Translates a object key to its coresponding datastore keys for the entries within the object
 
 	//helpers method for getting database access
 	GetDBValue(Identifier, []byte) (datastore.Value, error)
@@ -355,11 +354,6 @@ func (self *object) GetKeys(id Identifier) ([]Key, error) {
 	return result, nil
 }
 
-func (self *object) keyRemoved(id Identifier, key Key) error {
-	//Properties cannot be removed: fail!
-	return newInternalError(Error_Operation_Invalid, "object property cannot be removed", "Key", key)
-}
-
 func (self *object) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
 
 	if !self.HasProperty(key.AsString()) {
@@ -460,12 +454,9 @@ func (self *object) RemoveVersionsUpFrom(id Identifier, vId datastore.VersionID)
 	return utils.StackError(mngr.RemoveVersionsUpFrom(vId), "Unable to remove versions in DB")
 }
 
-func (self *object) BuildVersionedKey(id Identifier, storage datastore.StorageType, key []byte, subentries []interface{}) datastore.Key {
+func (self *object) BuildVersionedKey(id Identifier, storage datastore.StorageType, entries ...interface{}) datastore.Key {
 
-	if subentries == nil {
-		subentries = make([]interface{}, 0)
-	}
-	return datastore.NewKey(storage, true, id.Hash(), key, subentries...)
+	return datastore.NewKey(storage, true, id.Hash(), entries...)
 }
 
 func (self *object) KeysAnyHasUpdates(keys []datastore.Key) (bool, error) {

@@ -17,7 +17,7 @@
  *            must be added at the beginning, bevor versioning, as they are not part
  *            of the versioning process. Versioning happens inside the set, e.g.
  *            for a ValueVersionedType set the individual valueVersioneds are versioned.
- * Entry: 	  A data entry within a set. It is accessed via a key in a Set, and can be
+ * Entry: 	  A data entry within a database. It is accessed via a key in a Set, and can be
  *			  almost anything dependend in type of database. E.g for a ValueType Set a entry
  * 			  is just a single value. For a MapType a entry is a Map. Entries are recursive,
  * 			  that means an entry can hold other entries also accessbile by key. This goes
@@ -65,7 +65,7 @@ const Error_Setup_Incorrectly = "setup_incorectly"
 const Error_Transaction_Invalid = "transaction_invalid"
 const Error_Datastore_invalid = "datastore_invalid"
 
-//Describes a
+//Describes a Database of any kind, parent of sets of a storage type
 type DataBase interface {
 	Close()
 	HasSet(set [32]byte) (bool, error)
@@ -73,31 +73,34 @@ type DataBase interface {
 	RemoveSet(set [32]byte) error
 }
 
-//Describes a single set in a store and allows to access it
-type Set interface {
-	GetType() StorageType
-	IsValid() bool
-	Print(params ...int)
-	GetEntry([]byte) (Entry, error)
-}
-
-type VersionedSet interface {
-	VersionedData
-	Set
-
-	GetVersionedEntry([]byte) (VersionedEntry, error)
-}
-
 type Entry interface {
 	SupportsSubentries() bool
-	GetSubentry(interface{}) (Entry, error)
+	GetEntry(interface{}) (Entry, error)
+	Erase() error //Erases completely, 100%, including all version information if available. No checks done. Use carfully
 }
 
 type VersionedEntry interface {
 	VersionedData
 	Entry
 
-	GetVersionedSubentry(interface{}) (VersionedEntry, error)
+	GetVersionedEntry(interface{}) (VersionedEntry, error)
+}
+
+//Set: Describes a single set in a store and allows to access it
+type baseSet interface {
+	GetType() StorageType
+	IsValid() bool
+	Print(params ...int)
+}
+
+type Set interface {
+	Entry
+	baseSet
+}
+
+type VersionedSet interface {
+	VersionedEntry
+	baseSet
 }
 
 type StorageType uint64
@@ -110,16 +113,15 @@ const (
 
 var StorageTypes = []StorageType{ValueType, MapType, ListType}
 
-func NewKey(stype StorageType, versioned bool, set [32]byte, entry []byte, subentries ...interface{}) Key {
-	return Key{stype, versioned, set, entry, subentries}
+func NewKey(stype StorageType, versioned bool, set [32]byte, entries ...interface{}) Key {
+	return Key{stype, versioned, set, entries}
 }
 
 type Key struct {
-	Type       StorageType
-	Versioned  bool
-	Set        [32]byte
-	Entry      []byte
-	Subentries []interface{}
+	Type      StorageType
+	Versioned bool
+	Set       [32]byte
+	Entries   []interface{}
 }
 
 func NewDatastore(path string) (*Datastore, error) {
@@ -247,18 +249,22 @@ func (self *Datastore) GetEntry(key Key) (Entry, error) {
 		return nil, utils.StackError(err, "Unable to access set in DB, even though it should exist", "Type", key.Type, "Set", key.Set)
 	}
 
+	if len(key.Entries) < 1 {
+		return nil, NewDSError(Error_Operation_Invalid, "No entries into set specified")
+	}
+
 	//get set entry
-	entry, err := set.GetEntry(key.Entry)
+	entry, err := set.GetEntry(key.Entries[0])
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to access entry in set", "Type", key.Type, "Set", key.Set, "Entry", key.Entry)
+		return nil, utils.StackError(err, "Unable to access entry in set", "Type", key.Type, "Set", key.Set, "Entry", key.Entries[0])
 	}
 
 	//get subentries if available
-	if len(key.Subentries) > 0 && !entry.SupportsSubentries() {
+	if len(key.Entries) > 1 && !entry.SupportsSubentries() {
 		return nil, NewDSError(Error_Operation_Invalid, "Key specifies subentries, but entry doe not support those")
 	}
-	for _, v := range key.Subentries {
-		entry, err = entry.GetSubentry(v)
+	for _, v := range key.Entries[1:] {
+		entry, err = entry.GetEntry(v)
 		if err != nil {
 			return nil, utils.StackError(err, "Unable to access subentry", "Type", "Entry", v)
 		}

@@ -608,22 +608,55 @@ func (self *ListVersionedSet) GetOrCreateList(key []byte) (*ListVersioned, error
 	return &list, nil
 }
 
-func (self *ListVersionedSet) GetEntry(key []byte) (Entry, error) {
+func (self *ListVersionedSet) GetEntry(key interface{}) (Entry, error) {
 
-	if !self.HasList(key) {
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasList(bkey) {
 		return nil, NewDSError(Error_Key_Not_Existant, "Set does not have list", "List", key)
 	}
 
-	return self.GetOrCreateList(key)
+	return self.GetOrCreateList(bkey)
 }
 
-func (self *ListVersionedSet) GetVersionedEntry(key []byte) (VersionedEntry, error) {
+func (self *ListVersionedSet) GetVersionedEntry(key interface{}) (VersionedEntry, error) {
 
-	if !self.HasList(key) {
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasList(bkey) {
 		return nil, NewDSError(Error_Key_Not_Existant, "Set does not have list", "List", key)
 	}
 
-	return self.GetOrCreateList(key)
+	return self.GetOrCreateList(bkey)
+}
+
+func (self *ListVersionedSet) SupportsSubentries() bool {
+	return true
+}
+
+func (self *ListVersionedSet) Erase() error {
+
+	return self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		err := bucket.DeleteBucket(self.setkey)
+		return wrapDSError(err, Error_Bolt_Access_Failure)
+	})
 }
 
 /*
@@ -728,11 +761,7 @@ func (self *ListVersioned) HasReference(ref uint64) bool {
 	return self.kvset.HasKey(itob(ref))
 }
 
-func (self *ListVersioned) SupportsSubentries() bool {
-	return true
-}
-
-func (self *ListVersioned) GetSubentry(key interface{}) (Entry, error) {
+func (self *ListVersioned) GetEntry(key interface{}) (Entry, error) {
 
 	var id uint64
 	switch k := key.(type) {
@@ -767,7 +796,7 @@ func (self *ListVersioned) GetSubentry(key interface{}) (Entry, error) {
 	return &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, itob(id)}}, nil
 }
 
-func (self *ListVersioned) GetVersionedSubentry(key interface{}) (VersionedEntry, error) {
+func (self *ListVersioned) GetVersionedEntry(key interface{}) (VersionedEntry, error) {
 
 	var id uint64
 	switch k := key.(type) {
@@ -800,6 +829,14 @@ func (self *ListVersioned) GetVersionedSubentry(key interface{}) (VersionedEntry
 	}
 
 	return &listVersionedValue{ValueVersioned{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, itob(id)}}, nil
+}
+
+func (self *ListVersioned) SupportsSubentries() bool {
+	return true
+}
+
+func (self *ListVersioned) Erase() error {
+	return self.kvset.Erase()
 }
 
 /*
@@ -887,16 +924,20 @@ func (self *listVersionedValue) Next() (ListValue, error) {
 	return value, err
 }
 
+func (self *listVersionedValue) GetEntry(interface{}) (Entry, error) {
+	return nil, NewDSError(Error_Operation_Invalid, "ListValue does not support subentries")
+}
+
+func (self *listVersionedValue) GetVersionedEntry(interface{}) (VersionedEntry, error) {
+	return nil, NewDSError(Error_Operation_Invalid, "ListValue does not support subentries")
+}
+
 func (self *listVersionedValue) SupportsSubentries() bool {
 	return false
 }
 
-func (self *listVersionedValue) GetSubentry(interface{}) (Entry, error) {
-	return nil, NewDSError(Error_Operation_Invalid, "ListValue does not support subentries")
-}
-
-func (self *listVersionedValue) GetVersionedSubentry(interface{}) (VersionedEntry, error) {
-	return nil, NewDSError(Error_Operation_Invalid, "ListValue does not support subentries")
+func (self *listVersionedValue) Erase() error {
+	return self.value.Erase()
 }
 
 func (self *listVersionedValue) HasUpdates() (bool, error) {

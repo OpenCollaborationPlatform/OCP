@@ -119,7 +119,10 @@ func (self *dataProperty) InitializeDB(id Identifier) error {
 	if ok, _ := dbValue.Exists(); !ok {
 		return newInternalError(Error_Fatal, "Invalid database entry")
 	}
-	return utils.StackError(dbValue.Write(self.default_val), "Unable to write default value into datastore")
+	if err := dbValue.Write(self.default_val); err != nil {
+		return utils.StackError(err, "Unable to write default value into datastore")
+	}
+	return nil
 }
 
 func (self *dataProperty) SetDefaultValue(val interface{}) error {

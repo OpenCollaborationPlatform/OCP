@@ -168,6 +168,38 @@ func (self *ListSet) collectLists() []List {
 	return lists
 }
 
+func (self *ListSet) GetEntry(key interface{}) (Entry, error) {
+
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasList(bkey) {
+		return nil, NewDSError(Error_Key_Not_Existant, "Set does not have list", "List", key)
+	}
+
+	return self.GetOrCreateList(bkey)
+}
+
+func (self *ListSet) SupportsSubentries() bool {
+	return true
+}
+
+func (self *ListSet) Erase() error {
+
+	return self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		err := bucket.DeleteBucket(self.setkey)
+		return wrapDSError(err, Error_Bolt_Access_Failure)
+	})
+}
+
 /*
  * List functions
  * ********************************************************************************
@@ -226,15 +258,6 @@ func (self *ListSet) GetOrCreateList(key []byte) (*List, error) {
 
 	mp := newList(self.db, self.dbkey, [][]byte{self.setkey, key})
 	return &mp, nil
-}
-
-func (self *ListSet) GetEntry(key []byte) (Entry, error) {
-
-	if !self.HasList(key) {
-		return nil, NewDSError(Error_Key_Not_Existant, "Set does not have list", "List", key)
-	}
-
-	return self.GetOrCreateList(key)
 }
 
 /*
@@ -379,7 +402,7 @@ func (self *List) SupportsSubentries() bool {
 	return true
 }
 
-func (self *List) GetSubentry(key interface{}) (Entry, error) {
+func (self *List) GetEntry(key interface{}) (Entry, error) {
 
 	var id uint64
 	switch k := key.(type) {
@@ -412,6 +435,10 @@ func (self *List) GetSubentry(key interface{}) (Entry, error) {
 	}
 
 	return &listValue{Value{self.kvset.db, self.kvset.dbkey, self.kvset.setkey, itob(id)}}, nil
+}
+
+func (self *List) Erase() error {
+	return self.kvset.Erase()
 }
 
 /*
@@ -513,6 +540,10 @@ func (self *listValue) Next() (ListValue, error) {
 func (self *listValue) SupportsSubentries() bool {
 	return false
 }
-func (self *listValue) GetSubentry(interface{}) (Entry, error) {
+func (self *listValue) GetEntry(interface{}) (Entry, error) {
 	return nil, NewDSError(Error_Operation_Invalid, "ListValue does not support subentries")
+}
+
+func (self *listValue) Erase() error {
+	return self.value.Erase()
 }

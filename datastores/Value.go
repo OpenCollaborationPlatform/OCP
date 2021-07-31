@@ -178,12 +178,37 @@ func (self *ValueSet) Print(params ...int) {
 	})
 }
 
-func (self *ValueSet) GetEntry(key []byte) (Entry, error) {
+func (self *ValueSet) GetEntry(key interface{}) (Entry, error) {
 
-	if !self.HasKey(key) {
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasKey(bkey) {
 		return nil, NewDSError(Error_Key_Not_Existant, "Key does not exist in set", "Key", key)
 	}
-	return self.GetOrCreateValue(key)
+	return self.GetOrCreateValue(bkey)
+}
+
+func (self *ValueSet) SupportsSubentries() bool {
+	return true
+}
+
+func (self *ValueSet) Erase() error {
+
+	return self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		for _, bkey := range self.setkey[:len(self.setkey)-1] {
+			bucket = bucket.Bucket(bkey)
+		}
+		return wrapDSError(bucket.DeleteBucket(self.setkey[len(self.setkey)-1]), Error_Bolt_Access_Failure)
+	})
 }
 
 /*
@@ -396,7 +421,7 @@ func (self *Value) Exists() (bool, error) {
 func (self *Value) SupportsSubentries() bool {
 	return false
 }
-func (self *Value) GetSubentry(interface{}) (Entry, error) {
+func (self *Value) GetEntry(interface{}) (Entry, error) {
 	return nil, NewDSError(Error_Operation_Invalid, "Value does not have subentries")
 }
 
@@ -411,6 +436,11 @@ func (self *Value) remove() error {
 		err := bucket.Delete(self.key)
 		return wrapDSError(err, Error_Bolt_Access_Failure)
 	})
+}
+
+func (self *Value) Erase() error {
+	//same as remove
+	return self.remove()
 }
 
 //helper functions

@@ -217,13 +217,35 @@ func (self *MapSet) GetOrCreateMap(key []byte) (*Map, error) {
 	return &mp, nil
 }
 
-func (self *MapSet) GetEntry(key []byte) (Entry, error) {
+func (self *MapSet) GetEntry(key interface{}) (Entry, error) {
 
-	if !self.HasMap(key) {
+	var bkey []byte
+	switch t := key.(type) {
+	case []byte:
+		bkey = t
+	case string:
+		bkey = []byte(t)
+	default:
+		return nil, NewDSError(Error_Operation_Invalid, "Provided key must be byte or string")
+	}
+
+	if !self.HasMap(bkey) {
 		return nil, NewDSError(Error_Key_Not_Existant, "Map does not exist in Set", "Map", key)
 	}
 
-	return self.GetOrCreateMap(key)
+	return self.GetOrCreateMap(bkey)
+}
+
+func (self *MapSet) SupportsSubentries() bool {
+	return true
+}
+func (self *MapSet) Erase() error {
+
+	return self.db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket(self.dbkey)
+		err := bucket.DeleteBucket(self.setkey)
+		return wrapDSError(err, Error_Bolt_Access_Failure)
+	})
 }
 
 /*
@@ -323,7 +345,7 @@ func (self *Map) SupportsSubentries() bool {
 	return true
 }
 
-func (self *Map) GetSubentry(key interface{}) (Entry, error) {
+func (self *Map) GetEntry(key interface{}) (Entry, error) {
 
 	k, err := getBytes(key)
 	if err != nil {
@@ -335,6 +357,10 @@ func (self *Map) GetSubentry(key interface{}) (Entry, error) {
 	}
 
 	return self.kvset.GetOrCreateValue(k)
+}
+
+func (self *Map) Erase() error {
+	return self.kvset.Erase()
 }
 
 func (self *Map) getMapKey() []byte {

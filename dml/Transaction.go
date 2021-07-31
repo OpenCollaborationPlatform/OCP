@@ -1101,18 +1101,21 @@ func (self *partialTransaction) add(id Identifier, source Identifier, key Key, p
 	if err != nil {
 		return err
 	}
-	dskeys, err := dmlset.obj.keyToDS(source, key)
-	if err != nil {
-		return utils.StackError(err, "Unable to access key in source object of transaction")
-	}
-	for _, dskey := range dskeys {
-		if dskey.Versioned {
-			ventry, err := self.rntm.datastore.GetVersionedEntry(dskey)
-			if err != nil {
-				return utils.StackError(err, "Unable to access versioned entry based on ds key")
-			}
-			if upd, _ := ventry.HasUpdates(); upd {
-				ventry.FixStateAsVersion()
+	//note that it could happen, that the key is not available (e.g. a map with not yet created entry)
+	if has, _ := dmlset.obj.HasKey(source, key); has {
+		dskeys, err := dmlset.obj.keyToDS(source, key)
+		if err != nil {
+			return utils.StackError(err, "Unable to access key in source object of transaction")
+		}
+		for _, dskey := range dskeys {
+			if dskey.Versioned {
+				ventry, err := self.rntm.datastore.GetVersionedEntry(dskey)
+				if err != nil {
+					return utils.StackError(err, "Unable to access versioned entry based on ds key")
+				}
+				if upd, _ := ventry.HasUpdates(); upd {
+					ventry.FixStateAsVersion()
+				}
 			}
 		}
 	}
@@ -1206,7 +1209,7 @@ func (self *partialTransaction) transactionKeys(id Identifier) ([]string, error)
 			}
 			key := ""
 			if len(sourcepath) != len(parentpath) {
-				key = sourcepath[len(parentpath):] + "."
+				key = sourcepath[len(parentpath)+1:] + "."
 			}
 			result = append(result, key+transset.Key.AsString())
 		}
@@ -1321,18 +1324,58 @@ func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]b
 			if err != nil {
 				return utils.StackError(err, "Unable to get DS keys from transaction key")
 			}
+			if len(dskeys) == 0 {
+				return newInternalError(Error_Setup_Invalid, "User key does not correspond to any ds keys")
+			}
 
-			for _, dskey := range dskeys {
-				if dskey.Versioned {
+			//we need to check, if the key can be reset, or if we should delete him. For that the logic is as following:
+			// - all DS keys that are used for the dml key are assumed to be either new or already versioned, no mixture
+			// - Hence if any DS key is unversioned, it is assumed the dml key is unversioned, and vice very
+			// - If unversioned, it gets removed instead of reset
+			// - It is aso assumed that all ds keys are either versioned or unversioned
+			var reset bool = false
+			if dskeys[0].Versioned {
+				entry, err := self.rntm.datastore.GetVersionedEntry(dskeys[0])
+				if err != nil {
+					return utils.StackError(err, "Unable to get DS entry for transaction keys")
+				}
+				reset, err = entry.HasVersions()
+				if err != nil {
+					return utils.StackError(err, "Unable to inquery version state for transaction key")
+				}
+			}
+
+			if reset {
+				for _, dskey := range dskeys {
+					if !dskey.Versioned {
+						return newInternalError(Error_Setup_Invalid, "Transaction tries to reset unversioned key, something went wrong!")
+					}
 					entry, err := self.rntm.datastore.GetVersionedEntry(dskey)
 					if err != nil {
 						return utils.StackError(err, "Unable to get DS entry for transaction keys")
 					}
-					if has, _ := entry.HasUpdates(); has {
+
+					if upd, _ := entry.HasUpdates(); upd {
 						err := entry.ResetHead()
 						if err != nil {
 							return utils.StackError(err, "Unable to revert updates in transaction key")
 						}
+					}
+				}
+			} else {
+				//check if key corresponds to an object
+				/*rep, err := dmlset.obj.GetByKey(dmlset.id, transset.Key)
+				if err != nil {
+					return utils.StackError(err, "Unable to access key in object")
+				}*/
+				for _, dskey := range dskeys {
+					entry, err := self.rntm.datastore.GetEntry(dskey)
+					if err != nil {
+						return utils.StackError(err, "Unable to get DS entry for transaction keys")
+					}
+					err = entry.Erase()
+					if err != nil {
+						return utils.StackError(err, "Unable to erase datastore entry")
 					}
 				}
 			}

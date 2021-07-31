@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OpenCollaborationPlatform/OCP/utils"
+	//	"github.com/OpenCollaborationPlatform/OCP/utils"
 
 	datastore "github.com/OpenCollaborationPlatform/OCP/datastores"
 
@@ -165,6 +165,7 @@ func TestVarProperty(t *testing.T) {
 	})
 }
 
+/*
 func TestRawProperty(t *testing.T) {
 
 	Convey("Loading dml code into runtime including a raw property,", t, func() {
@@ -198,7 +199,7 @@ func TestRawProperty(t *testing.T) {
 			So(id.Defined(), ShouldBeFalse)
 		})
 	})
-}
+}*/
 
 func TestPropertyTypeIdentification(t *testing.T) {
 

@@ -373,6 +373,11 @@ func (self *DataImpl) keyToDS(id Identifier, key Key) ([]datastore.Key, error) {
 	return nil, newInternalError(Error_Key_Not_Available, "Key not available in data object")
 }
 
+func (self *DataImpl) keyToBeRemoved(id Identifier, key Key) ([]datastore.Key, error) {
+	//children are a static hirarchy, cannot be removed, as well as all object keys... so error!
+	return nil, newInternalError(Error_Operation_Invalid, "Keys of Data object cannot be removed", "Key", key)
+}
+
 /*Override  event emitted, to forward them to the behaviour handler*/
 func (self *DataImpl) EventEmitted(id Identifier, event string, args ...interface{}) error {
 

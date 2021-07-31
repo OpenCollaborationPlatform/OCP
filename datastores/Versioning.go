@@ -56,6 +56,7 @@ type VersionedData interface {
 type VersionManager interface {
 	VersionedData
 	GetDatabaseSet(sType StorageType) (Set, error)
+	Erase() error
 }
 
 func NewVersionManager(key [32]byte, ds *Datastore) (VersionManagerImp, error) {
@@ -448,4 +449,16 @@ func (self *VersionManagerImp) RemoveVersionsUpFrom(ID VersionID) error {
 	})
 
 	return err
+}
+
+func (self *VersionManagerImp) Erase() error {
+
+	sets := self.collectSets()
+	for _, set := range sets {
+		err := set.Erase()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

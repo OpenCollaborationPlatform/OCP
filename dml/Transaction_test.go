@@ -848,17 +848,6 @@ func TestPartialTransaction(t *testing.T) {
 						.value: int
 					}
 
-					Data {
-						.name: "Child"
-
-						property int value: 1
-
-						function test() {
-							this.p = 10
-							this.parent.p = 10
-						}
-					}
-
 					PartialTransaction {
 
 						.name: "trans"
@@ -883,7 +872,6 @@ func TestPartialTransaction(t *testing.T) {
 					 Document.trans.CurrentTransactionKeys()`
 
 			keys, err := rntm.RunJavaScript(store, "User1", code)
-			utils.PrintWithStacktrace(err)
 			So(err, ShouldBeNil)
 			So(keys, ShouldResemble, []string{"value1", "value2"})
 
@@ -901,7 +889,6 @@ func TestPartialTransaction(t *testing.T) {
 
 				code := `Transaction.Close()`
 				_, err = rntm.RunJavaScript(store, "User1", code)
-				utils.PrintWithStacktrace(err)
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -919,7 +906,6 @@ func TestPartialTransaction(t *testing.T) {
 					code := `Transaction.Open()
 							 Document.trans.CurrentTransactionKeys()`
 					keys, err = rntm.RunJavaScript(store, "User1", code)
-					utils.PrintWithStacktrace(err)
 					So(err, ShouldBeNil)
 					So(keys, ShouldResemble, []string{})
 				})
@@ -944,12 +930,62 @@ func TestPartialTransaction(t *testing.T) {
 				Convey("And removes the keys correctly", func() {
 
 					code := `Transaction.Open()
-							Document.trans.CurrentTransactionKeys()`
+							 Document.trans.CurrentTransactionKeys()`
 					keys, err = rntm.RunJavaScript(store, "User1", code)
 					utils.PrintWithStacktrace(err)
 					So(err, ShouldBeNil)
 					So(keys, ShouldResemble, []string{})
 				})
+			})
+
+			Convey("Editing other keys by different user works", func() {
+
+				code := `Document.value3 = 7
+					 	 Document.trans.CurrentTransactionKeys()`
+
+				keys, err = rntm.RunJavaScript(store, "User2", code)
+				So(err, ShouldBeNil)
+				So(keys, ShouldResemble, []string{"value3"})
+
+				Convey("and closing the first users transaction does not influence the second", func() {
+
+					code := `Transaction.Close()`
+					_, err = rntm.RunJavaScript(store, "User1", code)
+					So(err, ShouldBeNil)
+
+					code = `Document.trans.CurrentTransactionKeys()`
+					keys, err = rntm.RunJavaScript(store, "User2", code)
+					So(err, ShouldBeNil)
+					So(keys, ShouldResemble, []string{"value3"})
+				})
+			})
+
+			Convey("Editing same key by different user fails", func() {
+
+				code := `Document.value1 = 2`
+
+				_, err = rntm.RunJavaScript(store, "User2", code)
+				So(err, ShouldNotBeNil)
+			})
+		})
+
+		Convey("Editing the child object map is also supported", func() {
+
+			code := `Document.Child.Set(1,1)
+					 Document.Child.Set(2,2)
+					 Document.trans.CurrentTransactionKeys()`
+
+			keys, err := rntm.RunJavaScript(store, "User1", code)
+			utils.PrintWithStacktrace(err)
+			So(err, ShouldBeNil)
+			So(keys, ShouldResemble, []string{"Child.1", "Child.2"})
+
+			Convey("As well as aborting the changes", func() {
+
+				code := `Transaction.Abort()`
+				_, err := rntm.RunJavaScript(store, "User1", code)
+				utils.PrintWithStacktrace(err)
+				So(err, ShouldBeNil)
 			})
 		})
 
