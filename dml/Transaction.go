@@ -1355,22 +1355,6 @@ func (self *partialTransaction) add(id Identifier, source Identifier, key Key, p
 	return nil
 }
 
-/*
-func (self *partialTransaction) setInTransaction(id Identifier, trans *transaction, add bool) error {
-
-	list, err := self.GetDBList(id,transList)
-	if err != nil {
-		return utils.StackError(err, "Unable to read transaction list from DB")
-	}
-
-	if in {
-		list.Add(trans.identification)
-	} else {
-		list.GetSubentry()
-	}
-	return utils.StackError(inTransaction.Write(value), "Unable to write transaction status")
-}*/
-
 func (self *partialTransaction) InitializeDB(id Identifier) error {
 
 	err := self.object.InitializeDB(id)

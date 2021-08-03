@@ -69,7 +69,7 @@ func (self Cid) UnmarshalBinary(data []byte) error {
 	}
 	casted, err := cid.Cast(data)
 	if err != nil {
-		return err
+		return StackError(err, "Unable to decode p2p cid")
 	}
 	self.data = casted
 	return nil

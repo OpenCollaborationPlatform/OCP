@@ -468,6 +468,11 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 		return nil, err
 	}
 
+	//check if the return value is a object, which we do not do
+	if set, ok := result.(dmlSet); ok {
+		result = set.id
+	}
+
 	//postprocess correctly
 	return result, self.postprocess(constant)
 }

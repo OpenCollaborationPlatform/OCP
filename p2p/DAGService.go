@@ -57,6 +57,10 @@ func (self *OwnerAwareBlockService) Close() error {
 // GetBlock gets the requested block.
 func (self *OwnerAwareBlockService) GetBlock(ctx context.Context, c cid.Cid) (blocks.Block, error) {
 
+	if !c.Defined() {
+		return nil, newInternalError(Error_Invalid_Data, "Blockservice received undefined cid for retrievel")
+	}
+
 	//we simply add ourself as owner. If already in nothing happens, if not good.
 	//this should be the fastest way of doing it
 	//This is needed now so that the routing service knows where to look
@@ -90,6 +94,7 @@ func (self *OwnerAwareBlockService) GetBlocks(ctx context.Context, ks []cid.Cid)
 		return nil
 	}
 	for _, o := range ks {
+
 		key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", o.String(), self.owner))
 		if err := self.datastore.Put(key, []byte(self.owner)); err != nil {
 			txn.Discard()
@@ -114,6 +119,9 @@ func (self *OwnerAwareBlockService) Exchange() exchange.Interface {
 func (self *OwnerAwareBlockService) AddBlock(o blocks.Block) error {
 
 	c := o.Cid()
+	if !c.Defined() {
+		return newInternalError(Error_Invalid_Data, "Blockservice received block with undefined cid, cannot add")
+	}
 
 	//we simply add the new owner. If already in nothing happens, if not good.
 	//this should be the fastest way of doing it
@@ -142,6 +150,10 @@ func (self *OwnerAwareBlockService) AddBlocks(bs []blocks.Block) error {
 	}
 
 	for _, o := range bs {
+		if !o.Cid().Defined() {
+			txn.Discard()
+			return newInternalError(Error_Invalid_Data, "Blockservice received block with undefined cid for adding")
+		}
 		key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", o.Cid().String(), self.owner))
 		if err := txn.Put(key, []byte(self.owner)); err != nil {
 			txn.Discard()
@@ -162,6 +174,10 @@ func (self *OwnerAwareBlockService) AddBlocks(bs []blocks.Block) error {
 
 // DeleteBlock deletes the given block from the blockservice.
 func (self *OwnerAwareBlockService) DeleteBlock(c cid.Cid) error {
+
+	if !c.Defined() {
+		return newInternalError(Error_Invalid_Data, "Blockservice received undefined cid for deletion")
+	}
 
 	key := datastore.NewKey(fmt.Sprintf("/Owners/%v/%v", c.String(), self.owner))
 	err := self.datastore.Delete(key)
