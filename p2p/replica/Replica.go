@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/OpenCollaborationPlatform/OCP/utils"
 	"github.com/boltdb/bolt"
 	"github.com/hashicorp/raft"
 	raftbolt "github.com/hashicorp/raft-boltdb"
-	"github.com/OpenCollaborationPlatform/OCP/utils"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
 	peer "github.com/libp2p/go-libp2p-core/peer"
 	kaddht "github.com/libp2p/go-libp2p-kad-dht"
@@ -389,8 +389,8 @@ func (self *Replica) AddCommand(ctx context.Context, op Operation) error {
 
 	duration := durationFromContext(ctx)
 
-	//rerun the op till ctx closes, max 3 retries (to not stall forever)
-	for i := 0; i < 3; i++ {
+	//rerun the op till ctx closes
+	for {
 		future := self.rep.Apply(op.ToBytes(), duration)
 		err := future.Error()
 		//no error means success
