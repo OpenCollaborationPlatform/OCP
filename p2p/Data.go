@@ -65,7 +65,7 @@ func (self *dagHelper) Add(ctx context.Context, path string) (utils.Cid, error) 
 	}
 
 	//return
-	return utils.Cid{node.Cid()}, nil
+	return utils.FromP2PCid(node.Cid()), nil
 }
 
 func (self *dagHelper) AddData(ctx context.Context, data []byte) (utils.Cid, error) {
@@ -83,7 +83,7 @@ func (self *dagHelper) AddData(ctx context.Context, data []byte) (utils.Cid, err
 	}
 
 	//return
-	return utils.Cid{node.Cid()}, nil
+	return utils.FromP2PCid(node.Cid()), nil
 }
 
 func (self *dagHelper) AddAsync(path string) (utils.Cid, error) {
