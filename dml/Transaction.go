@@ -454,22 +454,27 @@ type baseTransaction struct {
 	mngr *TransactionManager
 }
 
-var subKey []byte = []byte("__transactionSubObjects")
+var subKey []byte = []byte("__transactionSubObjects_")
 
 func newBaseTransaction(rntm *Runtime) (*baseTransaction, error) {
 	behaviour, err := NewBaseBehaviour(rntm)
+	if err != nil {
+		return nil, err
+	}
 	mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 
-	return &baseTransaction{behaviour, mngr}, err
+	tbhvr := &baseTransaction{behaviour, mngr}
+	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, true) //open transaction automatically on change
+	return tbhvr, nil
 }
 
 //add a new Identifier to the transaction
 //id: the behaviour id wo which to add
 //source: the source object which gets the new subobject (could be parent, or any child of it if recursive)
 //sub: the subobject added to source
-func (self *baseTransaction) addNewSubobject(id, source, sub Identifier) error {
+func (self *baseTransaction) addNewSubobject(id, source, sub Identifier, trans [32]byte) error {
 
-	subMap, err := self.GetDBMap(id, subKey)
+	subMap, err := self.GetDBMap(id, bytes.Join([][]byte{subKey, trans[:]}, []byte{}))
 	if err != nil {
 		return err
 	}
@@ -509,10 +514,10 @@ func recursiveSubFix(set dmlSet) error {
 }
 
 //clears all new sub objects stored
-func (self *baseTransaction) clear(id Identifier) error {
+func (self *baseTransaction) clear(id Identifier, trans [32]byte) error {
 
 	//remove all entries from the list (simply erase, is the fastes way of doing it
-	subMap, err := self.GetDBMap(id, subKey)
+	subMap, err := self.GetDBMap(id, bytes.Join([][]byte{subKey, trans[:]}, []byte{}))
 	if err != nil {
 		return err
 	}
@@ -541,9 +546,9 @@ func recursiveSubErase(set dmlSet) error {
 }
 
 //erases all new subobjects from the datstore
-func (self *baseTransaction) eraseSubobjects(id Identifier) error {
+func (self *baseTransaction) eraseSubobjects(id Identifier, trans [32]byte) error {
 
-	subMap, err := self.GetDBMap(id, subKey)
+	subMap, err := self.GetDBMap(id, bytes.Join([][]byte{subKey, trans[:]}, []byte{}))
 	if err != nil {
 		return err
 	}
@@ -572,10 +577,10 @@ func (self *baseTransaction) eraseSubobjects(id Identifier) error {
 	return nil
 }
 
-func (self *baseTransaction) getNewSubobjects(id Identifier) ([]Identifier, error) {
+func (self *baseTransaction) getNewSubobjects(id Identifier, trans [32]byte) ([]Identifier, error) {
 
 	result := make([]Identifier, 0)
-	subMap, err := self.GetDBMap(id, subKey)
+	subMap, err := self.GetDBMap(id, bytes.Join([][]byte{subKey, trans[:]}, []byte{}))
 	if err != nil {
 		return nil, err
 	}
@@ -596,11 +601,11 @@ func (self *baseTransaction) getNewSubobjects(id Identifier) ([]Identifier, erro
 	return result, nil
 }
 
-func (self *baseTransaction) eraseUnreferenced(id Identifier) error {
+func (self *baseTransaction) eraseUnreferenced(id Identifier, trans [32]byte) error {
 
 	sourceMap := make(map[Identifier]dmlSet, 0)
 
-	subMap, err := self.GetDBMap(id, subKey)
+	subMap, err := self.GetDBMap(id, bytes.Join([][]byte{subKey, trans[:]}, []byte{}))
 	if err != nil {
 		return err
 	}
@@ -665,6 +670,23 @@ func (self *baseTransaction) eraseUnreferenced(id Identifier) error {
 	return nil
 }
 
+//little common helper
+func (self *baseTransaction) getOrOpenTransaction() (transaction, error) {
+
+	trans, err := self.mngr.getTransaction()
+	if err != nil {
+		//seems we do not have a transaction open. Let's check if we shall open one
+		auto, _ := self.GetProperty("automatic").GetValue(Identifier{}) //const, ignore error, id irrelevant
+		if auto.(bool) {
+			err = self.mngr.Open()
+			if err == nil {
+				trans, err = self.mngr.getTransaction()
+			}
+		}
+	}
+	return trans, err
+}
+
 //Object Transaction adds a whole object to the current transaction. This happens on every change within the object,
 //property or key, and if recursive == True also for every change of any subobject.
 type objectTransaction struct {
@@ -678,9 +700,6 @@ func NewObjectTransactionBehaviour(rntm *Runtime) (Object, error) {
 
 	base, _ := newBaseTransaction(rntm)
 	tbhvr := &objectTransaction{base}
-
-	//add default properties
-	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) //open transaction automatically on change
 
 	//add default methods for overriding by the user
 	tbhvr.AddMethod("CanBeAdded", MustNewIdMethod(tbhvr.defaultAddable, true))                //return true/false if object can be used in current transaction
@@ -722,7 +741,13 @@ func (self *objectTransaction) HandleEvent(id Identifier, source Identifier, eve
 		if !ok {
 			return newInternalError(Error_Fatal, "newSubobjectEvent does not provide object identifier as argument")
 		}
-		self.baseTransaction.addNewSubobject(id, source, sub)
+		trans, err := self.getOrOpenTransaction()
+		if err != nil {
+			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
+			self.GetEvent("onFailure").Emit(id, err.Error())
+			return err
+		}
+		self.baseTransaction.addNewSubobject(id, source, sub, trans.identification)
 	}
 	return nil
 }
@@ -737,22 +762,11 @@ func (self *objectTransaction) add(id Identifier) error {
 		return utils.StackError(err, "Unable to get parent objecct of transaction behaviour")
 	}
 
-	trans, err := self.mngr.getTransaction()
+	trans, err := self.getOrOpenTransaction()
 	if err != nil {
-		//seems we do not have a transaction open. Let's check if we shall open one
-		auto, _ := self.GetProperty("automatic").GetValue(id) //const, ignore error
-		if auto.(bool) {
-			err = self.mngr.Open()
-			if err == nil {
-				trans, err = self.mngr.getTransaction()
-			}
-		}
-
-		if err != nil {
-			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
-			self.GetEvent("onFailure").Emit(id, err.Error())
-			return err
-		}
+		err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
+		self.GetEvent("onFailure").Emit(id, err.Error())
+		return err
 	}
 
 	//check if object is not already in annother transaction
@@ -1021,10 +1035,10 @@ func (self *objectTransaction) closeTransaction(id Identifier, transIdent [32]by
 	}
 
 	//check if we reference all of the new subobjects, and delete those that we do not.
-	if err := self.baseTransaction.eraseUnreferenced(id); err != nil {
+	if err := self.baseTransaction.eraseUnreferenced(id, transIdent); err != nil {
 		return err
 	}
-	return self.baseTransaction.clear(id)
+	return self.baseTransaction.clear(id, transIdent)
 }
 
 // calls FixStateAsVersion for all childs of the provided dmlSet, and recursively for their
@@ -1083,10 +1097,10 @@ func (self *objectTransaction) abortTransaction(id Identifier, transIdent [32]by
 	}
 
 	//check if we reference all of the new subobjects, and delete those that we do not.
-	if err := self.baseTransaction.eraseSubobjects(id); err != nil {
+	if err := self.baseTransaction.eraseSubobjects(id, transIdent); err != nil {
 		return err
 	}
-	return self.baseTransaction.clear(id)
+	return self.baseTransaction.clear(id, transIdent)
 }
 
 // calls RevertHead for all childs of the provided dmlSet, and recursively for their
@@ -1126,9 +1140,7 @@ func (self *objectTransaction) recursiveResetTransaction(set dmlSet) error {
 //Partial Transaction adds individual keys of an object to the transaction. With this the object can be part of multiple transactions,
 //but for each with different keys. Note: Keys are relatvice paths from the behaviours parent object, e.g. MyChild.myProperty
 type partialTransaction struct {
-	*behaviour
-
-	mngr *TransactionManager
+	*baseTransaction
 }
 
 //little helper to store source and key in datastore
@@ -1141,13 +1153,8 @@ var transMap []byte = []byte("__transactionMap")
 
 func NewPartialTransactionBehaviour(rntm *Runtime) (Object, error) {
 
-	behaviour, _ := NewBaseBehaviour(rntm)
-
-	mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
-	tbhvr := &partialTransaction{behaviour, mngr}
-
-	//add default properties
-	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, false) //open transaction automatically on change
+	baseTrans, _ := newBaseTransaction(rntm)
+	tbhvr := &partialTransaction{baseTrans}
 
 	//add default methods for overriding by the user
 	//tbhvr.AddMethod("CanBeAdded", MustNewIdMethod(tbhvr.defaultAddable, true))             //return true/false if the provided key can be used in current transaction
@@ -1155,11 +1162,11 @@ func NewPartialTransactionBehaviour(rntm *Runtime) (Object, error) {
 	//tbhvr.AddMethod("DependentKeys", MustNewIdMethod(tbhvr.defaultDependentObjects, true)) //return array of keys that need to be added to the transaction together with the provided one
 
 	//add default events
-	tbhvr.AddEvent(NewEvent(`onParticipation`, behaviour)) //called when the first key is added to the current transaction
-	tbhvr.AddEvent(NewEvent(`onKeyAdded`, behaviour))      //called when a new key is added to the transaction
-	tbhvr.AddEvent(NewEvent(`onClosing`, behaviour))       //called when transaction, to which tany key was added, is closed (means finished)
-	tbhvr.AddEvent(NewEvent(`onAborting`, behaviour))      //Caled when the transaction, any key is part of. is aborted (means reverted)
-	tbhvr.AddEvent(NewEvent(`onFailure`, behaviour))       //called when adding to transaction failed, e.g. because already in annother transaction
+	tbhvr.AddEvent(NewEvent(`onParticipation`, tbhvr)) //called when the first key is added to the current transaction
+	tbhvr.AddEvent(NewEvent(`onKeyAdded`, tbhvr))      //called when a new key is added to the transaction
+	tbhvr.AddEvent(NewEvent(`onClosing`, tbhvr))       //called when transaction, to which tany key was added, is closed (means finished)
+	tbhvr.AddEvent(NewEvent(`onAborting`, tbhvr))      //Caled when the transaction, any key is part of. is aborted (means reverted)
+	tbhvr.AddEvent(NewEvent(`onFailure`, tbhvr))       //called when adding to transaction failed, e.g. because already in annother transaction
 
 	//add the user usable methods
 	tbhvr.AddMethod("Add", MustNewIdMethod(tbhvr.keyAdd, false)) //Adds a given key to the current trankey is in any transaction, also other users?
@@ -1202,6 +1209,19 @@ func (self *partialTransaction) HandleEvent(id Identifier, source Identifier, ev
 		if err != nil {
 			return err
 		}
+
+	case "onNewSubobject":
+		sub, ok := args[0].(Identifier)
+		if !ok {
+			return newInternalError(Error_Fatal, "newSubobjectEvent does not provide object identifier as argument")
+		}
+		trans, err := self.getOrOpenTransaction()
+		if err != nil {
+			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
+			self.GetEvent("onFailure").Emit(id, err.Error())
+			return err
+		}
+		self.baseTransaction.addNewSubobject(id, source, sub, trans.identification)
 	}
 	return nil
 }
@@ -1251,22 +1271,11 @@ func (self *partialTransaction) keyAdd(id Identifier, key interface{}) error {
 //Note: If transaction has Object already no error is returned
 func (self *partialTransaction) add(id Identifier, source Identifier, key Key, path string) error {
 
-	trans, err := self.mngr.getTransaction()
+	trans, err := self.getOrOpenTransaction()
 	if err != nil {
-		//seems we do not have a transaction open. Let's check if we shall open one
-		automatic, _ := self.GetProperty("automatic").GetValue(id) //const, ignore error
-		if automatic.(bool) {
-			err = self.mngr.Open()
-			if err == nil {
-				trans, err = self.mngr.getTransaction()
-			}
-		}
-
-		if err != nil {
-			err = utils.StackError(err, "Unable to add object to transaction: No transaction open")
-			self.GetEvent("onFailure").Emit(id, err.Error())
-			return err
-		}
+		err = utils.StackError(err, "Unable to add key to transaction: No transaction open")
+		self.GetEvent("onFailure").Emit(id, err.Error())
+		return err
 	}
 
 	//store the source/key pair in the behaviour
@@ -1504,7 +1513,11 @@ func (self *partialTransaction) closeTransaction(id Identifier, transIdent [32]b
 		}
 	}
 
-	return nil
+	//handle the newly created subobjects
+	if err := self.eraseUnreferenced(id, transIdent); err != nil {
+		return utils.StackError(err, "Unable to erase unreferenced objects")
+	}
+	return self.clear(id, transIdent)
 }
 
 func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]byte) error {
@@ -1609,5 +1622,10 @@ func (self *partialTransaction) abortTransaction(id Identifier, transIdent [32]b
 			}
 		}
 	}
-	return nil
+
+	//handle the newly created subobjects
+	if err := self.eraseSubobjects(id, transIdent); err != nil {
+		return utils.StackError(err, "Unable to erase objects created during transaction")
+	}
+	return self.clear(id, transIdent)
 }

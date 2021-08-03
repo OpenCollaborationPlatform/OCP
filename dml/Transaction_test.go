@@ -395,7 +395,8 @@ func TestTransactionBehaviour(t *testing.T) {
 					bhvSet, _ := getObjectFromPath(rntm, "Document.Child.trans")
 					bbhvr, ok := bhvSet.obj.(*objectTransaction)
 					So(ok, ShouldBeTrue)
-					subs, err := bbhvr.getNewSubobjects(bhvSet.id)
+					trans, _ := mngr.getTransaction()
+					subs, err := bbhvr.getNewSubobjects(bhvSet.id, trans.identification)
 					So(err, ShouldBeNil)
 					So(subs, ShouldResemble, []Identifier{newMapEntry})
 				})
@@ -909,6 +910,24 @@ func TestPartialTransaction(t *testing.T) {
 						.key: int
 						.value: int
 					}
+					
+					Map {
+						.name: "ObjectMap"
+						
+						.key: string
+						.value: Data {
+						
+							.name: "subobject"
+							
+							property int data: 0
+							
+							Data {
+								.name: "subsubobject"
+								
+								property int data: 0
+							}
+						}
+					}
 
 					PartialTransaction {
 
@@ -1042,12 +1061,84 @@ func TestPartialTransaction(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(keys, ShouldResemble, []string{"Child.1", "Child.2"})
 
-			Convey("As well as aborting the changes", func() {
+			Convey("as well as aborting the changes", func() {
 
 				code := `Transaction.Abort()`
 				_, err := rntm.RunJavaScript(store, "User1", code)
 				utils.PrintWithStacktrace(err)
 				So(err, ShouldBeNil)
+			})
+
+			Convey("and closing the transaction", func() {
+
+			})
+		})
+
+		Convey("Creating child object subobject works", func() {
+
+			code := `Document.ObjectMap.New("first")
+					 Document.ObjectMap.New("second")
+					 Document.trans.CurrentTransactionKeys()`
+
+			keys, err := rntm.RunJavaScript(store, "User1", code)
+			So(err, ShouldBeNil)
+			So(keys, ShouldResemble, []string{"ObjectMap.first", "ObjectMap.second"})
+
+			store.Begin()
+			defer store.Rollback()
+
+			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			first, _ := getObjectFromPath(rntm, "Document.ObjectMap.first")
+			firstsub, _ := getObjectFromPath(rntm, "Document.ObjectMap.first.subsubobject")
+			second, _ := getObjectFromPath(rntm, "Document.ObjectMap.second")
+			bhvSet, _ := getObjectFromPath(rntm, "Document.trans")
+			bbhvr, ok := bhvSet.obj.(*partialTransaction)
+			So(ok, ShouldBeTrue)
+			trans, _ := mngr.getTransaction()
+			subs, err := bbhvr.getNewSubobjects(bhvSet.id, trans.identification)
+			So(err, ShouldBeNil)
+			So(len(subs), ShouldEqual, 2)
+			So(subs, ShouldContain, first.id)
+			So(subs, ShouldContain, second.id)
+			store.Rollback()
+
+			Convey("as well as aborting the changes", func() {
+
+				code := `Transaction.Abort()`
+
+				_, err := rntm.RunJavaScript(store, "User1", code)
+				So(err, ShouldBeNil)
+
+				store.Begin()
+				defer store.Rollback()
+				objMap, _ := getObjectFromPath(rntm, "Document.ObjectMap")
+				keys, err := objMap.obj.(*mapImpl).Keys(objMap.id)
+				So(err, ShouldBeNil)
+				So(keys, ShouldBeEmpty)
+
+				subs, err := bbhvr.getNewSubobjects(bhvSet.id, trans.identification)
+				So(err, ShouldBeNil)
+				So(subs, ShouldBeEmpty)
+
+				for _, storage := range datastore.StorageTypes {
+					has, err := rntm.datastore.HasSet(storage, false, first.id.Hash())
+					So(err, ShouldBeNil)
+					So(has, ShouldBeFalse)
+
+					has, err = rntm.datastore.HasSet(storage, true, first.id.Hash())
+					So(err, ShouldBeNil)
+					So(has, ShouldBeFalse)
+				}
+
+				for _, storage := range datastore.StorageTypes {
+					has, err := rntm.datastore.HasSet(storage, false, firstsub.id.Hash())
+					So(err, ShouldBeNil)
+					So(has, ShouldBeFalse)
+
+					has, err = rntm.datastore.HasSet(storage, true, firstsub.id.Hash())
+					So(err, ShouldBeNil)
+					So(has, ShouldBeFalse)
+				}
 			})
 		})
 
