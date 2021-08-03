@@ -13,6 +13,7 @@ import (
 
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 
+	hclog "github.com/hashicorp/go-hclog"
 	bs "github.com/ipfs/go-bitswap"
 	bsnetwork "github.com/ipfs/go-bitswap/network"
 	"github.com/ipfs/go-datastore"
@@ -361,11 +362,13 @@ func (self *dataState) Apply(data []byte) interface{} {
 
 	cmd, err := dataStateCommandFromByte(data)
 	if err != nil {
+		self.service.logger.Error("Received invalid state update", "Error", err.Error())
 		return utils.StackError(err, "Unable to load command from data")
 	}
 
-	if cmd.Remove {
+	self.service.logger.Debug("State update startet", "Cid", cmd.File.Encode(), "Remove", cmd.Remove)
 
+	if cmd.Remove {
 		for i, val := range self.files {
 			if val == cmd.File {
 				self.files = append(self.files[:i], self.files[i+1:]...)
@@ -375,7 +378,6 @@ func (self *dataState) Apply(data []byte) interface{} {
 		self.service.internalDrop(cmd.File)
 
 	} else {
-
 		self.files = append(self.files, cmd.File)
 		//this could take a while... let's do it async
 		self.service.internalFetchAsync(cmd.File)
@@ -451,6 +453,7 @@ type swarmDataService struct {
 	state  *dataState
 	ctx    context.Context
 	cancel context.CancelFunc
+	logger hclog.Logger
 }
 
 func newSwarmDataService(swarm *Swarm) DataService {
@@ -465,7 +468,9 @@ func newSwarmDataService(swarm *Swarm) DataService {
 		swarm:  swarm,
 		owner:  hostService.ownerStore,
 		ctx:    ctx,
-		cancel: cncl}
+		cancel: cncl,
+		logger: swarm.logger.Named("Data"),
+	}
 
 	//handle the data state
 	service.state = newDataState(service)
@@ -476,11 +481,15 @@ func newSwarmDataService(swarm *Swarm) DataService {
 
 func (self *swarmDataService) Add(ctx context.Context, path string) (utils.Cid, error) {
 
+	self.logger.Trace("Add content path", "Path", path)
+
 	//add the file
 	filecid, err := self.dag.Add(ctx, path)
 	if err != nil {
+		self.logger.Error("Content adding to bitswap failed", "Error", err.Error())
 		return utils.CidUndef, utils.StackError(err, "Unable to add path to dag")
 	}
+	self.logger.Debug("Content added to bitswap", "Cid", filecid.Encode())
 
 	//store in shared state
 	cmd, err := dataStateCommand{filecid, false}.toByte()
@@ -490,6 +499,7 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (utils.Cid, 
 	_, err = self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	if err != nil {
 		self.dag.Drop(ctx, filecid)
+		self.logger.Error("Content distribution in swarm state failed", "Error", err.Error())
 		return utils.CidUndef, utils.StackError(err, "Unable to share file with swarm members")
 	}
 
@@ -499,10 +509,14 @@ func (self *swarmDataService) Add(ctx context.Context, path string) (utils.Cid, 
 
 func (self *swarmDataService) AddData(ctx context.Context, data []byte) (utils.Cid, error) {
 
+	self.logger.Trace("Add byte data")
+
 	filecid, err := self.dag.AddData(ctx, data)
 	if err != nil {
+		self.logger.Error("Content adding to bitswap failed", "Error", err.Error())
 		return utils.CidUndef, utils.StackError(err, "Unable to add data to dag")
 	}
+	self.logger.Debug("Content added to bitswap", "Cid", filecid.Encode())
 
 	//store in shared state
 	cmd, err := dataStateCommand{filecid, false}.toByte()
@@ -512,6 +526,7 @@ func (self *swarmDataService) AddData(ctx context.Context, data []byte) (utils.C
 	_, err = self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	if err != nil {
 		self.dag.Drop(ctx, filecid)
+		self.logger.Error("Content distribution in swarm state failed", "Error", err.Error())
 		return utils.CidUndef, utils.StackError(err, "Unable to share blocks with swarm members")
 	}
 
@@ -521,17 +536,23 @@ func (self *swarmDataService) AddData(ctx context.Context, data []byte) (utils.C
 
 func (self *swarmDataService) AddAsync(path string) (utils.Cid, error) {
 
+	self.logger.Trace("Add path asyncronous", "Path", path)
+
 	//add the file
 	filecid, err := self.dag.AddAsync(path)
 	if err != nil {
 		return utils.CidUndef, utils.StackError(err, "Unable to add data to dag")
 	}
+	self.logger.Debug("Content added to bitswap", "Cid", filecid.Encode())
 
 	go func() {
 		//store in shared state
 		cmd, _ := dataStateCommand{filecid, false}.toByte()
 		ctx, _ := context.WithTimeout(self.ctx, 10*time.Hour)
-		self.swarm.State.AddCommand(ctx, "dataState", cmd)
+		_, err := self.swarm.State.AddCommand(ctx, "dataState", cmd)
+		if err != nil {
+			self.logger.Error("Content distribution in swarm state failed", "Error", err.Error())
+		}
 	}()
 
 	//return
@@ -540,14 +561,18 @@ func (self *swarmDataService) AddAsync(path string) (utils.Cid, error) {
 
 func (self *swarmDataService) Drop(ctx context.Context, id utils.Cid) error {
 
+	self.logger.Trace("Drop content", "Cid", id.Encode())
+
 	//drop the file in the swarm (real drop handled in state handler)
 	cmd, err := dataStateCommand{id, true}.toByte()
 	if err != nil {
+		self.logger.Error("Droping content failed, unable to create command", "Error", err.Error())
 		return utils.StackError(err, "Unable to create drop command")
 	}
 	_, err = self.swarm.State.AddCommand(ctx, "dataState", cmd)
 	if err != nil {
-		utils.StackError(err, "Unable to drop file within swarm")
+		self.logger.Error("Droping content from state failed", "Error", err.Error())
+		return utils.StackError(err, "Unable to drop file within swarm")
 	}
 
 	return nil
@@ -555,23 +580,32 @@ func (self *swarmDataService) Drop(ctx context.Context, id utils.Cid) error {
 
 func (self *swarmDataService) Fetch(ctx context.Context, id utils.Cid) error {
 
+	self.logger.Trace("Fetch content", "Cid", id.Encode())
+
 	//check if we have the file, if not fetching makes no sense in swarm context
 	if !self.state.HasFile(id) {
+		self.logger.Error("Content is not part of state", "Cid", id.Encode())
 		return newUserError(Error_Operation_Invalid, "The file is not part of swarm, cannot be fetched")
 	}
 	//even if we have it in the state list, we fetch it anyway to make sure all blocks are received after the fetch call
 	//(we could be in fetching phase)
 	err := self.dag.Fetch(ctx, id)
 	if err != nil {
+		self.logger.Error("Fetching content failed", "Cid", id.Encode(), "Error", err.Error())
 		return wrapConnectionError(err, Error_Data)
 	}
+
+	self.logger.Debug("Content fetched", "Cid", id.Encode())
 	return nil
 }
 
 func (self *swarmDataService) FetchAsync(id utils.Cid) error {
 
+	self.logger.Trace("Fetch content asyncronous", "Cid", id.Encode())
+
 	//check if we have the file, if not fetching makes no sense in swarm context
 	if !self.state.HasFile(id) {
+		self.logger.Error("Content is not part of state", "Cid", id.Encode())
 		return newUserError(Error_Operation_Invalid, "The file is not part of swarm, cannot be fetched")
 	}
 
@@ -582,8 +616,11 @@ func (self *swarmDataService) FetchAsync(id utils.Cid) error {
 
 func (self *swarmDataService) Get(ctx context.Context, id utils.Cid) (io.Reader, error) {
 
+	self.logger.Trace("Try to retrieve content", "Cid", id.Encode())
+
 	reader, err := self.dag.Get(ctx, id)
 	if err != nil {
+		self.logger.Error("Retrieving content failed", "Cid", id.Encode(), "Error", err.Error())
 		return nil, utils.StackError(err, "Unable to get cid from dag")
 	}
 
@@ -591,13 +628,19 @@ func (self *swarmDataService) Get(ctx context.Context, id utils.Cid) (io.Reader,
 	if !self.state.HasFile(id) {
 		//store in shared state
 		cmd, _ := dataStateCommand{id, false}.toByte()
-		self.swarm.State.AddCommand(ctx, "dataState", cmd)
+		_, err := self.swarm.State.AddCommand(ctx, "dataState", cmd)
+		if err != nil {
+			self.logger.Error("Content adding to state failed", "Cid", id.Encode(), "Error", err.Error())
+			return nil, err
+		}
 	}
 
 	return reader, nil
 }
 
 func (self *swarmDataService) Write(ctx context.Context, id utils.Cid, path string) (string, error) {
+
+	self.logger.Trace("Write content to path", "Cid", id.Encode(), "Path", path)
 
 	//see if we can get the data
 	path, err := self.dag.Write(ctx, id, path)
@@ -616,6 +659,8 @@ func (self *swarmDataService) Write(ctx context.Context, id utils.Cid, path stri
 }
 
 func (self *swarmDataService) ReadChannel(ctx context.Context, id utils.Cid) (chan []byte, error) {
+
+	self.logger.Trace("Write content into channel", "Cid", id.Encode())
 
 	c, err := self.dag.ReadChannel(ctx, id)
 	if err != nil {
@@ -657,7 +702,12 @@ func (self *swarmDataService) internalFetchAsync(id utils.Cid) error {
 
 	go func() {
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Hour)
-		self.dag.Fetch(ctx, id)
+		err := self.dag.Fetch(ctx, id)
+		if err != nil {
+			self.logger.Error("Asyncronous state content fetch failed", "Cid", id.Encode(), "Error", err.Error())
+		} else {
+			self.logger.Debug("State content fetched", "Cid", id.Encode())
+		}
 	}()
 	return nil
 }
@@ -667,8 +717,10 @@ func (self *swarmDataService) internalDrop(id utils.Cid) error {
 	ctx, _ := context.WithTimeout(self.ctx, 1*time.Hour)
 	err := self.dag.Drop(ctx, id)
 	if err != nil {
+		self.logger.Error("State content drop failed", "Cid", id.Encode(), "Error", err.Error())
 		return utils.StackError(err, "Unable to drop id %v", id.String())
 	}
 
+	self.logger.Debug("State content dropped", "Cid", id.Encode())
 	return nil
 }

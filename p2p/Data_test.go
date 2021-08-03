@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/OpenCollaborationPlatform/OCP/utils"
+
 	"io"
 	"io/ioutil"
 	"os"
@@ -15,6 +17,7 @@ import (
 
 	bs "github.com/ipfs/go-bitswap"
 	bsnetwork "github.com/ipfs/go-bitswap/network"
+	ipfscid "github.com/ipfs/go-cid"
 	ds "github.com/ipfs/go-ds-badger2"
 	blockDS "github.com/ipfs/go-ipfs-blockstore"
 )
@@ -457,6 +460,30 @@ func TestDataStreaming(t *testing.T) {
 	})
 }
 
+func TestSwarmDataCommand(t *testing.T) {
+
+	Convey("Any datastate command", t, func() {
+
+		cid, err := ipfscid.V1Builder{}.Sum([]byte("Hello World"))
+		So(err, ShouldBeNil)
+		So(cid.Defined(), ShouldBeTrue)
+
+		cmd := dataStateCommand{utils.FromP2PCid(cid), false}
+
+		Convey("can be marshalled correctly", func() {
+
+			bytes, err := cmd.toByte()
+			So(err, ShouldBeNil)
+			So(bytes, ShouldNotBeEmpty)
+
+			cmd2, err := dataStateCommandFromByte(bytes)
+			So(err, ShouldBeNil)
+			So(cmd2.Remove, ShouldEqual, cmd.Remove)
+			So(cmd2.File.Encode(), ShouldEqual, cmd.File.Encode())
+		})
+	})
+}
+
 func TestSwarmDataService(t *testing.T) {
 
 	//make temporary folder for the data
@@ -499,7 +526,7 @@ func TestSwarmDataService(t *testing.T) {
 			ctx, _ := context.WithTimeout(ctx, 10*time.Second)
 			res, err := sw1.Data.Add(ctx, testfilepath)
 			So(err, ShouldBeNil)
-			time.Sleep(150 * time.Millisecond)
+			time.Sleep(300 * time.Millisecond)
 
 			reader, err := sw1.Data.Get(ctx, res)
 			So(err, ShouldBeNil)

@@ -2,14 +2,16 @@ package utils
 
 //condent identifier
 import (
-	"encoding/gob"
+	"encoding"
 	"strings"
 
 	cid "github.com/ipfs/go-cid"
 )
 
+var _ encoding.BinaryMarshaler = Cid{}
+var _ encoding.BinaryUnmarshaler = (*Cid)(nil)
+
 func init() {
-	gob.Register(new(Cid))
 	Decoder.RegisterEncotable("cid", cidDecode)
 }
 
@@ -61,7 +63,7 @@ func (self Cid) String() string {
 
 // It implements the encoding.BinaryUnmarshaler interface.
 // Needed as we want to be able to use CidUndef in gob
-func (self Cid) UnmarshalBinary(data []byte) error {
+func (self *Cid) UnmarshalBinary(data []byte) error {
 
 	if data == nil || len(data) == 0 {
 		self.data = cid.Undef

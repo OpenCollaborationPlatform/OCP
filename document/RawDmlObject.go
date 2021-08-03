@@ -108,5 +108,5 @@ func (self *Raw) Clear(id dml.Identifier) error {
 	if err != nil {
 		return err
 	}
-	return self.GetEvent("onDataChanged").Emit(id, utils.Cid{}.String())
+	return self.GetEvent("onDataChanged").Emit(id, utils.CidUndef.String())
 }
