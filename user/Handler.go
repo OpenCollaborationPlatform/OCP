@@ -6,11 +6,12 @@ import (
 	"time"
 
 	nxclient "github.com/gammazero/nexus/v3/client"
+	hclog "github.com/hashicorp/go-hclog"
 
-	wamp "github.com/gammazero/nexus/v3/wamp"
 	"github.com/OpenCollaborationPlatform/OCP/connection"
 	"github.com/OpenCollaborationPlatform/OCP/p2p"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
+	wamp "github.com/gammazero/nexus/v3/wamp"
 )
 
 /*extremely simple user handling... no authorisation, identification etc... just
@@ -27,9 +28,9 @@ type UserHandler struct {
 	ticker *time.Ticker
 }
 
-func NewUserHandler(router *connection.Router, host *p2p.Host) (*UserHandler, error) {
+func NewUserHandler(router *connection.Router, host *p2p.Host, logger hclog.Logger) (*UserHandler, error) {
 
-	client, err := router.GetLocalClient("user")
+	client, err := router.GetLocalClient("user", logger.Named("api"))
 	if err != nil {
 		return nil, utils.StackError(err, "Could not setup document handler")
 	}

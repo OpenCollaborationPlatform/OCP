@@ -92,7 +92,7 @@ func NewHost(router *connection.Router, logger hclog.Logger) *Host {
 
 	var client *nxclient.Client = nil
 	if router != nil {
-		client, _ = router.GetLocalClient("p2p")
+		client, _ = router.GetLocalClient("p2p", logger.Named("api"))
 	}
 
 	return &Host{swarms: make([]*Swarm, 0),
@@ -549,7 +549,7 @@ func (h *Host) CreateSwarmWithID(ctx context.Context, id SwarmID, states []State
 	h.swarmMutex.Lock()
 	defer h.swarmMutex.Unlock()
 
-	swarm, err := newSwarm(ctx, h, id, states, true, NoPeers(), h.logger.Named("Swarm"))
+	swarm, err := newSwarm(ctx, h, id, states, true, NoPeers(), h.logger.Named("Swarm").With("SwarmID", id.Pretty()))
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to setup new swarm")
 	}

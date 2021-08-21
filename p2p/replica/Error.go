@@ -15,7 +15,7 @@ const Error_Invalid_Data = "data_invalid"           // For all kind of wrong dat
 const Error_Setup = "setup_invalid"                 // The datastructures are not setup correctly
 
 func newInternalError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Internal, "replication", msg, reason, args)
+	err := utils.NewError(utils.Internal, "replication", reason, msg, args)
 	return err
 }
 
@@ -31,7 +31,7 @@ func wrapInternalError(err error, reason string, args ...interface{}) error {
 }
 
 func newConnectionError(reason, msg string, args ...interface{}) utils.OCPError {
-	err := utils.NewError(utils.Connection, "replication", msg, reason, args)
+	err := utils.NewError(utils.Connection, "replication", reason, msg, args)
 	return err
 }
 

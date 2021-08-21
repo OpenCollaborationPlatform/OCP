@@ -59,7 +59,7 @@ func onlineCommand(name string, f func(context.Context, []string, map[string]int
 	onlineCMDs = append(onlineCMDs, func(node *node.Node) {
 
 		//register the function to be callable via WAMP
-		cmdClient, err := node.Router.GetLocalClient("command")
+		cmdClient, err := node.Router.GetLocalClient("command", nil)
 		if err != nil {
 			log.Fatalf("Unable to setup command client: %s", err)
 		}

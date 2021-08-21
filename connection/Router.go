@@ -44,7 +44,7 @@ func (self *Router) Start(quit chan string) error {
 		},
 	}
 
-	stdLogger := self.logger.StandardLogger(&hclog.StandardLoggerOptions{ForceLevel: hclog.Trace})
+	stdLogger := self.logger.StandardLogger(&hclog.StandardLoggerOptions{ForceLevel: hclog.Debug})
 	nxr, err := nxrouter.NewRouter(routerConfig, stdLogger)
 
 	self.router = nxr
@@ -80,17 +80,22 @@ func (self *Router) Stop() {
 	self.logger.Info("Local wamp server has shut down")
 }
 
-func (self *Router) GetLocalClient(name string) (*nxclient.Client, error) {
+func (self *Router) GetLocalClient(name string, logger hclog.Logger) (*nxclient.Client, error) {
 
 	//connect the local client
 	authFunc := func(c *wamp.Challenge) (string, wamp.Dict) {
 		return "", wamp.Dict{}
 	}
+	if logger == nil {
+		logger = hclog.NewNullLogger()
+	}
+
 	cfg := nxclient.Config{
 		Realm:         "ocp",
 		HelloDetails:  wamp.Dict{"authid": name, "role": "local"},
 		AuthHandlers:  map[string]nxclient.AuthFunc{"ticket": authFunc},
 		Serialization: nxserialize.MSGPACK,
+		Logger:        logger.StandardLogger(&hclog.StandardLoggerOptions{ForceLevel: hclog.Debug}),
 	}
 	c, err := nxclient.ConnectLocal(self.router, cfg)
 

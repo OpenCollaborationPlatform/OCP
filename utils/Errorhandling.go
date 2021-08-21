@@ -209,9 +209,9 @@ func ErrorToWampResult(err error) nxclient.InvokeResult {
 
 	if ocperr, ok := err.(OCPError); ok {
 		if len(ocperr.Stack()) > 0 {
-			return nxclient.InvokeResult{Args: wamp.List{ocperr.Stack()[0]}, Err: wamp.URI(ocperr.ErrorType())}
+			return nxclient.InvokeResult{Args: wamp.List{ocperr.Message(), ocperr.Stack()[0]}, Err: wamp.URI(ocperr.ErrorType())}
 		} else {
-			return nxclient.InvokeResult{Err: wamp.URI(ocperr.ErrorType())}
+			return nxclient.InvokeResult{Args: wamp.List{ocperr.Message()}, Err: wamp.URI(ocperr.ErrorType())}
 		}
 	}
 	return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error.internal.library.failure")}

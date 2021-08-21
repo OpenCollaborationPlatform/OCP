@@ -21,5 +21,5 @@ func (id UserID) Cid() utils.Cid {
 		MhLength: -1}
 
 	c, _ := pref.Sum([]byte(id))
-	return utils.Cid{c}
+	return utils.FromP2PCid(c)
 }

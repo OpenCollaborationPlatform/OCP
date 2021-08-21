@@ -11,6 +11,7 @@ import (
 
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 	"github.com/boltdb/bolt"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/raft"
 	raftbolt "github.com/hashicorp/raft-boltdb"
 	p2phost "github.com/libp2p/go-libp2p-core/host"
@@ -19,18 +20,19 @@ import (
 )
 
 type Replica struct {
-	host  p2phost.Host
-	dht   *kaddht.IpfsDHT
-	state *multiState
-	rep   *raft.Raft
-	obs   *raft.Observer
-	logs  raft.LogStore
-	confs raft.StableStore
-	snaps raft.SnapshotStore
-	name  string
+	host   p2phost.Host
+	dht    *kaddht.IpfsDHT
+	state  *multiState
+	rep    *raft.Raft
+	obs    *raft.Observer
+	logs   raft.LogStore
+	confs  raft.StableStore
+	snaps  raft.SnapshotStore
+	name   string
+	logger hclog.Logger
 }
 
-func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT) (*Replica, error) {
+func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT, logger hclog.Logger) (*Replica, error) {
 
 	// Create the snapshot store. This allows the Raft to truncate the log.
 	snapshots, err := raft.NewFileSnapshotStore(path, 3, os.Stderr)
@@ -58,7 +60,7 @@ func NewReplica(name string, path string, host p2phost.Host, dht *kaddht.IpfsDHT
 	state := newMultiState()
 
 	return &Replica{host, dht, state, nil, nil,
-		logStore, stableStore, snapshots, name}, nil
+		logStore, stableStore, snapshots, name, logger}, nil
 }
 
 //starts the replica and waits to get added by the leader
@@ -79,7 +81,7 @@ func (self *Replica) Join() error {
 	config := raft.DefaultConfig()
 	config.LocalID = raft.ServerID(self.host.ID().Pretty())
 	config.LogOutput = ioutil.Discard
-	config.Logger = nil
+	config.Logger = self.logger
 	config.ShutdownOnRemove = true
 
 	// Instantiate the Raft systems.
@@ -214,14 +216,17 @@ func (self *Replica) Shutdown(ctx context.Context) error {
 
 func (self *Replica) GetLeader(ctx context.Context) (peer.ID, error) {
 
-	obsCh := make(chan raft.Observation, 1)
-	observer := raft.NewObserver(obsCh, false, nil)
+	self.logger.Trace("Leader requested")
+
+	obsCh := make(chan raft.Observation, 10)
+	observer := raft.NewObserver(obsCh, true, nil)
 	self.rep.RegisterObserver(observer)
-	defer close(obsCh)
 	defer self.rep.DeregisterObserver(observer)
+	defer close(obsCh)
 
 	leader := self.rep.Leader()
 	if leader == "" {
+		self.logger.Debug("No leader available, start observation")
 		for {
 			select {
 			case obs := <-obsCh:
@@ -237,6 +242,7 @@ func (self *Replica) GetLeader(ctx context.Context) (peer.ID, error) {
 				}
 
 			case <-ctx.Done():
+				self.logger.Debug("Timed out while waiting for leader")
 				return peer.ID(""), newConnectionError(Error_Process, "Timed out while waiting for leader")
 			}
 		}

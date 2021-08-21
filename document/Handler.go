@@ -101,7 +101,7 @@ type DocumentHandler struct {
 func NewDocumentHandler(router *connection.Router, host *p2p.Host, logger hclog.Logger) (*DocumentHandler, error) {
 
 	mutex := &sync.RWMutex{}
-	client, err := router.GetLocalClient("document")
+	client, err := router.GetLocalClient("document", logger.Named("api"))
 	if err != nil {
 		return nil, utils.StackError(err, "Could not setup document handler")
 	}
@@ -171,6 +171,7 @@ func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (D
 	//add the dml folder to the data exchange!
 	cid, err := self.host.Data.Add(ctx, path)
 	if err != nil {
+		self.logger.Debug("Creation of document failed, cannot add DML folder", "Error", err.Error())
 		return Document{}, utils.StackError(err, "Unable to share DML data during document creation")
 	}
 
@@ -178,6 +179,7 @@ func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (D
 	id := uuid.NewV4().String()
 	doc, err := NewDocument(ctx, self.router, self.host, cid, id, false, self.logger.Named("Document"))
 	if err != nil {
+		self.logger.Debug("Creation of document failed", "Error", err.Error())
 		return Document{}, utils.StackError(err, "Unable to create document")
 	}
 
@@ -187,11 +189,14 @@ func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (D
 
 	//inform everyone about the new doc
 	self.client.Publish("ocp.documents.created", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
+	self.logger.Info("Document created", "ID", doc.ID)
 
 	return doc, nil
 }
 
 func (self *DocumentHandler) createDoc(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	self.logger.Trace("Creation of new document requested via API", "Arguments", inv.Arguments)
 
 	//the user needs to provide the dml folder!
 	if len(inv.Arguments) != 1 {
@@ -223,6 +228,7 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	self.mutex.RLock()
 	for _, doc := range self.documents {
 		if doc.ID == docID {
+			self.logger.Debug("Document already open, cannot be opened again", "ID", docID)
 			return newUserError(Error_Operation_Invalid, "Document already open")
 		}
 	}
@@ -232,6 +238,7 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	swarmID := p2p.SwarmID(docID)
 	peer, err := self.host.FindSwarmMember(ctx, swarmID)
 	if err != nil {
+		self.logger.Debug("Unable to find other swarm members dor document", "ID", docID)
 		return utils.StackError(err, "Unable to find swarm member for doc ID")
 	}
 
@@ -239,12 +246,14 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	var cid utils.Cid
 	err = self.host.Rpc.Call(peer, "DocumentAPI", "DocumentDML", docID, &cid)
 	if err != nil {
+		self.logger.Debug("Unable to query cml cid for document", "ID", docID)
 		return utils.StackError(err, "Unable to inquery dml cid for doc ID")
 	}
 
 	//create the document by joining it
 	doc, err := NewDocument(ctx, self.router, self.host, cid, docID, true, self.logger.Named("Document"))
 	if err != nil {
+		self.logger.Debug("Unable to open new document", "ID", docID, "cid", cid.String())
 		return utils.StackError(err, "Unable to create new document")
 	}
 
@@ -254,11 +263,14 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 
 	//inform everyone about the newly opened doc
 	self.client.Publish("ocp.documents.opened", wamp.Dict{}, wamp.List{doc.ID}, wamp.Dict{})
+	self.logger.Info("Document opened", "ID", docID)
 
 	return nil
 }
 
 func (self *DocumentHandler) openDoc(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	self.logger.Trace("Opening of new document requested via API", "Arguments", inv.Arguments)
 
 	//the user needs to provide the doc id!
 	if len(inv.Arguments) != 1 {
@@ -292,6 +304,7 @@ func (self *DocumentHandler) CloseDocument(ctx context.Context, docID string) er
 
 			//inform everyone about the closed doc
 			self.client.Publish("ocp.documents.closed", wamp.Dict{}, wamp.List{docID}, wamp.Dict{})
+			self.logger.Debug("Document closed", "ID", docID)
 			return nil
 		}
 	}
@@ -300,6 +313,8 @@ func (self *DocumentHandler) CloseDocument(ctx context.Context, docID string) er
 }
 
 func (self *DocumentHandler) closeDoc(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	self.logger.Trace("Closing of new document requested via API", "Arguments", inv.Arguments)
 
 	//the user needs to provide the doc id!
 	if len(inv.Arguments) != 1 {

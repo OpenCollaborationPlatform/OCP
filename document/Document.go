@@ -50,7 +50,7 @@ func NewDocument(ctx context.Context, router *connection.Router, host *p2p.Host,
 	}
 
 	//get our very own client!
-	client, err := router.GetLocalClient(id)
+	client, err := router.GetLocalClient(id, logger.Named("api"))
 	if err != nil {
 		os.RemoveAll(path)
 		return Document{}, utils.StackError(err, "Unable to connect document to wamp router")

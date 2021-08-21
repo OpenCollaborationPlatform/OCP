@@ -110,14 +110,16 @@ type sharedStateService struct {
 func newSharedStateService(swarm *Swarm) (*sharedStateService, error) {
 
 	//setup replica
+	logger := swarm.logger.Named("State")
+	replog := logger.Named("Replica")
 	path := filepath.Join(swarm.GetPath())
-	rep, err := replica.NewReplica(string(swarm.ID), path, swarm.host.host, swarm.host.dht)
+	rep, err := replica.NewReplica(string(swarm.ID), path, swarm.host.host, swarm.host.dht, replog)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to create replica")
 	}
 
 	return &sharedStateService{swarm, rep, ReplicaAPI{}, ReplicaReadAPI{},
-		swarm.logger.Named("State"), StateObserver{}}, nil
+		logger, StateObserver{}}, nil
 
 }
 
@@ -134,15 +136,12 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 	//build the operation
 	op := replica.NewOperation(state, cmd)
 
-	//we use a default timeout to prevent stalling in case replica is in a deadlock
-	cmdCtx, _ := context.WithTimeout(ctx, 5*time.Second)
-
-	leader, err := self.rep.GetLeader(cmdCtx)
+	leader, err := self.rep.GetLeader(ctx)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to get leader for state")
 	}
 
-	err = self.swarm.connect(cmdCtx, PeerID(leader))
+	err = self.swarm.connect(ctx, PeerID(leader))
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to connect to leader")
 	}
@@ -153,7 +152,7 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 	}
 
 	var ret interface{}
-	err = self.swarm.Rpc.CallContext(cmdCtx, leader, "ReplicaAPI", "AddCommand", op, &ret)
+	err = self.swarm.Rpc.CallContext(ctx, leader, "ReplicaAPI", "AddCommand", op, &ret)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +161,7 @@ func (self *sharedStateService) AddCommand(ctx context.Context, state string, cm
 	case result := <-resultC:
 		return result, nil
 
-	case <-cmdCtx.Done():
+	case <-ctx.Done():
 		return nil, newConnectionError(Error_Process, "Command timed out")
 	}
 
@@ -273,7 +272,7 @@ func (self *sharedStateService) startup(bootstrap bool) error {
 		}
 	}
 
-	self.repObs = self.rep.NewObserver(false)
+	self.repObs = self.rep.NewObserver(true)
 	go self.eventLoop(self.repObs)
 
 	//setup API

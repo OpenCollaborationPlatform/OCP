@@ -71,7 +71,7 @@ func (self *Node) Start() error {
 	self.logger.Info("Sartup OCP Node", "version", self.Version)
 
 	//start up our local router
-	self.Router = connection.NewRouter(self.logger.Named("API"))
+	self.Router = connection.NewRouter(self.logger.Named("Router"))
 	err := self.Router.Start(self.quit)
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func (self *Node) Start() error {
 	}
 
 	//load the document component
-	dh, err := document.NewDocumentHandler(self.Router, self.Host, self.logger.Named("DocHandler"))
+	dh, err := document.NewDocumentHandler(self.Router, self.Host, self.logger.Named("Doc"))
 	if err != nil {
 		err = utils.StackError(err, "Unable to load document handler")
 		self.logger.Error(err.Error())
@@ -96,7 +96,7 @@ func (self *Node) Start() error {
 	self.Documents = dh
 
 	//load the user component
-	uh, err := user.NewUserHandler(self.Router, self.Host)
+	uh, err := user.NewUserHandler(self.Router, self.Host, self.logger.Named("User"))
 	if err != nil {
 		err = utils.StackError(err, "Unable to load user handler")
 		self.logger.Error(err.Error())
@@ -105,7 +105,7 @@ func (self *Node) Start() error {
 	self.Users = uh
 
 	//add config API
-	client, _ := self.Router.GetLocalClient("config")
+	client, _ := self.Router.GetLocalClient("config", self.logger.Named("config.api"))
 	self.Config = utils.NewConfigAPI(client)
 
 	//make sure we get system signals

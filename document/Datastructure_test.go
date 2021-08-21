@@ -293,6 +293,7 @@ func TestDatastructureData(t *testing.T) {
 		defer ds.Close()
 
 		swarm, err := host.CreateSwarmWithID(context.Background(), p2p.SwarmID(id), p2p.SwarmStates(ds.GetState()))
+		utils.PrintWithStacktrace(err)
 		So(err, ShouldBeNil)
 		ds.Start(swarm)
 		defer swarm.Close(context.Background())
