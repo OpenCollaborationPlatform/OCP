@@ -25,6 +25,7 @@ type OCPError interface {
 	Source() string
 	Reason() string
 	Message() string
+	Origin() string
 	Arguments() []interface{}
 	Stack() []string
 	ErrorType() string
@@ -50,7 +51,7 @@ func NewError(class OCPErrorClass, source, reason, message string, args ...inter
 	pc = pc[:n]
 	frames := runtime.CallersFrames(pc)
 	frame, _ := frames.Next()
-	origin := fmt.Sprintf("%v (Line %v)", frame.Function, frame.Line)
+	origin := fmt.Sprintf("%v (Line %v)", frame.File, frame.Line)
 
 	return &Error{class, source, reason, message, origin, args, make([]string, 0)}
 }
@@ -79,6 +80,10 @@ func (self *Error) Reason() string {
 
 func (self *Error) Message() string {
 	return self.message
+}
+
+func (self *Error) Origin() string {
+	return self.origin
 }
 
 func (self *Error) Arguments() []interface{} {
@@ -184,7 +189,7 @@ func StackError(err error, args ...interface{}) error {
 		} else if len(args) == 1 {
 			msg = args[0].(string)
 		}
-		msg = fmt.Sprintf("%v (Line %v): %v", frame.Function, frame.Line, msg)
+		msg = fmt.Sprintf("%v (Line %v): %v", frame.File, frame.Line, msg)
 
 		if ocperr, ok := err.(OCPError); ok {
 			ocperr.AddToStack(msg)
@@ -208,11 +213,57 @@ func ErrorToWampResult(err error) nxclient.InvokeResult {
 	}
 
 	if ocperr, ok := err.(OCPError); ok {
-		if len(ocperr.Stack()) > 0 {
-			return nxclient.InvokeResult{Args: wamp.List{ocperr.Message(), ocperr.Stack()[0]}, Err: wamp.URI(ocperr.ErrorType())}
-		} else {
-			return nxclient.InvokeResult{Args: wamp.List{ocperr.Message()}, Err: wamp.URI(ocperr.ErrorType())}
+
+		args := wamp.List{ocperr.Message(), ocperr.Origin(), ocperr.Arguments(), ocperr.Stack()}
+		return nxclient.InvokeResult{Args: args, Err: wamp.URI(ocperr.ErrorType())}
+	}
+
+	return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error.internal.library.failure")}
+}
+
+func WampRPCErrorToError(err nxclient.RPCError) OCPError {
+
+	msg := "unknown failure"
+	args := make([]interface{}, 0)
+	stack := make([]string, 0)
+	origin := "unknown origin"
+	if len(err.Err.Arguments) == 4 {
+
+		if str, ok := err.Err.Arguments[0].(string); ok {
+			msg = str
+		}
+		if str, ok := err.Err.Arguments[1].(string); ok {
+			origin = str
+		}
+		if inter, ok := err.Err.Arguments[2].([]interface{}); ok {
+			args = inter
+		}
+		if inter, ok := err.Err.Arguments[3].([]interface{}); ok {
+			for _, entry := range inter {
+				if str, ok := entry.(string); ok {
+					stack = append(stack, str)
+				}
+			}
 		}
 	}
-	return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error.internal.library.failure")}
+
+	class := "internal"
+	source := "unknwown"
+	reason := "unknwown"
+	parts := strings.Split(string(err.Err.Error), ".")
+	if len(parts) == 5 {
+		class = parts[2]
+		source = parts[3]
+		reason = parts[4]
+	}
+
+	ocperr := Error{class: OCPErrorClass(class),
+		source:  source,
+		reason:  reason,
+		message: msg,
+		args:    args,
+		origin:  origin,
+		stack:   stack}
+
+	return &ocperr
 }

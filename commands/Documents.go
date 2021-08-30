@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/OpenCollaborationPlatform/OCP/utils"
+
+	nxclient "github.com/gammazero/nexus/v3/client"
+	wamp "github.com/gammazero/nexus/v3/wamp"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +19,7 @@ func init() {
 	cmdDocClose.Flags().BoolP("remove", "r", false, "removes all data and folders of docuents")
 	cmdDocClose.Flags().BoolP("all", "a", false, "closes all open documens")
 
-	cmdDocuments.AddCommand(cmdDocClose, cmdDocCreate, cmdDocOpen)
+	cmdDocuments.AddCommand(cmdDocClose, cmdDocCreate, cmdDocOpen, cmdDocContent)
 	rootCmd.AddCommand(cmdDocuments)
 }
 
@@ -91,4 +95,41 @@ var cmdDocCreate = &cobra.Command{
 		}
 		return doc.ID
 	}),
+}
+
+var cmdDocContent = &cobra.Command{
+	Use:   "content [id] [path] fncArguments",
+	Short: "Accesses the document content with the given path and arguments, e.g. call mydocid MyToplevel.MySubObject.myFunction arg1",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+
+		if !isConnected {
+			fmt.Println("No node is currently running. Aborting.")
+			return
+		}
+
+		path := "ocp.documents." + args[0] + ".content." + args[1]
+
+		wampArgs := make(wamp.List, len(args)-2)
+		for i, arg := range args[2:] {
+			wampArgs[i] = arg
+		}
+		result, err := nodeClient.Call(cmd.Context(), path, wamp.Dict{}, wampArgs, wamp.Dict{}, nil)
+		if err != nil {
+			rpcerr, ok := err.(nxclient.RPCError)
+			if !ok {
+				fmt.Println(err.Error())
+			}
+			ocperr := utils.WampRPCErrorToError(rpcerr)
+			if verbose {
+				fmt.Println(ocperr.ErrorWithStacktrace())
+			} else {
+				fmt.Println(ocperr.Error())
+			}
+			return
+		}
+		for _, res := range result.Arguments {
+			fmt.Println(res)
+		}
+	},
 }

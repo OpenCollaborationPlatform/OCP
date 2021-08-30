@@ -79,6 +79,18 @@ func (self *method) Call(args ...interface{}) (interface{}, error) {
 	for i, arg := range args {
 		rfargs[i] = reflect.ValueOf(arg)
 	}
+
+	if self.fnc.Type().IsVariadic() {
+		if self.fnc.Type().NumIn()-1 > len(args) {
+			self.fnc.Type().IsVariadic()
+			return nil, newUserError(Error_Arguments_Wrong, "Wrong amount of arguments provided", "Minimum required", self.fnc.Type().NumIn()-1, "Provided", len(args), "Arguments", args)
+		}
+	} else {
+		if self.fnc.Type().NumIn() != len(args) {
+			return nil, newUserError(Error_Arguments_Wrong, "Wrong amount of arguments provided", "Required", self.fnc.Type().NumIn(), "Provided", len(args), "Arguments", args)
+		}
+	}
+
 	res := self.fnc.Call(rfargs)
 
 	if len(res) == 0 {
