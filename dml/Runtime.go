@@ -432,7 +432,9 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 
 	case Method:
 		mthd := resolved.(Method)
-		args = append([]interface{}{id}, args...)
+		if mthd.IsIdMethod() {
+			args = append([]interface{}{id}, args...)
+		}
 		result, err = mthd.Call(args...)
 
 	case Property:
