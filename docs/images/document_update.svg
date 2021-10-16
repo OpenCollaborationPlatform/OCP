@@ -1,0 +1,733 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="705.34753"
+   height="200.49677"
+   viewBox="0 0 705.34754 200.49676"
+   version="1.1"
+   id="svg5"
+   inkscape:version="1.1.1 (3bf5ae0d25, 2021-09-20)"
+   sodipodi:docname="document_update.svg"
+   inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/document_update.png.png"
+   inkscape:export-xdpi="49.943485"
+   inkscape:export-ydpi="49.943485"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview7"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:document-units="px"
+     showgrid="false"
+     inkscape:zoom="1.3160109"
+     inkscape:cx="294.83038"
+     inkscape:cy="169.07155"
+     inkscape:window-width="1858"
+     inkscape:window-height="1051"
+     inkscape:window-x="62"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g1497" />
+  <defs
+     id="defs2">
+    <rect
+       x="168.10159"
+       y="328.12961"
+       width="57.801224"
+       height="96.305374"
+       id="rect76791" />
+    <marker
+       style="overflow:visible"
+       id="TriangleInL"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleOutL"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleOutL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2971" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Arrow2Lend"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="Arrow2Lend"
+       inkscape:isstock="true">
+      <path
+         transform="matrix(-1.1,0,0,-1.1,-1.1,0)"
+         d="M 8.7185878,4.0337352 -2.2072895,0.01601326 8.7185884,-4.0017078 c -1.7454984,2.3720609 -1.7354408,5.6174519 -6e-7,8.035443 z"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:0.625;stroke-linejoin:round"
+         id="path2850" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-6"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-6" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-4"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-8" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-7"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-2" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-1"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-5" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-7-9"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-2-4" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-4-9"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-8-0" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-2"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-9" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-75"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-3" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-4-8"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-8-8" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleInL-7-4-9-3"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleInL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(-0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2962-3-8-0-1" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="TriangleOutL-8"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleOutL"
+       inkscape:isstock="true">
+      <path
+         transform="scale(0.8)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:context-stroke;stroke-width:1pt"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path2971-9" />
+    </marker>
+  </defs>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-1.3920122,-53.576378)">
+    <g
+       id="g1497"
+       transform="matrix(2.4530644,0,0,2.498195,-167.58794,-67.272471)">
+      <g
+         id="g1604"
+         style="stroke-width:1.00989;stroke-miterlimit:4;stroke-dasharray:none"
+         transform="translate(-137.23032,-57.322653)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="96.220062"
+         y="128.41603"
+         id="text14807"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="96.220062"
+           y="128.41603"
+           id="tspan14831">App 1</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="96.220062"
+           y="135.14861"
+           id="tspan20615" /></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="202.98553"
+         y="128.51323"
+         id="text14807-1"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="202.98553"
+           y="128.51323"
+           id="tspan14831-85">App 2</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="202.98553"
+           y="135.2458"
+           id="tspan20615-9" /></text>
+      <g
+         id="g2803"
+         transform="translate(-1.6369928,-80.238937)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177">
+        <path
+           style="fill:none;stroke:#000000;stroke-width:0.403954px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+           d="m 140.65571,202.21254 0.0995,-73.39716 h 20.51513 l 7.57973,8.73804 v 64.67098 z"
+           id="path2146"
+           sodipodi:nodetypes="cccccc" />
+        <path
+           style="fill:none;stroke:#000000;stroke-width:0.403954px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+           d="m 161.27034,128.8154 v 8.70922 l 7.57973,0.0288"
+           id="path2542"
+           sodipodi:nodetypes="ccc" />
+      </g>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="152.28708"
+         y="129.47801"
+         id="text31955"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="152.28708"
+           y="129.47801"
+           id="tspan31953">Document</tspan></text>
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.403954;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:2.42372, 0.403954;stroke-dashoffset:0;stroke-opacity:1;marker-start:url(#TriangleInL-7)"
+         d="m 135.92269,70.560716 -41.969436,-0.0852"
+         id="path2827-6"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         sodipodi:nodetypes="cc"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="95.225761"
+         y="68.893158"
+         id="text5144-1"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           id="tspan5142-2"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="95.225761"
+           y="68.893158">AppendNew()</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="-63.177799"
+         y="72.352341"
+         id="text5144-1-0"
+         transform="matrix(0,-0.99092619,1.0091569,0,0,0)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           id="tspan5142-2-8"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="-63.177799"
+           y="72.352341">Time</tspan></text>
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.403954;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:2.42372, 0.403954;stroke-dashoffset:0;stroke-opacity:1;marker-start:url(#TriangleInL-7-4)"
+         d="m 96.684444,91.053714 40.763986,-0.0852"
+         id="path2827-6-1"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         sodipodi:nodetypes="cc"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="109.29549"
+         y="90.434387"
+         id="text5144-1-7"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           id="tspan5142-2-2"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="109.29549"
+           y="90.434387">Done</tspan></text>
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.403954;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:2.42372, 0.403954;stroke-dashoffset:0;stroke-opacity:1;marker-start:url(#TriangleInL-7-4-9)"
+         d="m 206.53735,115.22768 -38.27801,-0.0852"
+         id="path2827-6-1-7"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         sodipodi:nodetypes="cc"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="169.14671"
+         y="114.15092"
+         id="text5144-1-7-3"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           id="tspan5142-2-2-6"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="169.14671"
+           y="114.15092">onNewEntry</tspan></text>
+      <text
+         xml:space="preserve"
+         transform="matrix(0.40765338,0,0,0.40028901,75.471411,36.230091)"
+         id="text76789"
+         style="font-style:normal;font-weight:normal;font-size:40px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect76791);fill:#000000;fill-opacity:1;stroke:none"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <path
+         style="fill:none;stroke:#000000;stroke-width:0.403954;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:0.807908, 0.403954, 0.201977, 0.403954;stroke-dashoffset:0;stroke-opacity:1;marker-end:url(#TriangleOutL)"
+         d="M 74.841873,50.174398 V 119.09695"
+         id="path185558"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <rect
+         style="fill:#000000;fill-opacity:1;stroke:none;stroke-width:1.00989;stroke-miterlimit:4;stroke-dasharray:none"
+         id="rect304861"
+         width="2.3901386"
+         height="72.565704"
+         x="89.752419"
+         y="48.747574"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <rect
+         style="fill:#000000;fill-opacity:1;stroke:none;stroke-width:1.00989;stroke-miterlimit:4;stroke-dasharray:none"
+         id="rect304861-4"
+         width="2.3901386"
+         height="72.565704"
+         x="209.57182"
+         y="49.019176"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="254.62006"
+         y="127.88715"
+         id="text14807-6"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="254.62006"
+           y="127.88715"
+           id="tspan14831-4">App 1</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="254.62006"
+           y="134.61974"
+           id="tspan20615-3" /></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="345.89185"
+         y="128.20279"
+         id="text14807-1-3"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="345.89185"
+           y="128.20279"
+           id="tspan14831-85-3">App 2</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="345.89185"
+           y="134.93536"
+           id="tspan20615-9-8" /></text>
+      <g
+         id="g2803-6"
+         transform="translate(158.26393,-79.986554)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177">
+        <path
+           style="fill:none;stroke:#000000;stroke-width:0.403954px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+           d="m 140.65571,202.21254 0.0995,-73.39716 h 20.51513 l 7.57973,8.73804 v 64.67098 z"
+           id="path2146-0"
+           sodipodi:nodetypes="cccccc" />
+        <path
+           style="fill:none;stroke:#000000;stroke-width:0.403954px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
+           d="m 161.27034,128.8154 v 8.70922 l 7.57973,0.0288"
+           id="path2542-4"
+           sodipodi:nodetypes="ccc" />
+      </g>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="310.73718"
+         y="129.73271"
+         id="text31955-8"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';text-align:center;text-anchor:middle;stroke-width:0.403954"
+           x="310.73718"
+           y="129.73271"
+           id="tspan31953-8">Document</tspan></text>
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.403954;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:2.42372, 0.403954;stroke-dashoffset:0;stroke-opacity:1;marker-start:url(#TriangleInL-7-75)"
+         d="m 295.70291,71.619424 -41.96941,-0.0852"
+         id="path2827-6-8"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         sodipodi:nodetypes="cc"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="253.55617"
+         y="69.961594"
+         id="text5144-1-9"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           id="tspan5142-2-7"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="253.55617"
+           y="69.961594">AppendNew()</tspan></text>
+      <path
+         style="fill:none;fill-rule:evenodd;stroke:#000000;stroke-width:0.403954;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:2.42372, 0.403954;stroke-dashoffset:0;stroke-opacity:1;marker-start:url(#TriangleInL-7-4-8)"
+         d="m 256.58536,92.907248 40.76396,-0.0852"
+         id="path2827-6-1-4"
+         inkscape:connector-type="polyline"
+         inkscape:connector-curvature="0"
+         sodipodi:nodetypes="cc"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="269.05804"
+         y="91.997002"
+         id="text5144-1-7-30"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           id="tspan5142-2-2-3"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="269.05804"
+           y="91.997002">Fail</tspan></text>
+      <rect
+         style="fill:#000000;fill-opacity:1;stroke:none;stroke-width:1.00989;stroke-miterlimit:4;stroke-dasharray:none"
+         id="rect304861-40"
+         width="2.3901386"
+         height="72.565704"
+         x="249.65332"
+         y="48.999958"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <rect
+         style="fill:#000000;fill-opacity:1;stroke:none;stroke-width:1.00989;stroke-miterlimit:4;stroke-dasharray:none"
+         id="rect304861-4-5"
+         width="2.3901386"
+         height="72.565704"
+         x="354.03241"
+         y="49.271561"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="297.75958"
+         y="80.827477"
+         id="text5144-1-7-9-6"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="297.75958"
+           y="80.827477"
+           id="tspan335767-9">C():</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="297.75958"
+           y="87.560051"
+           id="tspan335771-2">  error</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="139.34981"
+         y="58.098572"
+         id="text5144-1-7-9-2"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="139.34981"
+           y="58.098572"
+           id="tspan335767-4">List:</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="139.34981"
+           y="64.831146"
+           id="tspan335771-7">2 entries</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="139.90619"
+         y="100.60761"
+         id="text5144-1-7-9-2-7"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="139.90619"
+           y="100.60761"
+           id="tspan335767-4-5">List:</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="139.90619"
+           y="107.34019"
+           id="tspan335771-7-4">3 entries</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="297.51663"
+         y="57.816525"
+         id="text5144-1-7-9-2-8"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="297.51663"
+           y="57.816525"
+           id="tspan335767-4-1">List:</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="297.51663"
+           y="64.549103"
+           id="tspan335771-7-2">2 entries</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="298.22501"
+         y="104.07161"
+         id="text5144-1-7-9-2-7-8"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="298.22501"
+           y="104.07161"
+           id="tspan335767-4-5-9">List:</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="298.22501"
+           y="110.80418"
+           id="tspan335771-7-4-3">2 entries</tspan></text>
+      <text
+         xml:space="preserve"
+         style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
+         x="138.79922"
+         y="78.833267"
+         id="text5144-1-7-9"
+         transform="scale(1.0091569,0.99092619)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/traditional_application.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="138.79922"
+           y="78.833267"
+           id="tspan335767">C():</tspan><tspan
+           sodipodi:role="line"
+           style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
+           x="138.79922"
+           y="85.565842"
+           id="tspan335771">  return</tspan></text>
+    </g>
+  </g>
+</svg>
