@@ -2,9 +2,9 @@
 
 # -- Project information
 
-project = 'Lumache'
-copyright = '2021, Graziella'
-author = 'Graziella'
+project = 'Open Collaboration Platform'
+copyright = '2021, Stefan Tröger'
+author = 'Stefan Tröger'
 
 release = '0.1'
 version = '0.1.0'
