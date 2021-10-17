@@ -9,7 +9,7 @@
    id="svg5"
    inkscape:version="1.1.1 (3bf5ae0d25, 2021-09-20)"
    sodipodi:docname="cutom_data_structure.svg"
-   inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/database_problem.png"
+   inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/custom_data_structure.png"
    inkscape:export-xdpi="49.943485"
    inkscape:export-ydpi="49.943485"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
@@ -28,13 +28,13 @@
      showgrid="false"
      inkscape:zoom="1.3572462"
      inkscape:cx="75.152172"
-     inkscape:cy="230.24562"
+     inkscape:cy="211.08919"
      inkscape:window-width="1858"
      inkscape:window-height="1051"
      inkscape:window-x="62"
      inkscape:window-y="0"
      inkscape:window-maximized="1"
-     inkscape:current-layer="g1497" />
+     inkscape:current-layer="g2803" />
   <defs
      id="defs2">
     <rect
@@ -225,7 +225,7 @@
            sodipodi:nodetypes="cccccc" />
         <path
            style="fill:none;stroke:#000000;stroke-width:0.403954px;stroke-linecap:butt;stroke-linejoin:miter;stroke-opacity:1"
-           d="m 161.27034,128.8154 v 8.70922 l 7.57973,0.0288"
+           d="m 160.45503,128.8154 v 8.70922 l 7.57973,0.0288"
            id="path2542"
            sodipodi:nodetypes="ccc" />
       </g>
@@ -240,7 +240,7 @@
            id="tspan5142-2-1"
            style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
            x="159.82812"
-           y="66.318634">&quot;MyMainObject&quot; (Type List)</tspan></text>
+           y="66.318634">&quot;MyMainObject&quot; (Type Vector)</tspan></text>
       <text
          xml:space="preserve"
          style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
@@ -322,21 +322,21 @@
          transform="matrix(1.0091569,0,0,0.99092619,48.918417,7.205202)"><tspan
            x="115.76117"
            y="83.448853"
-           id="tspan297540"><tspan
+           id="tspan398108"><tspan
              style="font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans'"
-             id="tspan297538">Function C:
+             id="tspan398106">Function C:
 </tspan></tspan><tspan
            x="115.76117"
            y="90.181424"
-           id="tspan297544"><tspan
+           id="tspan398112"><tspan
              style="font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans'"
-             id="tspan297542">    my code
+             id="tspan398110">    my code
 </tspan></tspan><tspan
            x="115.76117"
            y="96.913999"
-           id="tspan297548"><tspan
+           id="tspan398116"><tspan
              style="font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans'"
-             id="tspan297546">
+             id="tspan398114">
 </tspan></tspan></text>
       <text
          xml:space="preserve"
@@ -349,7 +349,7 @@
            id="tspan5142-2-2-6-9-4"
            style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
            x="163.98749"
-           y="106.33733">Event D:  </tspan><tspan
+           y="106.33733">onNewEntry:</tspan><tspan
            sodipodi:role="line"
            style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
            x="163.98749"
@@ -369,7 +369,7 @@
              id="tspan5142-2-1-1"
              style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
              x="158.70665"
-             y="68.28421">&quot;MyListEntry&quot; (Type Map)</tspan></text>
+             y="68.28421">&quot;MyVectorEntry&quot; (Type Map)</tspan></text>
         <text
            xml:space="preserve"
            style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
@@ -457,7 +457,7 @@
              id="tspan5142-2-1-1-4"
              style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.38606px;font-family:'DejaVu Sans';-inkscape-font-specification:'DejaVu Sans';stroke-width:0.403954"
              x="158.70665"
-             y="68.28421">&quot;MyListEntry&quot; (Type Map)</tspan></text>
+             y="68.28421">&quot;MyVectorEntry&quot; (Type Map)</tspan></text>
         <text
            xml:space="preserve"
            style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
