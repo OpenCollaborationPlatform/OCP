@@ -11,7 +11,7 @@ Now assume you want to enable the given application for direct, realtime collabo
 
 |collaboration_application|
 
-However, it becomes imediately clear that the principle of syncronous input is not valid anymore: there are multiple input sources now for the application. Even worse, the remote input source is delayed and the user actions can arrive unordered. This means that the external inputs may not fit the current application state, and hence need to be rejected. This information must of course be provided back to the source, but this takes time again, and it could easily be that the source applicaton is already way ahead of the rejected action. This approach is clearly flawed, and it is almost impossible to keep the applicaion states syncronized this way.
+However, it becomes imediately clear that the principle of syncronous input is not valid anymore: there are noew multiple input sources for the application. Even worse, the remote input source is delayed and the user actions can arrive unordered. This means that the external inputs may not fit the current application state, and hence need to be rejected. This information must of course be provided back to the source, but this takes time again, and it could easily be that the source applicaton is already way ahead of the rejected action. This approach is clearly flawed, and it is almost impossible to keep the applicaion states syncronized this way.
 
 It becomes clear that there must be a central entity which defines the current state for all applications, some kind of system that every update is written to and where each application can inquery the currently valid data. Using a database for that comes to mind. It does provide a consistent view on data and allows to be accessed from multiple applications worldwide. Pefect, rigth? Not really. Imagine the following sequence of events:
 
@@ -61,13 +61,14 @@ With this basic understanding we can go fancy: Assuming we have a graphics editi
 .. |versioned_blocking| image:: ../images/full_app_versioned_blocking.png
 .. |layer_versioned_blocking| image:: ../images/layer_versioned_blocking.png
 
+You can extend this to very complex hirarchical structures, all deendend on how you want to let the user edit your data.
 
 Datastructure Markup Language
 -----------------------------
 
 OCP provides a custom markup language to create such datastructures and logic. They main building blocks you use are:
 
-* **Document**: A document is the container for all your custom types and logic. A document is basically your created database
+* **Documents**: A document is the container for all your custom types and logic, it contains all you need for collaboration. For each application state a instance of a document is created.
 * **Data objects**: Objects are the main building block for a hirarchical data structure withi the document. There are predefined ones like Map and List, and from those you build your own objects by combining and cutomizing them.
 * **Properties**: Each provided object has properties that define its behaviour. You can also add your own, eihter for cutomisation of your code or for data storage
 * **Functions**: You code custom functions within your objects, which are callable from other objects and directly from your application
@@ -128,3 +129,17 @@ With this hirarchy setup you now can easily access your datastructure from outsi
 
 Peer to Peer setup
 ------------------
+
+OCP as an open source project has two main driving principles that guide our setup:
+1. No cost of service: Whenever possible build the service in a way that does not generate hosting cost so that no fees need to be charged
+2. Long term availability: Make sure the service works independend of any companies success or failure, so that there is no risk of shutting down for apps using the service
+
+With those things in mind OCP decided to work on a peer-to-peer basis. There are no servers involved, no central entities required. Every user sets up a OCP node on his machine, which enables him to connect to other nodes and work on shared documents.
+
+|p2p|
+
+The OCP nodes are responsible for transfering data to each other as well as perfectly synchronizing the user documents at all time. Your applciation connects to the node via WAMP (websocket) and can use it as if would be a single source of truth.
+
+The OCP node is a executable with a command line interface, written in Go. You simply configure and start it with the cli. Wamp libraries are available for basically all programming languages, so that you can easily connect and interact with the node from your application.
+
+.. |p2p| image:: ../images/peer_to_peer.png

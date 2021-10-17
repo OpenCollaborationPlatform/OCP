@@ -216,17 +216,26 @@
          xml:space="preserve"
          transform="matrix(0.40765338,0,0,0.40028901,75.471411,36.230091)"
          id="text76789"
-         style="font-style:normal;font-weight:normal;font-size:40px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect76791);fill:#000000;fill-opacity:1;stroke:none" />
+         style="font-style:normal;font-weight:normal;font-size:40px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect76791);fill:#000000;fill-opacity:1;stroke:none"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
       <g
          id="g230646"
-         transform="translate(76.550227,7.35403)" />
+         transform="translate(76.550227,7.35403)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
       <text
          xml:space="preserve"
          style="font-style:normal;font-weight:normal;font-size:16.1582px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
          x="239.75903"
          y="82.710564"
          id="text227005"
-         transform="scale(1.0091569,0.9909262)"><tspan
+         transform="scale(1.0091569,0.9909262)"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177"><tspan
            sodipodi:role="line"
            id="tspan227003"
            style="stroke-width:0.403954"
@@ -236,11 +245,14 @@
          xml:space="preserve"
          transform="matrix(0.40765338,0,0,0.40028901,68.885249,45.586897)"
          id="text238694"
-         style="font-style:normal;font-weight:normal;font-size:40px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect238696);fill:#000000;fill-opacity:1;stroke:none" />
+         style="font-style:normal;font-weight:normal;font-size:40px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;white-space:pre;shape-inside:url(#rect238696);fill:#000000;fill-opacity:1;stroke:none"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
       <g
          id="g2803"
          transform="translate(156.41118,-69.851182)"
-         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/full_app_versioned_blocking.png"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
          inkscape:export-xdpi="50.289177"
          inkscape:export-ydpi="50.289177">
         <path
@@ -261,7 +273,7 @@
          y="57.795876"
          id="text5144-1-5"
          transform="scale(1.0091569,0.99092619)"
-         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/full_app_versioned_blocking.png"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
          inkscape:export-xdpi="50.289177"
          inkscape:export-ydpi="50.289177"><tspan
            sodipodi:role="line"
@@ -276,7 +288,7 @@
          y="68.619568"
          id="text5144-1-5-62"
          transform="scale(1.0091569,0.99092619)"
-         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/full_app_versioned_blocking.png"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
          inkscape:export-xdpi="50.289177"
          inkscape:export-ydpi="50.289177"><tspan
            sodipodi:role="line"
@@ -291,7 +303,7 @@
          y="69.23307"
          id="text5144-1-5-62-7"
          transform="scale(1.0091569,0.99092619)"
-         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/full_app_versioned_blocking.png"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
          inkscape:export-xdpi="50.289177"
          inkscape:export-ydpi="50.289177"><tspan
            sodipodi:role="line"
@@ -306,7 +318,7 @@
          y="76.939766"
          id="text5144-1-5-6"
          transform="scale(1.0091569,0.99092619)"
-         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/full_app_versioned_blocking.png"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
          inkscape:export-xdpi="50.289177"
          inkscape:export-ydpi="50.289177"><tspan
            sodipodi:role="line"
@@ -365,7 +377,10 @@
          width="153.368"
          height="63.026775"
          x="-3.6117959"
-         y="70.556328" />
+         y="70.556328"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
       <text
          xml:space="preserve"
          style="font-style:normal;font-weight:normal;font-size:5.38606px;line-height:1.25;font-family:sans-serif;letter-spacing:0px;word-spacing:0px;fill:#000000;fill-opacity:1;stroke:none;stroke-width:0.403954"
@@ -373,7 +388,7 @@
          y="77.259377"
          id="text5144-1-5-6-1"
          transform="scale(1.0091569,0.99092619)"
-         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/full_app_versioned_blocking.png"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
          inkscape:export-xdpi="50.289177"
          inkscape:export-ydpi="50.289177"><tspan
            sodipodi:role="line"
@@ -432,7 +447,10 @@
          width="153.368"
          height="63.026775"
          x="166.09286"
-         y="70.873032" />
+         y="70.873032"
+         inkscape:export-filename="/home/stefan/Projects/Documentation/docs/images/layer_versioned_blocking.png"
+         inkscape:export-xdpi="50.289177"
+         inkscape:export-ydpi="50.289177" />
     </g>
   </g>
 </svg>
