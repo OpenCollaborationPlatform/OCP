@@ -200,7 +200,7 @@ func (self *jsMethod) IsConst() bool {
 }
 
 func (self *jsMethod) IsIdMethod() bool {
-	return false
+	return true
 }
 
 type MethodHandler interface {

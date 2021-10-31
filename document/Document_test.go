@@ -81,7 +81,7 @@ func TestDocumentSingleNode(t *testing.T) {
 
 		//make a wamp router (and little test client)
 		router, _ := connection.MakeTemporaryRouter()
-		client, _ := router.GetLocalClient("testClient")
+		client, _ := router.GetLocalClient("testClient", nil)
 
 		//make a p2p host for communication (second one to mimic the network)
 		host, baseHost, _ := p2p.MakeTemporaryTwoHostNetwork(path)
@@ -165,8 +165,8 @@ func TestDocumentTwoNodes(t *testing.T) {
 
 		//make two wamp routers (and little test client)
 		router1, router2, _ := connection.MakeTwoTemporaryRouters()
-		client1, _ := router1.GetLocalClient("testClient")
-		client2, _ := router2.GetLocalClient("testClient")
+		client1, _ := router1.GetLocalClient("testClient", nil)
+		client2, _ := router2.GetLocalClient("testClient", nil)
 
 		//make two p2p host for communication
 		host1, host2, err := p2p.MakeTemporaryTwoHostNetwork(path)
@@ -348,9 +348,9 @@ func TestDocumentViews(t *testing.T) {
 
 		//make a wamp router (and two  little test clients)
 		router, _ := connection.MakeTemporaryRouter()
-		client1, _ := router.GetLocalClient("testClient1")
-		client2, _ := router.GetLocalClient("testClient2")
-		client3, _ := router.GetLocalClient("testClient3")
+		client1, _ := router.GetLocalClient("testClient1", nil)
+		client2, _ := router.GetLocalClient("testClient2", nil)
+		client3, _ := router.GetLocalClient("testClient3", nil)
 
 		//make a p2p host for communication (second one to mimic the network)
 		host, baseHost, _ := p2p.MakeTemporaryTwoHostNetwork(path)

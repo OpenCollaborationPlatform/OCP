@@ -73,8 +73,8 @@ func TestDatastructure(t *testing.T) {
 
 		//make a wamp router to be used for local clients
 		router, _ := connection.MakeTemporaryRouter()
-		dsClient, _ := router.GetLocalClient("dsClient")
-		testClient, _ := router.GetLocalClient("testClient")
+		dsClient, _ := router.GetLocalClient("dsClient", nil)
+		testClient, _ := router.GetLocalClient("testClient", nil)
 
 		//make a p2p host for communication
 		baseHost, _ := p2p.MakeTemporaryTestingHost(path)
@@ -265,8 +265,8 @@ func TestDatastructureData(t *testing.T) {
 
 		//make a wamp router to be used for local clients
 		router, _ := connection.MakeTemporaryRouter()
-		dsClient, _ := router.GetLocalClient("dsClient")
-		testClient, _ := router.GetLocalClient("testClient")
+		dsClient, _ := router.GetLocalClient("dsClient", nil)
+		testClient, _ := router.GetLocalClient("testClient", nil)
 
 		//make a p2p host for communication
 		baseHost, _ := p2p.MakeTemporaryTestingHost(path)
