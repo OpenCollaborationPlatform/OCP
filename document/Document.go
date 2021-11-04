@@ -165,36 +165,6 @@ func (self Document) Close(ctx context.Context) {
 	self.swarm.Close(ctx)
 }
 
-func (self Document) handleEvent(topic string) error {
-
-	sub, err := self.swarm.Event.Subscribe(topic)
-	if err != nil {
-		return utils.StackError(err, "Unable to subscribe document event")
-	}
-
-	self.subs = append(self.subs, sub)
-
-	go func(sub p2p.Subscription, client *nxclient.Client, id string) {
-		for {
-			evt, err := sub.Next(self.docCtx)
-			if err != nil {
-				//subscription canceld, return
-				return
-			}
-			topics := strings.Split(evt.Topic, ".")
-			uri := fmt.Sprintf("ocp.documents.%s.%s", id, topics[len(topics)-1])
-			args := make(wamp.List, len(evt.Arguments))
-			for i, argument := range evt.Arguments {
-				args[i] = argument
-			}
-			self.logger.Debug("Emit event", "uri", uri, "arguments", args)
-			client.Publish(uri, wamp.Dict{}, args, wamp.Dict{})
-		}
-	}(sub, self.client, self.ID)
-
-	return nil
-}
-
 func (self Document) stateEventLoop(obs p2p.StateObserver) {
 
 	//read events and do something useful with it!
@@ -252,6 +222,15 @@ func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
 	return pid, pidauth, nil
 }
 
+/* +extract wamp_individual_doc
+.. wamp:procedure:: ocp.documents.<docid>.addPeer(peer,auth)
+
+    Adds new peer to the document
+
+    :path DocID docid: ID of the document to add the peer to
+    :param NodeID peer: Peer to add to the document
+    :param str auth: Authorisation of added peer
+*/
 func (self Document) addPeer(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	pid, auth, err := getPeerAuthData(inv.Arguments)
@@ -279,32 +258,14 @@ func (self Document) addPeer(ctx context.Context, inv *wamp.Invocation) nxclient
 	return nxclient.InvokeResult{}
 }
 
-func (self Document) setPeerAuth(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+/* +extract wamp_individual_doc
+.. wamp:procedure:: ocp.documents.<docid>.removePeer(peer)
 
-	pid, auth, err := getPeerAuthData(inv.Arguments)
-	if err != nil {
-		return utils.ErrorToWampResult(err)
-	}
+	Remove the peer from document
 
-	err = self.swarm.ChangePeer(ctx, pid, auth)
-	if err != nil {
-		return utils.ErrorToWampResult(err)
-	}
-
-	return nxclient.InvokeResult{}
-}
-
-func (self Document) getPeerAuth(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
-
-	pid, err := getPeer(inv.Arguments)
-	if err != nil {
-		return utils.ErrorToWampResult(err)
-	}
-
-	auth := self.swarm.PeerAuth(pid)
-	return nxclient.InvokeResult{Args: wamp.List{auth}}
-}
-
+    :path DocID docid: ID of the document to add the peer to
+    :param NodeID peer: Peer thats autorisation should change
+*/
 func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	pid, err := getPeer(inv.Arguments)
@@ -332,6 +293,13 @@ func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxcli
 	return nxclient.InvokeResult{}
 }
 
+/* +extract wamp_individual_doc
+.. wamp:procedure:: ocp.documents.<docid>.listPeers(auth="None", joined=False)
+
+	List all peers in the document, possibly filtered auth or joined peers
+
+    :path DocID docid: ID of the document to add the peer to
+*/
 func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 	// returns all peers with possible sorting. Supported keyword args:
 	//   - "auth": 		only peers with that auth are returned. Valid args are "Read" and "Write"
@@ -383,6 +351,58 @@ func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclie
 	return nxclient.InvokeResult{Args: wamp.List{resargs}}
 }
 
+/* +extract wamp_individual_doc
+.. wamp:procedure:: ocp.documents.<docid>.setPeerAuth(peer,auth)
+
+	Change the peer authorisation
+
+    :path DocID docid: ID of the document to add the peer to
+    :param NodeID peer: Peer thats autorisation should change
+    :param str auth: New authorisation
+*/
+func (self Document) setPeerAuth(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	pid, auth, err := getPeerAuthData(inv.Arguments)
+	if err != nil {
+		return utils.ErrorToWampResult(err)
+	}
+
+	err = self.swarm.ChangePeer(ctx, pid, auth)
+	if err != nil {
+		return utils.ErrorToWampResult(err)
+	}
+
+	return nxclient.InvokeResult{}
+}
+
+/* +extract wamp_individual_doc
+.. wamp:procedure:: ocp.documents.<docid>.getPeerAuth(peer)
+
+	Read the peer authorisation
+
+    :path DocID docid: ID of the document to add the peer to
+    :param NodeID peer: Peer thats autorisation should change
+    :param str auth: New authorisation
+*/
+func (self Document) getPeerAuth(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
+
+	pid, err := getPeer(inv.Arguments)
+	if err != nil {
+		return utils.ErrorToWampResult(err)
+	}
+
+	auth := self.swarm.PeerAuth(pid)
+	return nxclient.InvokeResult{Args: wamp.List{auth}}
+}
+
+/* +extract wamp_individual_doc
+.. wamp:procedure:: ocp.documents.<docid>.hasMajority()
+
+	List all peers in the document, possibly filtered auth or joined peers
+
+    :path DocID docid: ID of the document to add the peer to
+    :return bool majority: True or false, dependent if majority is available
+*/
 func (self Document) majority(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	if len(inv.Arguments) != 0 {
@@ -400,6 +420,15 @@ func (self Document) majority(ctx context.Context, inv *wamp.Invocation) nxclien
 
 //							View Handling
 //******************************************************************************
+
+/* +extract wamp_individual_doc
+.. wamp:procedure:: ocp.documents.<docid>.view(open)
+
+	List all peers in the document, possibly filtered auth or joined peers
+
+    :path DocID docid: ID of the document to add the peer to
+    :return bool open: True or false, dependent if majority is available
+*/
 func (self Document) view(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
 
 	session := wamp.OptionID(inv.Details, "caller")
@@ -431,4 +460,47 @@ func (self Document) view(ctx context.Context, inv *wamp.Invocation) nxclient.In
 		return utils.ErrorToWampResult(err)
 	}
 	return nxclient.InvokeResult{}
+}
+
+//							Event Handling
+//******************************************************************************
+
+/* +extract wamp_individual_doc
+.. wamp:event:: ocp.documents.<docid>.peerAdded(peer)
+
+.. wamp:event:: ocp.documents.<docid>.peerRemoved(peer)
+
+.. wamp:event:: ocp.documents.<docid>.peerAuthChanged(peer)
+
+.. wamp:event:: ocp.documents.<docid>.peerActivityChanged(peer)
+
+*/
+func (self Document) handleEvent(topic string) error {
+
+	sub, err := self.swarm.Event.Subscribe(topic)
+	if err != nil {
+		return utils.StackError(err, "Unable to subscribe document event")
+	}
+
+	self.subs = append(self.subs, sub)
+
+	go func(sub p2p.Subscription, client *nxclient.Client, id string) {
+		for {
+			evt, err := sub.Next(self.docCtx)
+			if err != nil {
+				//subscription canceld, return
+				return
+			}
+			topics := strings.Split(evt.Topic, ".")
+			uri := fmt.Sprintf("ocp.documents.%s.%s", id, topics[len(topics)-1])
+			args := make(wamp.List, len(evt.Arguments))
+			for i, argument := range evt.Arguments {
+				args[i] = argument
+			}
+			self.logger.Debug("Emit event", "uri", uri, "arguments", args)
+			client.Publish(uri, wamp.Dict{}, args, wamp.Dict{})
+		}
+	}(sub, self.client, self.ID)
+
+	return nil
 }
