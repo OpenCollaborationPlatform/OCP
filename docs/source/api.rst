@@ -1,7 +1,11 @@
 WAMP API
 ========
-
 test ref :wamp:proc:`open` test ref
+
+Index: :ref:`wamp-index`
+
+
+* :ref:`wamp-index`
 
 Documents
 ---------

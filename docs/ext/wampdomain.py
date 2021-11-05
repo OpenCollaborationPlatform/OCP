@@ -4,8 +4,9 @@ import re
 from dataclasses import dataclass
 from docutils import nodes
 from sphinx import addnodes
+from sphinx.util.nodes import make_refnode
 from sphinx.roles import XRefRole
-from sphinx.domains import Domain
+from sphinx.domains import Domain, Index
 from sphinx.directives import ObjectDescription
 from sphinx.util.docfields import GroupedField, TypedField
 from sphinx.locale import _
@@ -179,6 +180,86 @@ class Event(ObjectDescription):
     def get_index_text(self, modname, name):
         return ''
 
+class WampIndex(Index):    
+    name = 'index'
+    localname = 'WAMP Index'
+    shortname = 'WAMP'
+    
+    def __init__(self, *args, **kwargs):
+        super(WampIndex, self).__init__(*args, **kwargs)
+
+    def generate(self, docnames=None):
+        """Return entries for the index given by *name*.  If *docnames* is
+        given, restrict to entries referring to these docnames.
+        The return value is a tuple of ``(content, collapse)``, where
+        * collapse* is a boolean that determines if sub-entries should
+        start collapsed (for output formats that support collapsing
+        sub-entries).
+        *content* is a sequence of ``(letter, entries)`` tuples, where *letter*
+        is the "heading" for the given *entries*, usually the starting letter.
+        *entries* is a sequence of single entries, where a single entry is a
+        sequence ``[name, subtype, docname, anchor, extra, qualifier, descr]``.
+        The items in this sequence have the following meaning:
+        - `name` -- the name of the index entry to be displayed
+        - `subtype` -- sub-entry related type:
+          0 -- normal entry
+          1 -- entry with sub-entries
+          2 -- sub-entry
+        - `docname` -- docname where the entry is located
+        - `anchor` -- anchor for the entry within `docname`
+        - `extra` -- extra info for the entry
+        - `qualifier` -- qualifier for the description
+        - `descr` -- description for the entry
+        Qualifier and description are not rendered e.g. in LaTeX output.
+        """
+
+        content = {}
+        
+        procs = []
+        evts = []
+        uris = []
+        for name, dispname, typ, docname, anchor, prio in self.domain.get_objects():
+            if typ == "proc":
+                procs.append((name, dispname, typ, docname, anchor))
+            if typ == "evt":
+                evts.append((name, dispname, typ, docname, anchor))
+            if typ == "uri":
+                uris.append((name, dispname, typ, docname, anchor))
+                
+        procs = sorted(procs, key=lambda item: item[1])
+        evts = sorted(evts, key=lambda item: item[1])
+        uris = sorted(uris, key=lambda item: item[1])
+                 
+        proc_entries = []
+        for name, dispname, typ, docname, anchor in procs:
+            proc_entries.append((
+                dispname, 0, docname,
+                anchor,
+                docname, '', "Procedure"
+            ))
+            
+        evt_entries = []
+        for name, dispname, typ, docname, anchor in evts:
+            evt_entries.append((
+                dispname, 0, docname,
+                anchor,
+                docname, '', "Event"
+            ))
+            
+        uri_entries = []
+        for name, dispname, typ, docname, anchor in uris:
+            uri_entries.append((
+                dispname, 0, docname,
+                anchor,
+                docname, '', "Uri"
+            ))
+        
+        content = [("Uri", uri_entries), ("Procedure", proc_entries), ("Events", evt_entries)]
+
+        return (content, True)
+
+
+
 class WampDomain(Domain):
     """Wamp domain."""
 
@@ -201,7 +282,9 @@ class WampDomain(Domain):
         'uris': [],
     }
 
-    indices = []
+    indices = {
+        WampIndex,
+    }
 
     def clear_doc(self, docname):
         self.data['uris'] = []
@@ -213,19 +296,20 @@ class WampDomain(Domain):
             
     def resolve_xref(self, env, fromdocname, builder, typ,
                      target, node, contnode):
+        match = None
+        for name, dispname, otype, docname, anchor, prio in self.get_objects():
+            
+            if otype == typ: 
+                print(dispname,  target)
+                if dispname.split(".")[-1] == target:
+                    match = (docname, anchor)
+                    break
         
-        print("resolve xref: ")
-        
-        matches = [(docname, anchor)
-                 for name, dispname, otype, docname, anchor, prio
-                 in self.get_objects() if dispname.contains(target) and otype == typ]
-        
-        if not matches:
+        if not match:
             return None
         
-        match = matches[0]
-        return make_refnode(builder,fromdocname, docname,
-                                anchor, contnode, anchor)
+        return make_refnode(builder,fromdocname, match[0],
+                                match[1], contnode, match[1])
 
 
 def setup(app):
