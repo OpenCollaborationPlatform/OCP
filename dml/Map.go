@@ -1,14 +1,29 @@
 // Map
 package dml
 
-/*
- A Map is a standart datatype as avilable in all languages, sometimes nown as Dictionary.
+/* +extract
 
- - Keys:		Allowed keys are all Datatype except "type" (as for this no reasonable
-			Path can be build) and "complex" (as those cannot be created as key)
- - Values:	All datatypes are allowed as values
- - Paths: 	A map exposes the stored values in the DML path. For example a string->obj map
-			exposes the object as MyMap.MyKey.
+.. dml:object:: Map
+
+	Mapping from any key type to any other type. A Map is a standart datatype as
+	avilable in all programming languages, sometimes nown as Dictionary.
+
+	.. dml:property:: key
+		:const:
+		:type: key
+		:default: string
+
+		A property defining the datatype of the maps keys. Allowed values are all
+		key datatypes like int and string.
+
+	.. dml:property:: value
+		:const:
+		:type: type
+		:default: none
+
+		A property defining the datatype of the maps values. Allowed values are
+		dml types including var. This allows for nesting objects by making the map
+		value a new subtype.
 */
 
 import (
@@ -107,6 +122,14 @@ func (self *mapImpl) typeToDB(key interface{}, dt DataType) interface{} {
 
 }
 
+/* +extract indent:1
+
+.. dml:function:: Length()
+
+	Returns the length of the map,  which is defined as the number of keys
+
+	:return int l: The length of the map
+*/
 func (self *mapImpl) Length(id Identifier) (int64, error) {
 
 	dbEntries, err := self.GetDBMapVersioned(id, entryKey)

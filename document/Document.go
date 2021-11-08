@@ -17,6 +17,18 @@ import (
 	hclog "github.com/hashicorp/go-hclog"
 )
 
+/* +extract prio:1
+
+Handling individual documents
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Individual documents are accessed with their document ID simply by using the wamp
+procedure ocp.documents.*docid* . From there you have the change to manage the
+documents peers by adding, removing or changing their rigths. But you can also
+access all the content in that document, be it the RAW data you stored in it or
+the structured data according to your dml file.
+*/
+
 type Document struct {
 
 	//internals
@@ -222,7 +234,7 @@ func getPeerAuthData(args wamp.List) (p2p.PeerID, p2p.AUTH_STATE, error) {
 	return pid, pidauth, nil
 }
 
-/* +extract wamp_individual_doc
+/* +extract prio:3
 .. wamp:procedure:: ocp.documents.<docid>.addPeer(peer,auth)
 
     Adds new peer to the document
@@ -258,7 +270,7 @@ func (self Document) addPeer(ctx context.Context, inv *wamp.Invocation) nxclient
 	return nxclient.InvokeResult{}
 }
 
-/* +extract wamp_individual_doc
+/* +extract prio:3
 .. wamp:procedure:: ocp.documents.<docid>.removePeer(peer)
 
 	Remove the peer from document
@@ -293,7 +305,7 @@ func (self Document) removePeer(ctx context.Context, inv *wamp.Invocation) nxcli
 	return nxclient.InvokeResult{}
 }
 
-/* +extract wamp_individual_doc
+/* +extract prio:3
 .. wamp:procedure:: ocp.documents.<docid>.listPeers(auth="None", joined=False)
 
 	List all peers in the document, possibly filtered auth or joined peers
@@ -351,7 +363,7 @@ func (self Document) listPeers(ctx context.Context, inv *wamp.Invocation) nxclie
 	return nxclient.InvokeResult{Args: wamp.List{resargs}}
 }
 
-/* +extract wamp_individual_doc
+/* +extract prio:3
 .. wamp:procedure:: ocp.documents.<docid>.setPeerAuth(peer,auth)
 
 	Change the peer authorisation
@@ -375,7 +387,7 @@ func (self Document) setPeerAuth(ctx context.Context, inv *wamp.Invocation) nxcl
 	return nxclient.InvokeResult{}
 }
 
-/* +extract wamp_individual_doc
+/* +extract prio:3
 .. wamp:procedure:: ocp.documents.<docid>.getPeerAuth(peer)
 
 	Read the peer authorisation
@@ -395,7 +407,7 @@ func (self Document) getPeerAuth(ctx context.Context, inv *wamp.Invocation) nxcl
 	return nxclient.InvokeResult{Args: wamp.List{auth}}
 }
 
-/* +extract wamp_individual_doc
+/* +extract prio:3
 .. wamp:procedure:: ocp.documents.<docid>.hasMajority()
 
 	List all peers in the document, possibly filtered auth or joined peers
@@ -421,7 +433,7 @@ func (self Document) majority(ctx context.Context, inv *wamp.Invocation) nxclien
 //							View Handling
 //******************************************************************************
 
-/* +extract wamp_individual_doc
+/* +extract prio:3
 .. wamp:procedure:: ocp.documents.<docid>.view(open)
 
 	List all peers in the document, possibly filtered auth or joined peers
@@ -465,7 +477,7 @@ func (self Document) view(ctx context.Context, inv *wamp.Invocation) nxclient.In
 //							Event Handling
 //******************************************************************************
 
-/* +extract wamp_individual_doc
+/* +extract prio:3
 .. wamp:event:: ocp.documents.<docid>.peerAdded(peer)
 
 .. wamp:event:: ocp.documents.<docid>.peerRemoved(peer)

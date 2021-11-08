@@ -15,7 +15,8 @@ sys.path.append(os.path.abspath("./../ext"))
 
 extensions = [
     'sphinx.ext.duration',
-    'wampdomain'
+    'wampdomain',
+    'dmldomain',
 ]
 
 autoapi_type = 'go'

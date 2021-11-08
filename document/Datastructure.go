@@ -194,7 +194,7 @@ func (self Datastructure) executeOperation(ctx context.Context, op Operation) nx
 	return nxclient.InvokeResult{Args: wamp.List{res}}
 }
 
-/* +extract wamp_individual_doc
+/* +extract prio:2
 .. wamp:uri:: ocp.documents.<docid>.content.<dmlpath>
 
 	Access anything within the document that is defined by the DML code. As the
@@ -257,7 +257,7 @@ func (self Datastructure) createWampInvokeFunction() nxclient.InvocationHandler 
 	return res
 }
 
-/* +extract wamp_individual_doc
+/* +extract prio:2
 .. wamp:procedure:: ocp.documents.<docid>.execute(code)
 
 	Execute the provided javascript code in the document.
@@ -361,6 +361,15 @@ func (self Datastructure) cidByBinary(ctx context.Context, inv *wamp.Invocation)
 	return cid, nil
 }
 
+/* +extract prio:4
+
+Raw data handling
+^^^^^^^^^^^^^^^^^
+OCP documents support raw binary data as mass storage for complex and custom
+data. It can be added directly from the filesystem or as binary datastream with
+the provided procedures. If used the caller is responsible for storing the
+content identifiers in the document, it is not done automatically.
+*/
 func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 
 	res := func(ctx context.Context, inv *wamp.Invocation) nxclient.InvokeResult {
@@ -386,7 +395,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			switch procedure {
 
 			case "CidByBinary":
-				/* +extract wamp_raw
+				/* +extract prio:4
 				.. wamp:procedure:: ocp.documents.<docid>.raw.CidByBinary(uri, arguments)
 
 					Adds raw binary data to the document. To support unlimited size data the binary stream is broken up in packages
@@ -416,7 +425,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return nxclient.InvokeResult{Args: wamp.List{cid.Encode()}}
 
 			case "BinaryByCid":
-				/* +extract wamp_raw
+				/* +extract prio:4
 				.. wamp:procedure:: ocp.documents.<docid>.raw.BinaryByCid(uri, arguments)
 
 					Reads raw binary data from the document. To support unlimited size data the binary stream is broken up in packages,
@@ -462,7 +471,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return nxclient.InvokeResult{}
 
 			case "CidByPath":
-				/* +extract wamp_raw
+				/* +extract prio:4
 				.. wamp:procedure:: ocp.documents.<docid>.raw.CidByPath(path)
 
 					Reads raw data from the filesystem. It adds all the content in path to the document,
@@ -499,7 +508,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				return nxclient.InvokeResult{Args: wamp.List{cid.Encode()}}
 
 			case "PathByCid":
-				/* +extract wamp_raw
+				/* +extract prio:4
 				.. wamp:procedure:: ocp.documents.<docid>.raw.PathByCid(cid, path)
 
 					Write data stored in the document into the given path. If the cid describes a binary stream or file,

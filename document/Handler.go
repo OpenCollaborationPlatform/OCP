@@ -15,9 +15,10 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
-/* +extract wamp_doc
-
- */
+/* +extract prio:0
+Documents
+---------
+*/
 
 //A p2p RPC API that allows querying some document details
 type DocumentAPI struct {
@@ -198,7 +199,7 @@ func (self *DocumentHandler) CreateDocument(ctx context.Context, path string) (D
 	return doc, nil
 }
 
-/* +extract wamp_doc
+/* +extract prio:0
 .. wamp:procedure:: ocp.documents.create(path)
 
 	Creates a new document from the provided dml code. The code must be in a
@@ -284,7 +285,7 @@ func (self *DocumentHandler) OpenDocument(ctx context.Context, docID string) err
 	return nil
 }
 
-/* +extract wamp_doc
+/* +extract prio:0
 .. wamp:procedure:: ocp.documents.open(docid)
 
 	Opens the document with the given id. For this the node looks for peers that
@@ -343,7 +344,7 @@ func (self *DocumentHandler) CloseDocument(ctx context.Context, docID string) er
 	return newUserError(Error_Operation_Invalid, "No document for given ID found")
 }
 
-/* +extract wamp_doc
+/* +extract prio:0
 .. wamp:procedure:: ocp.documents.close(docid)
 
 	Closes the document on the node and informs all other peers that we are leaving.
@@ -387,7 +388,7 @@ func (self *DocumentHandler) ListDocuments() []string {
 	return res
 }
 
-/* +extract wamp_doc
+/* +extract prio:0
 .. wamp:procedure:: ocp.documents.list()
 
 	Lists all currently open documents on the node.
@@ -425,7 +426,7 @@ func (self *DocumentHandler) Invitations() []string {
 	return res
 }
 
-/* +extract wamp_doc
+/* +extract prio:0
 .. wamp:procedure:: ocp.documents.invitations()
 
 	Lists all invitations, hence all documents we know of where we are allowed to
@@ -451,7 +452,7 @@ func (self *DocumentHandler) invitedDocs(ctx context.Context, inv *wamp.Invocati
 	return nxclient.InvokeResult{Args: wamp.List{res}}
 }
 
-/* +extract wamp_doc
+/* +extract prio:0
 .. wamp:procedure:: ocp.documents.updateInvitations()
 
 	Searches the network for documents we are allowed to join, and republish
@@ -520,7 +521,7 @@ func (self *DocumentHandler) handleInvitationRequest(sub p2p.Subscription) {
 	}
 }
 
-/* +extract wamp_doc
+/* +extract prio:0
 .. wamp:event:: ocp.documents.created
 
 	Emitted when a new document was created on the node. This event is not received by

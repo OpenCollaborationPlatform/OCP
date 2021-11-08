@@ -38,7 +38,8 @@ class Procedure(ObjectDescription):
 
     def handle_signature(self, sig, signode):
         
-        signode += addnodes.desc_annotation("Procedure", "Procedure ")
+        signode += addnodes.desc_annotation("Procedure", "Procedure")
+        signode += addnodes.desc_sig_space()
         
         # parse the path into nodes, including making <> things a parameter
         parts = sig.split('.')
@@ -94,7 +95,8 @@ class Uri(ObjectDescription):
 
     def handle_signature(self, sig, signode):
         
-        signode += addnodes.desc_annotation("Uri", "Uri ")
+        signode += addnodes.desc_annotation("Uri", "Uri")
+        signode += addnodes.desc_sig_space()
         
         # parse the path into nodes, including making <> things a parameter
         parts = sig.split('.')
@@ -143,7 +145,8 @@ class Event(ObjectDescription):
 
     def handle_signature(self, sig, signode):
         
-        signode += addnodes.desc_annotation("Event", "Event ")
+        signode += addnodes.desc_annotation("Event", "Event")
+        signode += addnodes.desc_sig_space()
         
         # parse the path into nodes, including making <> things a parameter
         parts = sig.split('.')

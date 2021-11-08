@@ -10,6 +10,9 @@ The OCP node is the bulding block for the open collaboration platforms peer to p
    
 .. toctree::
    :maxdepth: 2
-   :glob:
     
-   *
+   setup
+   cli
+   api
+   dml
+   
