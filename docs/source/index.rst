@@ -13,6 +13,6 @@ The OCP node is the bulding block for the open collaboration platforms peer to p
     
    setup
    cli
-   api
-   dml
+   wampindex
+   dmlindex
    
