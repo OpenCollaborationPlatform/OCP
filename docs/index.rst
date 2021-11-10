@@ -11,8 +11,8 @@ The OCP node is the bulding block for the open collaboration platforms peer to p
 .. toctree::
    :maxdepth: 2
     
-   setup
-   cli
-   wampindex
-   dmlindex
+   ocpsource/setup
+   ocpsource/cli
+   ocpsource/wampindex
+   ocpsource/dmlindex
    
