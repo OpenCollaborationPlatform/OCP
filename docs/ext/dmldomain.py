@@ -239,7 +239,8 @@ class DmlProperty(DmlObject):
     })
     
     doc_field_types = [
-        Field('default', label=_('Default'), names=('default'))
+        Field('default', label=_('Default'), names=('default')),
+        GroupedField('throws', label=_('Throws'), names=('throws', 'throw', 'error', 'err'), can_collapse=True)
     ]
 
     def split_signature(self, sig: str) -> Tuple[str, str, List[str], List[str]]:

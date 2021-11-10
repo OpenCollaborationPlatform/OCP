@@ -129,9 +129,9 @@ func (self *mapImpl) typeToDB(key interface{}, dt DataType) interface{} {
 
 .. dml:function:: Length()
 
-	Returns the length of the map,  which is defined as the number of keys
+	Returns the length of the map,  which is defined as the number of keys.
 
-	:return int l: The length of the map
+	:return int length: The length of the map
 */
 func (self *mapImpl) Length(id Identifier) (int64, error) {
 
@@ -147,6 +147,17 @@ func (self *mapImpl) Length(id Identifier) (int64, error) {
 	return int64(len(keys)), nil
 }
 
+/* +extract  prio:2 indent:1
+
+.. dml:function:: Keys()
+
+	Provides access to all keys in the map. The type of the keys is dependend on
+	the Maps *key* property. If called from javascript, an unmutable array is returned,
+	if called via WAMP API it will be the list type that is supported by the
+	calling language  (e.g. List for python)
+
+	:return List[any] keys: All keys that are in the map
+*/
 func (self *mapImpl) Keys(id Identifier) ([]interface{}, error) {
 
 	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
@@ -170,6 +181,19 @@ func (self *mapImpl) Keys(id Identifier) ([]interface{}, error) {
 	return result, nil
 }
 
+/* +extract  prio:2 indent:1
+
+.. dml:function:: Has(key)
+
+	Checks if the given key is available in the Map. The key must be of correct
+	type, e.g. if the Map key property defines int, the key must be an integer and
+	not a string describing the integer (like 1 and not "1"). This is different to
+	how the Map handels WAMP Uri for accessing its values, as there the key must always
+	be given as string.
+
+	:throws: If key is of wrong type
+	:return bool has: True if the key is available in the Map
+*/
 func (self *mapImpl) Has(id Identifier, key interface{}) (bool, error) {
 
 	dbEntries, err := self.GetDBMapVersioned(id, entryKey)
@@ -188,6 +212,18 @@ func (self *mapImpl) Has(id Identifier, key interface{}) (bool, error) {
 	return dbEntries.HasKey(dbkey), nil
 }
 
+/* +extract  prio:2 indent:1
+
+.. dml:function:: Get(key)
+
+	Returns the value currently stored for the given key. If the Maps value type
+	is a Object it will return the object itself when called from JavaScript, and
+	the object ID if called by WAMP Api.
+
+	:throws: If key is not available
+	:throws: If key is of wrong type (must be equal to key property)
+	:return any value: The value for the key
+*/
 func (self *mapImpl) Get(id Identifier, key interface{}) (interface{}, error) {
 
 	//check key type
@@ -218,6 +254,22 @@ func (self *mapImpl) Get(id Identifier, key interface{}) (interface{}, error) {
 	return self.dbToType(res, dt)
 }
 
+/* +extract  prio:2 indent:1
+
+.. dml:function:: Set(key, value)
+
+	Sets the value for the given key. If already available it the old value will
+	be overriden, otherwise it will be newly created and set to value. Key and value type
+	need to be consitent with the Maps defining properties.
+
+	If the Map value type is a object, this function will fail. It is not possible,
+	to set it to a different object or override it once created. Use the *New* function
+	for creating the object for a given key.
+
+	:throws: If key is of wrong type (must be equal to key property)
+	:throws: If value is of wrong type (must be equal to value property)
+	:throws: If value type of Map is a Object
+*/
 func (self *mapImpl) Set(id Identifier, key interface{}, value interface{}) error {
 
 	//check key type
@@ -304,7 +356,19 @@ func (self *mapImpl) set(id Identifier, key interface{}, value interface{}) erro
 	return nil
 }
 
-//creates a new entry with a all new type, returns the index of the new one
+/* +extract  prio:2 indent:1
+
+.. dml:function:: Net(key)
+
+	Creates a new entry with the given key and sets it to the value types default,
+	e.g. 0 for int, "" for string etc. If the value type is a Object it will be fully
+	setup, and its onCreated event will be called. The *New* function is the only way to
+	create a key entry if value type is an Object, as *Set* will fail in this case.
+
+	:throws: If key already exists
+	:throws: If key is of wrong type (must be equal to key property)
+	:return any value: The stored value for given key
+*/
 func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 
 	//check key type
@@ -369,8 +433,16 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 	return result, nil
 }
 
-//remove a entry from the mapImpl
-func (self *mapImpl) Remove(id Identifier, key interface{}) error {
+/* +extract  prio:2 indent:1
+
+.. dml:function:: Remove(key)
+
+	Removes the key from the map. If value type is a Object, its onRemove event
+	will be called and afterards will  be deleted.
+
+	:throws: If key does not exist
+	:throws: If key is of wrong type (must be equal to key property)
+*/func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 
 	//check key type
 	kdt := self.keyDataType(id)
