@@ -68,7 +68,7 @@ class DmlObject(ObjectDescription[Tuple[str, str]]):
         """
  
         #relevant info: 
-        (typ, const, name, arglist, default) = self.split_signature(sig)
+        (typ, name, arglist, annotations) = self.split_signature(sig)
 
         # determine class name as well as full name
         classname = self.env.ref_context.get('dml:class')
@@ -82,11 +82,7 @@ class DmlObject(ObjectDescription[Tuple[str, str]]):
  
         signode['class'] = classname
         signode['fullname'] = fullname
-
-        if const:
-            signode += addnodes.desc_annotation("const", "const")
-            signode += addnodes.desc_sig_space()
-
+          
         signode += addnodes.desc_annotation(str(typ), str(typ))
         signode += addnodes.desc_sig_space()
         signode += addnodes.desc_name(name, name)
@@ -98,12 +94,21 @@ class DmlObject(ObjectDescription[Tuple[str, str]]):
                 paramlist += addnodes.desc_parameter(arg, arg)
 
             signode += paramlist
-            
-        if default:
-            signode += addnodes.desc_sig_punctuation('', ':')
+        
+        if annotations:
             signode += addnodes.desc_sig_space()
-            signode += addnodes.desc_sig_name(default, default)
-           
+            signode += addnodes.desc_sig_operator('', '[')
+            addsepertor = False
+            for anno in annotations:
+                if addsepertor:
+                    signode += addnodes.desc_sig_operator('', ',')
+                    signode += addnodes.desc_sig_space()
+                    
+                signode += addnodes.desc_annotation(anno, anno)
+                aaddseperator = True
+                
+            signode += addnodes.desc_sig_operator('', ']')
+                           
         return fullname, classname
 
 
@@ -200,23 +205,23 @@ class DmlFunction(DmlObject):
         
         # return tuple:
         #   - type (class, property, event, function) -> str
-        #   - const (only valid for property and function) -> str
         #   - name -> str
-        #   - arglist (only valid for function) -> List[str]
-        #   - default (default value for property) -> str
+        #   - arglist -> List[str]
+        #   - annotations -> List[str]
         
         typ = "function"
-        const = ('const' in self.options)
-        
+                
         parts = sig.split("(")
         name = parts[0]
         
         parts = parts[1].split(")")
         arglist = parts[0].split(",")
         
-        default = None
+        annotations = []
+        if 'const' in self.options:
+            annotations.append("constant")
             
-        return (typ, const, name, arglist,  default)
+        return (typ, name, arglist, annotations)
 
     def get_index_text(self, name_cls: Tuple[str, str]) -> str:
         # add index in own add_target_and_index() instead.
@@ -229,34 +234,77 @@ class DmlProperty(DmlObject):
     option_spec: OptionSpec = DmlObject.option_spec.copy()
     option_spec.update({
         'const': directives.flag,
+        'readonly': directives.flag,
         'type': directives.unchanged,
-        'default': directives.unchanged,
     })
+    
+    doc_field_types = [
+        Field('default', label=_('Default'), names=('default'))
+    ]
 
-    def split_signature(self, sig: str) -> Tuple[str, bool, str, List[str], str]:
+    def split_signature(self, sig: str) -> Tuple[str, str, List[str], List[str]]:
         
         # return tuple:
         #   - type (class, property, event, function) -> str
-        #   - const (only valid for property and function) -> str
         #   - name -> str
-        #   - arglist (only valid for function) -> List[str]
-        #   - default (default value for property) -> str
+        #   - arglist -> List[str]
+        #   - annotations -> List[str]
+           
+        if not "type" in self.options:
+            raise Exception("DML property always needs type assigned")
         
         typ = "property " + self.options["type"]
-        const = ('const' in self.options)
-        
         name = sig
         arglist = None
-        default = None
-        if 'default' in self.options:
-            default = self.options["default"]
+
+        annotations = []
+        if 'const' in self.options:
+            annotations.append("constant")
+        if 'readonly' in self.options:
+            annotations.append("readonly")   
             
-        return (typ, const, name, arglist, default)
+        return (typ, name, arglist, annotations)
+
 
     def get_index_text(self, name_cls: Tuple[str, str]) -> str:
         # add index in own add_target_and_index() instead.
-        return "FunctionName " + name_cls[0]
+        return "PropertyName " + name_cls[0]
     
+    
+class DmlEvent(DmlObject):
+    """Description of an event."""
+
+    option_spec: OptionSpec = DmlObject.option_spec.copy()
+    option_spec.update({
+        'abstract': directives.flag,
+    })
+    
+    doc_field_types = [
+        TypedField('arguments', label=_('Arguments'), names=('arg', 'argument'), typenames=('argtype', 'argumenttype'))
+    ]
+
+    def split_signature(self, sig: str) -> Tuple[str, str, List[str], List[str]]:
+        
+        # return tuple:
+        #   - type (class, property, event, function) -> str
+        #   - name -> str
+        #   - arglist -> List[str]
+        #   - annotations -> List[str]
+        
+        typ = "event"
+        name = sig
+        arglist = None
+
+        annotations = []
+        if 'abstract' in self.options:
+            annotations.append("abstract") 
+            
+        return (typ, name, arglist, annotations)
+
+
+    def get_index_text(self, name_cls: Tuple[str, str]) -> str:
+        # add index in own add_target_and_index() instead.
+        return "EventName " + name_cls[0]
     
     
 
@@ -266,20 +314,69 @@ class DmlObject(DmlObject):
     """
 
     option_spec: OptionSpec = DmlObject.option_spec.copy()
+    option_spec.update({
+        'derived': directives.unchanged,
+        'abstract': directives.flag,
+    })
     allow_nesting = True
 
     def split_signature(self, sig: str) -> Tuple[str, bool, str, List[str], str]:
         
-        typ = "class"
-        const = False
+        # return tuple:
+        #   - type (class, property, event, function) -> str
+        #   - name -> str
+        #   - arglist -> List[str]
+        #   - annotations -> List[str]
+        
+        typ = "object"
         name  =  sig
         arglist = None
-        default =  None
+        if "derived" in self.options:
+            arglist = [self.options["derived"]]
+            
+        annotations = []
+        if 'abstract' in self.options:
+            annotations.append("abstract")
         
-        return (typ, const, name, arglist,  default)
+        return (typ, name, arglist, annotations)
 
     def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
-        return name_cls[0] + " (class)"
+        return name_cls[0] + " (Object)"
+    
+class DmlBehaviour(DmlObject):
+    """
+    Description of a behaviour
+    """
+
+    option_spec: OptionSpec = DmlObject.option_spec.copy()
+    option_spec.update({
+        'derived': directives.unchanged,
+        'abstract': directives.flag,
+    })
+    allow_nesting = True
+
+    def split_signature(self, sig: str) -> Tuple[str, bool, str, List[str], str]:
+        
+        # return tuple:
+        #   - type (class, property, event, function) -> str
+        #   - name -> str
+        #   - arglist -> List[str]
+        #   - annotations -> List[str]
+        
+        typ = "behaviour"
+        name  =  sig
+        arglist = None
+        if "derived" in self.options:
+            arglist = [self.options["derived"]]
+            
+        annotations = []
+        if 'abstract' in self.options:
+            annotations.append("abstract")
+        
+        return (typ, name, arglist, annotations)
+
+    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+        return name_cls[0] + " (Behaviour)"
 
 
 class DmlDomain(Domain):
@@ -290,12 +387,16 @@ class DmlDomain(Domain):
         'function':     ObjType(_('function'),      'func', 'obj'),
         'object':       ObjType(_('object'),        'class', 'exc', 'obj', 'object'),
         'property':     ObjType(_('property'),      'property', 'prop', 'obj'),
+        'event':        ObjType(_('event'),         'event', 'evt', 'obj'),
+        'behaviour':    ObjType(_('behaviour'),     'behaviour', 'bhvr', 'obj'),
    }
 
     directives = {
         'function': DmlFunction,
         'property': DmlProperty,
-        'object':    DmlObject,
+        'object':   DmlObject,
+        'behaviour': DmlBehaviour,
+        'event':    DmlEvent,
     }
     roles = {}
     

@@ -1,9 +1,10 @@
 // Map
 package dml
 
-/* +extract
+/* +extract prio:2
 
 .. dml:object:: Map
+	:derived: Data
 
 	Mapping from any key type to any other type. A Map is a standart datatype as
 	avilable in all programming languages, sometimes nown as Dictionary.
@@ -11,19 +12,21 @@ package dml
 	.. dml:property:: key
 		:const:
 		:type: key
-		:default: string
 
 		A property defining the datatype of the maps keys. Allowed values are all
 		key datatypes like int and string.
 
+		:default: string
+
 	.. dml:property:: value
 		:const:
 		:type: type
-		:default: none
 
 		A property defining the datatype of the maps values. Allowed values are
 		dml types including var. This allows for nesting objects by making the map
 		value a new subtype.
+
+		:default: none
 */
 
 import (
@@ -122,7 +125,7 @@ func (self *mapImpl) typeToDB(key interface{}, dt DataType) interface{} {
 
 }
 
-/* +extract indent:1
+/* +extract  prio:2 indent:1
 
 .. dml:function:: Length()
 

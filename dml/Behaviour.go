@@ -84,7 +84,48 @@ func (self behaviourManagerHandler) GetEventBehaviours(event string) []string {
 	return result
 }
 
-/* The behaviour interface*/
+/* +extract prio:3
+.. dml:behaviour:: Behaviour
+	:abstract:
+
+	Base class for all behaviours, adding common properties and events. It cannot be
+	used directly, only behaviours derived from it. It does add the possibility to add
+	custom properties,  events and functions. Children are not allowed.
+
+	.. dml:property:: name
+		:const:
+		:type: string
+
+		A property defining the name of the behaviour. The name can be used to access ut in
+		the hirarchy, either in JavaScript code or as WAMP uri. It is mandatory to set the name
+		of each behaviour.
+
+	.. dml:property:: recursive
+		:const:
+		:type: bool
+
+		Defines if the behaviour is applied recursively for all children and subobjects
+		of the behaviours parent. For example, if a behaviour is added to a Map Object,
+		it may watch for changes in that object. If recursive is true, it will also look
+		for all changes in any children or value objects of that Map.
+
+		:default: false
+
+	.. dml:event:: onBeforePropertyChange
+
+		Emitted bevore a property of the object changes. At time of emit the
+		property still has its old value.
+
+		:argument string Property: Name of the property thats about to be changed
+
+	.. dml:event:: onPropertyChanged
+
+		Emitted when a property was changed. The value of the property is already the
+		new one when emitted.
+
+		:argument string Property: Name of the property thats was changed
+
+*/
 type Behaviour interface {
 	Object
 
