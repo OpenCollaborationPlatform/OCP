@@ -58,6 +58,6 @@ jobs:
     - name: Push to github
       uses: ad-m/github-push-action@master
       with:
+        github_token: ${{ secrets.DOCUMENTATION_TOKEN }}
         directory: 'documentation'
         branch: 'main'
-        github_token: ${{ secrets.DOCUMENTATION_TOKEN }}
