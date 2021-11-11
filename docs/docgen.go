@@ -196,7 +196,7 @@ func main() {
 
 		filename := target + ".rst"
 		log.Printf("Writing %s", filename)
-		fpath := filepath.Join(mainpath, "docs", "source", filename)
+		fpath := filepath.Join(mainpath, "docs", "ocpsource", filename)
 
 		if _, err := os.Stat(fpath); err == nil {
 			os.Remove(fpath)

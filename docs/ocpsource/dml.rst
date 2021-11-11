@@ -141,10 +141,9 @@ API
 		is a Object it will return the object itself when called from JavaScript, and
 		the object ID if called by WAMP Api.
 	
-		:throws err: If key is not available
-		:throws err2: If key is of wrong type (must be equal to key property)
-		:return: The value for the key
-		:returntype: any
+		:throws: If key is not available
+		:throws: If key is of wrong type (must be equal to key property)
+		:return any value: The value for the key
 	
 	
 
