@@ -60,4 +60,4 @@ jobs:
       with:
         directory: 'documentation'
         branch: 'main'
-        github_token: ${{ secrets.GITHUB_API_TOKEN }}
+        github_token: ${{ secrets.DOCUMENTATION_TOKEN }}
