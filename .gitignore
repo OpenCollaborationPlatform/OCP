@@ -2,3 +2,12 @@
 *.lock
 *.debug
 *.test
+__pycache__
+
+# documentation process: auto generated files and build directories
+gen_*
+build
+
+# executables: the docgen and ocp itself
+OCP
+docs

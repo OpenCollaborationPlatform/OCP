@@ -9,6 +9,6 @@ Index: :ref:`wamp-index`
 
 
 .. toctree::
-    p2p
-    document
-    user
+    gen_p2p
+    gen_document
+    gen_user

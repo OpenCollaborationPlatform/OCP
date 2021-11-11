@@ -4,6 +4,6 @@ Datastructure Markup Language
  
 .. toctree::
     language
-    dml
+    gen_dml
 
     
