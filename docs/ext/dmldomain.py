@@ -38,7 +38,6 @@ class ObjectEntry(NamedTuple):
     docname: str
     node_id: str
     objtype: str
-    aliased: bool
 
 class DmlObject(ObjectDescription[Tuple[str, str]]):
     """
@@ -188,6 +187,7 @@ class DmlFunction(DmlObject):
     option_spec: OptionSpec = DmlObject.option_spec.copy()
     option_spec.update({
         'const': directives.flag,
+        'virtual': directives.flag,
     })
     
     doc_field_types = [
@@ -220,6 +220,8 @@ class DmlFunction(DmlObject):
         annotations = []
         if 'const' in self.options:
             annotations.append("constant")
+        if 'virtual' in self.options:
+            annotations.append("virtual")
             
         return (typ, name, arglist, annotations)
 
@@ -343,7 +345,8 @@ class DmlObject(DmlObject):
 
     def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
         return name_cls[0] + " (Object)"
-    
+
+
 class DmlBehaviour(DmlObject):
     """
     Description of a behaviour
@@ -379,17 +382,54 @@ class DmlBehaviour(DmlObject):
     def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
         return name_cls[0] + " (Behaviour)"
 
+class DmlSystem(DmlObject):
+    """
+    Description of a class
+    """
+
+    option_spec: OptionSpec = DmlObject.option_spec.copy()
+    allow_nesting = True
+
+    def split_signature(self, sig: str) -> Tuple[str, bool, str, List[str], str]:
+        
+        # return tuple:
+        #   - type (class, property, event, function) -> str
+        #   - name -> str
+        #   - arglist -> List[str]
+        #   - annotations -> List[str]
+        
+        typ = "system"
+        name  =  sig
+        arglist = None       
+        annotations = []
+        
+        return (typ, name, arglist, annotations)
+
+    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+        return name_cls[0] + " (System)"
+
+
+class DmlXRefRole(XRefRole):
+    
+    def process_link(self, env: BuildEnvironment, refnode: Element,
+                     has_explicit_title: bool, title: str, target: str) -> Tuple[str, str]:
+        #attach the py:class to the ref node, to make resolving easier
+
+        refnode['dml:class'] = env.ref_context.get('dml:class')
+        return title, target
+     
 
 class DmlDomain(Domain):
     """Python language domain."""
     name = 'dml'
     label = 'DML'
     object_types: Dict[str, ObjType] = {
-        'function':     ObjType(_('function'),      'func', 'obj'),
-        'object':       ObjType(_('object'),        'class', 'exc', 'obj', 'object'),
-        'property':     ObjType(_('property'),      'property', 'prop', 'obj'),
-        'event':        ObjType(_('event'),         'event', 'evt', 'obj'),
-        'behaviour':    ObjType(_('behaviour'),     'behaviour', 'bhvr', 'obj'),
+        'function':     ObjType(_('function'),      'func',),
+        'object':       ObjType(_('object'),        'obj'),
+        'property':     ObjType(_('property'),      'prop'),
+        'event':        ObjType(_('event'),         'evt'),
+        'behaviour':    ObjType(_('behaviour'),     'bhvr'),
+        'system':       ObjType(_('system'),        'sys'),
    }
 
     directives = {
@@ -398,8 +438,16 @@ class DmlDomain(Domain):
         'object':   DmlObject,
         'behaviour': DmlBehaviour,
         'event':    DmlEvent,
+        'system':   DmlSystem,
     }
-    roles = {}
+    roles = {
+        'func':  DmlXRefRole(),
+        'obj':   DmlXRefRole(),
+        'prop':  DmlXRefRole(),
+        'evt': DmlXRefRole(),
+        'bhvr': DmlXRefRole(),
+        'sys':  DmlXRefRole(),
+    }
     
     initial_data: Dict[str, Dict[str, Tuple[Any]]] = {
         'objects': {},  # fullname -> docname, objtype
@@ -412,19 +460,15 @@ class DmlDomain(Domain):
     def objects(self) -> Dict[str, ObjectEntry]:
         return self.data.setdefault('objects', {})  # fullname -> ObjectEntry
 
-    def note_object(self, name: str, objtype: str, node_id: str,
-                    aliased: bool = False, location: Any = None) -> None:
+    def note_object(self, name: str, objtype: str, node_id: str, location: Any = None) -> None:
+
+        print(f"note object {name}: {objtype}, {node_id}")
 
         if name in self.objects:
-            other = self.objects[name]
-            if other.aliased and aliased is False:
-                # The original definition found. Override it!
-                pass
-            elif other.aliased is False and aliased:
-                # The original definition is already registered.
-                return
+            # already registered
+            return 
 
-        self.objects[name] = ObjectEntry(self.env.docname, node_id, objtype, aliased)
+        self.objects[name] = ObjectEntry(self.env.docname, node_id, objtype)
 
  
     def clear_doc(self, docname: str) -> None:
@@ -487,19 +531,20 @@ class DmlDomain(Domain):
     def resolve_xref(self, env: BuildEnvironment, fromdocname: str, builder: Builder,
                      type: str, target: str, node: pending_xref, contnode: Element
                      ) -> Optional[Element]:
-        clsname = node.get('dml:class')
-        searchmode = 1 if node.hasattr('refspecific') else 0
-        matches = self.find_obj(env, clsname, target,
-                                type, searchmode)
+        
+        if "." in target:
+            parts = target.split(".")
+            clsname = parts[0]
+            target = parts[1]
+        else:
+            clsname = node.get('dml:class')
+        
+        matches = self.find_obj(env, clsname, target, type, 1)
 
         if not matches:
             return None
         elif len(matches) > 1:
-            canonicals = [m for m in matches if not m[1].aliased]
-            if len(canonicals) == 1:
-                matches = canonicals
-            else:
-                logger.warning(__('more than one target found for cross-reference %r: %s'),
+            logger.warning(__('more than one target found for cross-reference %r: %s'),
                                target, ', '.join(match[0] for match in matches),
                                type='ref', subtype='python', location=node)
         name, obj = matches[0]
@@ -514,36 +559,10 @@ class DmlDomain(Domain):
 
         return make_refnode(builder, fromdocname, obj[0], obj[1], children, name)
 
-    def resolve_any_xref(self, env: BuildEnvironment, fromdocname: str, builder: Builder,
-                         target: str, node: pending_xref, contnode: Element
-                         ) -> List[Tuple[str, Element]]:
-        clsname = node.get('dml:class')
-        results: List[Tuple[str, Element]] = []
-
-        # always search in "refspecific" mode with the :any: role
-        matches = self.find_obj(env, modname, clsname, target, None, 1)
-        for name, obj in matches:
-            # determine the content of the reference by conditions
-            content = find_pending_xref_condition(node, 'resolved')
-            if content:
-                children = content.children
-            else:
-                # if not found, use contnode
-                children = [contnode]
-
-            results.append(('dml:' + self.role_for_objtype(obj[2]),
-                            make_refnode(builder, fromdocname, obj[0], obj[1],
-                                            children, name)))
-        return results
-
     def get_objects(self) -> Iterator[Tuple[str, str, str, str, str, int]]:
 
         for refname, obj in self.objects.items():
-            if obj.aliased:
-                # aliased names are not full-text searchable.
-                yield (refname, refname, obj.objtype, obj.docname, obj.node_id, -1)
-            else:
-                yield (refname, refname, obj.objtype, obj.docname, obj.node_id, 1)
+            yield (refname, refname, obj.objtype, obj.docname, obj.node_id, 1)
 
     def get_full_qualified_name(self, node: Element) -> Optional[str]:
         clsname = node.get('dml:class')

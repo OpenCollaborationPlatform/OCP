@@ -175,6 +175,31 @@ func (self transaction) AddBehaviour(id Identifier) error {
 								Manager
 *********************************************************************************/
 
+/* +extract target:systems
+
+.. dml:system:: Transaction
+
+	The transaction system provides access control for data objects. A user can open
+	a transaction and make data objects part of it, and other users are then prevented
+	from chaning whatever is part of the transaction.
+
+	The general idea is to give the user a way to make multiple successive manipulations
+	on the datastructure, possibly over long time with many calls, in an atomic way.
+	For this he needs the gurantee, that only his calls change certain data, and
+	noone else can make any unforseen changes he needs to react to. To achieve this
+	the manipulated data can be made part of a transaction, which prevents anyone else
+	to manipulate it.
+
+	To enable data objects for transaction use it needs to have one of the transaction
+	behaviours added. In those behaviours the detailed handling of the Object withing the
+	transaction can be specified.
+
+	.. note:: The dml transactions are different to SQL transactions as they are open
+			  for successive user calls, without a time limit. This does however also
+			  mean, that the user needs to take care of closing it correctly.
+
+*/
+
 //implements BehaviourManager
 type TransactionManager struct {
 	methodHandler
@@ -235,7 +260,15 @@ func (self *TransactionManager) CanHandleEvent(event string) bool {
 	return false
 }
 
-//returns if currently a transaction is open
+/* +extract target:systems indent:1
+
+.. dml:function:: IsOpen()
+
+	Checks if the user has currently a transaction open
+
+	:return bool open: True if a transaction is open
+
+*/
 func (self *TransactionManager) IsOpen() bool {
 	transactions, err := self.transactionMap()
 	if err != nil {
@@ -244,7 +277,12 @@ func (self *TransactionManager) IsOpen() bool {
 	return transactions.HasKey(self.rntm.currentUser)
 }
 
-//Opens a transaction, and if one is already open it will be closed first
+/* +extract target:systems indent:1
+
+.. dml:function:: Open()
+
+	Opens a transaction. If one is already open, it will be closed first.
+*/
 func (self *TransactionManager) Open() error {
 
 	//close if a transaction is open
@@ -263,7 +301,12 @@ func (self *TransactionManager) Open() error {
 	return err
 }
 
-//Close a transaction
+/* +extract target:systems indent:1
+
+.. dml:function::Close()
+
+	Closes the currently open transaction.
+*/
 func (self *TransactionManager) Close() error {
 
 	trans, err := self.getTransaction()
@@ -311,7 +354,12 @@ func (self *TransactionManager) Close() error {
 	return nil
 }
 
-//Aborts the current transaction and reverts all objects to the state they had when adding to the transaction
+/* +extract target:systems indent:1
+
+.. dml:function::Close()
+
+	Aborts the current transaction and reverts all objects to the state they had when adding to the transaction
+*/
 func (self *TransactionManager) Abort() error {
 
 	trans, err := self.getTransaction()
@@ -687,6 +735,21 @@ func (self *baseTransaction) getOrOpenTransaction() (transaction, error) {
 	return trans, err
 }
 
+/* +extract prio:4
+
+.. dml:behaviour:: Transaction
+	:derived: Behaviour
+
+	Defines how a Object behaves in transactions. With this behaviour defined in a Object
+	it will become part of the current transaction when a change occurs. If any other user tries
+	to edit it an error will be raised and the action fails.
+
+	Any change within the object does trigger the transaction behaviour, be it a set property
+	or any Object internal change, like a new entry in a Map. If recursive is true, the same
+	holds for any change in a child- or subobject. Note that a change in a child will not add the
+	child to the current transaction, but the Object which has the behaviour defined.
+*/
+
 //Object Transaction adds a whole object to the current transaction. This happens on every change within the object,
 //property or key, and if recursive == True also for every change of any subobject.
 type objectTransaction struct {
@@ -752,9 +815,17 @@ func (self *objectTransaction) HandleEvent(id Identifier, source Identifier, eve
 	return nil
 }
 
-//Adds a new object to the current transaction. Fails if object is already part of
-//annother transaction
-//Note: If transaction has Object already no error is returned
+/* +extract prio:4 indent:1
+
+.. dml:function:: Add()
+
+	Adds the Object to the current transaction. If the Object is already part of the
+	current transaction nothing happens, and no error is thrown.
+
+	:throws: If no transaction is open for current user
+	:throws: If Object is already part of a transaction of annother user
+
+*/
 func (self *objectTransaction) add(id Identifier) error {
 
 	parent, err := self.GetParent(id)
@@ -882,6 +953,15 @@ func (self *objectTransaction) add(id Identifier) error {
 	return nil
 }
 
+/* +extract prio:4 indent:1
+
+.. dml:function:: InTransaction()
+
+	Checks if the Object is currently part in any transaction
+
+	:return bool IsPart: True if in a transaction, false otherwise
+
+*/
 func (self *objectTransaction) InTransaction(id Identifier) (bool, error) {
 
 	inTransaction, err := self.GetDBValue(id, inTransKey)
@@ -912,6 +992,15 @@ func (self *objectTransaction) setInTransaction(id Identifier, value bool) error
 	return utils.StackError(inTransaction.Write(value), "Unable to write transaction status")
 }
 
+/* +extract prio:4 indent:1
+
+.. dml:function:: InCurrentTransaction()
+
+	Checks if the Object is currently part in the users transaction
+
+	:return bool IsPart: True if in users transaction, false otherwise
+
+*/
 func (self *objectTransaction) InCurrentTransaction(id Identifier) (bool, error) {
 
 	if in, err := self.InTransaction(id); err != nil || !in {
@@ -931,6 +1020,15 @@ func (self *objectTransaction) InCurrentTransaction(id Identifier) (bool, error)
 	return current.Equal(trans), nil
 }
 
+/* +extract prio:4 indent:1
+
+.. dml:function:: InDifferentTransaction()
+
+	Checks if the Object is currently part in a transaction of annother user
+
+	:return bool IsPart: True if in other users transaction, false otherwise
+
+*/
 func (self *objectTransaction) InDifferentTransaction(id Identifier) (bool, error) {
 
 	if in, err := self.InTransaction(id); err != nil || !in {
@@ -1000,14 +1098,58 @@ func (self *objectTransaction) InitializeDB(id Identifier) error {
 	return nil
 }
 
+/* +extract prio:4 indent:1
+
+.. dml:function:: CanBeAdded()
+	:virtual:
+
+	Allows custom logic for checking if the Object is allowed to take part in the
+	current transaction. To be overriden and implemented by the user. If false is returned,
+	the action that lead to the Object being added to the transaction fails.
+	Note that it is not needed to check if the Object is already part of annother
+	transaction, this is still done internally. This function is to be used for custom logic
+	only.
+
+	:return bool Possible: True if it is allowed to add object to current transaction
+
+*/
 func (self *objectTransaction) defaultAddable(id Identifier) bool {
 	return true
 }
 
+/* +extract prio:4 indent:1
+
+.. dml:function:: CanBeClosed()
+	:virtual:
+
+	Allows custom logic for checking if the transaction, in which the Object takes part,
+	is allowed to be closed. To be overriden and implemented by the user. If false is returned,
+	closing the transaction fails and it stays open. The implementation should make sure
+	that the user is informed about the reasons, so that he can correct it bevore trying
+	to close the transaction again.
+
+	.. note:: This function is not called for aborting transactions. Aborting cannot
+			  be prevented.
+
+	:return bool Possible: True if it is allowed to close the current transaction
+
+*/
 func (self *objectTransaction) defaultCloseable(id Identifier) bool {
 	return true
 }
 
+/* +extract prio:4 indent:1
+
+.. dml:function:: DependentObjects()
+	:virtual:
+
+	Allows custom logic for defining dependent Objeccts. To be overriden and implemented
+	by the user. This function will be called when the Object is added to the transaction,
+	and the list of returned Objects will then be added to the current transaction too.
+
+	:return List[Objecct] Dependencies: All Objects that need to also be part of the transaction
+
+*/
 func (self *objectTransaction) defaultDependentObjects(id Identifier) []interface{} {
 	return make([]interface{}, 0)
 }
@@ -1136,6 +1278,33 @@ func (self *objectTransaction) recursiveResetTransaction(set dmlSet) error {
 	}
 	return nil
 }
+
+/* +extract prio:4 indent:1
+
+.. dml:event:: onParticipation
+
+	Emitted when the Object becomes part of the users current transaction. If a JavaScript
+	callback for this event throws an error the adding of the Object fails, as well as the
+	user action triggering it. Hence this can be used the same way as overriding *CanBeAdded*
+
+.. dml:event:: onClosing
+
+	Emitted when current transaction, of which the Object is a part, is closed. If a JavaScript
+	callback for this event throws an error the transaction closing fails, as well as the
+	user action triggering it. Hence this can be used the same way as overriding *CanBeClosed*
+
+.. dml:event:: onAborting
+
+	Emitted when current transaction, of which the Object is a part, is aborted. Errors in
+	callbacks ar ignored, as aborting cannot be stopped.
+
+.. dml:event:: onFailure
+
+	Emitted when adding the object to the current transaction fails, independent of
+	the reason for the fail.
+
+	:arg str error: The error message describing why it failed
+*/
 
 //Partial Transaction adds individual keys of an object to the transaction. With this the object can be part of multiple transactions,
 //but for each with different keys. Note: Keys are relatvice paths from the behaviours parent object, e.g. MyChild.myProperty

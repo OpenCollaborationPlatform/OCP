@@ -152,7 +152,7 @@ func (self *mapImpl) Length(id Identifier) (int64, error) {
 .. dml:function:: Keys()
 
 	Provides access to all keys in the map. The type of the keys is dependend on
-	the Maps *key* property. If called from javascript, an unmutable array is returned,
+	the Maps :dml:prop:`key` property. If called from javascript, an unmutable array is returned,
 	if called via WAMP API it will be the list type that is supported by the
 	calling language  (e.g. List for python)
 
@@ -263,11 +263,11 @@ func (self *mapImpl) Get(id Identifier, key interface{}) (interface{}, error) {
 	need to be consitent with the Maps defining properties.
 
 	If the Map value type is a object, this function will fail. It is not possible,
-	to set it to a different object or override it once created. Use the *New* function
+	to set it to a different object or override it once created. Use the :dml:func:`New` function
 	for creating the object for a given key.
 
-	:throws: If key is of wrong type (must be equal to key property)
-	:throws: If value is of wrong type (must be equal to value property)
+	:throws: If key is of wrong type (must be equal to :dml:prop:`key` property)
+	:throws: If value is of wrong type (must be equal to :dml:prop:`value` property)
 	:throws: If value type of Map is a Object
 */
 func (self *mapImpl) Set(id Identifier, key interface{}, value interface{}) error {
@@ -358,15 +358,15 @@ func (self *mapImpl) set(id Identifier, key interface{}, value interface{}) erro
 
 /* +extract  prio:2 indent:1
 
-.. dml:function:: Net(key)
+.. dml:function:: New(key)
 
 	Creates a new entry with the given key and sets it to the value types default,
 	e.g. 0 for int, "" for string etc. If the value type is a Object it will be fully
-	setup, and its onCreated event will be called. The *New* function is the only way to
-	create a key entry if value type is an Object, as *Set* will fail in this case.
+	setup, and its onCreated event will be called. The :dml:func:`New` function is the only way to
+	create a key entry if value type is an Object, as :dml:func:`Set` will fail in this case.
 
 	:throws: If key already exists
-	:throws: If key is of wrong type (must be equal to key property)
+	:throws: If key is of wrong type (must be equal to :dml:prop:`key` property)
 	:return any value: The stored value for given key
 */
 func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
@@ -441,7 +441,7 @@ func (self *mapImpl) New(id Identifier, key interface{}) (interface{}, error) {
 	will be called and afterards will  be deleted.
 
 	:throws: If key does not exist
-	:throws: If key is of wrong type (must be equal to key property)
+	:throws: If key is of wrong type (must be equal to :dml:prop:`key` property)
 */func (self *mapImpl) Remove(id Identifier, key interface{}) error {
 
 	//check key type
