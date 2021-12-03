@@ -157,7 +157,7 @@ A custom property of an object type may be defined in an object declaration in a
 
 .. code-block::
 
-    [const] property <propertyType> <propertyName> [: <defaultBalue>]
+    [const] property <propertyType> <propertyName> [: <defaultValue>]
 
 In this way an object declaration may expose a particular value to outside objects or maintain some internal state more easily. Property names must begin
 with a letter and can only contain letters, numbers and underscores. JavaScript reserved words are not valid property names. The const keyword is optional.
@@ -199,6 +199,21 @@ Method parameter types do not have to be declared as they default to the var typ
 object type block is an error, but the first declaration is ommited. For build in types declarations with the same name are not considered, except
 for some special methods are are intendet to be overridden by the user. Those are markt *virtual* in the documentation.
 
+Within a method *this* is the object the method is defined in, and can hence be used to access proeprties, other methods or the hirarchy.
+
+.. code-block:: JavaScript
+
+    Data {
+        .name: "MethodTest"
+        
+        property int myProp: 1
+        
+        function myMethod( newValue ) {
+            this.myProp = newValue
+        }
+    }
+
+
 Declaring a method as constant means that it does not change any data, only reads it. This has no impact for JavaScript calling of the method, but 
 allows to heavily optimize and speed up the function execution when called by the user vie WAMP api. When such a const function is called no data 
 alignment between all users is required, and hence local data storage can be used to execute the function, which is much faster. There is no compile
@@ -207,7 +222,47 @@ changes to the data are reverted automatically, to enforce the const. There will
 
 Event
 +++++
+
+Events can be added to a DML objects to define action based callback handling. Events can either trigger JavaScript callbacks assigned to them, or
+catched and processed via the WAMP api. 
+
+.. code-block::
     
+    event <eventName> [: function <methodName> ([<parameterName>[, ...]]) { <JavaScript> }]
+    
+Note that a event does not define its arguments, and any emit (or WAMP publish) can add in any arguments it wants. However, if a callback does not support 
+the amount or type of arguments a error occurs. It is therefore important for the user to ensure all emits and callbacks are defined with same arguments in mind.
+
+A default callback can be assigned to the event during the declaration by adding a function.  Alternatively a callback can be added (and removed) from JS code 
+during runtime by registering it in the event. This works via the object a callback method is defined in and the callback name.
+
+.. code-block:: JavaScript
+    
+    Data {
+        property int myProp: 0
+        
+        event myEvent: function {
+            this.myProp = this.myProp + 1
+        }
+        
+        function myCallback() {
+            this.myProp = this.myProp + 1
+        }
+        
+        function registerAndEmit() {
+            //add callback in this object, but any other would work too
+            this.myEvent.RegisterCallback(this, "testEventCallback")
+            
+            //emit the event
+            this.myEvent.emit()
+            
+            //both callback are called
+            //myProp == 2
+        }
+    }
+    
+For a default callback, *this* is the object the event is defined in. For registered callbacks *this* is the object the method is defined in. 
+Emitting events works by calling *emit* on it via JavaScript, or via publishing a message via wamp. 
 
 Line
     DML programm is split up into lines which are seperated by a newline charachter. Semicolons are not supported for line endings.

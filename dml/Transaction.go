@@ -1306,8 +1306,22 @@ func (self *objectTransaction) recursiveResetTransaction(set dmlSet) error {
 	:arg str error: The error message describing why it failed
 */
 
-//Partial Transaction adds individual keys of an object to the transaction. With this the object can be part of multiple transactions,
-//but for each with different keys. Note: Keys are relatvice paths from the behaviours parent object, e.g. MyChild.myProperty
+/* +extract prio:5
+.. dml:behaviour:: PartialTransaction
+	:derived: Behaviour
+
+	Defines how the objects individual keys behaves in transactions. With this behaviour defined in a object
+	its keys can become part of that transaction. A key is any identifier pointing to data, like a property
+	name, a number for a Vector or a key for a map. If the behaviour is recursive keys can also be stacked,
+	like childname.mapkey
+
+	Any change within the object does trigger the transaction behaviour, be it a set property
+	or any Object internal change, like a new entry in a Map. If recursive is true, the same
+	holds for any change in a child- or subobject. Note that a change in a child will not add the
+	child to the current transaction, but the Object which has the behaviour defined.
+
+	.. note:: Keys are relative paths from the behaviours parent object, e.g. MyChild.myProperty
+*/
 type partialTransaction struct {
 	*baseTransaction
 }
