@@ -10,4 +10,4 @@ build
 
 # executables: the docgen and ocp itself
 OCP
-docs
+docs/docs

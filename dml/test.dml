@@ -4,11 +4,11 @@
  Data {
     .name: "Document"
 
-    property string 	testS: "Hallo"
-    property int 	testI: 1
-	property bool 	testB: true
-	property float	testF 
-	property bool  	created: false
+    property string	 testS: "Hallo"
+    property int 	 testI: 1
+	property bool 	 testB: true
+	property float	 testF 
+	property bool  	 created: false
 	
 	const   property int testConst:4
 	

@@ -34,6 +34,19 @@ from sphinx.util.typing import OptionSpec, TextlikeNode
 logger = logging.getLogger(__name__)
 
 
+
+def create_xref(reftype: str, text: str, env: BuildEnvironment = None) -> addnodes.pending_xref:
+
+    if env:
+        kwargs = {'dml:class': env.ref_context.get('dml:class')}
+    else:
+        kwargs = {}
+
+    contnodes = [nodes.Text(text)]
+    return pending_xref('', *contnodes,
+                        refdomain='dml', reftype=reftype, reftarget=text, **kwargs)
+
+
 class ObjectEntry(NamedTuple):
     docname: str
     node_id: str
@@ -87,10 +100,16 @@ class DmlObject(ObjectDescription[Tuple[str, str]]):
         signode += addnodes.desc_name(name, name)
         
         if arglist is not None:
+                        
             # diff between None (no arguments) and [] (empty argument list, but brackets will be drawn)
             paramlist = addnodes.desc_parameterlist()
             for arg in arglist:
-                paramlist += addnodes.desc_parameter(arg, arg)
+                
+                if isinstance(arg, addnodes.pending_xref):
+                    print("add pending xref")
+                    paramlist += addnodes.desc_parameter('', '', arg)
+                else:
+                    paramlist += addnodes.desc_parameter(arg, arg)
 
             signode += paramlist
         
@@ -181,6 +200,32 @@ class DmlObject(ObjectDescription[Tuple[str, str]]):
         self.env.ref_context['dml:class'] = (classes[-1] if len(classes) > 0
                                             else None)
 
+class DmlType(DmlObject):
+    """
+    Description of a type in the dml language
+    """
+
+    option_spec: OptionSpec = DmlObject.option_spec.copy()
+
+    def split_signature(self, sig: str) -> Tuple[str, bool, str, List[str], str]:
+        
+        # return tuple:
+        #   - type (class, property, event, function) -> str
+        #   - name -> str
+        #   - arglist -> List[str]
+        #   - annotations -> List[str]
+        
+        typ = "type"
+        name  =  sig
+        arglist = None
+        annotations = []
+         
+        return (typ, name, arglist, annotations)
+
+    def get_index_text(self, modname: str, name_cls: Tuple[str, str]) -> str:
+        return name_cls[0] + " (Type)"
+
+
 class DmlFunction(DmlObject):
     """Description of a function."""
 
@@ -238,6 +283,7 @@ class DmlProperty(DmlObject):
         'const': directives.flag,
         'readonly': directives.flag,
         'type': directives.unchanged,
+        'jsonly': directives.flag,
     })
     
     doc_field_types = [
@@ -265,6 +311,8 @@ class DmlProperty(DmlObject):
             annotations.append("constant")
         if 'readonly' in self.options:
             annotations.append("readonly")   
+        if 'jsonly' in self.options:
+            annotations.append("JSonly")  
             
         return (typ, name, arglist, annotations)
 
@@ -335,7 +383,7 @@ class DmlObject(DmlObject):
         name  =  sig
         arglist = None
         if "derived" in self.options:
-            arglist = [self.options["derived"]]
+            arglist = [create_xref("obj", self.options["derived"], self.env)]
             
         annotations = []
         if 'abstract' in self.options:
@@ -430,6 +478,7 @@ class DmlDomain(Domain):
         'event':        ObjType(_('event'),         'evt'),
         'behaviour':    ObjType(_('behaviour'),     'bhvr'),
         'system':       ObjType(_('system'),        'sys'),
+        'type':         ObjType(_('type'),          'type'),
    }
 
     directives = {
@@ -439,6 +488,7 @@ class DmlDomain(Domain):
         'behaviour': DmlBehaviour,
         'event':    DmlEvent,
         'system':   DmlSystem,
+        'type':     DmlType,
     }
     roles = {
         'func':  DmlXRefRole(),
@@ -447,6 +497,7 @@ class DmlDomain(Domain):
         'evt': DmlXRefRole(),
         'bhvr': DmlXRefRole(),
         'sys':  DmlXRefRole(),
+        'type': DmlXRefRole(),
     }
     
     initial_data: Dict[str, Dict[str, Tuple[Any]]] = {
@@ -461,8 +512,6 @@ class DmlDomain(Domain):
         return self.data.setdefault('objects', {})  # fullname -> ObjectEntry
 
     def note_object(self, name: str, objtype: str, node_id: str, location: Any = None) -> None:
-
-        print(f"note object {name}: {objtype}, {node_id}")
 
         if name in self.objects:
             # already registered

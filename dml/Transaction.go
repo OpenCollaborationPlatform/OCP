@@ -303,7 +303,7 @@ func (self *TransactionManager) Open() error {
 
 /* +extract target:systems indent:1
 
-.. dml:function::Close()
+.. dml:function:: Close()
 
 	Closes the currently open transaction.
 */
@@ -356,7 +356,7 @@ func (self *TransactionManager) Close() error {
 
 /* +extract target:systems indent:1
 
-.. dml:function::Close()
+.. dml:function:: Abort()
 
 	Aborts the current transaction and reverts all objects to the state they had when adding to the transaction
 */
