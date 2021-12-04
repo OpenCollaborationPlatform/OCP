@@ -45,8 +45,11 @@ func init() {
 //Function prototype that can create new object types in DML
 type CreatorFunc func(rntm *Runtime) (Object, error)
 
-//Function prototype that gets called on any runtime event
-type EventCallbackFunc func(path string, args ...interface{})
+//Type to collect information about an emitted event and its arguments
+type EmmitedEvent struct {
+	Path string
+	Args []interface{}
+}
 
 func NewRuntime() *Runtime {
 
@@ -56,16 +59,16 @@ func NewRuntime() *Runtime {
 	console.Enable(js)
 
 	rntm := &Runtime{
-		printManager: NewPrintManager(),
-		creators:     make(map[string]CreatorFunc, 0),
-		eventCBs:     make(map[string]EventCallbackFunc, 0),
-		jsvm:         js,
-		datastore:    nil,
-		mutex:        &sync.Mutex{},
-		ready:        false,
-		currentUser:  "none",
-		objects:      make(map[DataType]Object, 0),
-		behaviours:   newBehaviourManagerHandler(),
+		printManager:  NewPrintManager(),
+		creators:      make(map[string]CreatorFunc, 0),
+		emittedEvents: nil,
+		jsvm:          js,
+		datastore:     nil,
+		mutex:         &sync.Mutex{},
+		ready:         false,
+		currentUser:   "none",
+		objects:       make(map[DataType]Object, 0),
+		behaviours:    newBehaviourManagerHandler(),
 	}
 
 	//build the managers and expose
@@ -96,8 +99,8 @@ func NewRuntime() *Runtime {
 type Runtime struct {
 	*printManager
 
-	creators map[string]CreatorFunc
-	eventCBs map[string]EventCallbackFunc
+	creators      map[string]CreatorFunc
+	emittedEvents []EmmitedEvent
 
 	//components of the runtime
 	jsvm      *goja.Runtime
@@ -277,43 +280,21 @@ func (self *Runtime) RegisterObjectCreator(name string, fnc CreatorFunc) error {
 	return nil
 }
 
-//Function to register function to catch all runtime events
-func (self *Runtime) RegisterEventCallback(name string, fnc EventCallbackFunc) error {
-
-	_, ok := self.eventCBs[name]
-	if ok {
-		return newSetupError(Error_Operation_Invalid, "Event callback '%v' already registered", name)
-	}
-
-	self.eventCBs[name] = fnc
-	return nil
-}
-
-//Function to register function to catch all runtime events
-func (self *Runtime) UnregisterEventCallback(name string) (EventCallbackFunc, error) {
-
-	cb, ok := self.eventCBs[name]
-	if !ok {
-		return nil, newInternalError(Error_Operation_Invalid, "Callback not registered")
-	}
-	delete(self.eventCBs, name)
-	return cb, nil
-}
-
 // 						Accessing / executing Methods
 //*********************************************************************************
 
 //run arbitrary javascript code on the loaded structure
-func (self *Runtime) RunJavaScript(ds *datastore.Datastore, user User, code string) (interface{}, error) {
+func (self *Runtime) RunJavaScript(ds *datastore.Datastore, user User, code string) (interface{}, []EmmitedEvent, error) {
 
 	self.clearMessage()
+	self.emittedEvents = make([]EmmitedEvent, 0)
 	self.datastore = ds
 	self.datastore.Begin()
 
 	//all upcoming operations use this datastore
 	if err := self.checkDatastore(ds); err != nil {
 		self.datastore.Rollback()
-		return nil, err
+		return nil, nil, err
 	}
 
 	//save the user for processing
@@ -329,16 +310,16 @@ func (self *Runtime) RunJavaScript(ds *datastore.Datastore, user User, code stri
 				err = ocperr
 			}
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	err = self.postprocess(false)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	//return default values
-	return extractValue(val, self), err
+	return extractValue(val, self), self.emittedEvents, err
 }
 
 //Check if the call isread only, hence does not change the data. True if:
@@ -390,9 +371,10 @@ func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args .
 	return true, nil
 }
 
-func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, args ...interface{}) (interface{}, error) {
+func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, args ...interface{}) (interface{}, []EmmitedEvent, error) {
 
 	self.clearMessage()
+	self.emittedEvents = make([]EmmitedEvent, 0)
 
 	//We check if this is readonly, and rollback the datastore if so instead of commit.
 	//it is important to use IsReadOnly function, as external users us this to determine
@@ -401,18 +383,18 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	//rolled back. This could happen if a user made a const method which is not really const...
 	constant, err := self.IsReadOnly(ds, fullpath, args...)
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to access database")
+		return nil, nil, utils.StackError(err, "Unable to access database")
 	}
 
 	self.datastore = ds
 	err = self.datastore.Begin()
 	if err != nil {
-		return nil, utils.StackError(err, "Unable to access database")
+		return nil, nil, utils.StackError(err, "Unable to access database")
 	}
 
 	if err := self.checkDatastore(ds); err != nil {
 		self.datastore.Rollback()
-		return nil, err
+		return nil, nil, err
 	}
 
 	//save the user for processing
@@ -422,7 +404,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	resolved, id, err := self.resolvePath(fullpath)
 	if err != nil {
 		self.datastore.Rollback()
-		return false, err
+		return nil, nil, err
 	}
 
 	var result interface{} = nil
@@ -454,7 +436,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 
 	case behaviourManager:
 		//that action is not allowed, we cannot return a behaviour manager
-		return false, newUserError(Error_Operation_Invalid, "Path points to behaviour without function call")
+		return nil, nil, newUserError(Error_Operation_Invalid, "Path points to behaviour without function call")
 
 	case dmlSet:
 		result = id //in this case id == dmlSet.id
@@ -467,7 +449,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	//did an error occure?
 	if err != nil {
 		self.postprocess(true)
-		return nil, err
+		return nil, nil, err
 	}
 
 	//check if the return value is a object, which we do not do
@@ -475,8 +457,13 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 		result = set.id
 	}
 
+	err = self.postprocess(constant)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	//postprocess correctly
-	return result, self.postprocess(constant)
+	return result, self.emittedEvents, err
 }
 
 // 							Internal Functions
@@ -1191,13 +1178,12 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 	return nil
 }
 
-//This function is called by all emitted events. It does forward it to outside of
-//The runtime
+//This function is called by all emitted events. It does collect it to later
+//forward it to the caller in order to be processed
 func (self *Runtime) emitEvent(objPath, event string, args ...interface{}) error {
 
-	eventpath := objPath + "." + event
-	for _, cb := range self.eventCBs {
-		cb(eventpath, args...)
+	if self.emittedEvents != nil {
+		self.emittedEvents = append(self.emittedEvents, EmmitedEvent{objPath, args})
 	}
 	return nil
 }
