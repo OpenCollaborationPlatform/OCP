@@ -20,7 +20,7 @@ type Datastructure struct {
 	prefix string
 
 	//dml state handling
-	dmlState dmlState
+	dmlState *dmlState
 
 	//connectvity: p2p and client
 	swarm  *p2p.Swarm
@@ -35,31 +35,34 @@ type Datastructure struct {
  */
 func NewDatastructure(path string, prefix string, client *nxclient.Client) (Datastructure, error) {
 
+	//make sure the prefix has a "." as last charachter
+	if prefix[len(prefix)-1] != '.' {
+		prefix = prefix + "."
+	}
+
 	//create the state
 	state, err := newState(path)
 	if err != nil {
 		return Datastructure{}, utils.StackError(err, "Unable to create state for datastructure")
 	}
 
-	//make sure the prefix has a "." as last charachter
-	if prefix[len(prefix)-1] != '.' {
-		prefix = prefix + "."
-	}
-
 	//return the datastructure
-	return Datastructure{
+	ds := Datastructure{
 		path:     path,
 		prefix:   prefix,
 		dmlState: state,
 		swarm:    nil,
 		client:   client,
-	}, nil
+	}
+
+	return ds, nil
 }
 
 // 							Bookepping functions
 // *****************************************************************************
 func (self Datastructure) Start(s *p2p.Swarm) {
 	self.swarm = s
+	self.dmlState.publish = self.publishCallback
 
 	//initiate the client connections for events
 	rntm := self.dmlState.dml
@@ -67,9 +70,6 @@ func (self Datastructure) Start(s *p2p.Swarm) {
 	//general options
 	options := wamp.SetOption(wamp.Dict{}, wamp.OptMatch, wamp.MatchPrefix)
 	options = wamp.SetOption(options, wamp.OptDiscloseCaller, true)
-
-	//register the event handler
-	rntm.RegisterEventCallback("events", self.createWampPublishFunction(defaultEventOtions()))
 
 	//register the function handler
 	uri := self.prefix + "content"
@@ -109,7 +109,18 @@ func (self Datastructure) OpenView(session wamp.ID) error {
 }
 
 func (self Datastructure) CloseView(session wamp.ID) error {
-	return self.dmlState.CloseView(session, "events", self.createWampPublishFunction(whitelistEventOptions(session)))
+
+	// first emit all events
+	eventChan, err := self.dmlState.ViewEventChannel(session)
+	if err != nil {
+		return wrapInternalError(err, "Cannot get event channel for view")
+	}
+
+	for evt := range eventChan {
+		self.publish(evt, whitelistEventOptions(session))
+	}
+
+	return self.dmlState.CloseView(session)
 }
 
 func (self Datastructure) HasView(session wamp.ID) bool {
@@ -144,33 +155,45 @@ func whitelistEventOptions(whitelist wamp.ID) optFnc {
 	}
 }
 
-func (self Datastructure) createWampPublishFunction(optionFnc optFnc) dml.EventCallbackFunc {
+func (self Datastructure) publishCallback(evts []dml.EmmitedEvent) {
 
-	return func(path string, args ...interface{}) {
+	self.multiPublish(evts, defaultEventOtions())
+}
+
+func (self Datastructure) multiPublish(events []dml.EmmitedEvent, optionFnc optFnc) {
+
+	for _, event := range events {
 
 		//convert the arguments into wamp style
 		//this includes encoding all custom types
-		wampArgs := make(wamp.List, len(args))
-		for i, arg := range args {
-
-			if enc, ok := arg.(utils.Encotable); ok {
-				wampArgs[i] = enc.Encode()
-
-			} else {
-				wampArgs[i] = arg
-			}
-		}
-
-		//connvert the path into wamp style uri
-		uri := self.prefix + "content." + path
-
-		//other arguments we do not need
-		kwargs := make(wamp.Dict, 0)
-		opts := optionFnc(&self)
-
-		//publish!
-		self.client.Publish(uri, opts, wampArgs, kwargs)
+		self.publish(event, optionFnc)
 	}
+}
+
+func (self Datastructure) publish(event dml.EmmitedEvent, optionFnc optFnc) {
+
+	//convert the arguments into wamp style
+	//this includes encoding all custom types
+	wampArgs := make(wamp.List, len(event.Args))
+	for i, arg := range event.Args {
+
+		if enc, ok := arg.(utils.Encotable); ok {
+			wampArgs[i] = enc.Encode()
+
+		} else {
+			wampArgs[i] = arg
+		}
+	}
+
+	//connvert the path into wamp style uri
+	uri := self.prefix + "content." + event.Path
+
+	//other arguments we do not need
+	kwargs := make(wamp.Dict, 0)
+	opts := optionFnc(&self)
+
+	//publish!
+	self.client.Publish(uri, opts, wampArgs, kwargs)
 }
 
 func (self Datastructure) executeOperation(ctx context.Context, op Operation) nxclient.InvokeResult {
@@ -599,7 +622,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 				}
 
 				//get the cid from the data object!
-				val, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path))
+				val, _, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path))
 				if err != nil {
 					return utils.ErrorToWampResult(err)
 				}
@@ -642,7 +665,7 @@ func (self Datastructure) createWampRawFunction() nxclient.InvocationHandler {
 			case "ReadBinary":
 
 				//get the cid from the data object!
-				val, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path))
+				val, _, err := self.dmlState.dml.Call(self.dmlState.store, dml.User(auth), string(path))
 				if err != nil {
 					return nxclient.InvokeResult{Args: wamp.List{err.Error()}, Err: wamp.URI("ocp.error")}
 				}

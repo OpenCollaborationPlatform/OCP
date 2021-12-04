@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/OpenCollaborationPlatform/OCP/dml"
+	"github.com/gammazero/nexus/v3/wamp"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -44,18 +44,18 @@ func TestStateSnapshot(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(len(snap1), ShouldNotEqual, 0)
 
-			s1, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
+			s1, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
 			So(err, ShouldBeNil)
-			i1, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+			i1, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
 			So(err, ShouldBeNil)
 
 			Convey("as well as reloadable", func() {
 				err := state.LoadSnapshot(snap1)
 				So(err, ShouldBeNil)
 
-				s2, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
+				s2, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
 				So(err, ShouldBeNil)
-				i2, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+				i2, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
 				So(err, ShouldBeNil)
 
 				So(s1, ShouldEqual, s2)
@@ -64,18 +64,18 @@ func TestStateSnapshot(t *testing.T) {
 
 			Convey("A snapshot from changed data", func() {
 
-				_, err := state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testS = \"yeah\"")
+				_, _, err := state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testS = \"yeah\"")
 				So(err, ShouldBeNil)
-				_, err = state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testI = 25")
+				_, _, err = state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testI = 25")
 				So(err, ShouldBeNil)
 
 				snap2, err := state.Snapshot()
 				So(err, ShouldBeNil)
 				So(len(snap2), ShouldNotEqual, 0)
 
-				s3, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
+				s3, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
 				So(err, ShouldBeNil)
-				i3, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+				i3, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
 				So(err, ShouldBeNil)
 
 				Convey("is reloadable as well", func() {
@@ -83,8 +83,8 @@ func TestStateSnapshot(t *testing.T) {
 					err := state.LoadSnapshot(snap2)
 					So(err, ShouldBeNil)
 
-					s4, _ := state.dml.Call(state.store, dml.User("test"), "Test.testS")
-					i4, _ := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+					s4, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testS")
+					i4, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testI")
 
 					So(s3, ShouldEqual, s4)
 					So(i3, ShouldEqual, i4)
@@ -96,8 +96,8 @@ func TestStateSnapshot(t *testing.T) {
 					err := state.LoadSnapshot(snap1)
 					So(err, ShouldBeNil)
 
-					s5, _ := state.dml.Call(state.store, dml.User("test"), "Test.testS")
-					i5, _ := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+					s5, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testS")
+					i5, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testI")
 
 					So(s5, ShouldEqual, s1)
 					So(i5, ShouldEqual, i1)
@@ -130,9 +130,9 @@ func TestStateView(t *testing.T) {
 
 		Convey("some data can be added.", func() {
 
-			_, err := state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testS = \"yeah\"")
+			_, _, err := state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testS = \"yeah\"")
 			So(err, ShouldBeNil)
-			_, err = state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testI = 25")
+			_, _, err = state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testI = 25")
 			So(err, ShouldBeNil)
 
 			Convey("No view exist for any session by default", func() {
@@ -165,7 +165,7 @@ func TestStateView(t *testing.T) {
 
 				Convey("Chaning the state does not change the View", func() {
 
-					_, err = state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testI = 10")
+					_, _, err = state.dml.RunJavaScript(state.store, dml.User("test"), "Test.testI = 10")
 					So(err, ShouldBeNil)
 
 					val, err := state.CallLocal(id2, "", "Test.testI")
@@ -179,7 +179,7 @@ func TestStateView(t *testing.T) {
 
 				Convey("Closing the view works", func() {
 
-					err := state.CloseView(id1, "", nil)
+					err := state.CloseView(id1)
 					So(err, ShouldBeNil)
 					So(state.HasView(id1), ShouldBeFalse)
 					So(state.HasView(id2), ShouldBeFalse)

@@ -5,10 +5,10 @@ import (
 
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 
-	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/dml"
 	"github.com/OpenCollaborationPlatform/OCP/p2p"
+	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/ugorji/go/codec"
 )
 
@@ -54,7 +54,7 @@ func (self Operation) ToData() ([]byte, error) {
 	return b, wrapInternalError(err, Error_Invalid_Data)
 }
 
-func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interface{} {
+func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) (interface{}, []dml.EmmitedEvent) {
 
 	//convert all encoded arguments
 	args := make([]interface{}, len(self.Arguments))
@@ -63,13 +63,14 @@ func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interf
 		if utils.Decoder.InterfaceIsEncoded(arg) {
 			val, err := utils.Decoder.DecodeInterface(arg)
 			if err != nil {
-				return utils.StackError(err, "Unable to decode argument")
+				return utils.StackError(err, "Unable to decode argument"), nil
 			}
 			args[i] = val
 		}
 	}
 
 	var val interface{}
+	var evts []dml.EmmitedEvent
 	var err error
 
 	if self.Path == "__js__" {
@@ -77,17 +78,17 @@ func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interf
 			err = newInternalError(Error_Arguments, "JS operation needs code as argument")
 
 		} else if code, ok := args[0].(string); ok {
-			val, err = rntm.RunJavaScript(ds, self.User, code)
+			val, evts, err = rntm.RunJavaScript(ds, self.User, code)
 
 		} else {
 			err = newInternalError(Error_Arguments, "JS operation needs code as argument")
 		}
 
 	} else {
-		val, err = rntm.Call(ds, self.User, self.Path, args...)
+		val, evts, err = rntm.Call(ds, self.User, self.Path, args...)
 	}
 	if err != nil {
-		return err
+		return err, nil
 	}
 
 	//check if it is a Encotable, if so we only return the encoded identifier!
@@ -95,7 +96,7 @@ func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) interf
 		val = enc.Encode()
 	}
 
-	return val
+	return val, evts
 }
 
 func (self Operation) GetSession() (p2p.PeerID, wamp.ID) {

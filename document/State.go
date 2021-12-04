@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/gammazero/nexus/v3/wamp"
 	"github.com/OpenCollaborationPlatform/OCP/datastores"
 	"github.com/OpenCollaborationPlatform/OCP/dml"
 	"github.com/OpenCollaborationPlatform/OCP/p2p"
 	"github.com/OpenCollaborationPlatform/OCP/utils"
+	"github.com/gammazero/nexus/v3/wamp"
 )
+
+type eventCB func([]dml.EmmitedEvent)
 
 //sharing information about the session, that is currently manipulating the state
 type sessionInfo struct {
@@ -50,15 +52,16 @@ type dmlState struct {
 	store            *datastore.Datastore
 	operationSession *sessionInfo
 	views            *viewManager
+	publish          eventCB
 }
 
-func newState(path string) (dmlState, error) {
+func newState(path string) (*dmlState, error) {
 
 	//create the datastore (autocreates the folder)
 	//path/Datastore
 	store, err := datastore.NewDatastore(path)
 	if err != nil {
-		return dmlState{}, utils.StackError(err, "Cannot create datastore for datastructure")
+		return nil, utils.StackError(err, "Cannot create datastore for datastructure")
 	}
 
 	//create the runtime
@@ -68,22 +71,22 @@ func newState(path string) (dmlState, error) {
 	dmlpath := filepath.Join(path, "Dml")
 	err = rntm.ParseFolder(dmlpath)
 	if err != nil {
-		return dmlState{}, wrapInternalError(err, Error_Filesytem)
+		return nil, wrapInternalError(err, Error_Filesytem)
 	}
 
 	//init DB
 	err = rntm.InitializeDatastore(store)
 	if err != nil {
-		return dmlState{}, utils.StackError(err, "Unable to initialize datastore for state")
+		return nil, utils.StackError(err, "Unable to initialize datastore for state")
 	}
 
 	//create the view manager
 	viewMngr := newViewManager(filepath.Join(path, "Views"))
 
-	return dmlState{path, &sync.Mutex{}, rntm, store, &sessionInfo{}, viewMngr}, nil
+	return &dmlState{path, &sync.Mutex{}, rntm, store, &sessionInfo{}, viewMngr, nil}, nil
 }
 
-func (self dmlState) Apply(data []byte) interface{} {
+func (self *dmlState) Apply(data []byte) interface{} {
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -98,14 +101,21 @@ func (self dmlState) Apply(data []byte) interface{} {
 	self.operationSession.Set(op.GetSession())
 	defer self.operationSession.Unset()
 
-	//append to all available views
-	self.views.appendOperation(op)
-
 	//apply to runtime
-	return op.ApplyTo(self.dml, self.store)
+	res, evts := op.ApplyTo(self.dml, self.store)
+
+	//Handle events
+	if evts != nil {
+		self.views.appendEvents(evts)
+		if self.publish != nil {
+			self.publish(evts)
+		}
+	}
+
+	return res
 }
 
-func (self dmlState) Snapshot() ([]byte, error) {
+func (self *dmlState) Snapshot() ([]byte, error) {
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -155,7 +165,7 @@ func (self dmlState) Snapshot() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (self dmlState) LoadSnapshot(data []byte) error {
+func (self *dmlState) LoadSnapshot(data []byte) error {
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -210,13 +220,13 @@ func (self dmlState) LoadSnapshot(data []byte) error {
 }
 
 //Carefull: Not locking, do not use outside of Apply callbacks!
-func (self dmlState) _getOperationSession() *sessionInfo {
+func (self *dmlState) _getOperationSession() *sessionInfo {
 	//not locking here, as this function is used for event publishing and hence during
 	//apply. This would deadlock
 	return self.operationSession
 }
 
-func (self dmlState) CanCallLocal(session wamp.ID, path string, args ...interface{}) (bool, error) {
+func (self *dmlState) CanCallLocal(session wamp.ID, path string, args ...interface{}) (bool, error) {
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -232,7 +242,7 @@ func (self dmlState) CanCallLocal(session wamp.ID, path string, args ...interfac
 	return self.dml.IsReadOnly(self.store, path, args...)
 }
 
-func (self dmlState) CallLocal(session wamp.ID, user dml.User, path string, args ...interface{}) (interface{}, error) {
+func (self *dmlState) CallLocal(session wamp.ID, user dml.User, path string, args ...interface{}) (interface{}, error) {
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -254,10 +264,10 @@ func (self dmlState) CallLocal(session wamp.ID, user dml.User, path string, args
 		if err != nil {
 			return false, utils.StackError(err, "Unable to access opened view")
 		}
-		val, err = self.dml.Call(view.store, user, path, args...)
+		val, _, err = self.dml.Call(view.store, user, path, args...)
 
 	} else {
-		val, err = self.dml.Call(self.store, user, path, args...)
+		val, _, err = self.dml.Call(self.store, user, path, args...)
 	}
 	if err != nil {
 		return nil, err
@@ -271,7 +281,7 @@ func (self dmlState) CallLocal(session wamp.ID, user dml.User, path string, args
 	return val, nil
 }
 
-func (self dmlState) HasView(session wamp.ID) bool {
+func (self *dmlState) HasView(session wamp.ID) bool {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
@@ -279,13 +289,13 @@ func (self dmlState) HasView(session wamp.ID) bool {
 }
 
 //Carefull: Not locking, do not use outside of Apply callbacks!
-func (self dmlState) _sessionsWithView() []wamp.ID {
+func (self *dmlState) _sessionsWithView() []wamp.ID {
 	//not locking here, as this function is used for event publishing and hence during
 	//apply. This would deadlock
 	return self.views.getSessionsWithView()
 }
 
-func (self dmlState) OpenView(session wamp.ID) error {
+func (self *dmlState) OpenView(session wamp.ID) error {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
@@ -293,7 +303,24 @@ func (self dmlState) OpenView(session wamp.ID) error {
 	return err
 }
 
-func (self dmlState) CloseView(session wamp.ID, pauseEvent string, eventCB dml.EventCallbackFunc) error {
+func (self *dmlState) ViewEventChannel(session wamp.ID) (chan dml.EmmitedEvent, error) {
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	if !self.views.hasView(session) {
+		return nil, newInternalError(Error_Operation_Invalid, "no view open for session", "session", session)
+	}
+
+	view, err := self.views.getOrCreateView(session, self.store)
+	if err != nil {
+		return nil, wrapInternalError(err, "Unable to retreive view")
+	}
+
+	return view.getEventChan(), nil
+}
+
+func (self *dmlState) CloseView(session wamp.ID) error {
 
 	//We lock the state, hence noone else will  access the dml runtime and also not emit events.
 	//we therefore can remove the event handler and not miss any events
@@ -306,27 +333,11 @@ func (self dmlState) CloseView(session wamp.ID, pauseEvent string, eventCB dml.E
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	if pauseEvent != "" {
-		cb, err := self.dml.UnregisterEventCallback(pauseEvent)
-		defer self.dml.RegisterEventCallback(pauseEvent, cb)
-		if err != nil {
-			return utils.StackError(err, "Unable to pause event handling")
-		}
-	}
-
-	if eventCB != nil {
-		err := self.dml.RegisterEventCallback("tmp", eventCB)
-		defer self.dml.UnregisterEventCallback("tmp")
-		if err != nil {
-			return utils.StackError(err, "Unable to setup temporary event  handler")
-		}
-	}
-
 	//close the view, which emits all the events that occured after the view was created
 	return self.views.removeAndCloseView(session, self.dml)
 }
 
-func (self dmlState) Close() {
+func (self *dmlState) Close() {
 
 	self.lock.Lock()
 	defer self.lock.Unlock()

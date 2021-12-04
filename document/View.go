@@ -1,7 +1,9 @@
 package document
 
 import (
+	"bytes"
 	"encoding/binary"
+	"encoding/gob"
 	"strings"
 	"time"
 
@@ -24,10 +26,11 @@ A view is a way to capture the current state of the document and preventing any 
 It is intended for the users to have enough time to process whatever they see without the risk
 of running into synchronisation issues due to running changes
 
-1. 	The view needs to be able to be opened and closed. When closing all the missed updates need to be
-	applied to that the user receives all events as expected
+1. 	The view needs to be able to be opened and closed. When closing all the missed events need to
+	be published
 2. 	The view is a user property: It should not happen for everyone that connects to the document,
-	but only the requresting user
+	but only the requresting user. This holds also for a single node: multiple users/apps could connect
+	to the node docuent, but only one of them should see the view
 3. 	The view cannot block the normal state operation including updates. Not allowing to update
 	the state would block everyone in the document, which is not in line with point 2. If we cache
 	the operations before applying to state the correct return values could not be retreived,
@@ -39,12 +42,12 @@ on closing the view all stored operations are applied to get all events correctl
 the user switches back to the live state.
 */
 
-var operationKey = []byte("operations")
+var eventKey = []byte("events")
 
 type view struct {
-	store *datastore.Datastore
-	opLog *bolt.DB
-	path  string
+	store    *datastore.Datastore
+	eventLog *bolt.DB
+	path     string
 }
 
 func newView(path string, captureDS *datastore.Datastore) (view, error) {
@@ -93,66 +96,85 @@ func newView(path string, captureDS *datastore.Datastore) (view, error) {
 		return view{}, utils.StackError(err, "Unable to create Datastore from copied folder")
 	}
 
-	//create the operation store
-	olPath := filepath.Join(viewPath, "oplog.db")
+	//create the event store
+	olPath := filepath.Join(viewPath, "evtlog.db")
 	db, err := bolt.Open(olPath, 0600, &bolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
 		return view{}, wrapInternalError(err, Error_Setup)
 	}
 	err = db.Update(func(tx *bolt.Tx) error {
 
-		_, err := tx.CreateBucketIfNotExists(operationKey)
+		_, err := tx.CreateBucketIfNotExists(eventKey)
 		return err
 	})
 
 	return view{ds, db, viewPath}, wrapInternalError(err, Error_Process)
 }
 
-func (self view) appendOperation(op Operation) error {
+func (self view) appendEvents(evts []dml.EmmitedEvent) error {
 
 	//single update is sufficient
-	return self.opLog.Update(func(tx *bolt.Tx) error {
+	return self.eventLog.Update(func(tx *bolt.Tx) error {
 
-		bucket := tx.Bucket(operationKey)
-		id, err := bucket.NextSequence()
-		if err != nil {
-			return wrapInternalError(err, Error_Process)
+		for _, evt := range evts {
+			bucket := tx.Bucket(eventKey)
+			id, err := bucket.NextSequence()
+			if err != nil {
+				return wrapInternalError(err, Error_Process)
+			}
+
+			var buf bytes.Buffer
+			enc := gob.NewEncoder(&buf)
+			if err := enc.Encode(evt); err != nil {
+				return wrapInternalError(err, Error_Invalid_Data)
+			}
+
+			err = wrapInternalError(bucket.Put(itob(id), buf.Bytes()), Error_Process)
+			if err != nil {
+				return err
+			}
 		}
 
-		data, err := op.ToData()
-		if err != nil {
-			return err
-		}
-
-		return wrapInternalError(bucket.Put(itob(id), data), Error_Process)
+		return nil
 	})
+}
+
+func (self view) getEventChan() chan dml.EmmitedEvent {
+
+	returnChan := make(chan dml.EmmitedEvent)
+
+	go func() {
+		self.eventLog.View(func(tx *bolt.Tx) error {
+
+			bucket := tx.Bucket(eventKey)
+			err := bucket.ForEach(func(k, v []byte) error {
+				var event dml.EmmitedEvent
+				buf := bytes.NewBuffer(v)
+				dec := gob.NewDecoder(buf)
+				err := dec.Decode(&event)
+				if err != nil {
+					return err
+				}
+				returnChan <- event
+				return nil
+			})
+
+			close(returnChan)
+			return err
+		})
+	}()
+
+	return returnChan
 }
 
 func (self view) close(rntm *dml.Runtime) error {
 
-	//start applying all pending all operations
-	err := self.opLog.View(func(tx *bolt.Tx) error {
-
-		bucket := tx.Bucket(operationKey)
-		return bucket.ForEach(func(k, v []byte) error {
-			op, err := operationFromData(v)
-			if err != nil {
-				return err
-			}
-			op.ApplyTo(rntm, self.store)
-			return nil
-		})
-	})
-	if err != nil {
-		return utils.StackError(err, "Unable to apply all pending operations")
-	}
-
 	//close the datastore and log
-	err = self.store.Close()
+	err := self.store.Close()
 	if err != nil {
 		return err
 	}
-	err = self.opLog.Close()
+	err = self.eventLog.Close()
 	if err != nil {
 		return err
 	}
@@ -223,10 +245,10 @@ func (self *viewManager) getSessionsWithView() []wamp.ID {
 	return result
 }
 
-func (self *viewManager) appendOperation(op Operation) {
+func (self *viewManager) appendEvents(events []dml.EmmitedEvent) {
 
 	for _, view := range self.views {
-		view.appendOperation(op)
+		view.appendEvents(events)
 	}
 }
 

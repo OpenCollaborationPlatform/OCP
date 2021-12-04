@@ -74,6 +74,7 @@ func TestDatastructure(t *testing.T) {
 		//make a wamp router to be used for local clients
 		router, _ := connection.MakeTemporaryRouter()
 		dsClient, _ := router.GetLocalClient("dsClient", nil)
+		callClient, _ := router.GetLocalClient("callClient", nil)
 		testClient, _ := router.GetLocalClient("testClient", nil)
 
 		//make a p2p host for communication
@@ -122,7 +123,7 @@ func TestDatastructure(t *testing.T) {
 			}
 
 			testClient.Subscribe("ocp.test.content.Test.TestEventZeroArgs", handlerZeroArgs, make(wamp.Dict, 0))
-			_, err = ds.dmlState.dml.RunJavaScript(ds.dmlState.store, "TestUser", "Test.TestEventZeroArgs.Emit()")
+			_, err = callClient.Call(ctx, "ocp.test.content.Test.TestEventZeroArgs", wamp.Dict{}, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			//wait a bit to be sure it reached us
 			time.Sleep(100 * time.Millisecond)
@@ -145,7 +146,7 @@ func TestDatastructure(t *testing.T) {
 				args[1] = evt.Arguments[1]
 			}
 			testClient.Subscribe("ocp.test.content.Test.TestEventTwoArgs", handlerTwoArgs, make(wamp.Dict, 0))
-			_, err = ds.dmlState.dml.RunJavaScript(ds.dmlState.store, "TestUser", "Test.TestEventTwoArgs.Emit(\"Hello\", 42)")
+			_, err = callClient.Call(ctx, "ocp.test.content.Test.TestEventTwoArgs", wamp.Dict{}, wamp.List{"Hello", 42}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			//wait a bit to be sure it reached us
 			time.Sleep(50 * time.Millisecond)
@@ -158,7 +159,7 @@ func TestDatastructure(t *testing.T) {
 		Convey("methods are callable by clients,", func() {
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "ocp.test.content.Test.TestFncZeroArgs", opts, wamp.List{}, wamp.Dict{}, nil)
+			res, err := callClient.Call(ctx, "ocp.test.content.Test.TestFncZeroArgs", opts, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -166,23 +167,23 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
+			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 0)
 
-			_, err = testClient.Call(ctx, "ocp.test.content.Test.TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, nil)
+			_, err = callClient.Call(ctx, "ocp.test.content.Test.TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ = ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
+			val, _, _ = ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 3)
 
-			val, err = testClient.Call(ctx, "ocp.test.content.Test.TestList", opts, wamp.List{}, wamp.Dict{}, nil)
+			val, err = callClient.Call(ctx, "ocp.test.content.Test.TestList", opts, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			args := val.(*wamp.Result)
 			So(args.Arguments[0], ShouldResemble, []interface{}{})
 
-			testClient.Call(ctx, "ocp.test.content.Test.Graph.AddNode", opts, wamp.List{"node"}, wamp.Dict{}, nil)
-			val, err = testClient.Call(ctx, "ocp.test.content.Test.Graph.ToNode", opts, wamp.List{"node"}, wamp.Dict{}, nil)
+			callClient.Call(ctx, "ocp.test.content.Test.Graph.AddNode", opts, wamp.List{"node"}, wamp.Dict{}, nil)
+			val, err = callClient.Call(ctx, "ocp.test.content.Test.Graph.ToNode", opts, wamp.List{"node"}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			args = val.(*wamp.Result)
 			So(args.Arguments[0], ShouldResemble, []interface{}{})
@@ -193,7 +194,7 @@ func TestDatastructure(t *testing.T) {
 			code := `Test.testI = 120`
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "ocp.test.execute", opts, wamp.List{code}, wamp.Dict{}, nil)
+			res, err := callClient.Call(ctx, "ocp.test.execute", opts, wamp.List{code}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -201,14 +202,14 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
+			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
 			So(val, ShouldEqual, 120)
 		})
 
 		Convey("and properties are read/writable,", func() {
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "ocp.test.content.Test.testI", opts, wamp.List{}, wamp.Dict{}, nil)
+			res, err := callClient.Call(ctx, "ocp.test.content.Test.testI", opts, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -216,7 +217,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 1)
 
-			res, err = testClient.Call(ctx, "ocp.test.content.Test.testI", opts, wamp.List{42}, wamp.Dict{}, nil)
+			res, err = callClient.Call(ctx, "ocp.test.content.Test.testI", opts, wamp.List{42}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok = res.Arguments[0].(error)
@@ -224,7 +225,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 42)
 
-			res, err = testClient.Call(ctx, "ocp.test.content.Test.testI", opts, wamp.List{}, wamp.Dict{}, nil)
+			res, err = callClient.Call(ctx, "ocp.test.content.Test.testI", opts, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok = res.Arguments[0].(error)
@@ -236,12 +237,12 @@ func TestDatastructure(t *testing.T) {
 		Convey("Also access via identifier work", func() {
 
 			opts := make(wamp.Dict, 0)
-			res, err := testClient.Call(ctx, "ocp.test.content.Test.Vector.AppendNew", opts, wamp.List{}, wamp.Dict{}, nil)
+			res, err := callClient.Call(ctx, "ocp.test.content.Test.Vector.AppendNew", opts, wamp.List{}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 
 			id := res.Arguments[0].(string)
 			uri := "ocp.test.content." + id + ".testI"
-			res, err = testClient.Call(ctx, uri, opts, wamp.List{20}, wamp.Dict{}, nil)
+			res, err = callClient.Call(ctx, uri, opts, wamp.List{20}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			So(len(res.Arguments), ShouldEqual, 1)
 			err, ok := res.Arguments[0].(error)
@@ -249,7 +250,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 20)
 
-			val, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), id+".testI")
+			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), id+".testI")
 			So(val, ShouldEqual, 20)
 		})
 	})

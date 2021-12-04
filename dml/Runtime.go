@@ -1183,7 +1183,7 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 func (self *Runtime) emitEvent(objPath, event string, args ...interface{}) error {
 
 	if self.emittedEvents != nil {
-		self.emittedEvents = append(self.emittedEvents, EmmitedEvent{objPath, args})
+		self.emittedEvents = append(self.emittedEvents, EmmitedEvent{objPath + "." + event, args})
 	}
 	return nil
 }
