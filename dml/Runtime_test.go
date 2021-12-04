@@ -276,5 +276,13 @@ func TestDmlFile(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(res, ShouldBeTrue)
 		})
+
+		Convey("A error also means no events", func() {
+
+			_, evts, err := rntm.Call(store, "", "Document.failAfterChange")
+			So(err, ShouldNotBeNil)
+			So(evts, ShouldBeNil)
+
+		})
 	})
 }

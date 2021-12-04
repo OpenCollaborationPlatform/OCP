@@ -36,6 +36,11 @@
 		this.testI = a
 	}
 	
+	function failAfterChange() {
+		this.testI = 100
+		throw "random error"
+	}
+	
 	function errorTestFnc() {
 		//let's see if it fails correctly
 		this.nonExistent()
