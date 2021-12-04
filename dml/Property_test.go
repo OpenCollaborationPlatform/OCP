@@ -61,7 +61,7 @@ func TestTypeProperty(t *testing.T) {
 			So(ok, ShouldBeTrue)
 			store.Rollback()
 
-			val, err = rntm.RunJavaScript(store, "", "toplevel.test")
+			val, _, err = rntm.RunJavaScript(store, "", "toplevel.test")
 			So(err, ShouldBeNil)
 			dtJs, ok := val.(DataType)
 			So(ok, ShouldBeTrue)
@@ -77,7 +77,7 @@ func TestTypeProperty(t *testing.T) {
 						throw "Should be POD, but is not"
 					}
 					`
-				_, err := rntm.RunJavaScript(store, "", "toplevel.test")
+				_, _, err := rntm.RunJavaScript(store, "", "toplevel.test")
 				So(err, ShouldBeNil)
 			})
 		})
@@ -92,7 +92,7 @@ func TestTypeProperty(t *testing.T) {
 					throw "Should be POD, but is not"
 				}
 			`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 		})
 
@@ -106,7 +106,7 @@ func TestTypeProperty(t *testing.T) {
 					throw "Should not be POD, but is"
 				}
 			`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 		})
 
@@ -139,10 +139,10 @@ func TestVarProperty(t *testing.T) {
 
 		Convey("The properties must be accessbile", func() {
 
-			res, err := rntm.Call(store, "", "toplevel.constVarProp")
+			res, _, err := rntm.Call(store, "", "toplevel.constVarProp")
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, "Hello")
-			res, err = rntm.Call(store, "", "toplevel.varProp")
+			res, _, err = rntm.Call(store, "", "toplevel.varProp")
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 2)
 		})
@@ -152,14 +152,14 @@ func TestVarProperty(t *testing.T) {
 					if (toplevel.varProp != true) {
 						throw "not boolean, but should be"
 					}`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 		})
 
 		Convey("but const var properties canot", func() {
 			code := `toplevel.constVarProp = true
 					`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldNotBeNil)
 		})
 	})
@@ -190,7 +190,7 @@ func TestRawProperty(t *testing.T) {
 
 		Convey("The default value must be undefined Cid", func() {
 
-			res, err := rntm.Call(store, "", "toplevel.rawProp")
+			res, _, err := rntm.Call(store, "", "toplevel.rawProp")
 			utils.PrintWithStacktrace(err)
 			So(err, ShouldBeNil)
 			id, ok := res.(utils.Cid)
@@ -234,7 +234,7 @@ func TestPropertyTypeIdentification(t *testing.T) {
 					throw "is object"
 				}
 			`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 		})
 	})

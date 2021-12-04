@@ -40,36 +40,36 @@ func TestDmlFile(t *testing.T) {
 		Convey("the properties shall be accessible via js", func() {
 
 			code := `Document.testI`
-			val, err := rntm.RunJavaScript(store, "", code)
+			val, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 1)
 
 			code = `Document.testI = 5`
-			val, err = rntm.RunJavaScript(store, "", code)
+			val, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			value, ok = val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
 
 			code = `Document.testI`
-			val, err = rntm.RunJavaScript(store, "", code)
+			val, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			value, ok = val.(int64)
 			So(ok, ShouldBeTrue)
 			So(value, ShouldEqual, 5)
 
 			code = `Document.testI = "hello"`
-			val, err = rntm.RunJavaScript(store, "", code)
+			val, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldNotBeNil)
 
 			code = `Document.testConst = 1`
-			val, err = rntm.RunJavaScript(store, "", code)
+			val, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldNotBeNil)
 
 			code = `Document.testConst = 1`
-			val, err = rntm.RunJavaScript(store, "", code)
+			val, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldNotBeNil)
 
 		})
@@ -80,11 +80,11 @@ func TestDmlFile(t *testing.T) {
 					Document.testE.RegisterCallback(Document, "testEventCallback")
 					Document.testE.Emit(2, "hello")
 				`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			code = `Document.testI`
-			val, err := rntm.RunJavaScript(store, "", code)
+			val, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
@@ -101,22 +101,22 @@ func TestDmlFile(t *testing.T) {
 			So(value, ShouldEqual, 0)
 
 			code = `Document.testE.Emit("hello", "2")`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldNotBeNil)
 
 			code = `Document.testB`
-			val, err = rntm.RunJavaScript(store, "", code)
+			val, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			bvalue, ok := val.(bool)
 			So(ok, ShouldBeTrue)
 			So(bvalue, ShouldBeFalse)
 
 			code = `Document.testE2.Emit()`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			code = `Document.testB`
-			val, err = rntm.RunJavaScript(store, "", code)
+			val, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			bvalue, ok = val.(bool)
 			So(ok, ShouldBeTrue)
@@ -129,7 +129,7 @@ func TestDmlFile(t *testing.T) {
 					throw "floating point number dosn't work"
 				}
 			`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			//testI must be one if the function was called correctly
@@ -145,7 +145,7 @@ func TestDmlFile(t *testing.T) {
 			Convey("with correct error capturing", func() {
 
 				code = `Document.testErrorE.Emit()`
-				_, err = rntm.RunJavaScript(store, "", code)
+				_, _, err = rntm.RunJavaScript(store, "", code)
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -156,7 +156,7 @@ func TestDmlFile(t *testing.T) {
 			Document.testFnc(42)
 			Document.testI`
 
-			val, err := rntm.RunJavaScript(store, "", code)
+			val, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			value, ok := val.(int64)
 			So(ok, ShouldBeTrue)
@@ -170,7 +170,7 @@ func TestDmlFile(t *testing.T) {
 
 			Convey("But errors are captured", func() {
 				code := `Document.errorTestFnc()`
-				_, err := rntm.RunJavaScript(store, "", code)
+				_, _, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -202,7 +202,7 @@ func TestDmlFile(t *testing.T) {
 				}
 				`
 
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 		})
 
@@ -248,7 +248,7 @@ func TestDmlFile(t *testing.T) {
 			thiscode := `	Document.ThisTest.assign()
 						 	Document.ThisTest.Sub.test.Emit()`
 
-			_, err := rntm.RunJavaScript(store, "", thiscode)
+			_, _, err := rntm.RunJavaScript(store, "", thiscode)
 			So(err, ShouldBeNil)
 		})
 
@@ -272,7 +272,7 @@ func TestDmlFile(t *testing.T) {
 
 		Convey("and created event was emitted", func() {
 
-			res, err := rntm.Call(store, "", "Document.created")
+			res, _, err := rntm.Call(store, "", "Document.created")
 			So(err, ShouldBeNil)
 			So(res, ShouldBeTrue)
 		})

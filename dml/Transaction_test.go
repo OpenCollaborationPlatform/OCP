@@ -82,25 +82,25 @@ func TestTransactionBasics(t *testing.T) {
 				store.Begin()
 				So(mngr.IsOpen(), ShouldBeFalse)
 				store.Rollback()
-				res, err := rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
+				res, _, err := rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeFalse)
 
-				_, err = rntm.RunJavaScript(store, "User3", "Transaction.Open()")
+				_, _, err = rntm.RunJavaScript(store, "User3", "Transaction.Open()")
 				So(err, ShouldBeNil)
 				store.Begin()
 				So(mngr.IsOpen(), ShouldBeTrue)
 				store.Rollback()
-				res, err = rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
+				res, _, err = rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeTrue)
 
-				_, err = rntm.RunJavaScript(store, "User3", "Transaction.Close()")
+				_, _, err = rntm.RunJavaScript(store, "User3", "Transaction.Close()")
 				So(err, ShouldBeNil)
 				store.Begin()
 				So(mngr.IsOpen(), ShouldBeFalse)
 				store.Rollback()
-				res, err = rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
+				res, _, err = rntm.RunJavaScript(store, "User3", "Transaction.IsOpen()")
 				So(err, ShouldBeNil)
 				So(res.(bool), ShouldBeFalse)
 			})
@@ -201,7 +201,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 		Convey("the object structure must be correct", func() {
 
-			val, err := rntm.RunJavaScript(store, "User1", "Document.trans.parent.name")
+			val, _, err := rntm.RunJavaScript(store, "User1", "Document.trans.parent.name")
 			So(err, ShouldBeNil)
 			value, ok := val.(string)
 			So(ok, ShouldBeTrue)
@@ -234,7 +234,7 @@ func TestTransactionBehaviour(t *testing.T) {
 				store.Commit()
 				So(err, ShouldBeNil)
 
-				_, err = rntm.RunJavaScript(store, "User1", "Document.result.value = ''")
+				_, _, err = rntm.RunJavaScript(store, "User1", "Document.result.value = ''")
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -276,7 +276,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 				Convey("only its participation event must have been called", func() {
 
-					res, err := rntm.Call(store, "User1", "Document.result.value")
+					res, _, err := rntm.Call(store, "User1", "Document.result.value")
 					So(err, ShouldBeNil)
 					str := res.(string)
 					So(str, ShouldEqual, "p1")
@@ -312,7 +312,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(open, ShouldBeFalse)
 
-					res, err := rntm.Call(store, "User1", "Document.result.value")
+					res, _, err := rntm.Call(store, "User1", "Document.result.value")
 					So(err, ShouldBeNil)
 					str := res.(string)
 					So(str, ShouldEqual, "p1c1")
@@ -336,7 +336,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 			Convey("Changing a property on object with transaction behaviour", func() {
 
-				_, err := rntm.RunJavaScript(store, "User1", "Document.Child.test = 2")
+				_, _, err := rntm.RunJavaScript(store, "User1", "Document.Child.test = 2")
 				So(err, ShouldBeNil)
 
 				Convey("Adds the object to the transaction", func() {
@@ -354,7 +354,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 			Convey("Changing a object below a recursive transaction", func() {
 
-				_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildChild.value = 2")
+				_, _, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildChild.value = 2")
 				So(err, ShouldBeNil)
 
 				Convey("Adds the behaviour equiped object to the transaction", func() {
@@ -372,7 +372,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 			Convey("Creating a new object below a recursive transaction behaviour", func() {
 
-				ret, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.New(\"test\")")
+				ret, _, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.New(\"test\")")
 				So(err, ShouldBeNil)
 				newMapEntry := ret.(Identifier)
 
@@ -408,7 +408,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					store.Commit()
 					So(err, ShouldBeNil)
 
-					_, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.Get(\"test\").value = 5")
+					_, _, err := rntm.RunJavaScript(store, "User1", "Document.Child.ChildMap.Get(\"test\").value = 5")
 					utils.PrintWithStacktrace(err)
 					So(err, ShouldBeNil)
 
@@ -428,7 +428,7 @@ func TestTransactionBehaviour(t *testing.T) {
 				Convey("Aborting the transaction", func() {
 
 					code := `Transaction.Abort()`
-					_, err := rntm.RunJavaScript(store, "User1", code)
+					_, _, err := rntm.RunJavaScript(store, "User1", code)
 					So(err, ShouldBeNil)
 
 					Convey("removes every database entry of the created object", func() {
@@ -452,7 +452,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 					code := `Document.Child.ChildMap.Remove("test")
 							 Transaction.Close()`
-					_, err := rntm.RunJavaScript(store, "User1", code)
+					_, _, err := rntm.RunJavaScript(store, "User1", code)
 					So(err, ShouldBeNil)
 
 					Convey("removes every database entry of it", func() {
@@ -613,7 +613,7 @@ func TestTransactionFail(t *testing.T) {
 
 			code = `	Document.p = 2; Document.DocumentObject.p=2;`
 
-			_, err := rntm.RunJavaScript(store, "User1", code)
+			_, _, err := rntm.RunJavaScript(store, "User1", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -655,7 +655,7 @@ func TestTransactionFail(t *testing.T) {
 			Convey("Changing data of non-transaction subobject should work", func() {
 
 				code = `Document.DocumentObject.p=3;`
-				_, err := rntm.RunJavaScript(store, "User1", code)
+				_, _, err := rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -671,7 +671,7 @@ func TestTransactionFail(t *testing.T) {
 			Convey("but changing data of toplevel should fail", func() {
 
 				code = `Document.p=4;`
-				_, err := rntm.RunJavaScript(store, "User1", code)
+				_, _, err := rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldNotBeNil)
 
 				store.Begin()
@@ -706,7 +706,7 @@ func TestTransactionFail(t *testing.T) {
 				store.Commit()
 
 				code = `Document.TransDocumentObject.p=5; Document.FailTransDocumentObject.p = 5`
-				_, err = rntm.RunJavaScript(store, "User1", code)
+				_, _, err = rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldNotBeNil)
 
 				Convey("Should not have changed the data", func() {
@@ -747,7 +747,7 @@ func TestTransactionFail(t *testing.T) {
 				store.Commit()
 
 				code = `Transaction.Open(); Document.FailTransDocument.p = 5`
-				_, err = rntm.RunJavaScript(store, "User1", code)
+				_, _, err = rntm.RunJavaScript(store, "User1", code)
 
 				Convey("Should be an error", func() {
 					So(err, ShouldNotBeNil)
@@ -769,7 +769,7 @@ func TestTransactionFail(t *testing.T) {
 		Convey("Changing a object with automatic transaction enabled", func() {
 
 			code = `Transaction.Close(); Document.DepTest.Child2.p = 1`
-			_, err := rntm.RunJavaScript(store, "User1", code)
+			_, _, err := rntm.RunJavaScript(store, "User1", code)
 			So(err, ShouldBeNil)
 
 			Convey("should add this object to the transaction", func() {
@@ -856,7 +856,7 @@ func TestTransactionAbort(t *testing.T) {
 
 			code := `Document.value = 5
 					 Transaction.Abort()`
-			_, err = rntm.RunJavaScript(store, "User1", code)
+			_, _, err = rntm.RunJavaScript(store, "User1", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -871,7 +871,7 @@ func TestTransactionAbort(t *testing.T) {
 
 			code := `Document.Child.value = 5
 					 Transaction.Abort()`
-			_, err = rntm.RunJavaScript(store, "User1", code)
+			_, _, err = rntm.RunJavaScript(store, "User1", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -952,7 +952,7 @@ func TestPartialTransaction(t *testing.T) {
 					 Document.value2 = 3
 					 Document.trans.CurrentTransactionKeys()`
 
-			keys, err := rntm.RunJavaScript(store, "User1", code)
+			keys, _, err := rntm.RunJavaScript(store, "User1", code)
 			So(err, ShouldBeNil)
 			So(keys, ShouldResemble, []string{"value1", "value2"})
 
@@ -969,7 +969,7 @@ func TestPartialTransaction(t *testing.T) {
 			Convey("Closing the transaction works and preserves the values", func() {
 
 				code := `Transaction.Close()`
-				_, err = rntm.RunJavaScript(store, "User1", code)
+				_, _, err = rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -986,7 +986,7 @@ func TestPartialTransaction(t *testing.T) {
 
 					code := `Transaction.Open()
 							 Document.trans.CurrentTransactionKeys()`
-					keys, err = rntm.RunJavaScript(store, "User1", code)
+					keys, _, err = rntm.RunJavaScript(store, "User1", code)
 					So(err, ShouldBeNil)
 					So(keys, ShouldResemble, []string{})
 				})
@@ -995,7 +995,7 @@ func TestPartialTransaction(t *testing.T) {
 			Convey("Aborting the transaction works and resets both values", func() {
 
 				code := `Transaction.Abort()`
-				_, err = rntm.RunJavaScript(store, "User1", code)
+				_, _, err = rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -1012,7 +1012,7 @@ func TestPartialTransaction(t *testing.T) {
 
 					code := `Transaction.Open()
 							 Document.trans.CurrentTransactionKeys()`
-					keys, err = rntm.RunJavaScript(store, "User1", code)
+					keys, _, err = rntm.RunJavaScript(store, "User1", code)
 					utils.PrintWithStacktrace(err)
 					So(err, ShouldBeNil)
 					So(keys, ShouldResemble, []string{})
@@ -1024,18 +1024,18 @@ func TestPartialTransaction(t *testing.T) {
 				code := `Document.value3 = 7
 					 	 Document.trans.CurrentTransactionKeys()`
 
-				keys, err = rntm.RunJavaScript(store, "User2", code)
+				keys, _, err = rntm.RunJavaScript(store, "User2", code)
 				So(err, ShouldBeNil)
 				So(keys, ShouldResemble, []string{"value3"})
 
 				Convey("and closing the first users transaction does not influence the second", func() {
 
 					code := `Transaction.Close()`
-					_, err = rntm.RunJavaScript(store, "User1", code)
+					_, _, err = rntm.RunJavaScript(store, "User1", code)
 					So(err, ShouldBeNil)
 
 					code = `Document.trans.CurrentTransactionKeys()`
-					keys, err = rntm.RunJavaScript(store, "User2", code)
+					keys, _, err = rntm.RunJavaScript(store, "User2", code)
 					So(err, ShouldBeNil)
 					So(keys, ShouldResemble, []string{"value3"})
 				})
@@ -1045,7 +1045,7 @@ func TestPartialTransaction(t *testing.T) {
 
 				code := `Document.value1 = 2`
 
-				_, err = rntm.RunJavaScript(store, "User2", code)
+				_, _, err = rntm.RunJavaScript(store, "User2", code)
 				So(err, ShouldNotBeNil)
 			})
 		})
@@ -1056,7 +1056,7 @@ func TestPartialTransaction(t *testing.T) {
 					 Document.Child.Set(2,2)
 					 Document.trans.CurrentTransactionKeys()`
 
-			keys, err := rntm.RunJavaScript(store, "User1", code)
+			keys, _, err := rntm.RunJavaScript(store, "User1", code)
 			utils.PrintWithStacktrace(err)
 			So(err, ShouldBeNil)
 			So(keys, ShouldResemble, []string{"Child.1", "Child.2"})
@@ -1064,7 +1064,7 @@ func TestPartialTransaction(t *testing.T) {
 			Convey("as well as aborting the changes", func() {
 
 				code := `Transaction.Abort()`
-				_, err := rntm.RunJavaScript(store, "User1", code)
+				_, _, err := rntm.RunJavaScript(store, "User1", code)
 				utils.PrintWithStacktrace(err)
 				So(err, ShouldBeNil)
 			})
@@ -1080,7 +1080,7 @@ func TestPartialTransaction(t *testing.T) {
 					 Document.ObjectMap.New("second")
 					 Document.trans.CurrentTransactionKeys()`
 
-			keys, err := rntm.RunJavaScript(store, "User1", code)
+			keys, _, err := rntm.RunJavaScript(store, "User1", code)
 			So(err, ShouldBeNil)
 			So(keys, ShouldResemble, []string{"ObjectMap.first", "ObjectMap.second"})
 
@@ -1106,7 +1106,7 @@ func TestPartialTransaction(t *testing.T) {
 
 				code := `Transaction.Abort()`
 
-				_, err := rntm.RunJavaScript(store, "User1", code)
+				_, _, err := rntm.RunJavaScript(store, "User1", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()

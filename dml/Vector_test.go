@@ -83,7 +83,7 @@ func TestPODVector(t *testing.T) {
 			So(length, ShouldEqual, 0)
 			store.Rollback()
 			code = `toplevel.IntVec.Append(0)`
-			val, err := rntm.RunJavaScript(store, "", code)
+			val, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			idx := val.(int64)
 			So(idx, ShouldEqual, 0)
@@ -95,12 +95,12 @@ func TestPODVector(t *testing.T) {
 			Convey("and the relevant events with keys have been emitted", func() {
 
 				code = `toplevel.IntVec.beforeChangeKeys`
-				res, err := rntm.Call(store, "", code)
+				res, _, err := rntm.Call(store, "", code)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "0")
 
 				code = `toplevel.IntVec.changeKeys`
-				res, err = rntm.Call(store, "", code)
+				res, _, err = rntm.Call(store, "", code)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "0")
 			})
@@ -388,7 +388,7 @@ func TestTypeVector(t *testing.T) {
 			code = `toplevel.TypeVec.AppendNew()
 					toplevel.TypeVec.AppendNew()
 			`
-			_, err = rntm.RunJavaScript(store, "user3", code)
+			_, _, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -425,7 +425,7 @@ func TestTypeVector(t *testing.T) {
 					obj = toplevel.TypeVec.Get(0)
 					obj.test = 1
 				`
-				_, err := rntm.RunJavaScript(store, "user3", code)
+				_, _, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -455,7 +455,7 @@ func TestTypeVector(t *testing.T) {
 			Convey("but setting complex types is forbidden", func() {
 
 				code = `	toplevel.TypeVec.Set(0, toplevel.TypeVec.Get(1))`
-				_, err = rntm.RunJavaScript(store, "user3", code)
+				_, _, err = rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
 
 			})
@@ -468,7 +468,7 @@ func TestTypeVector(t *testing.T) {
 							throw "parent not set correctly"
 						}
 					`
-				_, err := rntm.RunJavaScript(store, "user3", code)
+				_, _, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 			})
 
@@ -487,7 +487,7 @@ func TestTypeVector(t *testing.T) {
 							throw "Object removal failed"
 						}
 					`
-				_, err = rntm.RunJavaScript(store, "user3", code)
+				_, _, err = rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()

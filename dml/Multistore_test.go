@@ -57,7 +57,7 @@ func TestMultistore(t *testing.T) {
 							throw "length not correct"
 						}
 					`
-			_, err := rntm.RunJavaScript(store1, "user", code)
+			_, _, err := rntm.RunJavaScript(store1, "user", code)
 			So(err, ShouldBeNil)
 
 			Convey("while the second is still empty", func() {
@@ -66,7 +66,7 @@ func TestMultistore(t *testing.T) {
 								throw "length not correct"
 							}
 					`
-				_, err := rntm.RunJavaScript(store2, "user", code)
+				_, _, err := rntm.RunJavaScript(store2, "user", code)
 				So(err, ShouldBeNil)
 			})
 
@@ -79,7 +79,7 @@ func TestMultistore(t *testing.T) {
 							entry = map.New("entry")
 							entry.test = 1
 						`
-				_, err := rntm.RunJavaScript(store2, "user", code)
+				_, _, err := rntm.RunJavaScript(store2, "user", code)
 				So(err, ShouldBeNil)
 
 				code = ` 	if (Vector.Length() != 1) {
@@ -90,7 +90,7 @@ func TestMultistore(t *testing.T) {
 								throw "length not correct"
 							}
 						`
-				_, err = rntm.RunJavaScript(store1, "user", code)
+				_, _, err = rntm.RunJavaScript(store1, "user", code)
 				So(err, ShouldBeNil)
 			})
 		})

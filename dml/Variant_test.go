@@ -51,22 +51,22 @@ func TestPODVariant(t *testing.T) {
 		Convey("Adding to int variant should work", func() {
 
 			code = `toplevel.Variant.SetValue(10)`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
-			res, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
+			res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
 
 			Convey("and emit correct events", func() {
 
 				code = `toplevel.Variant.beforeChangeKeys`
-				res, err := rntm.Call(store, "", code)
+				res, _, err := rntm.Call(store, "", code)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "value")
 
 				code = `toplevel.Variant.changeKeys`
-				res, err = rntm.Call(store, "", code)
+				res, _, err = rntm.Call(store, "", code)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "value")
 			})
@@ -74,21 +74,21 @@ func TestPODVariant(t *testing.T) {
 			Convey("but setting wrong type should fail", func() {
 
 				code = `toplevel.Variant.SetValue("hello")`
-				_, err := rntm.RunJavaScript(store, "", code)
+				_, _, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldNotBeNil)
-				res, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
+				res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 10)
 
 				Convey("and not add any events", func() {
 
 					code = `toplevel.Variant.beforeChangeKeys`
-					res, err := rntm.Call(store, "", code)
+					res, _, err := rntm.Call(store, "", code)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, "value")
 
 					code = `toplevel.Variant.changeKeys`
-					res, err = rntm.Call(store, "", code)
+					res, _, err = rntm.Call(store, "", code)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, "value")
 				})
@@ -97,11 +97,11 @@ func TestPODVariant(t *testing.T) {
 			Convey("Changeing the datatype works", func() {
 
 				code = `toplevel.Variant.type = toplevel.other`
-				_, err := rntm.RunJavaScript(store, "", code)
+				_, _, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 
 				Convey("and initialized the value to the default of the new datatype", func() {
-					res, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
+					res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
 					So(err, ShouldBeNil)
 					So(res, ShouldBeFalse)
 				})
@@ -109,12 +109,12 @@ func TestPODVariant(t *testing.T) {
 				Convey("and emit aditional change events", func() {
 
 					code = `toplevel.Variant.beforeChangeKeys`
-					res, err := rntm.Call(store, "", code)
+					res, _, err := rntm.Call(store, "", code)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, "valuevalue")
 
 					code = `toplevel.Variant.changeKeys`
-					res, err = rntm.Call(store, "", code)
+					res, _, err = rntm.Call(store, "", code)
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, "valuevalue")
 				})
@@ -178,7 +178,7 @@ func TestTypeVariant(t *testing.T) {
 			code = `
 				toplevel.Variant.type = new DataType("Data{property int test: 10}")
 			`
-			_, err := rntm.RunJavaScript(store, "user3", code)
+			_, _, err := rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldBeNil)
 
 			Convey("and the value should be a nicely initialized object", func() {
@@ -192,7 +192,7 @@ func TestTypeVariant(t *testing.T) {
 						throw "initialisation failed: value should be 10"
 					}
 				`
-				_, err := rntm.RunJavaScript(store, "user3", code)
+				_, _, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 			})
 		})

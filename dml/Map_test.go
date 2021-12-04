@@ -102,7 +102,7 @@ func TestPODMap(t *testing.T) {
 			store.Rollback()
 
 			code := `toplevel.IntIntMap.Set(10, 10)`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -115,23 +115,23 @@ func TestPODMap(t *testing.T) {
 			So(has, ShouldBeTrue)
 
 			code = `toplevel.IntIntMap.Get(10)`
-			res, err := rntm.RunJavaScript(store, "", code)
+			res, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
 
 			Convey("and the relevant events with keys have been emitted", func() {
 
 				code := `toplevel.IntIntMap.Set(10, 11)`
-				_, err = rntm.RunJavaScript(store, "", code)
+				_, _, err = rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 
 				code = `toplevel.IntIntMap.beforeChangeKeys`
-				res, err := rntm.Call(store, "", code)
+				res, _, err := rntm.Call(store, "", code)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "1010")
 
 				code = `toplevel.IntIntMap.changeKeys`
-				res, err = rntm.Call(store, "", code)
+				res, _, err = rntm.Call(store, "", code)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "1010")
 			})
@@ -140,51 +140,51 @@ func TestPODMap(t *testing.T) {
 		Convey("Adding new values should work", func() {
 
 			code := `toplevel.StringBoolMap.New("hey")`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.StringBoolMap.New("hey")`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldNotBeNil)
 
 			code = `toplevel.StringBoolMap.Get("hey")`
-			res, err := rntm.RunJavaScript(store, "", code)
+			res, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeFalse)
 
 			code = `toplevel.StringBoolMap.Set("ho", true)`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.StringBoolMap.Get("ho")`
-			res, err = rntm.RunJavaScript(store, "", code)
+			res, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeTrue)
 
 			code = `toplevel.StringBoolMap.Length()`
-			res, err = rntm.RunJavaScript(store, "", code)
+			res, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 2)
 
 			code = `toplevel.StringBoolMap.Has("ho")`
-			res, err = rntm.RunJavaScript(store, "", code)
+			res, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeTrue)
 
 			code = `toplevel.StringBoolMap.Has("klö")`
-			res, err = rntm.RunJavaScript(store, "", code)
+			res, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(res, ShouldBeFalse)
 
 			Convey("and the relevant events with keys have been emitted", func() {
 
 				code = `toplevel.StringBoolMap.beforeChangeKeys`
-				res, err := rntm.Call(store, "", code)
+				res, _, err := rntm.Call(store, "", code)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "heyho")
 
 				code = `toplevel.StringBoolMap.changeKeys`
-				res, err = rntm.Call(store, "", code)
+				res, _, err = rntm.Call(store, "", code)
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "heyho")
 			})
@@ -195,7 +195,7 @@ func TestPODMap(t *testing.T) {
 			code := `toplevel.IntIntMap.Set(10, 10)
 					toplevel.IntIntMap.Set(9, 9)
 					`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			store.Begin()
@@ -221,7 +221,7 @@ func TestPODMap(t *testing.T) {
 			code := `toplevel.IntFloatMap.Set(10, 5.5);
 				    toplevel.IntFloatMap.Set(9, 4.4);
 					`
-			_, err = rntm.RunJavaScript(store, "", code)
+			_, _, err = rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			rntm2 := NewRuntime()
@@ -303,15 +303,15 @@ func TestComplexTypeMap(t *testing.T) {
 			store.Commit()
 
 			code = `toplevel.TypeMap.New("test")`
-			_, err = rntm.RunJavaScript(store, "user3", code)
+			_, _, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.test("test2")`
-			_, err = rntm.RunJavaScript(store, "user3", code)
+			_, _, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldBeNil)
 
 			code = `	toplevel.TypeMap.Set("new", toplevel.TypeMap.Get("test"))`
-			_, err = rntm.RunJavaScript(store, "user3", code)
+			_, _, err = rntm.RunJavaScript(store, "user3", code)
 			So(err, ShouldNotBeNil) //setting complex objects should not be allowed (no doublication, clear hirarchy)
 
 			Convey("Accessing the object via path is possible", func() {
@@ -351,7 +351,7 @@ func TestComplexTypeMap(t *testing.T) {
 						throw "identifiers are not equal, but should be"
 					}
 				`
-				_, err = rntm.RunJavaScript(store, "user3", code)
+				_, _, err = rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 			})
 
@@ -362,7 +362,7 @@ func TestComplexTypeMap(t *testing.T) {
 					obj.test = 1
 					toplevel.TypeMap.Get("test2").test = 2
 				`
-				_, err := rntm.RunJavaScript(store, "user3", code)
+				_, _, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
 				store.Begin()
@@ -394,7 +394,7 @@ func TestComplexTypeMap(t *testing.T) {
 						throw "parent not set correctly"
 					}
 				`
-				_, err := rntm.RunJavaScript(store, "user3", code)
+				_, _, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 			})
 
@@ -407,7 +407,7 @@ func TestComplexTypeMap(t *testing.T) {
 						throw "Object removal did not shorten the map"
 					}
 				`
-				_, err := rntm.RunJavaScript(store, "user3", code)
+				_, _, err := rntm.RunJavaScript(store, "user3", code)
 				So(err, ShouldBeNil)
 
 			})

@@ -45,11 +45,11 @@ func TestPODGraph(t *testing.T) {
 			code = `	toplevel.IntGraph.AddNode(1)
 					toplevel.IntGraph.AddNode(2)
 					toplevel.IntGraph.AddNode(4)`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.IntGraph.Nodes()`
-			val, err := rntm.RunJavaScript(store, "", code)
+			val, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 			So(val, ShouldResemble, []interface{}{int64(1), int64(2), int64(4)})
 
@@ -58,51 +58,51 @@ func TestPODGraph(t *testing.T) {
 				code = `	toplevel.IntGraph.NewEdge(1, 2)
 					toplevel.IntGraph.NewEdge(2, 4)
 					toplevel.IntGraph.NewEdge(4, 1)`
-				_, err := rntm.RunJavaScript(store, "", code)
+				_, _, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 
 				code = `toplevel.IntGraph.HasEdgeBetween(1,2)`
-				val, err := rntm.RunJavaScript(store, "", code)
+				val, _, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 				So(val, ShouldBeTrue)
 
 				code = `toplevel.IntGraph.HasEdgeBetween(2,1)`
-				val, err = rntm.RunJavaScript(store, "", code)
+				val, _, err = rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 				So(val, ShouldBeFalse)
 
 				code = `toplevel.IntGraph.HasEdgeBetween(1,4)`
-				val, err = rntm.RunJavaScript(store, "", code)
+				val, _, err = rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 				So(val, ShouldBeFalse)
 
 				code = `toplevel.IntGraph.HasEdgeBetween(4,1)`
-				val, err = rntm.RunJavaScript(store, "", code)
+				val, _, err = rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 				So(val, ShouldBeTrue)
 
 				Convey("Connections are returned correctly", func() {
 
 					code = `	toplevel.IntGraph.FromNode(1)`
-					val, err = rntm.RunJavaScript(store, "", code)
+					val, _, err = rntm.RunJavaScript(store, "", code)
 					So(err, ShouldBeNil)
 					So(val, ShouldResemble, []interface{}{int64(2)})
 
 					code = `	toplevel.IntGraph.ToNode(1)`
-					val, err = rntm.RunJavaScript(store, "", code)
+					val, _, err = rntm.RunJavaScript(store, "", code)
 					So(err, ShouldBeNil)
 					So(val, ShouldResemble, []interface{}{int64(4)})
 
 					code = `	toplevel.IntGraph.ToNode(7)`
-					val, err = rntm.RunJavaScript(store, "", code)
+					val, _, err = rntm.RunJavaScript(store, "", code)
 					So(err, ShouldNotBeNil)
 					So(val, ShouldBeNil)
 
-					val, err = rntm.Call(store, "", "toplevel.IntGraph.ToNode", 1)
+					val, _, err = rntm.Call(store, "", "toplevel.IntGraph.ToNode", 1)
 					So(err, ShouldBeNil)
 					So(val, ShouldResemble, []interface{}{int64(4)})
 
-					val, err = rntm.Call(store, "", "toplevel.IntGraph.ToNode", 7)
+					val, _, err = rntm.Call(store, "", "toplevel.IntGraph.ToNode", 7)
 					So(err, ShouldNotBeNil)
 					So(val, ShouldBeNil)
 				})
@@ -111,7 +111,7 @@ func TestPODGraph(t *testing.T) {
 
 					code = `	toplevel.IntGraph.RemoveEdgeBetween(1,2);
 							toplevel.IntGraph.HasEdgeBetween(1,2)`
-					val, err = rntm.RunJavaScript(store, "", code)
+					val, _, err = rntm.RunJavaScript(store, "", code)
 					So(err, ShouldBeNil)
 					So(val, ShouldBeFalse)
 				})
@@ -120,20 +120,20 @@ func TestPODGraph(t *testing.T) {
 
 					code = `	toplevel.IntGraph.RemoveNode(2);
 							toplevel.IntGraph.Nodes()`
-					val, err = rntm.RunJavaScript(store, "", code)
+					val, _, err = rntm.RunJavaScript(store, "", code)
 					So(err, ShouldBeNil)
 					So(val, ShouldResemble, []interface{}{int64(1), int64(4)})
 
 					Convey("and does also remove all relevant edges", func() {
 
 						code = `	toplevel.IntGraph.HasEdgeBetween(1,2)`
-						_, err = rntm.RunJavaScript(store, "", code)
+						_, _, err = rntm.RunJavaScript(store, "", code)
 						So(err, ShouldNotBeNil)
 						code = `	toplevel.IntGraph.HasEdgeBetween(2,4)`
-						_, err = rntm.RunJavaScript(store, "", code)
+						_, _, err = rntm.RunJavaScript(store, "", code)
 						So(err, ShouldNotBeNil)
 						code = `	toplevel.IntGraph.HasEdgeBetween(4,1)`
-						val, err = rntm.RunJavaScript(store, "", code)
+						val, _, err = rntm.RunJavaScript(store, "", code)
 						So(err, ShouldBeNil)
 						So(val, ShouldBeTrue)
 					})
@@ -154,16 +154,16 @@ func TestPODGraph(t *testing.T) {
 					toplevel.IntGraph.NewEdge(4,2)
 					toplevel.IntGraph.NewEdge(5,2)
 					`
-			_, err := rntm.RunJavaScript(store, "", code)
+			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
 			code = `toplevel.IntGraph.Sorted()`
-			res, err := rntm.RunJavaScript(store, "", code)
+			res, _, err := rntm.RunJavaScript(store, "", code)
 			sorted := res.([]interface{})
 			So(sorted[4], ShouldEqual, 1) //1 must be last, others can very a bit in order
 
 			code = `toplevel.IntGraph.Cycles()`
-			cycles, err := rntm.RunJavaScript(store, "", code)
+			cycles, _, err := rntm.RunJavaScript(store, "", code)
 			So(cycles, ShouldHaveLength, 0)
 
 			Convey("and cycles are detected", func() {
@@ -172,15 +172,15 @@ func TestPODGraph(t *testing.T) {
 					toplevel.IntGraph.NewEdge(1,5)
 					toplevel.IntGraph.NewEdge(4,3)
 					`
-				_, err := rntm.RunJavaScript(store, "", code)
+				_, _, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldBeNil)
 
 				code = `toplevel.IntGraph.Cycles()`
-				cycles, err := rntm.RunJavaScript(store, "", code)
+				cycles, _, err := rntm.RunJavaScript(store, "", code)
 				So(cycles, ShouldHaveLength, 1)
 
 				code = `toplevel.IntGraph.Sorted()`
-				sorted, err := rntm.RunJavaScript(store, "", code)
+				sorted, _, err := rntm.RunJavaScript(store, "", code)
 				So(sorted, ShouldResemble, []interface{}{int64(4), int64(3), []interface{}{int64(1), int64(2), int64(5)}})
 			})
 		})
