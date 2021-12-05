@@ -3,6 +3,7 @@ package utils
 //condent identifier
 import (
 	"encoding"
+	"encoding/gob"
 	"strings"
 
 	cid "github.com/ipfs/go-cid"
@@ -13,12 +14,13 @@ var _ encoding.BinaryUnmarshaler = (*Cid)(nil)
 
 func init() {
 	Decoder.RegisterEncotable("cid", cidDecode)
+	gob.Register(new(Cid))
 }
 
 var CidUndef = Cid{cid.Undef}
 
 type Cid struct {
-	data cid.Cid
+	cid.Cid
 }
 
 func FromP2PCid(p2p cid.Cid) Cid {
@@ -46,19 +48,11 @@ func cidDecode(code string) (interface{}, error) {
 }
 
 func (self Cid) Encode() string {
-	return "ocp_cid_" + self.data.String()
+	return "ocp_cid_" + self.Cid.String()
 }
 
 func (self Cid) P2P() cid.Cid {
-	return self.data
-}
-
-func (self Cid) Defined() bool {
-	return self.data.Defined()
-}
-
-func (self Cid) String() string {
-	return self.data.String()
+	return self.Cid
 }
 
 // It implements the encoding.BinaryUnmarshaler interface.
@@ -66,17 +60,17 @@ func (self Cid) String() string {
 func (self *Cid) UnmarshalBinary(data []byte) error {
 
 	if data == nil || len(data) == 0 {
-		self.data = cid.Undef
+		self.Cid = cid.Undef
 		return nil
 	}
 	casted, err := cid.Cast(data)
 	if err != nil {
 		return StackError(err, "Unable to decode p2p cid")
 	}
-	self.data = casted
+	self.Cid = casted
 	return nil
 }
 
 func (self Cid) MarshalBinary() ([]byte, error) {
-	return self.data.MarshalBinary()
+	return self.Cid.MarshalBinary()
 }

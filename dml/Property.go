@@ -42,18 +42,14 @@ func NewProperty(name string, dtype DataType, default_value interface{}, constpr
 	var prop Property
 
 	if !constprop {
-		//setup default value if needed
-		prop = &dataProperty{name, dtype, default_value, nil, nil}
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to use provided value as default for property")
-		}
-
+		prop = &dataProperty{name, dtype, nil, nil, nil}
 	} else {
 		prop = &constProperty{dtype, nil}
-		err := prop.SetDefaultValue(default_value)
-		if err != nil {
-			return nil, utils.StackError(err, "Unable to use provided value as default for property")
-		}
+	}
+
+	err = prop.SetDefaultValue(default_value)
+	if err != nil {
+		return nil, utils.StackError(err, "Unable to use provided value as default for property")
 	}
 
 	return prop, nil
