@@ -303,7 +303,7 @@ func (self *hostDataService) announceAllGlobal() {
 }
 
 /******************************************************************************
-							SwarmhostDataService
+							SwarmDataService
 *******************************************************************************/
 
 //This dataservice behaves sligthly different than the normal one:
