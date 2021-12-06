@@ -104,7 +104,7 @@ func TestDataService(t *testing.T) {
 		defer os.RemoveAll(path) //ake sure empty bitswaps are created each run
 
 		//Setup the hosts
-		ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
 		h1, _ := temporaryHost(path)
 		defer h1.Stop(ctx)
 
@@ -122,7 +122,7 @@ func TestDataService(t *testing.T) {
 			testfilepath := filepath.Join(path, "testfile")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
-			ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+			ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 			res, err := h1.Data.Add(ctx, testfilepath)
 			So(err, ShouldBeNil)
 
@@ -137,12 +137,10 @@ func TestDataService(t *testing.T) {
 
 			Convey("and retreiving from the other shall be possible too.", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 				reader, err := h2.Data.Get(ctx, res)
 				So(err, ShouldBeNil)
 				io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
 
-				ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
 				reader, err = h2.Data.Get(ctx, res)
 				So(err, ShouldBeNil)
 
@@ -158,7 +156,6 @@ func TestDataService(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					Convey("while it is still accessible from the second host", func() {
-						ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 						err := h2.Data.Fetch(ctx, res)
 						So(err, ShouldBeNil)
 					})
@@ -171,10 +168,14 @@ func TestDataService(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				Convey("it is not accessible in any host", func() {
-					ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-					err := h1.Data.Fetch(ctx, res)
+
+					//custom context as we fetch till timeout
+					cctx, _ := context.WithTimeout(ctx, 2*time.Second)
+					err := h1.Data.Fetch(cctx, res)
 					So(err, ShouldNotBeNil)
-					err = h2.Data.Fetch(ctx, res)
+
+					cctx, _ = context.WithTimeout(ctx, 2*time.Second)
+					err = h2.Data.Fetch(cctx, res)
 					So(err, ShouldNotBeNil)
 				})
 			})
@@ -190,7 +191,7 @@ func TestDataService(t *testing.T) {
 
 			Convey("Adding data to one host should be possible", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
+				ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 				res, err := h1.Data.Add(ctx, testfilepath)
 				So(err, ShouldBeNil)
 
@@ -205,12 +206,10 @@ func TestDataService(t *testing.T) {
 
 				Convey("and retreiving from the other shall be possible too.", func() {
 
-					ctx, _ := context.WithTimeout(context.Background(), 3*time.Second)
 					reader, err := h2.Data.Get(ctx, res)
 					So(err, ShouldBeNil)
 					io.Copy(ioutil.Discard, reader) //ensure the reader fetches all data
 
-					ctx, _ = context.WithTimeout(context.Background(), 3*time.Second)
 					reader, err = h2.Data.Get(ctx, res)
 					So(err, ShouldBeNil)
 
@@ -226,7 +225,6 @@ func TestDataService(t *testing.T) {
 						So(err, ShouldBeNil)
 
 						Convey("while it is still accessing from the second host", func() {
-							ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
 							err := h2.Data.Fetch(ctx, res)
 							So(err, ShouldBeNil)
 						})
@@ -239,10 +237,14 @@ func TestDataService(t *testing.T) {
 					So(err, ShouldBeNil)
 
 					Convey("it is not accessible in any host", func() {
-						ctx, _ := context.WithTimeout(context.Background(), 1*time.Second)
-						err := h1.Data.Fetch(ctx, res)
+
+						//custom context as we fetch till timeout
+						cctx, _ := context.WithTimeout(ctx, 2*time.Second)
+						err := h1.Data.Fetch(cctx, res)
 						So(err, ShouldNotBeNil)
-						err = h2.Data.Fetch(ctx, res)
+
+						cctx, _ = context.WithTimeout(ctx, 2*time.Second)
+						err = h2.Data.Fetch(cctx, res)
 						So(err, ShouldNotBeNil)
 					})
 				})
@@ -278,7 +280,7 @@ func TestDataService(t *testing.T) {
 
 			Convey("Adding a directory with files only should work", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+				ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 				res2, err := h1.Data.Add(ctx, dirpath2)
 				So(err, ShouldBeNil)
 
@@ -340,14 +342,20 @@ func TestDataService(t *testing.T) {
 						So(err, ShouldBeNil)
 						err = h2.Data.Drop(ctx, res1)
 						So(err, ShouldBeNil)
+						time.Sleep(1000 * time.Millisecond)
 
 						Convey("and neither directory should be accessible", func() {
 
-							So(h1.Data.Fetch(ctx, res1), ShouldNotBeNil)
-							So(h1.Data.Fetch(ctx, res2), ShouldNotBeNil)
+							//custom context as we fetch till timeout
+							cctx, _ := context.WithTimeout(ctx, 2*time.Second)
+							So(h1.Data.Fetch(cctx, res1), ShouldNotBeNil)
+							cctx, _ = context.WithTimeout(ctx, 2*time.Second)
+							So(h1.Data.Fetch(cctx, res2), ShouldNotBeNil)
 
-							So(h2.Data.Fetch(ctx, res1), ShouldNotBeNil)
-							So(h2.Data.Fetch(ctx, res2), ShouldNotBeNil)
+							cctx, _ = context.WithTimeout(ctx, 2*time.Second)
+							So(h2.Data.Fetch(cctx, res1), ShouldNotBeNil)
+							cctx, _ = context.WithTimeout(ctx, 2*time.Second)
+							So(h2.Data.Fetch(cctx, res2), ShouldNotBeNil)
 						})
 					})
 				})
@@ -382,7 +390,7 @@ func TestDataStreaming(t *testing.T) {
 
 			data := RepeatableData(10)
 
-			ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+			ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 			id, err := h1.Data.AddData(ctx, data)
 			So(err, ShouldBeNil)
 
@@ -411,7 +419,7 @@ func TestDataStreaming(t *testing.T) {
 			datasize := int(2500)
 			data := RepeatableData(datasize)
 
-			ctx, _ := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 			id, err := h1.Data.AddData(ctx, data)
 			So(err, ShouldBeNil)
 
@@ -496,7 +504,7 @@ func TestSwarmDataService(t *testing.T) {
 		defer os.RemoveAll(path) //ake sure empty bitswaps are created each run
 
 		//Setup the hosts
-		ctx, _ := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
 		h1, _ := temporaryHost(path)
 		defer h1.Stop(ctx)
 
@@ -523,7 +531,7 @@ func TestSwarmDataService(t *testing.T) {
 			testfilepath := filepath.Join(path, "testfile")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
-			ctx, _ := context.WithTimeout(ctx, 10*time.Second)
+			ctx, _ := context.WithTimeout(ctx, 60*time.Second)
 			res, err := sw1.Data.Add(ctx, testfilepath)
 			So(err, ShouldBeNil)
 			time.Sleep(300 * time.Millisecond)
@@ -570,7 +578,6 @@ func TestSwarmDataService(t *testing.T) {
 				time.Sleep(100 * time.Millisecond)
 
 				Convey("it is not accessible in any host", func() {
-					ctx, _ := context.WithTimeout(ctx, 1*time.Second)
 					err := sw1.Data.Fetch(ctx, res)
 					So(err, ShouldNotBeNil)
 					err = sw2.Data.Fetch(ctx, res)
@@ -589,7 +596,7 @@ func TestSwarmDataService(t *testing.T) {
 
 			Convey("Adding data to one swarm should be possible", func() {
 
-				ctx, _ := context.WithTimeout(ctx, 3*time.Second)
+				ctx, _ := context.WithTimeout(ctx, 60*time.Second)
 				res, err := sw1.Data.Add(ctx, testfilepath)
 				So(err, ShouldBeNil)
 				time.Sleep(100 * time.Millisecond)
@@ -667,7 +674,7 @@ func TestSwarmDataService(t *testing.T) {
 
 			Convey("Adding a directory with files only should work", func() {
 
-				ctx, _ := context.WithTimeout(ctx, 5*time.Second)
+				ctx, _ := context.WithTimeout(ctx, 60*time.Second)
 				res2, err := sw1.Data.Add(ctx, dirpath2)
 				So(err, ShouldBeNil)
 				time.Sleep(100 * time.Millisecond)
