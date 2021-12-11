@@ -100,6 +100,12 @@ func (self behaviourManagerHandler) GetEventBehaviours(event string) []string {
 		the hirarchy, either in JavaScript code or as WAMP uri. It is mandatory to set the name
 		of each behaviour.
 
+	.. dml:property:: parent
+		:const:
+		:type: Data
+
+		The parent object of the behaviour, the one which it extends.
+
 	.. dml:property:: recursive
 		:const:
 		:type: bool
