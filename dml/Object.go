@@ -124,6 +124,7 @@ func NewObject(rntm *Runtime) (*object, error) {
 
 	//default properties
 	obj.AddProperty("name", MustNewDataType("string"), "", true)
+	obj.AddFuncProperty("parent", obj.parentGetter, true)
 
 	//add default events
 	obj.AddEvent(NewEvent("onBeforePropertyChange", obj))
@@ -181,6 +182,17 @@ func (self *object) GetParent(id Identifier) (dmlSet, error) {
 	}
 
 	return dmlSet{obj: obj, id: parent}, nil
+}
+
+func (self *object) parentGetter(id Identifier) (interface{}, error) {
+	id, err := self.GetParentIdentifier(id)
+	if err != nil {
+		return nil, err
+	}
+	if !id.Valid() {
+		return nil, nil
+	}
+	return id, err
 }
 
 func (self *object) GetDataType(id Identifier) (DataType, error) {

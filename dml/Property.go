@@ -385,7 +385,9 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 			if err != nil {
 				return rntm.jsvm.ToValue(err)
 			}
-			return rntm.jsvm.ToValue(val)
+
+			//handle returning identifier or dmlset (and lists of those)
+			return toGojaValue(val, rntm)
 		})
 
 		setter := rntm.jsvm.ToValue(func(call goja.FunctionCall) (ret goja.Value) {

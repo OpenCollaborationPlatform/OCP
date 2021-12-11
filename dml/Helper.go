@@ -194,6 +194,48 @@ func extractValues(values []goja.Value, rntm *Runtime) []interface{} {
 	return res
 }
 
+//goja value handling
+func toGojaValue(value interface{}, rntm *Runtime) goja.Value {
+
+	switch value.(type) {
+	case Identifier:
+		id := value.(Identifier)
+		set, err := rntm.getObjectSet(id)
+		if err != nil {
+			return rntm.jsvm.ToValue(err)
+		} else {
+			return set.obj.GetJSObject(set.id)
+		}
+
+	case dmlSet:
+		set := value.(dmlSet)
+		return set.obj.GetJSObject(set.id)
+
+	case []Identifier:
+		ids := value.([]Identifier)
+		result := make([]goja.Value, len(ids))
+		for i, id := range ids {
+			set, err := rntm.getObjectSet(id)
+			if err != nil {
+				return rntm.jsvm.ToValue(err)
+			} else {
+				result[i] = set.obj.GetJSObject(set.id)
+			}
+		}
+		return rntm.jsvm.ToValue(result)
+
+	case []dmlSet:
+		sets := value.([]dmlSet)
+		result := make([]goja.Value, len(sets))
+		for i, set := range sets {
+			result[i] = set.obj.GetJSObject(set.id)
+		}
+		return rntm.jsvm.ToValue(result)
+	}
+	//default
+	return rntm.jsvm.ToValue(value)
+}
+
 //user type to store data about a user
 type User string
 

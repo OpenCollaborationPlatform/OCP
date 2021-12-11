@@ -127,6 +127,9 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 		make([]Data, 0),
 	}
 
+	dat.AddFuncProperty("children", dat.childrenGetter, true)
+	dat.AddFuncProperty("behaviours", dat.behavirourGetter, true)
+
 	dat.AddEvent(NewEvent("onCreated", dat))
 	dat.AddEvent(NewEvent("onRemove", dat))
 	dat.AddEvent(NewEvent("onNewSubobject", dat))
@@ -280,6 +283,25 @@ func (self *DataImpl) GetSubobjects(id Identifier) ([]dmlSet, error) {
 		result = append(result, bhvr)
 	}
 
+	return result, nil
+}
+
+// getters for proeprties
+func (self *DataImpl) childrenGetter(id Identifier) (interface{}, error) {
+	return self.GetChildIdentifiers(id)
+}
+
+func (self *DataImpl) behavirourGetter(id Identifier) (interface{}, error) {
+
+	result := make([]Identifier, 0)
+	bhvrs := self.Behaviours()
+	for _, name := range bhvrs {
+		bhvr, err := self.GetBehaviourIdentifier(id, name)
+		if err != nil {
+			return nil, utils.StackError(err, "Unable to query behaviour manager")
+		}
+		result = append(result, bhvr)
+	}
 	return result, nil
 }
 

@@ -352,7 +352,16 @@ func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args .
 
 	case Property:
 		//no arguments means reading
-		return len(args) == 0, nil
+		if len(args) == 0 {
+			return true, nil
+		}
+
+		//if readonly or const it will also not change anything (it will throw a error,
+		//but stillbetter to have the error local)
+		prop := result.(Property)
+		if prop.IsConst() || prop.IsReadOnly() {
+			return true, nil
+		}
 
 	case Event:
 		//events are never const
@@ -831,25 +840,6 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 	}
 	obj.SetupJSMethods(self, obj.GetJSPrototype())
 
-	//expose parent to js
-	getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
-		id := call.This.ToObject(self.jsvm).Get("identifier").Export()
-		identifier, ok := id.(Identifier)
-		if !ok {
-			panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
-		}
-		parent, err := obj.GetParent(identifier)
-		if err != nil {
-			//return nil, as no parent is also returned as error
-			return self.jsvm.ToValue(nil)
-		}
-		if !parent.valid() {
-			return self.jsvm.ToValue(nil)
-		}
-		return parent.obj.GetJSObject(parent.id)
-	})
-	obj.GetJSPrototype().DefineAccessorProperty("parent", getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
-
 	//go on with all subobjects (if not behaviour)
 	_, isBehaviour := obj.(Behaviour)
 	if !isBehaviour {
@@ -872,7 +862,7 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 
 			//expose child as parent property (do this here as now name is easily accessbile
 			childName := child.GetProperty("name").GetDefaultValue().(string)
-			getter = self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
+			getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
 				id := call.This.ToObject(self.jsvm).Get("identifier").Export()
 				identifier, ok := id.(Identifier)
 				if !ok {
@@ -894,25 +884,6 @@ func (self *Runtime) buildObject(astObj *astObject, forceNew bool) (Object, erro
 			obj.GetJSPrototype().DefineAccessorProperty(childName, getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 		}
-
-		//expose children list to javascript
-		getter := self.jsvm.ToValue(func(call goja.FunctionCall) goja.Value {
-			id := call.This.ToObject(self.jsvm).Get("identifier").Export()
-			identifier, ok := id.(Identifier)
-			if !ok {
-				panic(fmt.Sprintf("Called object does not have identifier setup correctly: %v", id))
-			}
-			children, err := obj.(Data).GetChildren(identifier)
-			if err != nil {
-				panic(utils.StackError(err, "Unable to collect children"))
-			}
-			result := make([]*goja.Object, len(children))
-			for i, child := range children {
-				result[i] = child.obj.GetJSObject(child.id)
-			}
-			return self.jsvm.ToValue(result)
-		})
-		obj.GetJSPrototype().DefineAccessorProperty("children", getter, nil, goja.FLAG_FALSE, goja.FLAG_TRUE)
 
 	} else if len(astObj.Objects) > 0 {
 		return nil, newSetupError(Error_Type, "Behaviours cannot have child objects")
