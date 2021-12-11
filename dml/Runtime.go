@@ -363,6 +363,9 @@ func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args .
 			return true, nil
 		}
 
+		//all other access is changing
+		return false, nil
+
 	case Event:
 		//events are never const
 		return false, nil
