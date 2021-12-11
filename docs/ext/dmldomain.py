@@ -416,7 +416,7 @@ class DmlBehaviour(DmlObject):
         name  =  sig
         arglist = None
         if "derived" in self.options:
-            arglist = [self.options["derived"]]
+            arglist = [create_xref("bhvr", self.options["derived"], self.env)]
             
         annotations = []
         if 'abstract' in self.options:
