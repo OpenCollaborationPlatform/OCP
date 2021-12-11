@@ -21,6 +21,7 @@ type Property interface {
 	//	EventHandler
 	Type() DataType
 	IsConst() bool
+	IsReadOnly() bool
 
 	SetValue(id Identifier, value interface{}) error
 	GetValue(id Identifier) (interface{}, error)
@@ -55,6 +56,11 @@ func NewProperty(name string, dtype DataType, default_value interface{}, constpr
 	return prop, nil
 }
 
+func NewFuncProperty(name string, getter func(Identifier) (interface{}, error), constprop bool) (Property, error) {
+
+	return &funcProperty{constprop, getter}, nil
+}
+
 //Data property
 //**************
 
@@ -71,6 +77,10 @@ func (self dataProperty) Type() DataType {
 }
 
 func (self dataProperty) IsConst() bool {
+	return false
+}
+
+func (self dataProperty) IsReadOnly() bool {
 	return false
 }
 
@@ -179,6 +189,10 @@ func (self constProperty) IsConst() bool {
 	return true
 }
 
+func (self constProperty) IsReadOnly() bool {
+	return true
+}
+
 func (self *constProperty) SetValue(id Identifier, val interface{}) error {
 
 	return newUserError(Error_Operation_Invalid, "Const property cannot set value")
@@ -209,10 +223,55 @@ func (self *constProperty) InitializeDB(id Identifier) error {
 	return nil
 }
 
+//Const property
+//**************
+
+type funcProperty struct {
+	isConst bool
+	getter  func(Identifier) (interface{}, error)
+}
+
+func (self funcProperty) Type() DataType {
+	return MustNewDataType("none")
+}
+
+func (self funcProperty) IsConst() bool {
+	return self.isConst
+}
+
+func (self funcProperty) IsReadOnly() bool {
+	return true
+}
+
+func (self *funcProperty) SetValue(id Identifier, val interface{}) error {
+
+	return newUserError(Error_Operation_Invalid, "ReadOnly property cannot set value")
+}
+
+func (self *funcProperty) GetValue(id Identifier) (interface{}, error) {
+
+	return self.getter(id)
+}
+
+func (self *funcProperty) SetDefaultValue(val interface{}) error {
+
+	//we do not need a default value
+	return nil
+}
+
+func (self *funcProperty) GetDefaultValue() interface{} {
+	return nil
+}
+
+func (self *funcProperty) InitializeDB(id Identifier) error {
+	return nil
+}
+
 //Property handler, which defines a interface for holding and using multiple properties
 type PropertyHandler interface {
 	HasProperty(name string) bool
 	AddProperty(name string, dtype DataType, defaultVal interface{}, constprop bool) error
+	AddFuncProperty(name string, getter func(Identifier) (interface{}, error), constprop bool) error
 	GetProperty(name string) Property
 	GetProperties() []string
 
@@ -239,6 +298,22 @@ func (self *propertyHandler) AddProperty(name string, dtype DataType, default_va
 
 	//we add properties
 	prop, err := NewProperty(name, dtype, default_val, constprop)
+	if err != nil {
+		return err
+	}
+
+	//everthing went without error, now we can set this property
+	self.properties[name] = prop
+	return nil
+}
+
+func (self *propertyHandler) AddFuncProperty(name string, getter func(Identifier) (interface{}, error), constprop bool) error {
+
+	if self.HasProperty(name) {
+		return newInternalError(Error_Setup_Invalid, fmt.Sprintf("Property %s already exists", name))
+	}
+
+	prop, err := NewFuncProperty(name, getter, constprop)
 	if err != nil {
 		return err
 	}
