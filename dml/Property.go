@@ -15,6 +15,9 @@ type PropertyChangeNotifyer interface {
 	PropertyChanged(Identifier, string) error
 }
 
+type PropGetter func(Identifier) (interface{}, error)
+type PropSetter func(Identifier, interface{}) error
+
 //Defines the default Property interface under which different data types can be stored.
 //It uses a getter setter interface for better interactibility between dml, js and go
 type Property interface {
@@ -56,9 +59,9 @@ func NewProperty(name string, dtype DataType, default_value interface{}, constpr
 	return prop, nil
 }
 
-func NewFuncProperty(name string, getter func(Identifier) (interface{}, error), constprop bool) (Property, error) {
+func NewFuncProperty(name string, getter PropGetter, setter PropSetter, readonly bool) (Property, error) {
 
-	return &funcProperty{constprop, getter}, nil
+	return &funcProperty{readonly, name, nil, getter, setter}, nil
 }
 
 //Data property
@@ -223,12 +226,25 @@ func (self *constProperty) InitializeDB(id Identifier) error {
 	return nil
 }
 
-//Const property
-//**************
+//Function property
+//*****************
 
+//Property that gets its return value from a function
+//If a setter is given the property SetValue can be used to call it together with
+//the relevant change notifications. If ReadOnly = false the user can set the property
+//from JS and WAMP. If ReadOnly = true both JS and WAMP changes will fail, but go code
+//can still use SetValue (if the setter is given). If no setter is given the proeprty is
+//considered to be constant, the creater needs to ensure that the function does always
+//return the same value
+// The idea behind this setup is that once a function property is created all the go code
+// does only  maipulate its value by using the properties SetValue and hence the PropSetter
+// callback. This ensures the correct change handling.
 type funcProperty struct {
-	isConst bool
-	getter  func(Identifier) (interface{}, error)
+	isReadOnly bool
+	name       string
+	callback   PropertyChangeNotifyer
+	getter     func(Identifier) (interface{}, error)
+	setter     func(Identifier, interface{}) error
 }
 
 func (self funcProperty) Type() DataType {
@@ -236,16 +252,30 @@ func (self funcProperty) Type() DataType {
 }
 
 func (self funcProperty) IsConst() bool {
-	return self.isConst
+	return self.setter == nil
 }
 
 func (self funcProperty) IsReadOnly() bool {
-	return true
+	return self.IsReadOnly()
 }
 
 func (self *funcProperty) SetValue(id Identifier, val interface{}) error {
 
-	return newUserError(Error_Operation_Invalid, "ReadOnly property cannot set value")
+	if self.IsConst() || self.IsReadOnly() {
+		return newUserError(Error_Operation_Invalid, "Const and ReadOnly properties cannot set value")
+	}
+
+	err := self.callback.BeforePropertyChange(id, self.name)
+	if err != nil {
+		return err
+	}
+
+	//change it
+	if err := self.setter(id, val); err != nil {
+		return err
+	}
+
+	return self.callback.PropertyChanged(id, self.name)
 }
 
 func (self *funcProperty) GetValue(id Identifier) (interface{}, error) {
@@ -269,10 +299,10 @@ func (self *funcProperty) InitializeDB(id Identifier) error {
 
 //Property handler, which defines a interface for holding and using multiple properties
 type PropertyHandler interface {
-	HasProperty(name string) bool
-	AddProperty(name string, dtype DataType, defaultVal interface{}, constprop bool) error
-	AddFuncProperty(name string, getter func(Identifier) (interface{}, error), constprop bool) error
-	GetProperty(name string) Property
+	HasProperty(string) bool
+	AddProperty(string, DataType, interface{}, bool) error
+	AddFuncProperty(string, PropGetter, PropSetter, bool) error
+	GetProperty(string) Property
 	GetProperties() []string
 
 	SetupProperties(rntm *Runtime, jsobj *goja.Object, cb PropertyChangeNotifyer) error
@@ -307,13 +337,13 @@ func (self *propertyHandler) AddProperty(name string, dtype DataType, default_va
 	return nil
 }
 
-func (self *propertyHandler) AddFuncProperty(name string, getter func(Identifier) (interface{}, error), constprop bool) error {
+func (self *propertyHandler) AddFuncProperty(name string, getter PropGetter, setter PropSetter, constprop bool) error {
 
 	if self.HasProperty(name) {
 		return newInternalError(Error_Setup_Invalid, fmt.Sprintf("Property %s already exists", name))
 	}
 
-	prop, err := NewFuncProperty(name, getter, constprop)
+	prop, err := NewFuncProperty(name, getter, setter, constprop)
 	if err != nil {
 		return err
 	}
@@ -367,6 +397,9 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 		if dp, ok := prop.(*dataProperty); ok {
 			dp.callback = cb
 			dp.rntm = rntm
+		}
+		if fp, ok := prop.(*funcProperty); ok {
+			fp.callback = cb
 		}
 
 		//expose to JavaScript

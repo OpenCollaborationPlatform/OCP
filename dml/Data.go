@@ -146,8 +146,8 @@ func NewDataBaseClass(rntm *Runtime) (*DataImpl, error) {
 		make([]Data, 0),
 	}
 
-	dat.AddFuncProperty("children", dat.childrenGetter, true)
-	dat.AddFuncProperty("behaviours", dat.behavirourGetter, true)
+	dat.AddFuncProperty("children", dat.childrenGetter, nil, true)
+	dat.AddFuncProperty("behaviours", dat.behavirourGetter, nil, true)
 
 	dat.AddEvent(NewEvent("onCreated", dat))
 	dat.AddEvent(NewEvent("onRemove", dat))
