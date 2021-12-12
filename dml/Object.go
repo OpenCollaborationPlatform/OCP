@@ -123,7 +123,7 @@ func NewObject(rntm *Runtime) (*object, error) {
 	}
 
 	//default properties
-	obj.AddProperty("name", MustNewDataType("string"), "", true)
+	obj.AddProperty("name", MustNewDataType("string"), "", Constant)
 	obj.AddFuncProperty("parent", obj.parentGetter, nil, true)
 
 	//add default events

@@ -29,7 +29,7 @@ func NewVector(rntm *Runtime) (Object, error) {
 	}
 
 	//add properties
-	vec.AddProperty("type", MustNewDataType("type"), MustNewDataType("none"), true)
+	vec.AddProperty("type", MustNewDataType("type"), MustNewDataType("none"), Constant)
 
 	//add methods
 	vec.AddMethod("Length", MustNewIdMethod(vec.Length, true))

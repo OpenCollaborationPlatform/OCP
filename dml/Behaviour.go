@@ -148,7 +148,7 @@ func NewBaseBehaviour(runtime *Runtime) (*behaviour, error) {
 	result := behaviour{obj}
 
 	//add default behaviour properties
-	err = result.AddProperty(`recursive`, MustNewDataType("bool"), false, true)
+	err = result.AddProperty(`recursive`, MustNewDataType("bool"), false, Constant)
 	if err != nil {
 		return nil, utils.StackError(err, "Unable to recursive property to behaviour")
 	}

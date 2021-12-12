@@ -58,8 +58,8 @@ func NewMap(rntm *Runtime) (Object, error) {
 	}
 
 	//add properties
-	mapI.AddProperty("key", MustNewDataType("key"), MustNewDataType("string"), true)
-	mapI.AddProperty("value", MustNewDataType("type"), MustNewDataType("none"), true)
+	mapI.AddProperty("key", MustNewDataType("key"), MustNewDataType("string"), Constant)
+	mapI.AddProperty("value", MustNewDataType("type"), MustNewDataType("none"), Constant)
 
 	//add methods
 	mapI.AddMethod("Length", MustNewIdMethod(mapI.Length, true))

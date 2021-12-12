@@ -26,7 +26,7 @@ func NewVariant(rntm *Runtime) (Object, error) {
 	}
 
 	//add properties (with setup callback)
-	vari.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), false)
+	vari.AddProperty("type", MustNewDataType("type"), MustNewDataType("int"), ReadWrite)
 
 	//add methods
 	vari.AddMethod("SetValue", MustNewIdMethod(vari.SetValue, false))

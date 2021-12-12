@@ -512,7 +512,7 @@ func newBaseTransaction(rntm *Runtime) (*baseTransaction, error) {
 	mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
 
 	tbhvr := &baseTransaction{behaviour, mngr}
-	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, true) //open transaction automatically on change
+	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, Constant) //open transaction automatically on change
 	return tbhvr, nil
 }
 

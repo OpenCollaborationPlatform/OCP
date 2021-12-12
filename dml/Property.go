@@ -9,6 +9,14 @@ import (
 	"github.com/dop251/goja"
 )
 
+type PropertyType int
+
+const (
+	ReadWrite PropertyType = iota //writable from go, JS and WAMP
+	ReadOnly                      //writable from go, but not by users from JS and WAMP
+	Constant                      //not writable
+)
+
 //Defines a interface that is called by a Property on changes
 type PropertyChangeNotifyer interface {
 	BeforePropertyChange(Identifier, string) error
@@ -35,20 +43,19 @@ type Property interface {
 	InitializeDB(id Identifier) error
 }
 
-func NewProperty(name string, dtype DataType, default_value interface{}, constprop bool) (Property, error) {
+func NewProperty(name string, dtype DataType, default_value interface{}, proptype PropertyType) (Property, error) {
 
 	err := dtype.MustBeTypeOf(default_value)
 	if err != nil {
-		fmt.Printf("\n type: %v, default: %v\n", dtype, default_value)
 		return nil, utils.StackError(err, "Cannot create property, default value does not match data type")
 	}
 
 	var prop Property
 
-	if !constprop {
-		prop = &dataProperty{name, dtype, nil, nil, nil}
-	} else {
+	if proptype == Constant {
 		prop = &constProperty{dtype, nil}
+	} else {
+		prop = &dataProperty{name, dtype, nil, nil, nil, proptype == ReadOnly}
 	}
 
 	err = prop.SetDefaultValue(default_value)
@@ -73,6 +80,7 @@ type dataProperty struct {
 	default_val  interface{}
 	rntm         *Runtime
 	callback     PropertyChangeNotifyer
+	readonly     bool
 }
 
 func (self dataProperty) Type() DataType {
@@ -84,7 +92,7 @@ func (self dataProperty) IsConst() bool {
 }
 
 func (self dataProperty) IsReadOnly() bool {
-	return false
+	return self.readonly
 }
 
 func (self *dataProperty) SetValue(id Identifier, val interface{}) error {
@@ -300,7 +308,7 @@ func (self *funcProperty) InitializeDB(id Identifier) error {
 //Property handler, which defines a interface for holding and using multiple properties
 type PropertyHandler interface {
 	HasProperty(string) bool
-	AddProperty(string, DataType, interface{}, bool) error
+	AddProperty(string, DataType, interface{}, PropertyType) error
 	AddFuncProperty(string, PropGetter, PropSetter, bool) error
 	GetProperty(string) Property
 	GetProperties() []string
@@ -320,14 +328,14 @@ type propertyHandler struct {
 	properties map[string]Property
 }
 
-func (self *propertyHandler) AddProperty(name string, dtype DataType, default_val interface{}, constprop bool) error {
+func (self *propertyHandler) AddProperty(name string, dtype DataType, default_val interface{}, proptype PropertyType) error {
 
 	if self.HasProperty(name) {
 		return newInternalError(Error_Setup_Invalid, fmt.Sprintf("Property %s already exists", name))
 	}
 
 	//we add properties
-	prop, err := NewProperty(name, dtype, default_val, constprop)
+	prop, err := NewProperty(name, dtype, default_val, proptype)
 	if err != nil {
 		return err
 	}

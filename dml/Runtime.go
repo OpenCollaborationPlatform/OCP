@@ -1113,17 +1113,17 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 	}
 	dt := MustNewDataType(astProp.Type.Pod)
 
-	var constprop bool = false
+	var propType PropertyType = ReadWrite
 	if astProp.Const != "" {
-		constprop = true
+		propType = Constant
 	}
 
 	if astProp.Default == nil {
-		if constprop {
+		if propType == Constant {
 			return newSetupError(Error_Setup_Invalid, "Constant property needs to have a value assigned")
 		}
 
-		err := obj.AddProperty(astProp.Key, dt, dt.GetDefaultValue(), constprop)
+		err := obj.AddProperty(astProp.Key, dt, dt.GetDefaultValue(), ReadWrite)
 		if err != nil {
 			return utils.StackError(err, "Cannot add property to object")
 		}
@@ -1133,19 +1133,19 @@ func (self *Runtime) addProperty(obj Object, astProp *astProperty) error {
 
 	var err error
 	if astProp.Default.String != nil {
-		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.String, constprop)
+		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.String, propType)
 
 	} else if astProp.Default.Int != nil {
-		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.Int, constprop)
+		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.Int, propType)
 
 	} else if astProp.Default.Number != nil {
-		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.Number, constprop)
+		err = obj.AddProperty(astProp.Key, dt, *astProp.Default.Number, propType)
 
 	} else if astProp.Default.Bool != nil {
-		err = obj.AddProperty(astProp.Key, dt, bool(*astProp.Default.Bool), constprop)
+		err = obj.AddProperty(astProp.Key, dt, bool(*astProp.Default.Bool), propType)
 
 	} else if astProp.Default.Type != nil {
-		err = obj.AddProperty(astProp.Key, dt, MustNewDataType(astProp.Default.Type), constprop)
+		err = obj.AddProperty(astProp.Key, dt, MustNewDataType(astProp.Default.Type), propType)
 	}
 
 	if err != nil {

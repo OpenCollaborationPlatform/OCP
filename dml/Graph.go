@@ -43,9 +43,9 @@ func NewGraph(rntm *Runtime) (Object, error) {
 	}
 
 	//add properties
-	gr.AddProperty("directed", MustNewDataType("bool"), true, true)
-	gr.AddProperty("node", MustNewDataType("type"), MustNewDataType("int"), true)
-	gr.AddProperty("edge", MustNewDataType("type"), MustNewDataType("none"), true)
+	gr.AddProperty("directed", MustNewDataType("bool"), true, Constant)
+	gr.AddProperty("node", MustNewDataType("type"), MustNewDataType("int"), Constant)
+	gr.AddProperty("edge", MustNewDataType("type"), MustNewDataType("none"), Constant)
 
 	//add methods
 	gr.AddMethod("AddNode", MustNewIdMethod(gr.AddNode, false))
