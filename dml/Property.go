@@ -438,9 +438,9 @@ func (self *propertyHandler) SetupProperties(rntm *Runtime, proto *goja.Object, 
 			}
 
 			p := self.GetProperty(propname)
-			if p.IsConst() {
+			if p.IsConst() || p.IsReadOnly() {
 				//panic becomes exception in JS
-				panic(rntm.jsvm.ToValue(newUserError(Error_Operation_Invalid, fmt.Sprintf("Property %s is constant", propname))))
+				panic(rntm.jsvm.ToValue(newUserError(Error_Operation_Invalid, fmt.Sprintf("Property %s is constant or readonly", propname))))
 			}
 
 			//convert goja args to go ones

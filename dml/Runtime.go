@@ -438,6 +438,9 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 			//read only
 			result, err = prop.GetValue(id)
 		} else {
+			if prop.IsConst() || prop.IsReadOnly() {
+				return nil, nil, newUserError(Error_Operation_Invalid, "Const and ReadOnly properties cannot be set")
+			}
 			err = prop.SetValue(id, args[0])
 			result = args[0]
 		}
