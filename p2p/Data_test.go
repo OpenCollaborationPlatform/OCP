@@ -103,7 +103,7 @@ func TestDataService(t *testing.T) {
 		defer os.RemoveAll(path) //ake sure empty bitswaps are created each run
 
 		//Setup the hosts
-		ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 		h1, _ := temporaryHost(path)
 		defer h1.Stop(ctx)
 
@@ -121,7 +121,6 @@ func TestDataService(t *testing.T) {
 			testfilepath := filepath.Join(path, "testfile")
 			ioutil.WriteFile(testfilepath, filedata, 0644)
 
-			ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 			res, err := h1.Data.Add(ctx, testfilepath)
 			So(err, ShouldBeNil)
 
@@ -190,7 +189,6 @@ func TestDataService(t *testing.T) {
 
 			Convey("Adding data to one host should be possible", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 				res, err := h1.Data.Add(ctx, testfilepath)
 				So(err, ShouldBeNil)
 
@@ -282,7 +280,6 @@ func TestDataService(t *testing.T) {
 
 			Convey("Adding a directory with files only should work", func() {
 
-				ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 				res2, err := h1.Data.Add(ctx, dirpath2)
 				So(err, ShouldBeNil)
 
@@ -382,21 +379,21 @@ func TestDataStreaming(t *testing.T) {
 		defer os.RemoveAll(path) //make sure empty bitswaps are created each run
 
 		//Setup the hosts
+		ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 		h1, _ := temporaryHost(path)
-		defer h1.Stop(context.Background())
+		defer h1.Stop(ctx)
 
 		h2, _ := temporaryHost(path)
-		defer h1.Stop(context.Background())
+		defer h1.Stop(ctx)
 
 		h2.SetMultipleAdress(h1.ID(), h1.OwnAddresses())
 		h1.SetMultipleAdress(h2.ID(), h2.OwnAddresses())
-		h1.Connect(context.Background(), h2.ID(), true)
+		h1.Connect(ctx, h2.ID(), true)
 
 		Convey("it is possible to stream small data to one host", func() {
 
 			data := RepeatableData(10)
 
-			ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 			id, err := h1.Data.AddData(ctx, data)
 			So(err, ShouldBeNil)
 
@@ -425,7 +422,6 @@ func TestDataStreaming(t *testing.T) {
 			datasize := int(2500)
 			data := RepeatableData(datasize)
 
-			ctx, _ := context.WithTimeout(context.Background(), 60*time.Second)
 			id, err := h1.Data.AddData(ctx, data)
 			So(err, ShouldBeNil)
 
@@ -510,7 +506,7 @@ func TestSwarmDataService(t *testing.T) {
 		defer os.RemoveAll(path) //ake sure empty bitswaps are created each run
 
 		//Setup the hosts
-		ctx, _ := context.WithTimeout(context.Background(), 100*time.Second)
+		ctx, _ := context.WithTimeout(context.Background(), 120*time.Second)
 		h1, _ := temporaryHost(path)
 		defer h1.Stop(ctx)
 
