@@ -68,22 +68,12 @@ func NewRuntime() *Runtime {
 		ready:         false,
 		currentUser:   "none",
 		objects:       make(map[DataType]Object, 0),
-		behaviours:    newBehaviourManagerHandler(),
+		systems:       newSystemHandler(),
 	}
 
-	//build the managers and expose
-	transMngr, err := NewTransactionManager(rntm)
-	if err != nil {
-		panic("Unable to initilize transaction manager")
-	}
-	rntm.behaviours.RegisterManager("Transaction", transMngr)
-	rntm.jsvm.Set("Transaction", transMngr.GetJSObject())
-
-	continuity, err := NewContinuitySystem(rntm)
-	if err != nil {
-		panic("Unable to initilize continuity system")
-	}
-	rntm.behaviours.RegisterManager("Continuity", continuity)
+	//build the managers
+	rntm.systems.RegisterSystem(rntm, "Transaction", NewTransactionManager)
+	rntm.systems.RegisterSystem(rntm, "Continuity", NewContinuitySystem)
 
 	//add the datastructures
 	rntm.RegisterObjectCreator("Data", NewData)
@@ -122,7 +112,7 @@ type Runtime struct {
 	main        DataType
 
 	//managers
-	behaviours behaviourManagerHandler
+	systems SystemHandler
 }
 
 // Setup / creation Methods
@@ -377,7 +367,7 @@ func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args .
 		//events are never const
 		return false, nil
 
-	case behaviourManager:
+	case System:
 		//that action is not allowed, we cannot return a behaviour manager
 		return false, newUserError(Error_Operation_Invalid, "Path points to behaviour without function call")
 
@@ -456,7 +446,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 		evt := resolved.(Event)
 		err = evt.Emit(id, args...)
 
-	case behaviourManager:
+	case System:
 		//that action is not allowed, we cannot return a behaviour manager
 		return nil, nil, newUserError(Error_Operation_Invalid, "Path points to behaviour without function call")
 
@@ -565,7 +555,7 @@ func (self *Runtime) resolvePath(path string) (interface{}, Identifier, error) {
 	}
 
 	//check if manager
-	mngr := self.behaviours.GetManager(names[0])
+	mngr := self.systems.GetSystem(names[0])
 	if mngr != nil {
 		if len(names) == 1 {
 			return mngr, Identifier{}, nil

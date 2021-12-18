@@ -491,7 +491,7 @@ func (self *DataImpl) EventEmitted(id Identifier, event string, args ...interfac
 
 	//call ourself and our parents till all behaviours are handled. Note that initially we use
 	//unrecursive behaviours, all parents only use the recursive ones.
-	behaviours := self.GetRuntime().behaviours.GetEventBehaviours(event)
+	behaviours := self.GetRuntime().systems.GetEventBehaviours(event)
 	res, err := self.HandleBehaviourEvent(id, id, event, args, behaviours, false)
 	if err != nil {
 		return err

@@ -8,6 +8,8 @@ import (
 	"github.com/OpenCollaborationPlatform/OCP/utils"
 )
 
+var behaviourKey []byte = []byte("__behaviours")
+
 /*
  * A Behaviour is a set of methods and events that define a certain way an object reacts on
  * certain circumstances or in certain situations. The language interpreter handles a object
@@ -21,73 +23,16 @@ import (
  * 	 parent Object is handled for the given behaviour type
  * - Behaviour Handler: Helper interface to manage behaviours within an Object, similar
  *   to MethodHandler or EventHandler
- * - behaviourManager: A general managing class for a given behaviour (TO be overriden).
+ * - System: A general managing class for a given behaviour (To be overriden).
  *   This is a singleton and accessible as toplevel global object. It exposes global behaviour
  *   methods
- * - behaviourManagerHandler: Helper interface to manage multiple behaviour managers. This is used
- *   by the runtime to store and access all behaviourManager. behaviourManagerHandler is to behaviourManager
+ * - SystemHandler: Helper interface to manage multiple behaviour managers. This is used
+ *   by the runtime to store and access all System. SystemHandler is to System
  *   what BehaviourHandler is to Behaviour
  *
  *  TODO: Ensure behaviours are not "historical", e.g. do not to change during versioning or transactioning.
  *		  Maybe only allow const properties?
  */
-
-var behaviourKey []byte = []byte("__behaviours")
-
-/* The general behaviour manager, exposing Methods */
-type behaviourManager interface {
-	MethodHandler
-
-	CanHandleEvent(string) bool   //events to be handled by the behaviour type
-	CanHandleKeyword(string) bool //WAMP call keywords to be handled by the behaviour type
-
-	BeforeOperation() error //called before a WAMP operation is processed
-	AfterOperation() error  //called after a WAMP operation is Processed
-}
-
-/*Type to handle multiple behaviourManagers. As we use this only in runtime, and not to define other
-interfaces, we do not a interface for this type*/
-type behaviourManagerHandler struct {
-	managers map[string]behaviourManager
-}
-
-func newBehaviourManagerHandler() behaviourManagerHandler {
-	return behaviourManagerHandler{make(map[string]behaviourManager, 0)}
-}
-
-func (self *behaviourManagerHandler) RegisterManager(name string, manager behaviourManager) error {
-
-	if _, has := self.managers[name]; has {
-		return newInternalError(Error_Operation_Invalid, "Manager already registered", "name", name)
-	}
-
-	self.managers[name] = manager
-	return nil
-}
-
-func (self *behaviourManagerHandler) HasManager(name string) bool {
-	_, has := self.managers[name]
-	return has
-}
-
-func (self behaviourManagerHandler) GetManager(name string) behaviourManager {
-	manager, has := self.managers[name]
-	if !has {
-		return nil
-	}
-	return manager
-}
-
-func (self behaviourManagerHandler) GetEventBehaviours(event string) []string {
-
-	result := make([]string, 0)
-	for name, manager := range self.managers {
-		if manager.CanHandleEvent(event) {
-			result = append(result, name)
-		}
-	}
-	return result
-}
 
 /* +extract prio:3
 .. dml:behaviour:: Behaviour

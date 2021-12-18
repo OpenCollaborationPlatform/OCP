@@ -208,7 +208,7 @@ type TransactionManager struct {
 	jsobj *goja.Object
 }
 
-func NewTransactionManager(rntm *Runtime) (*TransactionManager, error) {
+func NewTransactionManager(rntm *Runtime) (System, error) {
 
 	mngr := &TransactionManager{NewMethodHandler(), rntm, nil}
 
@@ -240,6 +240,10 @@ func (self *TransactionManager) transactionMap() (*datastore.Map, error) {
 		return nil, utils.StackError(err, "Cannot access internal transaction map")
 	}
 	return map_, nil
+}
+
+func (self *TransactionManager) ExposedToJS() bool {
+	return true
 }
 
 func (self *TransactionManager) GetJSObject() *goja.Object {
@@ -521,7 +525,7 @@ func newBaseTransaction(rntm *Runtime) (*baseTransaction, error) {
 	if err != nil {
 		return nil, err
 	}
-	mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+	mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 
 	tbhvr := &baseTransaction{behaviour, mngr}
 	tbhvr.AddProperty(`automatic`, MustNewDataType("bool"), false, Constant) //open transaction automatically on change

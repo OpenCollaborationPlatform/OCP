@@ -1,15 +1,27 @@
 package dml
 
+import (
+	"github.com/dop251/goja"
+)
+
 type continuitySystem struct {
 	methodHandler
 
 	toIncrement map[Identifier]*continuity
 }
 
-func NewContinuitySystem(rntm *Runtime) (*continuitySystem, error) {
+func NewContinuitySystem(rntm *Runtime) (System, error) {
 
 	sys := &continuitySystem{NewMethodHandler(), make(map[Identifier]*continuity, 0)}
 	return sys, nil
+}
+
+func (self *continuitySystem) ExposedToJS() bool {
+	return false
+}
+
+func (self *continuitySystem) GetJSObject() *goja.Object {
+	return nil
 }
 
 func (self *continuitySystem) CanHandleEvent(event string) bool {
@@ -111,7 +123,7 @@ type continuity struct {
 func NewContinuityBehaviour(rntm *Runtime) (Object, error) {
 
 	base, _ := NewBaseBehaviour(rntm)
-	sys := rntm.behaviours.GetManager("Continuity").(*continuitySystem)
+	sys := rntm.systems.GetSystem("Continuity").(*continuitySystem)
 	cbhvr := &continuity{base, sys}
 
 	cbhvr.AddProperty("automatic", MustNewDataType("bool"), false, Constant)

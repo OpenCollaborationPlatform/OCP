@@ -33,7 +33,7 @@ func TestTransactionBasics(t *testing.T) {
 
 		Convey("a transaction manager shall be created", func() {
 
-			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 			So(err, ShouldBeNil)
 
 			Convey("which allows creating transactions", func() {
@@ -197,7 +197,7 @@ func TestTransactionBehaviour(t *testing.T) {
 		So(err, ShouldBeNil)
 		err = rntm.InitializeDatastore(store)
 		So(err, ShouldBeNil)
-		mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+		mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 
 		Convey("the object structure must be correct", func() {
 
@@ -573,7 +573,7 @@ func TestTransactionFail(t *testing.T) {
 		So(err, ShouldBeNil)
 		rntm.currentUser = "User1"
 		store.Begin()
-		So(rntm.behaviours.GetManager("Transaction").(*TransactionManager).Open(), ShouldBeNil)
+		So(rntm.systems.GetSystem("Transaction").(*TransactionManager).Open(), ShouldBeNil)
 		store.Commit()
 
 		Convey("leads to a single transaction in the manager.", func() {
@@ -581,7 +581,7 @@ func TestTransactionFail(t *testing.T) {
 			store.Begin()
 			defer store.Rollback()
 
-			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 			transactions, err := mngr.transactionMap()
 			So(err, ShouldBeNil)
 			keys, err := transactions.GetKeys()
@@ -595,11 +595,11 @@ func TestTransactionFail(t *testing.T) {
 			store.Begin()
 			defer store.Commit()
 
-			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 			mngr.Close()
 
 			Convey("leads to zero transaction in the manager.", func() {
-				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+				mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 				transactions, err := mngr.transactionMap()
 				So(err, ShouldBeNil)
 				keys, err := transactions.GetKeys()
@@ -630,7 +630,7 @@ func TestTransactionFail(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				trans, err := rntm.behaviours.GetManager("Transaction").(*TransactionManager).getTransaction()
+				trans, err := rntm.systems.GetSystem("Transaction").(*TransactionManager).getTransaction()
 				So(err, ShouldBeNil)
 				user, err := trans.User()
 				So(err, ShouldBeNil)
@@ -649,7 +649,7 @@ func TestTransactionFail(t *testing.T) {
 			mset, _ := rntm.getMainObjectSet()
 			err := mset.obj.GetProperty("abort").SetValue(mset.id, true)
 			So(err, ShouldBeNil)
-			So(rntm.behaviours.GetManager("Transaction").(*TransactionManager).Open(), ShouldBeNil)
+			So(rntm.systems.GetSystem("Transaction").(*TransactionManager).Open(), ShouldBeNil)
 			store.Commit()
 
 			Convey("Changing data of non-transaction subobject should work", func() {
@@ -685,7 +685,7 @@ func TestTransactionFail(t *testing.T) {
 
 				Convey("And transaction should have no object", func() {
 					store.Begin()
-					mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+					mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 					trans, _ := mngr.getTransaction()
 					obj, err := trans.Behaviours()
 					So(err, ShouldBeNil)
@@ -698,7 +698,7 @@ func TestTransactionFail(t *testing.T) {
 
 				//initially 0 objects required
 				store.Begin()
-				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+				mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 				trans, _ := mngr.getTransaction()
 				obj, err := trans.Behaviours()
 				So(err, ShouldBeNil)
@@ -734,7 +734,7 @@ func TestTransactionFail(t *testing.T) {
 
 			Convey("Opening a transaction directly bevore failing data change", func() {
 				store.Begin()
-				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+				mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 
 				mngr.Close()
 
@@ -777,7 +777,7 @@ func TestTransactionFail(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				trans, err := rntm.behaviours.GetManager("Transaction").(*TransactionManager).getTransaction()
+				trans, err := rntm.systems.GetSystem("Transaction").(*TransactionManager).getTransaction()
 				So(err, ShouldBeNil)
 				user, err := trans.User()
 				So(err, ShouldBeNil)
@@ -793,7 +793,7 @@ func TestTransactionFail(t *testing.T) {
 				store.Begin()
 				defer store.Rollback()
 
-				trans, err := rntm.behaviours.GetManager("Transaction").(*TransactionManager).getTransaction()
+				trans, err := rntm.systems.GetSystem("Transaction").(*TransactionManager).getTransaction()
 				So(err, ShouldBeNil)
 				user, err := trans.User()
 				So(err, ShouldBeNil)
@@ -860,7 +860,7 @@ func TestTransactionAbort(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			store.Begin()
-			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 			So(mngr.IsOpen(), ShouldBeFalse)
 			set, _ := getObjectFromPath(rntm, "Document")
 			value, _ := set.obj.GetProperty("value").GetValue(set.id)
@@ -875,7 +875,7 @@ func TestTransactionAbort(t *testing.T) {
 			So(err, ShouldBeNil)
 
 			store.Begin()
-			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 			So(mngr.IsOpen(), ShouldBeFalse)
 			set, _ := getObjectFromPath(rntm, "Document.Child")
 			value, _ := set.obj.GetProperty("value").GetValue(set.id)
@@ -957,7 +957,7 @@ func TestPartialTransaction(t *testing.T) {
 			So(keys, ShouldResemble, []string{"value1", "value2"})
 
 			store.Begin()
-			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 			So(mngr.IsOpen(), ShouldBeTrue)
 			set, _ := getObjectFromPath(rntm, "Document")
 			value, _ := set.obj.GetProperty("value1").GetValue(set.id)
@@ -973,7 +973,7 @@ func TestPartialTransaction(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				store.Begin()
-				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+				mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 				So(mngr.IsOpen(), ShouldBeFalse)
 				set, _ := getObjectFromPath(rntm, "Document")
 				value, _ := set.obj.GetProperty("value1").GetValue(set.id)
@@ -999,7 +999,7 @@ func TestPartialTransaction(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				store.Begin()
-				mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+				mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 				So(mngr.IsOpen(), ShouldBeFalse)
 				set, _ := getObjectFromPath(rntm, "Document")
 				value, _ := set.obj.GetProperty("value1").GetValue(set.id)
@@ -1087,7 +1087,7 @@ func TestPartialTransaction(t *testing.T) {
 			store.Begin()
 			defer store.Rollback()
 
-			mngr := rntm.behaviours.GetManager("Transaction").(*TransactionManager)
+			mngr := rntm.systems.GetSystem("Transaction").(*TransactionManager)
 			first, _ := getObjectFromPath(rntm, "Document.ObjectMap.first")
 			firstsub, _ := getObjectFromPath(rntm, "Document.ObjectMap.first.subsubobject")
 			second, _ := getObjectFromPath(rntm, "Document.ObjectMap.second")
