@@ -28,7 +28,8 @@ import (
  *   by the runtime to store and access all behaviourManager. behaviourManagerHandler is to behaviourManager
  *   what BehaviourHandler is to Behaviour
  *
- *  TODO: Ensure behaviours are not "historical", e.g. do not to change during versioning or transactioning. Maybe only allow const properties?
+ *  TODO: Ensure behaviours are not "historical", e.g. do not to change during versioning or transactioning.
+ *		  Maybe only allow const properties?
  */
 
 var behaviourKey []byte = []byte("__behaviours")
@@ -37,7 +38,11 @@ var behaviourKey []byte = []byte("__behaviours")
 type behaviourManager interface {
 	MethodHandler
 
-	CanHandleEvent(string) bool
+	CanHandleEvent(string) bool   //events to be handled by the behaviour type
+	CanHandleKeyword(string) bool //WAMP call keywords to be handled by the behaviour type
+
+	BeforeOperation() error //called before a WAMP operation is processed
+	AfterOperation() error  //called after a WAMP operation is Processed
 }
 
 /*Type to handle multiple behaviourManagers. As we use this only in runtime, and not to define other
@@ -137,6 +142,7 @@ type Behaviour interface {
 
 	GetBehaviourType() string                                        //returns the type of behaviour, e.g. "Transaction". Needed to allow multiple different structs implement single behaviour
 	HandleEvent(Identifier, Identifier, string, []interface{}) error //Entry for any kind of behhaviour handling. Here the event that can be handled according to the relevant Manager are provided
+	HandleKeyword(Identifier, string, interface{}) error             //Handle Keywords on WAMP Api call to the object
 }
 
 func NewBaseBehaviour(runtime *Runtime) (*behaviour, error) {

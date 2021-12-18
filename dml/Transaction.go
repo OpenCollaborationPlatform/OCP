@@ -260,6 +260,18 @@ func (self *TransactionManager) CanHandleEvent(event string) bool {
 	return false
 }
 
+func (self *TransactionManager) CanHandleKeyword(string) bool {
+	return false
+}
+
+func (self *TransactionManager) BeforeOperation() error {
+	return nil
+}
+
+func (self *TransactionManager) AfterOperation() error {
+	return nil
+}
+
 /* +extract target:systems indent:1
 
 .. dml:function:: IsOpen()
@@ -813,6 +825,10 @@ func (self *objectTransaction) HandleEvent(id Identifier, source Identifier, eve
 		self.baseTransaction.addNewSubobject(id, source, sub, trans.identification)
 	}
 	return nil
+}
+
+func (self *objectTransaction) HandleKeyword(Identifier, string, interface{}) error {
+	return newInternalError(Error_Fatal, "No keyword should be handled in transaction system")
 }
 
 /* +extract prio:4 indent:1
@@ -1407,6 +1423,10 @@ func (self *partialTransaction) HandleEvent(id Identifier, source Identifier, ev
 		self.baseTransaction.addNewSubobject(id, source, sub, trans.identification)
 	}
 	return nil
+}
+
+func (self *partialTransaction) HandleKeyword(Identifier, string, interface{}) error {
+	return newInternalError(Error_Fatal, "No keyword should be handled in transaction behaviour")
 }
 
 func (self *partialTransaction) keyToSourceKey(id Identifier, key interface{}) (Identifier, Key, error) {

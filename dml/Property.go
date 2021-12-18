@@ -72,7 +72,7 @@ func NewFuncProperty(name string, getter PropGetter, setter PropSetter, readonly
 }
 
 //Data property
-//**************
+//*************
 
 type dataProperty struct {
 	name         string

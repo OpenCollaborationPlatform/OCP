@@ -79,6 +79,12 @@ func NewRuntime() *Runtime {
 	rntm.behaviours.RegisterManager("Transaction", transMngr)
 	rntm.jsvm.Set("Transaction", transMngr.GetJSObject())
 
+	continuity, err := NewContinuitySystem(rntm)
+	if err != nil {
+		panic("Unable to initilize continuity system")
+	}
+	rntm.behaviours.RegisterManager("Continuity", continuity)
+
 	//add the datastructures
 	rntm.RegisterObjectCreator("Data", NewData)
 	rntm.RegisterObjectCreator("Variant", NewVariant)
@@ -87,6 +93,7 @@ func NewRuntime() *Runtime {
 	rntm.RegisterObjectCreator("Graph", NewGraph)
 	rntm.RegisterObjectCreator("Transaction", NewObjectTransactionBehaviour)
 	rntm.RegisterObjectCreator("PartialTransaction", NewPartialTransactionBehaviour)
+	rntm.RegisterObjectCreator("Continuity", NewContinuityBehaviour)
 
 	//setup globals
 	SetupGlobals(rntm)
