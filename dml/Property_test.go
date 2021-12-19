@@ -139,10 +139,10 @@ func TestVarProperty(t *testing.T) {
 
 		Convey("The properties must be accessbile", func() {
 
-			res, _, err := rntm.Call(store, "", "toplevel.constVarProp")
+			res, _, err := rntm.Call(store, "", "toplevel.constVarProp", args(), kwargs())
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, "Hello")
-			res, _, err = rntm.Call(store, "", "toplevel.varProp")
+			res, _, err = rntm.Call(store, "", "toplevel.varProp", args(), kwargs())
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 2)
 		})
@@ -190,7 +190,7 @@ func TestRawProperty(t *testing.T) {
 
 		Convey("The default value must be undefined Cid", func() {
 
-			res, _, err := rntm.Call(store, "", "toplevel.rawProp")
+			res, _, err := rntm.Call(store, "", "toplevel.rawProp", args(), kwargs())
 			utils.PrintWithStacktrace(err)
 			So(err, ShouldBeNil)
 			id, ok := res.(utils.Cid)

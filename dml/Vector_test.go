@@ -95,12 +95,12 @@ func TestPODVector(t *testing.T) {
 			Convey("and the relevant events with keys have been emitted", func() {
 
 				code = `toplevel.IntVec.beforeChangeKeys`
-				res, _, err := rntm.Call(store, "", code)
+				res, _, err := rntm.Call(store, "", code, args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "0")
 
 				code = `toplevel.IntVec.changeKeys`
-				res, _, err = rntm.Call(store, "", code)
+				res, _, err = rntm.Call(store, "", code, args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "0")
 			})

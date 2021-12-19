@@ -62,12 +62,34 @@ func (self SystemHandler) GetSystem(name string) System {
 	return manager
 }
 
+func (self SystemHandler) GetSystems() []System {
+	res := make([]System, 0)
+	for _, sys := range self.systems {
+		res = append(res, sys)
+	}
+	return res
+}
+
 func (self SystemHandler) GetEventBehaviours(event string) []string {
 
 	result := make([]string, 0)
 	for name, manager := range self.systems {
 		if manager.CanHandleEvent(event) {
 			result = append(result, name)
+		}
+	}
+	return result
+}
+
+func (self SystemHandler) GetKeywordBehaviours(kws map[string]interface{}) []string {
+
+	result := make([]string, 0)
+	for name, system := range self.systems {
+		for kw, _ := range kws {
+			if system.CanHandleKeyword(kw) {
+				result = append(result, name)
+				break
+			}
 		}
 	}
 	return result

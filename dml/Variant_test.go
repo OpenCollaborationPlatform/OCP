@@ -54,19 +54,19 @@ func TestPODVariant(t *testing.T) {
 			_, _, err := rntm.RunJavaScript(store, "", code)
 			So(err, ShouldBeNil)
 
-			res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
+			res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue", args(), kwargs())
 			So(err, ShouldBeNil)
 			So(res, ShouldEqual, 10)
 
 			Convey("and emit correct events", func() {
 
 				code = `toplevel.Variant.beforeChangeKeys`
-				res, _, err := rntm.Call(store, "", code)
+				res, _, err := rntm.Call(store, "", code, args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "value")
 
 				code = `toplevel.Variant.changeKeys`
-				res, _, err = rntm.Call(store, "", code)
+				res, _, err = rntm.Call(store, "", code, args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "value")
 			})
@@ -76,19 +76,19 @@ func TestPODVariant(t *testing.T) {
 				code = `toplevel.Variant.SetValue("hello")`
 				_, _, err := rntm.RunJavaScript(store, "", code)
 				So(err, ShouldNotBeNil)
-				res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
+				res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue", args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, 10)
 
 				Convey("and not add any events", func() {
 
 					code = `toplevel.Variant.beforeChangeKeys`
-					res, _, err := rntm.Call(store, "", code)
+					res, _, err := rntm.Call(store, "", code, args(), kwargs())
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, "value")
 
 					code = `toplevel.Variant.changeKeys`
-					res, _, err = rntm.Call(store, "", code)
+					res, _, err = rntm.Call(store, "", code, args(), kwargs())
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, "value")
 				})
@@ -101,7 +101,7 @@ func TestPODVariant(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				Convey("and initialized the value to the default of the new datatype", func() {
-					res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue")
+					res, _, err := rntm.Call(store, "", "toplevel.Variant.GetValue", args(), kwargs())
 					So(err, ShouldBeNil)
 					So(res, ShouldBeFalse)
 				})
@@ -109,12 +109,12 @@ func TestPODVariant(t *testing.T) {
 				Convey("and emit aditional change events", func() {
 
 					code = `toplevel.Variant.beforeChangeKeys`
-					res, _, err := rntm.Call(store, "", code)
+					res, _, err := rntm.Call(store, "", code, args(), kwargs())
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, "valuevalue")
 
 					code = `toplevel.Variant.changeKeys`
-					res, _, err = rntm.Call(store, "", code)
+					res, _, err = rntm.Call(store, "", code, args(), kwargs())
 					So(err, ShouldBeNil)
 					So(res, ShouldEqual, "valuevalue")
 				})

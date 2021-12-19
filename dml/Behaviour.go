@@ -135,8 +135,11 @@ type BehaviourHandler interface {
 
 	//Forwards event to all behaviours given in list, and returns the ones not available
 	//Identifier, source object, eventname, arguments, behaviours to forward, recursive (true) or original object(false).
-	//If recursive == true the eventname includes the full path (e.g. "MyObject.Child.event")
 	HandleBehaviourEvent(Identifier, Identifier, string, []interface{}, []string, bool) ([]string, error)
+
+	//Forwards WAMP keywords to all behaviours given in list, and returns the ones not available
+	//Identifier, keyword arguments, behaviours to forward, recursive (true) or original object(false).
+	HandleBehaviourKeywords(Identifier, map[string]interface{}, []string, bool) ([]string, error)
 
 	//key handlings
 	getDSKeyForBehaviour(Identifier, string) datastore.Key
@@ -258,6 +261,42 @@ func (self *behaviourHandler) HandleBehaviourEvent(id Identifier, source Identif
 			err = bhvrObj.HandleEvent(bhvrSet.id, source, event, args)
 			if err != nil {
 				return result, err
+			}
+
+		} else {
+			result = append(result, behaviour)
+		}
+	}
+	return result, nil
+}
+
+func (self *behaviourHandler) HandleBehaviourKeywords(id Identifier, kwargs map[string]interface{}, behaviours []string, isrecursive bool) ([]string, error) {
+
+	result := make([]string, 0)
+	for _, behaviour := range behaviours {
+		if self.HasBehaviour(behaviour) {
+			bhvrSet, err := self.GetBehaviour(id, behaviour)
+			if err != nil {
+				return nil, utils.StackError(err, "Unable to retreive behaviour for ID, even though it said to have the behaviour", "behaviour", behaviour, "id", id.String())
+			}
+			bhvrObj := bhvrSet.obj.(Behaviour)
+
+			val, err := bhvrObj.GetProperty("recursive").GetValue(bhvrSet.id)
+			if err != nil {
+				return nil, utils.StackError(err, "Unable to read property value", "Property", "recursive")
+			}
+			if isrecursive && !val.(bool) {
+				// we do not add the bahaviour to the result: We have the relevant behaviour, it is just
+				//not recursive. this means processing ends here
+				continue
+			}
+
+			//handle the keyword, and do no not propagate further
+			for name, arg := range kwargs {
+				err = bhvrObj.HandleKeyword(bhvrSet.id, name, arg)
+				if err != nil {
+					return result, err
+				}
 			}
 
 		} else {

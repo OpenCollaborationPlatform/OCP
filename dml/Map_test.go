@@ -126,12 +126,12 @@ func TestPODMap(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				code = `toplevel.IntIntMap.beforeChangeKeys`
-				res, _, err := rntm.Call(store, "", code)
+				res, _, err := rntm.Call(store, "", code, args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "1010")
 
 				code = `toplevel.IntIntMap.changeKeys`
-				res, _, err = rntm.Call(store, "", code)
+				res, _, err = rntm.Call(store, "", code, args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "1010")
 			})
@@ -179,12 +179,12 @@ func TestPODMap(t *testing.T) {
 			Convey("and the relevant events with keys have been emitted", func() {
 
 				code = `toplevel.StringBoolMap.beforeChangeKeys`
-				res, _, err := rntm.Call(store, "", code)
+				res, _, err := rntm.Call(store, "", code, args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "heyho")
 
 				code = `toplevel.StringBoolMap.changeKeys`
-				res, _, err = rntm.Call(store, "", code)
+				res, _, err = rntm.Call(store, "", code, args(), kwargs())
 				So(err, ShouldBeNil)
 				So(res, ShouldEqual, "heyho")
 			})

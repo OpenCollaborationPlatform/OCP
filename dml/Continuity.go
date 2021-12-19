@@ -35,7 +35,7 @@ func (self *continuitySystem) CanHandleEvent(event string) bool {
 }
 func (self *continuitySystem) CanHandleKeyword(keyword string) bool {
 	switch keyword {
-	case "knownState":
+	case "based_on_state":
 		return true
 	}
 

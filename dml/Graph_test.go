@@ -98,11 +98,11 @@ func TestPODGraph(t *testing.T) {
 					So(err, ShouldNotBeNil)
 					So(val, ShouldBeNil)
 
-					val, _, err = rntm.Call(store, "", "toplevel.IntGraph.ToNode", 1)
+					val, _, err = rntm.Call(store, "", "toplevel.IntGraph.ToNode", args(1), kwargs())
 					So(err, ShouldBeNil)
 					So(val, ShouldResemble, []interface{}{int64(4)})
 
-					val, _, err = rntm.Call(store, "", "toplevel.IntGraph.ToNode", 7)
+					val, _, err = rntm.Call(store, "", "toplevel.IntGraph.ToNode", args(7), kwargs())
 					So(err, ShouldNotBeNil)
 					So(val, ShouldBeNil)
 				})

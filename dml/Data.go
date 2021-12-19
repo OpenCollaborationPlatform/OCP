@@ -116,10 +116,11 @@ type Data interface {
 	GetChildren(Identifier) ([]dmlSet, error)
 	GetChildByName(Identifier, string) (dmlSet, error)
 
-	GetSubobjects(id Identifier) ([]dmlSet, error)                                               //Convinience function to get all subobjects, including childs, behaviours any any created ones
-	Created(id Identifier) error                                                                 //emits onCreated event for this and all subobjects (not behaviours)
+	GetSubobjects(id Identifier) ([]dmlSet, error) //Convinience function to get all subobjects, including childs, behaviours any any created ones
+	Created(id Identifier) error
+	ProcessBehaviourKeywords(id Identifier, kwargs map[string]interface{}) error                 //handles the keyword arguments in the behaviours of this object                                                          //emits onCreated event for this and all subobjects (not behaviours)
 	recursiveHandleBehaviourEvent(Identifier, Identifier, string, []interface{}, []string) error //Helper function to propagate behaviour events to the parent (if availbabe)
-
+	recursiveHandleBehaviourKeywords(Identifier, map[string]interface{}, []string) error         //Upward recursive search for the given behaviours  which then handle the kwargs
 }
 
 type DataImpl struct {
@@ -522,6 +523,47 @@ func (self *DataImpl) recursiveHandleBehaviourEvent(id Identifier, source Identi
 			if err == nil {
 				if parent, ok := parentSet.obj.(Data); ok {
 					err := parent.recursiveHandleBehaviourEvent(parentSet.id, source, name, args, res)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (self *DataImpl) ProcessBehaviourKeywords(id Identifier, kwargs map[string]interface{}) error {
+
+	behaviours := self.GetRuntime().systems.GetKeywordBehaviours(kwargs)
+	res, err := self.HandleBehaviourKeywords(id, kwargs, behaviours, false)
+	if err != nil {
+		return err
+	}
+
+	if len(res) != 0 {
+		err = self.recursiveHandleBehaviourKeywords(id, kwargs, res)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (self *DataImpl) recursiveHandleBehaviourKeywords(id Identifier, kwargs map[string]interface{}, behaviours []string) error {
+
+	if len(behaviours) > 0 {
+		res, err := self.HandleBehaviourKeywords(id, kwargs, behaviours, true)
+		if err != nil {
+			return err
+		}
+
+		//if we have unhadled behaviours left we forward them to the parent object
+		if len(res) > 0 {
+			parentSet, err := self.GetParent(id)
+			if err == nil {
+				if parent, ok := parentSet.obj.(Data); ok {
+					err := parent.recursiveHandleBehaviourKeywords(parentSet.id, kwargs, res)
 					if err != nil {
 						return err
 					}

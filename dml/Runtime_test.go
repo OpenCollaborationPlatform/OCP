@@ -13,6 +13,21 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
+func args(args ...interface{}) []interface{} {
+	return args
+}
+
+func kwargs(args ...interface{}) map[string]interface{} {
+	res := make(map[string]interface{})
+
+	if len(args) != 0 {
+		for i := 0; i <= len(args)/2; i = i + 2 {
+			res[args[i].(string)] = args[i+1]
+		}
+	}
+	return res
+}
+
 func TestDmlFile(t *testing.T) {
 
 	Convey("Establishing a datastore and runtime,", t, func() {
@@ -254,11 +269,11 @@ func TestDmlFile(t *testing.T) {
 
 		Convey("and const functions are recognized", func() {
 
-			c, err := rntm.IsReadOnly(store, "Document.readString")
+			c, err := rntm.IsReadOnly(store, "Document.readString", args())
 			So(err, ShouldBeNil)
 			So(c, ShouldBeTrue)
 
-			c, err = rntm.IsReadOnly(store, "Document.testFnc")
+			c, err = rntm.IsReadOnly(store, "Document.testFnc", args())
 			So(err, ShouldBeNil)
 			So(c, ShouldBeFalse)
 		})
@@ -272,14 +287,14 @@ func TestDmlFile(t *testing.T) {
 
 		Convey("and created event was emitted", func() {
 
-			res, _, err := rntm.Call(store, "", "Document.created")
+			res, _, err := rntm.Call(store, "", "Document.created", args(), kwargs())
 			So(err, ShouldBeNil)
 			So(res, ShouldBeTrue)
 		})
 
 		Convey("A error also means no events", func() {
 
-			_, evts, err := rntm.Call(store, "", "Document.failAfterChange")
+			_, evts, err := rntm.Call(store, "", "Document.failAfterChange", args(), kwargs())
 			So(err, ShouldNotBeNil)
 			So(evts, ShouldBeNil)
 

@@ -276,7 +276,7 @@ func TestTransactionBehaviour(t *testing.T) {
 
 				Convey("only its participation event must have been called", func() {
 
-					res, _, err := rntm.Call(store, "User1", "Document.result.value")
+					res, _, err := rntm.Call(store, "User1", "Document.result.value", args(), kwargs())
 					So(err, ShouldBeNil)
 					str := res.(string)
 					So(str, ShouldEqual, "p1")
@@ -312,7 +312,7 @@ func TestTransactionBehaviour(t *testing.T) {
 					So(err, ShouldBeNil)
 					So(open, ShouldBeFalse)
 
-					res, _, err := rntm.Call(store, "User1", "Document.result.value")
+					res, _, err := rntm.Call(store, "User1", "Document.result.value", args(), kwargs())
 					So(err, ShouldBeNil)
 					str := res.(string)
 					So(str, ShouldEqual, "p1c1")

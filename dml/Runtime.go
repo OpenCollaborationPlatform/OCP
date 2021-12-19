@@ -297,7 +297,26 @@ func (self *Runtime) RunJavaScript(ds *datastore.Datastore, user User, code stri
 	//save the user for processing
 	self.currentUser = user
 
+	//system handling
+	for _, sys := range self.systems.GetSystems() {
+		if err := sys.BeforeOperation(); err != nil {
+			self.datastore.Rollback()
+			return nil, nil, err
+		}
+	}
+
+	// run code
 	val, err := self.jsvm.RunString(code)
+
+	// Postprocess systems
+	if err == nil {
+		for _, sys := range self.systems.GetSystems() {
+			err = sys.AfterOperation()
+			if err != nil {
+				break
+			}
+		}
+	}
 
 	if err != nil {
 		self.postprocess(true)
@@ -323,7 +342,7 @@ func (self *Runtime) RunJavaScript(ds *datastore.Datastore, user User, code stri
 // - path is a const method
 // - path/args is reading a property
 // - path is a value in an object, e.g. it reading the value
-func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args ...interface{}) (bool, error) {
+func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args []interface{}) (bool, error) {
 
 	self.clearMessage()
 	self.datastore = ds
@@ -380,7 +399,7 @@ func (self *Runtime) IsReadOnly(ds *datastore.Datastore, fullpath string, args .
 	return true, nil
 }
 
-func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, args ...interface{}) (interface{}, []EmmitedEvent, error) {
+func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, args []interface{}, kwargs map[string]interface{}) (interface{}, []EmmitedEvent, error) {
 
 	self.clearMessage()
 	self.emittedEvents = make([]EmmitedEvent, 0)
@@ -390,7 +409,7 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 	//if this call does not change the datastore, and act accordingly. If a error is in
 	//IsReadOnly and a call would change the store we gurantee here that this change is
 	//rolled back. This could happen if a user made a const method which is not really const...
-	constant, err := self.IsReadOnly(ds, fullpath, args...)
+	constant, err := self.IsReadOnly(ds, fullpath, args)
 	if err != nil {
 		return nil, nil, utils.StackError(err, "Unable to access database")
 	}
@@ -416,6 +435,25 @@ func (self *Runtime) Call(ds *datastore.Datastore, user User, fullpath string, a
 		return nil, nil, err
 	}
 
+	//system handling
+	for _, sys := range self.systems.GetSystems() {
+		if err := sys.BeforeOperation(); err != nil {
+			self.datastore.Rollback()
+			return nil, nil, err
+		}
+	}
+	//check if data and keyword processing needs to happen
+	set, err := self.getObjectSet(id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if data, ok := set.obj.(Data); ok {
+		if err := data.ProcessBehaviourKeywords(set.id, kwargs); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// process the call itself
 	var result interface{} = nil
 	err = nil
 
@@ -637,8 +675,13 @@ func (self *Runtime) postprocess(rollbackOnly bool) error {
 
 	if !rollbackOnly {
 
-		//handle behaviours... none yet. Transaction is handled in normal
-		//execution flow
+		for _, sys := range self.systems.GetSystems() {
+			postError = sys.AfterOperation()
+			if postError != nil {
+				rollback = true
+				break
+			}
+		}
 	}
 
 	//rollback if required (caller requested or behaviours failed)
