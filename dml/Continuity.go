@@ -190,6 +190,15 @@ func (self *continuity) HandleKeyword(id Identifier, keyword string, arg interfa
 
 func (self *continuity) increment(id Identifier) error {
 
+	//check if we can increment
+	has, err := self.userHasLatestState(id)
+	if err != nil {
+		return err
+	}
+	if !has {
+		return newUserError(Error_Operation_Invalid, "Can only increment state based on current one")
+	}
+
 	//we only mark ourself for increment, and not do it directly
 	self.system.toIncrement[id] = self
 	return nil
