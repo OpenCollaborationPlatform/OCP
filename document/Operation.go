@@ -31,20 +31,21 @@ func operationFromData(data []byte) (Operation, error) {
 }
 
 type Operation struct {
-	User      dml.User
-	Path      string
-	Arguments []interface{}
+	User        dml.User
+	Path        string
+	Arguments   []interface{}
+	KWArguments map[string]interface{}
 
 	Node    p2p.PeerID
 	Session wamp.ID
 }
 
-func newCallOperation(user dml.User, path string, args []interface{}, node p2p.PeerID, session wamp.ID) Operation {
-	return Operation{user, path, args, node, session}
+func newCallOperation(user dml.User, path string, args []interface{}, kwargs map[string]interface{}, node p2p.PeerID, session wamp.ID) Operation {
+	return Operation{user, path, args, kwargs, node, session}
 }
 
 func newJsOperation(user dml.User, code string, node p2p.PeerID, session wamp.ID) Operation {
-	return Operation{user, "__js__", []interface{}{code}, node, session}
+	return Operation{user, "__js__", []interface{}{code}, nil, node, session}
 }
 
 func (self Operation) ToData() ([]byte, error) {
@@ -85,7 +86,7 @@ func (self Operation) ApplyTo(rntm *dml.Runtime, ds *datastore.Datastore) (inter
 		}
 
 	} else {
-		val, evts, err = rntm.Call(ds, self.User, self.Path, args...)
+		val, evts, err = rntm.Call(ds, self.User, self.Path, args, kwargs())
 	}
 	if err != nil {
 		return err, nil

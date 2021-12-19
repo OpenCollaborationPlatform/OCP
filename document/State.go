@@ -236,10 +236,10 @@ func (self *dmlState) CanCallLocal(session wamp.ID, path string, args ...interfa
 		if err != nil {
 			return false, utils.StackError(err, "Unable to access opened view")
 		}
-		return self.dml.IsReadOnly(view.store, path, args...)
+		return self.dml.IsReadOnly(view.store, path, args)
 	}
 
-	return self.dml.IsReadOnly(self.store, path, args...)
+	return self.dml.IsReadOnly(self.store, path, args)
 }
 
 func (self *dmlState) CallLocal(session wamp.ID, user dml.User, path string, args ...interface{}) (interface{}, error) {
@@ -264,10 +264,10 @@ func (self *dmlState) CallLocal(session wamp.ID, user dml.User, path string, arg
 		if err != nil {
 			return false, utils.StackError(err, "Unable to access opened view")
 		}
-		val, _, err = self.dml.Call(view.store, user, path, args...)
+		val, _, err = self.dml.Call(view.store, user, path, args, kwargs())
 
 	} else {
-		val, _, err = self.dml.Call(self.store, user, path, args...)
+		val, _, err = self.dml.Call(self.store, user, path, args, kwargs())
 	}
 	if err != nil {
 		return nil, err

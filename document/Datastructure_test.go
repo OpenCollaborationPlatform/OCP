@@ -167,14 +167,14 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
+			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI", args(), kwargs())
 			So(val, ShouldEqual, 0)
 
 			_, err = callClient.Call(ctx, "ocp.test.content.Test.TestFncTwoArgs", opts, wamp.List{1, 2}, wamp.Dict{}, nil)
 			So(err, ShouldBeNil)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _, _ = ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
+			val, _, _ = ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI", args(), kwargs())
 			So(val, ShouldEqual, 3)
 
 			val, err = callClient.Call(ctx, "ocp.test.content.Test.TestList", opts, wamp.List{}, wamp.Dict{}, nil)
@@ -202,7 +202,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			time.Sleep(100 * time.Millisecond)
 
-			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI")
+			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), "Test.testI", args(), kwargs())
 			So(val, ShouldEqual, 120)
 		})
 
@@ -250,7 +250,7 @@ func TestDatastructure(t *testing.T) {
 			So(ok, ShouldBeFalse)
 			So(res.Arguments[0], ShouldEqual, 20)
 
-			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), id+".testI")
+			val, _, _ := ds.dmlState.dml.Call(ds.dmlState.store, dml.User("test"), id+".testI", args(), kwargs())
 			So(val, ShouldEqual, 20)
 		})
 	})

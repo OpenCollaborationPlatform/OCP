@@ -44,18 +44,18 @@ func TestStateSnapshot(t *testing.T) {
 			So(err, ShouldBeNil)
 			So(len(snap1), ShouldNotEqual, 0)
 
-			s1, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
+			s1, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS", args(), kwargs())
 			So(err, ShouldBeNil)
-			i1, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+			i1, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI", args(), kwargs())
 			So(err, ShouldBeNil)
 
 			Convey("as well as reloadable", func() {
 				err := state.LoadSnapshot(snap1)
 				So(err, ShouldBeNil)
 
-				s2, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
+				s2, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS", args(), kwargs())
 				So(err, ShouldBeNil)
-				i2, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+				i2, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI", args(), kwargs())
 				So(err, ShouldBeNil)
 
 				So(s1, ShouldEqual, s2)
@@ -73,9 +73,9 @@ func TestStateSnapshot(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(len(snap2), ShouldNotEqual, 0)
 
-				s3, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS")
+				s3, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testS", args(), kwargs())
 				So(err, ShouldBeNil)
-				i3, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+				i3, _, err := state.dml.Call(state.store, dml.User("test"), "Test.testI", args(), kwargs())
 				So(err, ShouldBeNil)
 
 				Convey("is reloadable as well", func() {
@@ -83,8 +83,8 @@ func TestStateSnapshot(t *testing.T) {
 					err := state.LoadSnapshot(snap2)
 					So(err, ShouldBeNil)
 
-					s4, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testS")
-					i4, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+					s4, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testS", args(), kwargs())
+					i4, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testI", args(), kwargs())
 
 					So(s3, ShouldEqual, s4)
 					So(i3, ShouldEqual, i4)
@@ -96,8 +96,8 @@ func TestStateSnapshot(t *testing.T) {
 					err := state.LoadSnapshot(snap1)
 					So(err, ShouldBeNil)
 
-					s5, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testS")
-					i5, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testI")
+					s5, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testS", args(), kwargs())
+					i5, _, _ := state.dml.Call(state.store, dml.User("test"), "Test.testI", args(), kwargs())
 
 					So(s5, ShouldEqual, s1)
 					So(i5, ShouldEqual, i1)
