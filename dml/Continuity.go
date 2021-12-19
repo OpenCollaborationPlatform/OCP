@@ -4,9 +4,10 @@ import (
 	"github.com/dop251/goja"
 )
 
+var userKey []byte = []byte("__userContinuityStateKey_")
+
 type continuitySystem struct {
 	methodHandler
-
 	toIncrement map[Identifier]*continuity
 }
 
@@ -64,6 +65,7 @@ func (self *continuitySystem) AfterOperation() error {
 		if err := con.GetProperty("state").SetValue(id, state+1); err != nil {
 			return err
 		}
+		con.GetEvent("onStateUpdate").Emit(id, state+1)
 	}
 
 	return nil
@@ -150,7 +152,7 @@ func (self *continuity) HandleEvent(id Identifier, source Identifier, event stri
 	switch event {
 	case "onBeforePropertyChange", "onBeforeChange":
 		//check if the user change is based on the lates change
-		if has, _ := self.userHasLatestState(); !has {
+		if has, _ := self.userHasLatestState(id); !has {
 			return newUserError(Error_Operation_Invalid, "Change is not based on latest state")
 		}
 
@@ -164,6 +166,28 @@ func (self *continuity) HandleEvent(id Identifier, source Identifier, event stri
 	return nil
 }
 
+func (self *continuity) HandleKeyword(id Identifier, keyword string, arg interface{}) error {
+
+	if keyword == "based_on_state" {
+
+		val := UnifyDataType(arg)
+		knownstate, ok := val.(int64)
+		if !ok {
+			newUserError(Error_Arguments_Wrong, "Keyword argument for continuity behaviour needs to be integer")
+		}
+
+		prop, _ := self.GetProperty("state").GetValue(id)
+		state := prop.(int64)
+
+		if knownstate != state {
+			newUserError(Error_Operation_Invalid, "The change is not based on the latest state", "latest", state, "based_on", knownstate)
+		}
+		// make sure we store this info
+		return self.setLatestState(id, knownstate)
+	}
+	return nil
+}
+
 func (self *continuity) increment(id Identifier) error {
 
 	//we only mark ourself for increment, and not do it directly
@@ -171,10 +195,41 @@ func (self *continuity) increment(id Identifier) error {
 	return nil
 }
 
-func (self *continuity) userHasLatestState() (bool, error) {
-	return false, nil
+func (self *continuity) userHasLatestState(id Identifier) (bool, error) {
+
+	map_, err := self.GetDBMap(id, userKey)
+	if err != nil {
+		return false, err
+	}
+
+	if !map_.HasKey(self.rntm.currentUser) {
+		return false, nil
+	}
+
+	value, err := map_.Read(self.rntm.currentUser)
+	if err != nil {
+		return false, err
+	}
+
+	knownstate, ok := value.(int64)
+	if !ok {
+		return false, newInternalError(Error_Setup_Invalid, "User state data stored in wrong format")
+	}
+
+	state, err := self.GetProperty("state").GetValue(id)
+	if err != nil {
+		return false, err
+	}
+
+	return state == knownstate, nil
 }
 
-func (self *continuity) setLatestState(state int) error {
-	return nil
+func (self *continuity) setLatestState(id Identifier, state int64) error {
+
+	map_, err := self.GetDBMap(id, userKey)
+	if err != nil {
+		return err
+	}
+
+	return map_.Write(self.rntm.currentUser, state)
 }

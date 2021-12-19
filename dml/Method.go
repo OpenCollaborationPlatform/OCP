@@ -77,7 +77,7 @@ func (self *method) Call(args ...interface{}) (interface{}, error) {
 
 	rfargs := make([]reflect.Value, len(args))
 	for i, arg := range args {
-		rfargs[i] = reflect.ValueOf(arg)
+		rfargs[i] = reflect.ValueOf(UnifyDataType(arg))
 	}
 
 	if self.fnc.Type().IsVariadic() {
@@ -168,7 +168,7 @@ func (self *jsMethod) Call(args ...interface{}) (result interface{}, err error) 
 	//build the function call argument
 	jsargs := make([]goja.Value, len(args)-1)
 	for i, arg := range args[1:] {
-		jsargs[i] = self.rntm.jsvm.ToValue(arg)
+		jsargs[i] = self.rntm.jsvm.ToValue(UnifyDataType(arg))
 	}
 
 	//build the object to call on

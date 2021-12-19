@@ -39,7 +39,7 @@ func UnifyDataType(val interface{}) interface{} {
 	case uint64:
 		return int64(val.(uint64))
 	case float32:
-		return int64(val.(float32))
+		return float64(val.(float32))
 	case Boolean:
 		return bool(val.(bool))
 	case *utils.Cid:
